@@ -4716,6 +4716,15 @@ int dsi_panel_device_register(struct platform_device *ctrl_pdev,
 		return -EINVAL;
 	}
 
+	pr_info("DSI-PANEL-DIAG: node=%s resolution=%ux%u fps=%u bitclk=%llu pclk=%u byteclk=%llu escclk=%u\n",
+		of_node_full_name(pan_node),
+		pinfo->xres, pinfo->yres,
+		mipi->frame_rate,
+		(unsigned long long)pinfo->clk_rate,
+		pinfo->mipi.dsi_pclk_rate,
+		(unsigned long long)(pinfo->clk_rate / 8),
+		pinfo->esc_clk_rate_hz);
+
 	ctrl_pdata->pclk_rate = mipi->dsi_pclk_rate;
 	clk_rate = pinfo->clk_rate;
 	do_div(clk_rate, 8U);

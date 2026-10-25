@@ -170,3 +170,10 @@
 		qcom,fast-avg-setup = <0>;
 	};
 };
+
+/* Dora: enlarge default CMA pool to 64 MiB */
+&reserved_memory {
+    linux,cma {
+        size = <0 0x4000000>;
+    };
+};

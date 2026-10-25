@@ -365,35 +365,7 @@
 				qcom,mdss-tear-check-rd-ptr-trigger-intr = <1921>;
 			};
 
-			1080p120 {
-				qcom,mdss-dsi-panel-width = <1080>;
-				qcom,mdss-dsi-panel-height = <1920>;
-				qcom,mdss-dsi-h-back-porch = <8>;
-				qcom,mdss-dsi-h-pulse-width = <8>;
-				qcom,mdss-dsi-h-front-porch = <56>;
-				qcom,mdss-dsi-v-back-porch = <8>;
-				qcom,mdss-dsi-v-pulse-width = <8>;
-				qcom,mdss-dsi-v-front-porch = <227>;
-				qcom,mdss-dsi-panel-framerate = <120>;
-				qcom,mdss-dsi-panel-timings = [E6 38 26 00 68 6E 2A 3C 2C 03 04 00];
-				qcom,mdss-dsi-t-clk-post = <0x1B>;
-				qcom,mdss-dsi-t-clk-pre = <0x2B>;
-				qcom,mdss-dsi-on-command = [
-						29 01 00 00 00 00 02 B0 04
-						29 01 00 00 00 00 02 D6 01
-						29 01 00 00 00 00 20 C1 84 00 00 FF 47 99 80 39 EB FF CF 9A 73 8D FD BF D6 31 2F 89 F1 3F 00 00 40 22 82 03 08 00 01
-						15 01 00 00 00 00 02 35 00
-						05 01 00 00 78 00 01 11
-						29 01 00 00 00 00 1F C7 0F 1F 29 34 41 4D 55 61 42 49 54 60 67 6D 79 0B 1F 29 34 41 4D 55 61 42 49 54 60 67 6D 73
-						29 01 00 00 00 00 14 C8 00 00 00 00 00 FC 00 00 00 00 00 FC 00 00 00 00 00 FC 00];
-				qcom,mdss-dsi-post-panel-on-command = [
-						05 01 00 00 00 00 01 29];
-				qcom,mdss-dsi-on-command-state = "dsi_lp_mode";
 
-				qcom,mdss-tear-check-sync-init-val = <1920>;
-				qcom,mdss-tear-check-start-pos = <1920>;
-				qcom,mdss-tear-check-rd-ptr-trigger-intr = <1921>;
-			};
 		};
 	};
 };

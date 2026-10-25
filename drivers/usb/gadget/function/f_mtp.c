@@ -414,12 +414,19 @@ static inline struct mtp_dev *func_to_mtp(struct usb_function *f)
 static struct usb_request *mtp_request_new(struct usb_ep *ep, int buffer_size)
 {
 	struct usb_request *req = usb_ep_alloc_request(ep, GFP_KERNEL);
+	gfp_t gfp_flags = GFP_KERNEL;
 
 	if (!req)
 		return NULL;
 
+	/* Avoid costly reclaim for high-order allocations; the caller retries
+	 * with 16 KiB requests if a large allocation fails.
+	 */
+	if (buffer_size > MTP_BULK_BUFFER_SIZE)
+		gfp_flags |= __GFP_NOWARN | __GFP_NORETRY;
+
 	/* now allocate buffers for the requests */
-	req->buf = kmalloc(buffer_size, GFP_KERNEL);
+	req->buf = kmalloc(buffer_size, gfp_flags);
 	if (!req->buf) {
 		usb_ep_free_request(ep, req);
 		return NULL;
@@ -1622,7 +1629,7 @@ static int debug_mtp_read_stats(struct seq_file *s, void *unused)
 	}
 
 	seq_printf(s, "vfs_write(time in usec) min:%d\t max:%d\t avg:%d\n",
-						min, max, sum / iteration);
+						min, max, iteration ? sum / iteration : 0);
 	min = max = sum = iteration = 0;
 	seq_puts(s, "\n=======================\n");
 	seq_puts(s, "MTP Read Stats:\n");
@@ -1644,7 +1651,7 @@ static int debug_mtp_read_stats(struct seq_file *s, void *unused)
 	}
 
 	seq_printf(s, "vfs_read(time in usec) min:%d\t max:%d\t avg:%d\n",
-						min, max, sum / iteration);
+						min, max, iteration ? sum / iteration : 0);
 	spin_unlock_irqrestore(&dev->lock, flags);
 	return 0;
 }

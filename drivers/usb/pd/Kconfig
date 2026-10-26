@@ -1,0 +1,45 @@
+#
+# USB Power Delivery driver configuration
+#
+menu "USB Power Delivery"
+
+config USB_PD
+	def_bool n
+
+config USB_PD_POLICY
+	tristate "USB Power Delivery Protocol and Policy Engine"
+	depends on EXTCON
+	depends on DUAL_ROLE_USB_INTF
+	select USB_PD
+	help
+          Say Y here to enable USB PD protocol and policy engine.
+	  This driver provides a class that implements the upper
+	  layers of the USB Power Delivery stack. It requires a
+	  PD PHY driver in order to transmit and receive PD
+	  messages on its behalf.
+
+config QPNP_USB_PDPHY
+	tristate "QPNP USB Power Delivery PHY"
+	depends on SPMI
+	help
+          Say Y here to enable QPNP USB PD PHY peripheral driver
+	  which communicates over the SPMI bus. The is used to handle
+	  the PHY layer communication of the Power Delivery stack.
+
+config USBPD_SMBFG_NEWGEN_EXTENSION
+	bool "SoMC additional SMB2/FG3 Extensions for USB_PD"
+	depends on USB_PD_POLICY
+	depends on QPNP_SMBFG_NEWGEN_EXTENSION
+	help
+	  Say Y here to enable additional SMB2/FG3 extensions for
+	  USB PD framework.
+
+config USB_PD_WATER_DETECTION
+	bool "SoMC Water Detection driver"
+	depends on USBPD_SMBFG_NEWGEN_EXTENSION
+	help
+	  Say Y here to enable the SoMC Water Detection driver,
+	  made to detect water presence in the Type-C port and
+	  to prevent damage to the hardware for short circuit.
+
+endmenu

@@ -21,6 +21,7 @@ static inline int led_get_brightness(struct led_classdev *led_cdev)
 	return led_cdev->brightness;
 }
 
+#ifdef CONFIG_LEDS_TRIGGERS
 static inline struct led_classdev *trigger_to_lcdev(struct led_trigger *trig)
 {
 	struct led_classdev *led_cdev;
@@ -36,6 +37,7 @@ static inline struct led_classdev *trigger_to_lcdev(struct led_trigger *trig)
 	read_unlock(&trig->leddev_list_lock);
 	return NULL;
 }
+#endif
 
 void led_init_core(struct led_classdev *led_cdev);
 void led_stop_software_blink(struct led_classdev *led_cdev);

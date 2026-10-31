@@ -7,7 +7,7 @@
  *  - SIM1 (TLMM GPIO 112) & hybrid UIM2 tray (TLMM GPIO 29) presence/IRQ
  *  - FPC1145 / FPC1020 TrustZone fingerprint power/reset/IRQ sysfs interface
  *  - Sony init.qcom.rc sysfs compatibility bridges:
- *      /sys/devices/virtual/input/clearpad/*
+ *      /sys/devices/virtual/input/clearpad/<attr>
  *      /sys/kernel/boot_adsp/boot, /sys/kernel/boot_slpi/boot
  *      /sys/module/bcmdhd/parameters/{firmware_path,nvram_path,op_mode}
  */
@@ -347,7 +347,7 @@ static int somc_dora_plat_probe(struct platform_device *pdev)
 		}
 	}
 
-	/* Create /sys/devices/virtual/input/clearpad/* for Sony init.qcom.rc */
+	/* Create /sys/devices/virtual/input/clearpad/<attr> for Sony init.qcom.rc */
 	plat->input_compat_class = class_create(THIS_MODULE, "somc_clearpad_compat");
 	if (!IS_ERR(plat->input_compat_class)) {
 		plat->clearpad_compat_dev = device_create_with_groups(
@@ -366,7 +366,7 @@ static int somc_dora_plat_probe(struct platform_device *pdev)
 			ret = sysfs_create_file(plat->boot_slpi_kobj, &boot_slpi_attr.attr);
 	}
 
-	/* Create /sys/module/bcmdhd/parameters/* if bcmdhd is not loaded */
+	/* Create /sys/module/bcmdhd/parameters/<attr> if bcmdhd is not loaded */
 	mod_kset = *(struct kset **)&THIS_MODULE->mkobj.kobj.kset;
 	if (mod_kset && !kset_find_obj(mod_kset, "bcmdhd")) {
 		plat->bcmdhd_mod_kobj = kobject_create_and_add("bcmdhd", &mod_kset->kobj);

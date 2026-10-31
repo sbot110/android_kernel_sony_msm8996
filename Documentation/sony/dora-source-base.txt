@@ -1,0 +1,19 @@
+Sony Xperia X Performance Linux 4.19 source transition
+
+Imported source: https://github.com/Tama-4-19/android_kernel_sony_sdm845-419
+Source branch (informational): lineage-20
+Pinned source commit: 51b2850a389ec9069d1d6f6ecd8fbf22f9c03f99
+Pinned source tree: 3feca968f677b76dbbdc0532b7d9a7b8463fb6d8
+Root Makefile: Linux 4.19.318
+
+Destination: sbot110/android_kernel_sony_msm8996
+Only destination branch: kernel-4.19-701905467803253630
+Previous destination commit: 43839fece4231f9f90be291993a90ce91acf3ab5
+Sony 4.4.302 hardware reference: 0c295b15b6d0fb59a64e13b9e0ef2070818ef2a1
+
+This commit imports the real 4.19 core. It is not a completed dora port.
+Tone/dora board description, BCMDHD and other Sony-specific support must
+be adapted against this core. Existing 4.4 hardware behavior is available
+in the parent history and reference commit, rather than mixing 4.4 kernel
+core files into 4.19. Upstream COPYING and source license notices retained.
+No successful device boot or vendor userspace ABI compatibility is implied.

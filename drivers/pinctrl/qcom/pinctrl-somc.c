@@ -8,6 +8,7 @@
 #include <linux/module.h>
 #include <linux/platform_device.h>
 #include <linux/pinctrl/consumer.h>
+#include <linux/mod_devicetable.h>
 
 #define PLATFORM_COMMON_DEFAULT "platform_common_default"
 #define PRODUCT_COMMON_DEFAULT "product_common_default"
@@ -72,6 +73,7 @@ out:
 
 static const struct of_device_id somc_pinctrl_dt_match[] = {
 	{ .compatible = "somc-pinctrl", },
+	{ .compatible = "somc-pinctrl-pmic", },
 	{ },
 };
 
@@ -97,4 +99,3 @@ static void __exit somc_pinctrl_drv_unregister(void)
 module_exit(somc_pinctrl_drv_unregister);
 
 MODULE_LICENSE("GPL v2");
-

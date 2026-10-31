@@ -1,4 +1,5 @@
-/* Copyright (c) 2013-2017, The Linux Foundation. All rights reserved.
+/* SPDX-License-Identifier: GPL-2.0 */
+/* Copyright (c) 2013-2020, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -18,7 +19,7 @@
 #include <linux/pm_qos.h>
 #include "ufshcd.h"
 
-#define MAX_UFS_QCOM_HOSTS	1
+#define MAX_UFS_QCOM_HOSTS	2
 #define MAX_U32                 (~(u32)0)
 #define MPHY_TX_FSM_STATE       0x41
 #define MPHY_RX_FSM_STATE       0xC1
@@ -40,8 +41,8 @@
 
 #define UFS_QCOM_LIMIT_NUM_LANES_RX	2
 #define UFS_QCOM_LIMIT_NUM_LANES_TX	2
-#define UFS_QCOM_LIMIT_HSGEAR_RX	UFS_HS_G3
-#define UFS_QCOM_LIMIT_HSGEAR_TX	UFS_HS_G3
+#define UFS_QCOM_LIMIT_HSGEAR_RX	UFS_HS_G4
+#define UFS_QCOM_LIMIT_HSGEAR_TX	UFS_HS_G4
 #define UFS_QCOM_LIMIT_PWMGEAR_RX	UFS_PWM_G4
 #define UFS_QCOM_LIMIT_PWMGEAR_TX	UFS_PWM_G4
 #define UFS_QCOM_LIMIT_RX_PWR_PWM	SLOW_MODE
@@ -76,7 +77,6 @@ enum {
 	UFS_AH8_CFG				= 0xFC,
 };
 
-
 /* QCOM UFS host controller vendor specific debug registers */
 enum {
 	UFS_DBG_RD_REG_UAWM			= 0x100,
@@ -98,7 +98,8 @@ enum {
 #define UFS_CNTLR_3_x_x_VEN_REGS_OFFSET(x)	(0x400 + x)
 
 /* bit definitions for REG_UFS_CFG1 register */
-#define QUNIPRO_SEL	UFS_BIT(0)
+#define QUNIPRO_SEL		0x1
+#define UTP_DBG_RAMS_EN		0x20000
 #define TEST_BUS_EN		BIT(18)
 #define TEST_BUS_SEL		0x780000
 #define UFS_REG_TEST_BUS_EN	BIT(30)
@@ -166,11 +167,16 @@ enum ufs_qcom_phy_init_type {
 #define PA_VS_CLK_CFG_REG	0x9004
 #define PA_VS_CLK_CFG_REG_MASK	0x1FF
 
+#define PA_VS_CORE_CLK_40NS_CYCLES	0x9007
+#define PA_VS_CORE_CLK_40NS_CYCLES_MASK	0xF
+
 #define DL_VS_CLK_CFG		0xA00B
 #define DL_VS_CLK_CFG_MASK	0x3FF
 
 #define DME_VS_CORE_CLK_CTRL	0xD002
 /* bit and mask definitions for DME_VS_CORE_CLK_CTRL attribute */
+#define DME_VS_CORE_CLK_CTRL_MAX_CORE_CLK_1US_CYCLES_MASK_V4	0xFFF
+#define DME_VS_CORE_CLK_CTRL_MAX_CORE_CLK_1US_CYCLES_OFFSET_V4	0x10
 #define DME_VS_CORE_CLK_CTRL_MAX_CORE_CLK_1US_CYCLES_MASK	0xFF
 #define DME_VS_CORE_CLK_CTRL_CORE_CLK_DIV_EN_BIT		BIT(8)
 #define DME_VS_CORE_CLK_CTRL_DME_HW_CGC_EN			BIT(9)
@@ -192,10 +198,10 @@ static inline void ufs_qcom_assert_reset(struct ufs_hba *hba)
 			1 << OFFSET_UFS_PHY_SOFT_RESET, REG_UFS_CFG1);
 
 	/*
-	 * Make sure assertion of ufs phy reset is written to
-	 * register before returning
+	 * Dummy read to ensure the write takes effect before doing any sort
+	 * of delay
 	 */
-	mb();
+	ufshcd_readl(hba, REG_UFS_CFG1);
 }
 
 static inline void ufs_qcom_deassert_reset(struct ufs_hba *hba)
@@ -204,10 +210,10 @@ static inline void ufs_qcom_deassert_reset(struct ufs_hba *hba)
 			0 << OFFSET_UFS_PHY_SOFT_RESET, REG_UFS_CFG1);
 
 	/*
-	 * Make sure de-assertion of ufs phy reset is written to
-	 * register before returning
+	 * Dummy read to ensure the write takes effect before doing any sort
+	 * of delay
 	 */
-	mb();
+	ufshcd_readl(hba, REG_UFS_CFG1);
 }
 
 struct ufs_qcom_bus_vote {
@@ -220,31 +226,16 @@ struct ufs_qcom_bus_vote {
 	struct device_attribute max_bus_bw;
 };
 
-/**
- * struct ufs_qcom_ice_data - ICE related information
- * @vops:	pointer to variant operations of ICE
- * @async_done:	completion for supporting ICE's driver asynchronous nature
- * @pdev:	pointer to the proper ICE platform device
- * @state:      UFS-ICE interface's internal state (see
- *       ufs-qcom-ice.h for possible internal states)
- * @quirks:     UFS-ICE interface related quirks
- * @crypto_engine_err: crypto engine errors
- */
-struct ufs_qcom_ice_data {
-	struct qcom_ice_variant_ops *vops;
-	struct platform_device *pdev;
-	int state;
-
-	u16 quirks;
-
-	bool crypto_engine_err;
-};
-
 /* Host controller hardware version: major.minor.step */
 struct ufs_hw_version {
 	u16 step;
 	u16 minor;
 	u8 major;
+};
+
+struct ufs_qcom_testbus {
+	u8 select_major;
+	u8 select_minor;
 };
 
 #ifdef CONFIG_DEBUG_FS
@@ -259,11 +250,6 @@ struct qcom_debugfs_files {
 	struct dentry *pm_qos;
 };
 #endif
-
-struct ufs_qcom_testbus {
-	u8 select_major;
-	u8 select_minor;
-};
 
 /* PM QoS voting state  */
 enum ufs_qcom_pm_qos_state {
@@ -324,24 +310,25 @@ struct ufs_qcom_host {
 	 * Note: By default this capability will be kept enabled if host
 	 * controller supports the QUniPro mode.
 	 */
-	#define UFS_QCOM_CAP_QUNIPRO	UFS_BIT(0)
+	#define UFS_QCOM_CAP_QUNIPRO	0x1
 
 	/*
 	 * Set this capability if host controller can retain the secure
 	 * configuration even after UFS controller core power collapse.
 	 */
-	#define UFS_QCOM_CAP_RETAIN_SEC_CFG_AFTER_PWR_COLLAPSE	UFS_BIT(1)
+	#define UFS_QCOM_CAP_RETAIN_SEC_CFG_AFTER_PWR_COLLAPSE	0x2
 
 	/*
 	 * Set this capability if host controller supports Qunipro internal
 	 * clock gating.
 	 */
-	#define UFS_QCOM_CAP_QUNIPRO_CLK_GATING		UFS_BIT(2)
+	#define UFS_QCOM_CAP_QUNIPRO_CLK_GATING		0x4
 
 	/*
 	 * Set this capability if host controller supports SVS2 frequencies.
 	 */
-	#define UFS_QCOM_CAP_SVS2	UFS_BIT(3)
+	#define UFS_QCOM_CAP_SVS2	0x8
+
 	u32 caps;
 
 	struct phy *generic_phy;
@@ -359,23 +346,29 @@ struct ufs_qcom_host {
 	bool disable_lpm;
 	bool is_lane_clks_enabled;
 	bool sec_cfg_updated;
-	struct ufs_qcom_ice_data ice;
+
 	void __iomem *dev_ref_clk_ctrl_mmio;
 	bool is_dev_ref_clk_enabled;
 	struct ufs_hw_version hw_ver;
-	u32 dev_ref_clk_en_mask;
 #ifdef CONFIG_DEBUG_FS
 	struct qcom_debugfs_files debugfs_files;
 #endif
+
+	u32 dev_ref_clk_en_mask;
+
 	/* Bitmask for enabling debug prints */
 	u32 dbg_print_en;
 	struct ufs_qcom_testbus testbus;
 
-	spinlock_t ice_work_lock;
-	struct work_struct ice_cfg_work;
 	struct request *req_pending;
 	struct ufs_vreg *vddp_ref_clk;
+	struct ufs_vreg *vccq_parent;
 	bool work_pending;
+	bool is_phy_pwr_on;
+	bool err_occurred;
+	/* FlashPVL entries */
+	atomic_t scale_up;
+	atomic_t clks_on;
 };
 
 static inline u32

@@ -11,10 +11,6 @@
  * FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License for
  * more details.
  *
- * You should have received a copy of the GNU General Public License along with
- * this program; if not, write to the Free Software Foundation, Inc.,
- * 51 Franklin Street, Fifth Floor, Boston, MA 02110, USA
- *
  * The full GNU General Public License is included in this distribution in the
  * file called LICENSE.
  *
@@ -102,7 +98,7 @@ void rtl92c_phy_sw_chnl_callback(struct ieee80211_hw *hw);
 u8 rtl92c_phy_sw_chnl(struct ieee80211_hw *hw);
 void rtl92c_phy_iq_calibrate(struct ieee80211_hw *hw, bool b_recovery);
 void rtl92c_phy_set_beacon_hw_reg(struct ieee80211_hw *hw, u16 beaconinterval);
-void rtl92c_phy_ap_calibrate(struct ieee80211_hw *hw, char delta);
+void rtl92c_phy_ap_calibrate(struct ieee80211_hw *hw, s8 delta);
 void rtl92c_phy_lc_calibrate(struct ieee80211_hw *hw);
 void _rtl92ce_phy_lc_calibrate(struct ieee80211_hw *hw, bool is2t);
 void rtl92c_phy_set_rfpath_switch(struct ieee80211_hw *hw, bool bmain);
@@ -120,7 +116,6 @@ u32 _rtl92c_phy_rf_serial_read(struct ieee80211_hw *hw, enum radio_path rfpath,
 			       u32 offset);
 u32 _rtl92c_phy_fw_rf_serial_read(struct ieee80211_hw *hw,
 				  enum radio_path rfpath, u32 offset);
-u32 _rtl92c_phy_calculate_bit_shift(u32 bitmask);
 void _rtl92c_phy_rf_serial_write(struct ieee80211_hw *hw,
 				 enum radio_path rfpath, u32 offset, u32 data);
 void _rtl92c_phy_fw_rf_serial_write(struct ieee80211_hw *hw,

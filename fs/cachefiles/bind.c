@@ -20,6 +20,7 @@
 #include <linux/mount.h>
 #include <linux/statfs.h>
 #include <linux/ctype.h>
+#include <linux/xattr.h>
 #include "internal.h"
 
 static int cachefiles_daemon_add_cache(struct cachefiles_cache *caches);
@@ -126,14 +127,13 @@ static int cachefiles_daemon_add_cache(struct cachefiles_cache *cache)
 	if (d_is_negative(root) ||
 	    !d_backing_inode(root)->i_op->lookup ||
 	    !d_backing_inode(root)->i_op->mkdir ||
-	    !d_backing_inode(root)->i_op->setxattr ||
-	    !d_backing_inode(root)->i_op->getxattr ||
+	    !(d_backing_inode(root)->i_opflags & IOP_XATTR) ||
 	    !root->d_sb->s_op->statfs ||
 	    !root->d_sb->s_op->sync_fs)
 		goto error_unsupported;
 
 	ret = -EROFS;
-	if (root->d_sb->s_flags & MS_RDONLY)
+	if (sb_rdonly(root->d_sb))
 		goto error_unsupported;
 
 	/* determine the security of the on-disk cache as this governs
@@ -218,7 +218,8 @@ static int cachefiles_daemon_add_cache(struct cachefiles_cache *cache)
 			   "%s",
 			   fsdef->dentry->d_sb->s_id);
 
-	fscache_object_init(&fsdef->fscache, NULL, &cache->cache);
+	fscache_object_init(&fsdef->fscache, &fscache_fsdef_index,
+			    &cache->cache);
 
 	ret = fscache_add_cache(&cache->cache, &fsdef->fscache, cache->tag);
 	if (ret < 0)
@@ -248,6 +249,8 @@ error_open_root:
 	kmem_cache_free(cachefiles_object_jar, fsdef);
 error_root_object:
 	cachefiles_end_secure(cache, saved_cred);
+	put_cred(cache->cache_cred);
+	cache->cache_cred = NULL;
 	pr_err("Failed to register: %d\n", ret);
 	return ret;
 }
@@ -268,6 +271,7 @@ void cachefiles_daemon_unbind(struct cachefiles_cache *cache)
 
 	dput(cache->graveyard);
 	mntput(cache->mnt);
+	put_cred(cache->cache_cred);
 
 	kfree(cache->rootdirname);
 	kfree(cache->secctx);

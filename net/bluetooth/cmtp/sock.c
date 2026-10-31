@@ -50,7 +50,7 @@ static int cmtp_sock_release(struct socket *sock)
 {
 	struct sock *sk = sock->sk;
 
-	BT_DBG("sock %pK sk %pK", sock, sk);
+	BT_DBG("sock %p sk %p", sock, sk);
 
 	if (!sk)
 		return 0;
@@ -178,7 +178,6 @@ static const struct proto_ops cmtp_sock_ops = {
 	.getname	= sock_no_getname,
 	.sendmsg	= sock_no_sendmsg,
 	.recvmsg	= sock_no_recvmsg,
-	.poll		= sock_no_poll,
 	.listen		= sock_no_listen,
 	.shutdown	= sock_no_shutdown,
 	.setsockopt	= sock_no_setsockopt,
@@ -200,7 +199,7 @@ static int cmtp_sock_create(struct net *net, struct socket *sock, int protocol,
 {
 	struct sock *sk;
 
-	BT_DBG("sock %pK", sock);
+	BT_DBG("sock %p", sock);
 
 	if (sock->type != SOCK_RAW)
 		return -ESOCKTNOSUPPORT;

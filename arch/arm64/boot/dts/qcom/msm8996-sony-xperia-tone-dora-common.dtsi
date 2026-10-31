@@ -223,3 +223,114 @@
 		bias-disable;
 	};
 };
+
+/* Display subsystem: MDP5 + SMMU + DSI0 + 14nm PHY + LAB/IBB + WLED + LCD ID multi-panel */
+&pm8994_l2 {
+	regulator-allow-set-load;
+};
+
+&pm8994_s4 {
+	regulator-allow-set-load;
+};
+
+&pmi8994_lab {
+	regulator-min-microvolt = <5500000>;
+	regulator-max-microvolt = <5700000>;
+	regulator-active-discharge = <1>;
+	qcom,soft-start-us = <800>;
+};
+
+&pmi8994_ibb {
+	regulator-min-microvolt = <5500000>;
+	regulator-max-microvolt = <5700000>;
+	regulator-active-discharge = <1>;
+};
+
+&pmi8994_wled {
+	status = "okay";
+	default-brightness = <512>;
+	qcom,current-limit-microamp = <20000>;
+	qcom,num-strings = <3>;
+	qcom,enabled-strings = <0 1 2>;
+};
+
+&mdp_smmu {
+	status = "okay";
+};
+
+&mdss {
+	status = "okay";
+};
+
+&dsi0 {
+	status = "okay";
+	vdda-supply = <&pm8994_l2>;
+	vcca-supply = <&pm8994_l28>;
+	vddio-supply = <&pm8994_s4>;
+
+	pinctrl-names = "default";
+	pinctrl-0 = <&disp_reset_n_gpio &mdp_vsync_p_gpio &lcd_vddio_en>;
+
+	panel@0 {
+		compatible = "somc,dora-incell-panel", "somc,auo_synaptics_cmd_4_panel";
+		reg = <0>;
+
+		reset-gpios = <&tlmm 8 GPIO_ACTIVE_LOW>;
+		vddio-gpios = <&tlmm 51 GPIO_ACTIVE_HIGH>;
+
+		vddio-supply = <&pm8994_s4>;
+		lab-supply = <&pmi8994_lab>;
+		ibb-supply = <&pmi8994_ibb>;
+		touch-avdd-supply = <&pm8994_l22>;
+
+		io-channels = <&pm8994_vadc VADC_P_MUX6_1_1>;
+		io-channel-names = "lcd-id";
+
+		backlight = <&pmi8994_wled>;
+
+		/*
+		 * Preserved Sony 4.4 dsi-panel-dora.dtsi ADC lookup reference table:
+		 *   Panel 9 (Sharp ID9): <0 57000>
+		 *   Panel 8 (LGD ID8):   <215000 256000>
+		 *   Panel 6 (JDI ID6):   <353000 653000>
+		 *   Panel 4 (AUO ID4):   <1087000 1231000>  [F8132 confirmed: 0x11FFEA / 1179626]
+		 *   Panel 3 (Sharp ID3): <1236000 1395000>
+		 */
+		somc,panel-adc-windows-uv = <
+			9 0 57000
+			8 215000 256000
+			6 353000 653000
+			4 1087000 1231000
+			3 1236000 1395000
+		>;
+
+		port {
+			dora_panel_in: endpoint {
+				remote-endpoint = <&dsi0_out>;
+			};
+		};
+	};
+};
+
+&dsi0_out {
+	remote-endpoint = <&dora_panel_in>;
+};
+
+&dsi0_phy {
+	status = "okay";
+	vcca-supply = <&pm8994_l28>;
+};
+
+/* Adreno 530 GPU + SMMU + Zap Shader */
+&adreno_smmu {
+	status = "okay";
+};
+
+&gpu {
+	status = "okay";
+
+	zap-shader {
+		memory-region = <&zap_shader_region>;
+		firmware-name = "qcom/msm8996/a530_zap.mdt";
+	};
+};

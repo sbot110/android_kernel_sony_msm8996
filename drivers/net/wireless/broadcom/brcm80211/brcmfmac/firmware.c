@@ -635,7 +635,18 @@ static int brcmf_fw_request_firmware(const struct firmware **fw,
 	}
 
 fallback:
-	return request_firmware(fw, cur->path, fwctx->dev);
+	ret = request_firmware(fw, cur->path, fwctx->dev);
+	/* Sony Xperia Tone/Dora BCM4359 stock SquashFS /oem (/vendor) fallback */
+	if (ret && strstr(cur->path, "brcmfmac4359-pcie")) {
+		if (cur->type == BRCMF_FW_TYPE_NVRAM) {
+			ret = request_firmware(fw, "wlan/bcmdhd/bcmdhd.cal", fwctx->dev);
+			if (ret)
+				ret = request_firmware(fw, "../wifi/bcmdhd.cal", fwctx->dev);
+		} else if (cur->type == BRCMF_FW_TYPE_BINARY) {
+			ret = request_firmware(fw, "wlan/bcmdhd/fw_bcmdhd.bin", fwctx->dev);
+		}
+	}
+	return ret;
 }
 
 static void brcmf_fw_request_done(const struct firmware *fw, void *ctx)
@@ -664,11 +675,23 @@ static void brcmf_fw_request_done_alt_path(const struct firmware *fw, void *ctx)
 	struct brcmf_fw_item *first = &fwctx->req->items[0];
 	int ret = 0;
 
-	/* Fall back to canonical path if board firmware not found */
-	if (!fw)
+	/* Fall back to canonical path (or Sony Dora BCM4359 stock path) */
+	if (!fw) {
+		const struct firmware *sync_fw = NULL;
+		if (strstr(first->path, "brcmfmac4359-pcie.bin") &&
+		    request_firmware(&sync_fw, first->path, fwctx->dev) != 0 &&
+		    request_firmware(&sync_fw, "wlan/bcmdhd/fw_bcmdhd.bin", fwctx->dev) == 0) {
+			brcmf_fw_request_done(sync_fw, ctx);
+			return;
+		}
+		if (sync_fw) {
+			brcmf_fw_request_done(sync_fw, ctx);
+			return;
+		}
 		ret = request_firmware_nowait(THIS_MODULE, true, first->path,
 					      fwctx->dev, GFP_KERNEL, fwctx,
 					      brcmf_fw_request_done);
+	}
 
 	if (fw || ret < 0)
 		brcmf_fw_request_done(fw, ctx);

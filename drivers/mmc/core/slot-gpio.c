@@ -21,6 +21,7 @@
 struct mmc_gpio {
 	struct gpio_desc *ro_gpio;
 	struct gpio_desc *cd_gpio;
+	struct gpio_desc *uim2_gpio;
 	irqreturn_t (*cd_gpio_isr)(int irq, void *dev_id);
 	char *ro_label;
 	char *cd_label;
@@ -37,6 +38,9 @@ static irqreturn_t mmc_gpio_cd_irqt(int irq, void *dev_id)
 	trace_android_vh_mmc_gpio_cd_irqt(host, &allow);
 	if (!allow)
 		return IRQ_HANDLED;
+
+	if (ctx->uim2_gpio && mmc_gpio_get_cd(host) == 0)
+		gpiod_set_value_cansleep(ctx->uim2_gpio, 0);
 
 	host->trigger_card_event = true;
 	mmc_detect_change(host, msecs_to_jiffies(ctx->cd_debounce_delay_ms));
@@ -279,3 +283,48 @@ bool mmc_can_gpio_ro(struct mmc_host *host)
 	return ctx->ro_gpio ? true : false;
 }
 EXPORT_SYMBOL(mmc_can_gpio_ro);
+
+/*
+ * Sony Xperia X Performance F8132 Dual-SIM hybrid MicroSD / UIM2 tray support:
+ * Keep UIM2_DET_EN (GPIO 29) low during SD probe or tray eject; assert high
+ * only when tray is closed (CD active) and no MicroSD card responds.
+ */
+int mmc_gpiod_request_uim2(struct mmc_host *host)
+{
+	struct mmc_gpio *ctx = host->slot.handler_priv;
+	struct gpio_desc *desc;
+
+	if (!ctx)
+		return -EINVAL;
+
+	desc = devm_gpiod_get_optional(host->parent, "uim2", GPIOD_OUT_LOW);
+	if (IS_ERR(desc))
+		return PTR_ERR(desc);
+
+	ctx->uim2_gpio = desc;
+	return 0;
+}
+EXPORT_SYMBOL(mmc_gpiod_request_uim2);
+
+void mmc_gpio_set_uim2_en(struct mmc_host *host, int val)
+{
+	struct mmc_gpio *ctx = host->slot.handler_priv;
+
+	if (!ctx || !ctx->uim2_gpio)
+		return;
+
+	gpiod_set_value_cansleep(ctx->uim2_gpio, !!val);
+}
+EXPORT_SYMBOL(mmc_gpio_set_uim2_en);
+
+void mmc_gpio_tray_close_set_uim2(struct mmc_host *host, int val)
+{
+	struct mmc_gpio *ctx = host->slot.handler_priv;
+
+	if (!ctx || !ctx->uim2_gpio)
+		return;
+
+	if (mmc_gpio_get_cd(host) > 0)
+		gpiod_set_value_cansleep(ctx->uim2_gpio, !!val);
+}
+EXPORT_SYMBOL(mmc_gpio_tray_close_set_uim2);

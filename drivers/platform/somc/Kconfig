@@ -1,0 +1,26 @@
+# SPDX-License-Identifier: GPL-2.0-only
+menuconfig SOMC_PLATFORMS
+	bool "Sony Mobile (SOMC) Xperia platform drivers"
+	depends on ARCH_QCOM || COMPILE_TEST
+	default y if ARCH_QCOM
+	help
+	  Platform integration, SIM/hybrid-tray detection, FPC1145 TEE
+	  fingerprint control, and Sony userspace sysfs compatibility bridges
+	  for Sony Xperia Tone / Dora (MSM8996) devices.
+
+if SOMC_PLATFORMS
+
+config SOMC_DORA_PLATFORM
+	tristate "Sony Xperia X Performance (dora F8131/F8132) platform & FPC1145 driver"
+	depends on OF && GPIOLIB && REGULATOR
+	default y
+	help
+	  Provides hardware integration for Sony Xperia X Performance
+	  (F8131 Single SIM and F8132 Dual SIM):
+	  - SIM1 (GPIO 112) and hybrid UIM2/SD tray (GPIO 29) state & wakeup
+	  - FPC1145 / FPC1020 TrustZone fingerprint reset/IRQ/regulator control
+	  - Userspace sysfs compatibility nodes expected by Sony init.qcom.rc
+	    (clearpad wakeup_gesture/cover_mode, boot_adsp/boot_slpi, and
+	    bcmdhd firmware_path/nvram_path parameters).
+
+endif # SOMC_PLATFORMS

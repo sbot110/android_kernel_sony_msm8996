@@ -340,6 +340,10 @@ int mmc_of_parse(struct mmc_host *host)
 			dev_info(host->parent, "Got CD GPIO\n");
 		else if (ret != -ENOENT && ret != -ENOSYS)
 			return ret;
+
+		ret = mmc_gpiod_request_uim2(host);
+		if (ret && ret != -ENOENT && ret != -ENOSYS)
+			return ret;
 	}
 
 	/* Parse Write Protection */

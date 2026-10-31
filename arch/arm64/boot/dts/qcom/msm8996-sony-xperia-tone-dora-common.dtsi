@@ -1,11 +1,14 @@
 // SPDX-License-Identifier: BSD-3-Clause
 /*
  * Sony Xperia X Performance (dora: F8131 Single SIM / F8132 Dual SIM)
- * Hardware platform base ported from Sony Linux 4.4.302 (0c295b15b6d0) to Linux 5.15.
+ * Hardware platform & peripherals ported from Sony Linux 4.4.302 (0c295b15b6d0)
+ * to Linux 5.15.
  */
 
 #include <dt-bindings/iio/qcom,spmi-vadc.h>
 #include <dt-bindings/input/linux-event-codes.h>
+#include <dt-bindings/sound/qcom,q6afe.h>
+#include <dt-bindings/sound/qcom,q6asm.h>
 
 /delete-node/ &tof_sensor;
 /delete-node/ &pm8994_l11;
@@ -34,14 +37,12 @@
 		};
 	};
 
-	/* Legacy early-mount DT fstab for LineageOS / Sony oem->vendor squashfs layout */
+	/* Legacy early-mount DT fstab for LineageOS / Sony oem->vendor SquashFS layout */
 	firmware {
 		android {
 			compatible = "android,firmware";
-
 			fstab {
 				compatible = "android,fstab";
-
 				system {
 					compatible = "android,system";
 					dev = "/dev/block/platform/soc/7464900.sdhci/by-name/system";
@@ -50,7 +51,6 @@
 					fsmgr_flags = "wait";
 					status = "okay";
 				};
-
 				vendor {
 					compatible = "android,vendor";
 					dev = "/dev/block/platform/soc/7464900.sdhci/by-name/oem";
@@ -60,6 +60,18 @@
 					status = "okay";
 				};
 			};
+		};
+	};
+
+	clocks {
+		compatible = "simple-bus";
+
+		/* WCD9335 Tasha 9.6 MHz MCLK gated by PM8994 GPIO 15 (PM_DIVCLK1) */
+		div1_mclk: divclk1 {
+			compatible = "gpio-gate-clock";
+			clocks = <&rpmcc RPM_SMD_DIV_CLK1>;
+			#clock-cells = <0>;
+			enable-gpios = <&pm8994_gpios 15 GPIO_ACTIVE_HIGH>;
 		};
 	};
 
@@ -116,13 +128,32 @@
 		};
 	};
 
-	/* Sony Dora platform bridge: SIM1/UIM2 tray detect (F8131 SS / F8132 DSDS) & userspace sysfs */
+	/* LDO / GPIO Vibrator on PMI8994 GPIO 1 (Sony 4.4 ldo_vibrator) */
+	vibrator {
+		compatible = "gpio-vibrator";
+		enable-gpios = <&pmi8994_gpios 1 GPIO_ACTIVE_HIGH>;
+	};
+
+	/* FPC1145 / FPC1020 side-button fingerprint sensor (SPI0 owned by QSEE TZ) */
+	fpc1145 {
+		compatible = "fpc,fpc1145", "fpc,fpc1020";
+		pinctrl-names = "default";
+		pinctrl-0 = <&fpc_rst_default &fpc_irq_default>;
+		reset-gpios = <&tlmm 21 GPIO_ACTIVE_LOW>;
+		irq-gpios = <&tlmm 132 GPIO_ACTIVE_HIGH>;
+		vcc_spi-supply = <&pm8994_s4>;
+		vdd_ana-supply = <&pm8994_l18>;
+		vdd_io-supply = <&pm8994_l18>;
+		wakeup-source;
+		status = "okay";
+	};
+
+	/* Sony Dora platform bridge: SIM1 detect & Sony userspace sysfs bridges */
 	somc_dora_platform: somc-dora-platform {
 		compatible = "somc,dora-platform";
 		pinctrl-names = "default";
-		pinctrl-0 = <&sim1_det_default &uim_detect_en &dora_nc_gpios>;
+		pinctrl-0 = <&sim1_det_default &dora_nc_gpios>;
 		sim1-det-gpios = <&tlmm 112 GPIO_ACTIVE_HIGH>;
-		uim2-det-gpios = <&tlmm 29 GPIO_ACTIVE_HIGH>;
 		status = "okay";
 	};
 };
@@ -139,12 +170,23 @@
 	mmc-hs400-1_8v;
 };
 
-/* MicroSD + F8132 Dual-SIM hybrid tray on sdhc2 (74a4900.sdhci) */
+/*
+ * MicroSD + F8132 Dual-SIM hybrid UIM2/SD tray on sdhc2 (74a4900.sdhci):
+ *  - cd-gpios (TLMM 40, ACTIVE_HIGH): tray closed detection
+ *  - uim2-gpios (TLMM 29, ACTIVE_HIGH): asserted high by MMC core only when
+ *    tray is closed and no SD card responds, routing UIM2 to modem on F8132.
+ */
 &sdhc2 {
 	status = "okay";
-	cd-gpios = <&tlmm 40 GPIO_ACTIVE_LOW>;
+	pinctrl-names = "default", "sleep";
+	pinctrl-0 = <&sdc2_state_on &tray_det_pin &uim_detect_en>;
+	pinctrl-1 = <&sdc2_state_off &tray_det_pin &uim_detect_en>;
+	cd-gpios = <&tlmm 40 GPIO_ACTIVE_HIGH>;
+	uim2-gpios = <&tlmm 29 GPIO_ACTIVE_HIGH>;
 	vmmc-supply = <&pm8994_l21>;
 	vqmmc-supply = <&pm8994_l13>;
+	no-sdio;
+	no-mmc;
 };
 
 &ufshc {
@@ -155,7 +197,7 @@
 	status = "disabled";
 };
 
-/* Dora uses Micro-USB (ID on GPIO 24), no USB-C FUSB301 on BLSP2 I2C5 */
+/* Dora uses Micro-USB 2.0 OTG (ID on GPIO 24), no USB-C FUSB301 on BLSP2 I2C5 */
 &blsp2_i2c5 {
 	status = "disabled";
 };
@@ -166,6 +208,67 @@
 
 &usb3_id {
 	id-gpio = <&tlmm 24 GPIO_ACTIVE_LOW>;
+};
+
+/* Broadcom BCM4359 Wi-Fi PCIe0 + host-wake pinctrl */
+&pcie0 {
+	status = "okay";
+	pinctrl-names = "default", "sleep";
+	pinctrl-0 = <&pcie0_state_on &wl_host_wake>;
+	pinctrl-1 = <&pcie0_state_off &wl_host_wake>;
+};
+
+/* Broadcom BCM4359 Bluetooth H4/BCM serdev on BLSP1 UART2 (serial@7570000) */
+&blsp1_uart2 {
+	status = "okay";
+
+	bluetooth {
+		compatible = "brcm,bcm4359-bt", "brcm,bcm4349-bt", "brcm,bcm43438-bt";
+		pinctrl-names = "default";
+		pinctrl-0 = <&bt_pins_default>;
+		shutdown-gpios = <&tlmm 83 GPIO_ACTIVE_HIGH>;
+		device-wakeup-gpios = <&tlmm 81 GPIO_ACTIVE_HIGH>;
+		host-wakeup-gpios = <&tlmm 82 GPIO_ACTIVE_HIGH>;
+		vddio-supply = <&pm8994_s4>;
+		max-speed = <3000000>;
+	};
+};
+
+/* NXP PN547 / PN548 NFC controller on BLSP2 I2C2 (0x75b6000 @ 0x28) */
+&blsp2_i2c2 {
+	status = "okay";
+	clock-frequency = <400000>;
+
+	nfc@28 {
+		compatible = "nxp,nxp-nci-i2c";
+		reg = <0x28>;
+		pinctrl-names = "default";
+		pinctrl-0 = <&nfc_pins_default>;
+		interrupt-parent = <&tlmm>;
+		interrupts = <9 IRQ_TYPE_EDGE_RISING>;
+		enable-gpios = <&pm8994_gpios 7 GPIO_ACTIVE_HIGH>;
+		firmware-gpios = <&tlmm 12 GPIO_ACTIVE_HIGH>;
+		wakeup-source;
+	};
+};
+
+/* Synaptics Clearpad S3320 In-Cell Touchscreen on BLSP2 I2C6 (0x75ba000 @ 0x2c) */
+&blsp2_i2c6 {
+	status = "okay";
+	clock-frequency = <400000>;
+
+	synaptics@2c {
+		pinctrl-names = "default", "sleep";
+		pinctrl-0 = <&touch_int_n &ts_reset_n>;
+		pinctrl-1 = <&touch_int_sleep &ts_reset_n>;
+		vio-supply = <&pm8994_s4>;
+		wakeup-source;
+
+		rmi4-f12@12 {
+			reg = <0x12>;
+			syna,sensor-type = <1>;
+		};
+	};
 };
 
 /* PM8994 VADC channels for LCD_ID_ADC (MPP2 -> AMUX6) and Sony Thermistor inputs */
@@ -189,6 +292,10 @@
 		reg = <VADC_LR_MUX5_PU1_AMUX_THM2>;
 		label = "emmc_therm";
 	};
+};
+
+&uim_detect_en {
+	output-low;
 };
 
 &tlmm {
@@ -221,6 +328,63 @@
 		function = "gpio";
 		drive-strength = <2>;
 		bias-disable;
+	};
+
+	fpc_rst_default: fpc-rst-default {
+		pins = "gpio21";
+		function = "gpio";
+		drive-strength = <2>;
+		bias-disable;
+		output-low;
+	};
+
+	fpc_irq_default: fpc-irq-default {
+		pins = "gpio132";
+		function = "gpio";
+		drive-strength = <2>;
+		bias-pull-down;
+	};
+
+	bt_pins_default: bt-pins-default {
+		bt-reg-on {
+			pins = "gpio83";
+			function = "gpio";
+			drive-strength = <2>;
+			bias-disable;
+			output-low;
+		};
+
+		bt-dev-wake {
+			pins = "gpio81";
+			function = "gpio";
+			drive-strength = <2>;
+			bias-disable;
+			output-low;
+		};
+
+		bt-host-wake {
+			pins = "gpio82";
+			function = "gpio";
+			drive-strength = <2>;
+			bias-pull-down;
+		};
+	};
+
+	nfc_pins_default: nfc-pins-default {
+		nfc-irq {
+			pins = "gpio9";
+			function = "gpio";
+			drive-strength = <2>;
+			bias-pull-down;
+		};
+
+		nfc-dwld {
+			pins = "gpio12";
+			function = "gpio";
+			drive-strength = <2>;
+			bias-disable;
+			output-low;
+		};
 	};
 };
 
@@ -267,25 +431,20 @@
 	vdda-supply = <&pm8994_l2>;
 	vcca-supply = <&pm8994_l28>;
 	vddio-supply = <&pm8994_s4>;
-
 	pinctrl-names = "default";
 	pinctrl-0 = <&disp_reset_n_gpio &mdp_vsync_p_gpio &lcd_vddio_en>;
 
 	panel@0 {
 		compatible = "somc,dora-incell-panel", "somc,auo_synaptics_cmd_4_panel";
 		reg = <0>;
-
 		reset-gpios = <&tlmm 8 GPIO_ACTIVE_LOW>;
 		vddio-gpios = <&tlmm 51 GPIO_ACTIVE_HIGH>;
-
 		vddio-supply = <&pm8994_s4>;
 		lab-supply = <&pmi8994_lab>;
 		ibb-supply = <&pmi8994_ibb>;
 		touch-avdd-supply = <&pm8994_l22>;
-
 		io-channels = <&pm8994_vadc VADC_P_MUX6_1_1>;
 		io-channel-names = "lcd-id";
-
 		backlight = <&pmi8994_wled>;
 
 		/*
@@ -332,5 +491,116 @@
 	zap-shader {
 		memory-region = <&zap_shader_region>;
 		firmware-name = "qcom/msm8996/a530_zap.mdt";
+	};
+};
+
+/* Remoteproc subsystems: Modem (MPSS), Audio DSP (LPASS/ADSP), Sensor DSP (SLPI), Venus Video */
+&lpass_q6_smmu {
+	status = "okay";
+};
+
+&adsp_pil {
+	status = "okay";
+	firmware-name = "adsp.mdt";
+};
+
+&mss_pil {
+	status = "okay";
+	pll-supply = <&pm8994_l12>;
+	firmware-name = "mba.mbn", "modem.mdt";
+};
+
+&slpi_pil {
+	status = "okay";
+	px-supply = <&pm8994_s4>;
+	firmware-name = "slpi.mdt";
+};
+
+&venus_smmu {
+	status = "okay";
+};
+
+&venus {
+	status = "okay";
+	firmware-name = "venus.mdt";
+};
+
+/* Audio: Qualcomm WCD9335 (Tasha) SLIMbus codec + Q6DSP routing */
+&wcd9335 {
+	clock-names = "mclk", "slimbus";
+	clocks = <&div1_mclk>, <&rpmcc RPM_SMD_BB_CLK1>;
+	vdd-buck-supply = <&pm8994_s4>;
+	vdd-buck-sido-supply = <&pm8994_s4>;
+	vdd-tx-supply = <&pm8994_s4>;
+	vdd-rx-supply = <&pm8994_s4>;
+	vdd-io-supply = <&pm8994_s4>;
+};
+
+&q6asmdai {
+	dai@0 {
+		reg = <0>;
+	};
+	dai@1 {
+		reg = <1>;
+	};
+	dai@2 {
+		reg = <2>;
+	};
+};
+
+&sound {
+	compatible = "qcom,apq8096-sndcard";
+	model = "Sony-Xperia-Dora";
+	audio-routing =
+		"RX_BIAS", "MCLK",
+		"MM_DL1", "MultiMedia1 Playback",
+		"MM_DL2", "MultiMedia2 Playback",
+		"MultiMedia3 Capture", "MM_UL3";
+
+	mm1-dai-link {
+		link-name = "MultiMedia1";
+		cpu {
+			sound-dai = <&q6asmdai MSM_FRONTEND_DAI_MULTIMEDIA1>;
+		};
+	};
+
+	mm2-dai-link {
+		link-name = "MultiMedia2";
+		cpu {
+			sound-dai = <&q6asmdai MSM_FRONTEND_DAI_MULTIMEDIA2>;
+		};
+	};
+
+	mm3-dai-link {
+		link-name = "MultiMedia3";
+		cpu {
+			sound-dai = <&q6asmdai MSM_FRONTEND_DAI_MULTIMEDIA3>;
+		};
+	};
+
+	slim-dai-link {
+		link-name = "SLIM Playback";
+		cpu {
+			sound-dai = <&q6afedai SLIMBUS_6_RX>;
+		};
+		platform {
+			sound-dai = <&q6routing>;
+		};
+		codec {
+			sound-dai = <&wcd9335 6>;
+		};
+	};
+
+	slimcap-dai-link {
+		link-name = "SLIM Capture";
+		cpu {
+			sound-dai = <&q6afedai SLIMBUS_0_TX>;
+		};
+		platform {
+			sound-dai = <&q6routing>;
+		};
+		codec {
+			sound-dai = <&wcd9335 1>;
+		};
 	};
 };

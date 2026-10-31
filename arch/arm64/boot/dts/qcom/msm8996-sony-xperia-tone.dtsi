@@ -1,0 +1,844 @@
+// SPDX-License-Identifier: BSD-3-Clause
+/*
+ * Copyright (c) 2021, AngeloGioacchino Del Regno
+ *                     <angelogioacchino.delregno@somainline.org>
+ * Copyright (c) 2021, Konrad Dybcio <konrad.dybcio@somainline.org>
+ */
+
+/*
+ * Adapted from Linux v5.15 arch/arm64/boot/dts/qcom/
+ * msm8996-sony-xperia-tone.dtsi for the pinned Linux 4.19 MSM8996 base.
+ * Only existing 4.19 drivers/bindings are enabled here. Original copyright
+ * and BSD-3-Clause license above apply to the board data.
+ *
+ * This is an initial headless bring-up description: Sony MDSS 1080p60,
+ * camera, DSP/audio, touch, fuel gauge/charger and secure firmware ABI
+ * still need porting. It does not replace the working 4.4 vendor DT.
+ * Board-specific SPMI SAW/WLED nodes and absent I2C controllers from 5.15
+ * are deliberately omitted rather than described with invented bindings.
+ */
+
+#include "msm8996.dtsi"
+#include "pm8994.dtsi"
+#include "pmi8994.dtsi"
+#include <dt-bindings/input/input.h>
+#include <dt-bindings/gpio/gpio.h>
+#include <dt-bindings/pinctrl/qcom,pmic-gpio.h>
+#include <dt-bindings/pinctrl/qcom,pmic-mpp.h>
+
+/delete-node/ &slpi_region;
+/delete-node/ &venus_region;
+
+/ {
+	qcom,msm-id = <246 0x30001>; /* MSM8996 V3.1 (Final) */
+	qcom,pmic-id = <0x20009 0x2000a 0 0>; /* PM8994 + PMI8994 */
+	qcom,board-id = <8 0>;
+
+	chosen {
+		/* Retain the upstream Tone bring-up CPU limit until on-device tests. */
+		bootargs = "maxcpus=2";
+	};
+
+	reserved-memory {
+		ramoops@a7f00000 {
+			compatible = "ramoops";
+			reg = <0 0xa7f00000 0 0x100000>;
+			record-size = <0x20000>;
+			console-size = <0x40000>;
+			ftrace-size = <0x20000>;
+			pmsg-size = <0x20000>;
+			ecc-size = <16>;
+		};
+
+		cont_splash_mem: memory@83401000 {
+			reg = <0 0x83401000 0 0x23ff000>;
+			no-map;
+		};
+
+		zap_shader_region: gpu@90400000 {
+			compatible = "shared-dma-pool";
+			reg = <0x0 0x90400000 0x0 0x2000>;
+			no-map;
+		};
+
+		slpi_region: memory@90500000 {
+			reg = <0 0x90500000 0 0xa00000>;
+			no-map;
+		};
+
+		venus_region: memory@90f00000 {
+			reg = <0 0x90f00000 0 0x500000>;
+			no-map;
+		};
+	};
+
+	panel_tvdd: tvdd-regulator {
+		compatible = "regulator-fixed";
+		regulator-name = "panel_tvdd";
+		gpio = <&msmgpio 50 GPIO_ACTIVE_LOW>;
+		pinctrl-0 = <&tp_vddio_en>;
+		pinctrl-names = "default";
+	};
+
+	usb3_id: usb3-id {
+		compatible = "linux,extcon-usb-gpio";
+		id-gpios = <&msmgpio 25 GPIO_ACTIVE_LOW>;
+		pinctrl-names = "default";
+		pinctrl-0 = <&usb_detect>;
+	};
+
+	vph_pwr: vph-pwr-regulator {
+		compatible = "regulator-fixed";
+		regulator-min-microvolt = <3700000>;
+		regulator-max-microvolt = <3700000>;
+		regulator-name = "vph_pwr";
+		regulator-always-on;
+		regulator-boot-on;
+	};
+
+	wlan_en: wlan-en-1-8v {
+		compatible = "regulator-fixed";
+		regulator-name = "wlan-en-regulator";
+		regulator-min-microvolt = <1800000>;
+		regulator-max-microvolt = <1800000>;
+		gpio = <&msmgpio 84 GPIO_ACTIVE_HIGH>;
+		pinctrl-names = "default";
+		pinctrl-0 = <&wl_reg_on>;
+
+		/* WLAN card specific delay */
+		startup-delay-us = <70000>;
+		enable-active-high;
+	};
+};
+
+&blsp2_uart2 {
+	status = "okay";
+};
+
+&hsusb_phy1 {
+	status = "okay";
+
+	vdda-pll-supply = <&pm8994_l12>;
+	vdda-phy-dpdm-supply = <&pm8994_l24>;
+};
+
+&pcie0 {
+	status = "okay";
+	perst-gpio = <&msmgpio 35 GPIO_ACTIVE_LOW>;
+	wake-gpio = <&msmgpio 37 GPIO_ACTIVE_HIGH>;
+	vddpe-3v3-supply = <&wlan_en>;
+	vdda-supply = <&pm8994_l28>;
+};
+
+&{/soc/phy@34000} {
+	status = "okay";
+
+	vdda-phy-supply = <&pm8994_l28>;
+	vdda-pll-supply = <&pm8994_l12>;
+};
+
+&pm8994_gpios {
+	pinctrl-names = "default";
+	pinctrl-0 = <&pm8994_gpios_defaults>;
+	gpio-line-names =
+		"NC",
+		"VOL_DOWN_N",
+		"VOL_UP_N",
+		"SNAPSHOT_N",
+		"FOCUS_N",
+		"NC",
+		"NFC_VEN",
+		"NC",
+		"NC",
+		"NC",
+		"NC",
+		"NC",
+		"EAR_EN",
+		"NC",
+		"PM_DIVCLK1",
+		"PMI_CLK",
+		"NC",
+		"WL_SLEEP_CLK",
+		"NC",
+		"PMIC_SPON",
+		"UIM_BATT_ALARM",
+		"PMK_SLEEP_CLK";
+
+	/*
+	 * We don't yet know for sure which GPIOs are of our interest, but what
+	 * we do know is that if a vendor sets the pins to a non-default state, there's
+	 * probably a reason for it, and just to be on the safe side, we follow suit.
+	 */
+	pm8994_gpios_defaults: pm8994-gpios-default-state {
+		pm8994-gpio1-nc {
+			pins = "gpio1";
+			function = PMIC_GPIO_FUNC_NORMAL;
+			drive-push-pull;
+			bias-high-impedance;
+		};
+
+		vol-down-n {
+			pins = "gpio2";
+			function = PMIC_GPIO_FUNC_NORMAL;
+			drive-push-pull;
+			input-enable;
+			bias-pull-up;
+			qcom,drive-strength = <PMIC_GPIO_STRENGTH_NO>;
+			power-source = <PM8994_GPIO_S4>;
+		};
+
+		vol-up-n {
+			pins = "gpio3";
+			function = PMIC_GPIO_FUNC_NORMAL;
+			drive-push-pull;
+			input-enable;
+			bias-pull-up;
+			power-source = <PM8994_GPIO_S4>;
+		};
+
+		camera-snapshot-n {
+			pins = "gpio4";
+			function = PMIC_GPIO_FUNC_NORMAL;
+			drive-push-pull;
+			input-enable;
+			bias-pull-up;
+			qcom,drive-strength = <PMIC_GPIO_STRENGTH_NO>;
+			power-source = <PM8994_GPIO_S4>;
+		};
+
+		camera-focus-n {
+			pins = "gpio5";
+			function = PMIC_GPIO_FUNC_NORMAL;
+			drive-push-pull;
+			input-enable;
+			bias-pull-up;
+			qcom,drive-strength = <PMIC_GPIO_STRENGTH_NO>;
+			power-source = <PM8994_GPIO_S4>;
+		};
+
+		pm8994-gpio6-nc {
+			pins = "gpio6";
+			function = PMIC_GPIO_FUNC_NORMAL;
+			drive-push-pull;
+			bias-high-impedance;
+			power-source = <PM8994_GPIO_VPH>;
+		};
+
+		nfc-download {
+			pins = "gpio7";
+			function = PMIC_GPIO_FUNC_NORMAL;
+			output-low;
+			drive-push-pull;
+			bias-disable;
+			qcom,drive-strength = <PMIC_GPIO_STRENGTH_LOW>;
+			power-source = <PM8994_GPIO_S4>;
+		};
+
+		pm8994-gpio8-nc {
+			pins = "gpio8";
+			function = PMIC_GPIO_FUNC_NORMAL;
+			output-low;
+			drive-push-pull;
+			bias-high-impedance;
+			qcom,drive-strength = <PMIC_GPIO_STRENGTH_NO>;
+			power-source = <PM8994_GPIO_VPH>;
+		};
+
+		pm8994-gpio9-nc {
+			pins = "gpio9";
+			function = PMIC_GPIO_FUNC_NORMAL;
+			output-high;
+			drive-push-pull;
+			bias-high-impedance;
+			qcom,drive-strength = <PMIC_GPIO_STRENGTH_LOW>;
+			power-source = <PM8994_GPIO_VPH>;
+		};
+
+		nfc-clock {
+			pins = "gpio10";
+			function = PMIC_GPIO_FUNC_NORMAL;
+			input-enable;
+			drive-push-pull;
+			bias-pull-down;
+			qcom,drive-strength = <PMIC_GPIO_STRENGTH_NO>;
+			power-source = <PM8994_GPIO_S4>;
+		};
+
+		pm8994-gpio11-nc {
+			pins = "gpio11";
+			function = PMIC_GPIO_FUNC_NORMAL;
+			drive-push-pull;
+			bias-high-impedance;
+			power-source = <PM8994_GPIO_VPH>;
+		};
+
+		pm8994-gpio12-nc {
+			pins = "gpio12";
+			function = PMIC_GPIO_FUNC_NORMAL;
+			drive-push-pull;
+			bias-high-impedance;
+			power-source = <PM8994_GPIO_VPH>;
+		};
+
+		ear-enable {
+			pins = "gpio13";
+			function = PMIC_GPIO_FUNC_NORMAL;
+			output-high;
+			drive-push-pull;
+			bias-disable;
+			qcom,drive-strength = <PMIC_GPIO_STRENGTH_LOW>;
+			power-source = <PM8994_GPIO_S4>;
+		};
+
+		pm8994-gpio14-nc {
+			pins = "gpio14";
+			function = PMIC_GPIO_FUNC_NORMAL;
+			drive-push-pull;
+			input-enable;
+			bias-high-impedance;
+			qcom,drive-strength = <PMIC_GPIO_STRENGTH_LOW>;
+			power-source = <PM8994_GPIO_VPH>;
+		};
+
+		pm-divclk1-gpio {
+			pins = "gpio15";
+			function = "func1";
+			output-high;
+			drive-push-pull;
+			bias-high-impedance;
+			qcom,drive-strength = <PMIC_GPIO_STRENGTH_LOW>;
+			power-source = <PM8994_GPIO_VPH>;
+		};
+
+		pmi-clk-gpio {
+			pins = "gpio16";
+			function = PMIC_GPIO_FUNC_NORMAL;
+			drive-push-pull;
+		};
+
+		pm8994-gpio17-nc {
+			pins = "gpio17";
+			function = PMIC_GPIO_FUNC_NORMAL;
+			drive-push-pull;
+			bias-high-impedance;
+			power-source = <PM8994_GPIO_VPH>;
+		};
+
+		rome-sleep {
+			pins = "gpio18";
+			function = PMIC_GPIO_FUNC_FUNC2;
+			output-low;
+			drive-push-pull;
+			bias-disable;
+			qcom,drive-strength = <PMIC_GPIO_STRENGTH_MED>;
+			power-source = <PM8994_GPIO_S4>;
+		};
+
+		pm8994-gpio19-nc {
+			pins = "gpio19";
+			function = PMIC_GPIO_FUNC_NORMAL;
+			output-low;
+			drive-push-pull;
+			bias-high-impedance;
+			qcom,drive-strength = <PMIC_GPIO_STRENGTH_NO>;
+			power-source = <PM8994_GPIO_VPH>;
+		};
+
+		pm8994-gpio22-nc {
+			pins = "gpio22";
+			function = PMIC_GPIO_FUNC_NORMAL;
+			drive-push-pull;
+			bias-high-impedance;
+			power-source = <PM8994_GPIO_VPH>;
+		};
+	};
+};
+
+&pm8994_mpps {
+	pinctrl-names = "default";
+	pinctrl-0 = <&pm8994_mpps_defaults>;
+
+	gpio-line-names =
+		"SDC_UIM_VBIAS",
+		"LCD_ID_ADC",
+		"VREF_DACX",
+		"NC",
+		"FLASH_THERM",
+		"NC",
+		"NC",
+		"RF_ID";
+
+	pm8994_mpps_defaults: pm8994-mpps-default-state {
+		lcd-id_adc-mpp {
+			pins = "mpp2";
+			function = "analog";
+			input-enable;
+			qcom,amux-route = <PMIC_MPP_AMUX_ROUTE_CH6>;
+		};
+
+		pm-mpp4-nc {
+			pins = "mpp4";
+			function = "digital";
+			bias-high-impedance;
+			power-source = <PM8994_GPIO_VPH>;
+		};
+
+		flash-therm-mpp {
+			pins = "mpp5";
+			function = "analog";
+			input-enable;
+			qcom,amux-route = <PMIC_MPP_AMUX_ROUTE_CH5>;
+		};
+
+		mpp6-nc {
+			pins = "mpp6";
+			function = "digital";
+			bias-high-impedance;
+		};
+
+		rf-id-mpp {
+			pins = "mpp8";
+			function = "analog";
+			input-enable;
+			qcom,amux-route = <PMIC_MPP_AMUX_ROUTE_CH8>;
+		};
+	};
+};
+
+&pmi8994_gpios {
+	pinctrl-names = "default";
+	pinctrl-0 = <&pmi8994_gpios_defaults>;
+
+	gpio-line-names =
+		"VIB_LDO_EN",
+		"NC",
+		"NC",
+		"NC",
+		"NC",
+		"NC",
+		"NC",
+		"NC",
+		"USB_SWITCH_SEL",
+		"NC";
+
+	pmi8994_gpios_defaults: pmi8994-gpios-default-state {
+		vib-ldo-en-gpio {
+			pins = "gpio1";
+			function = PMIC_GPIO_FUNC_NORMAL;
+			drive-push-pull;
+			output-low;
+			bias-disable;
+			power-source = <PM8994_GPIO_S4>;
+		};
+
+		pmi-gpio2-nc {
+			pins = "gpio2";
+			function = PMIC_GPIO_FUNC_NORMAL;
+			drive-push-pull;
+			input-enable;
+			bias-high-impedance;
+			qcom,drive-strength = <PMIC_GPIO_STRENGTH_NO>;
+			power-source = <PM8994_GPIO_VPH>;
+		};
+
+		pmi-gpio3-nc {
+			pins = "gpio3";
+			function = PMIC_GPIO_FUNC_NORMAL;
+			drive-push-pull;
+			input-enable;
+			bias-high-impedance;
+			qcom,drive-strength = <PMIC_GPIO_STRENGTH_NO>;
+			power-source = <PM8994_GPIO_VPH>;
+		};
+
+		pmi-gpio4-nc {
+			pins = "gpio4";
+			function = PMIC_GPIO_FUNC_NORMAL;
+			drive-push-pull;
+			output-high;
+			qcom,drive-strength = <PMIC_GPIO_STRENGTH_LOW>;
+			power-source = <PM8994_GPIO_S4>;
+		};
+
+		pmi-gpio5-nc {
+			pins = "gpio5";
+			function = PMIC_GPIO_FUNC_NORMAL;
+			drive-push-pull;
+			output-high;
+			qcom,drive-strength = <PMIC_GPIO_STRENGTH_NO>;
+			power-source = <PM8994_GPIO_S4>;
+		};
+
+		pmi-gpio6-nc {
+			pins = "gpio6";
+			function = PMIC_GPIO_FUNC_NORMAL;
+			drive-push-pull;
+			output-high;
+			qcom,drive-strength = <PMIC_GPIO_STRENGTH_LOW>;
+			power-source = <PM8994_GPIO_S4>;
+		};
+
+		pmi-gpio7-nc {
+			pins = "gpio7";
+			function = PMIC_GPIO_FUNC_NORMAL;
+			drive-push-pull;
+			output-high;
+			qcom,drive-strength = <PMIC_GPIO_STRENGTH_LOW>;
+			power-source = <PM8994_GPIO_S4>;
+		};
+
+		pmi-gpio8-nc {
+			pins = "gpio8";
+			function = PMIC_GPIO_FUNC_NORMAL;
+			drive-push-pull;
+			output-high;
+			qcom,drive-strength = <PMIC_GPIO_STRENGTH_LOW>;
+			power-source = <PM8994_GPIO_S4>;
+		};
+
+		usb-switch-sel {
+			pins = "gpio9";
+			function = PMIC_GPIO_FUNC_NORMAL;
+			drive-push-pull;
+		};
+
+		pmi-gpio10-nc {
+			pins = "gpio10";
+			function = PMIC_GPIO_FUNC_NORMAL;
+			output-low;
+			drive-push-pull;
+			bias-disable;
+			qcom,drive-strength = <PMIC_GPIO_STRENGTH_NO>;
+			power-source = <PM8994_GPIO_S4>;
+		};
+	};
+};
+
+&{/rpm-glink/rpm_requests} {
+	pm8994-regulators {
+		compatible = "qcom,rpm-pm8994-regulators";
+
+		vdd_s1-supply = <&vph_pwr>;
+		vdd_s2-supply = <&vph_pwr>;
+		vdd_s3-supply = <&vph_pwr>;
+		vdd_s4-supply = <&vph_pwr>;
+		vdd_s5-supply = <&vph_pwr>;
+		vdd_s6-supply = <&vph_pwr>;
+		vdd_s7-supply = <&vph_pwr>;
+		vdd_s8-supply = <&vph_pwr>;
+		vdd_s9-supply = <&vph_pwr>;
+		vdd_s10-supply = <&vph_pwr>;
+		vdd_s11-supply = <&vph_pwr>;
+		vdd_s12-supply = <&vph_pwr>;
+		vdd_l1-supply = <&pm8994_s3>;
+		vdd_l2_l26_l28-supply = <&pm8994_s3>;
+		vdd_l3_l11-supply = <&pm8994_s3>;
+		vdd_l4_l27_l31-supply = <&pm8994_s3>;
+		vdd_l5_l7-supply = <&pm8994_s5>;
+		vdd_l6_l12_l32-supply = <&pm8994_s5>;
+		vdd_l8_l16_l30-supply = <&vph_pwr>;
+		vdd_l14_l15-supply = <&pm8994_s5>;
+		vdd_l20_l21-supply = <&pm8994_s5>;
+		vdd_l25-supply = <&pm8994_s3>;
+		vdd_lvs1_2-supply = <&pm8994_s4>;
+
+		pm8994_s3: s3 {
+			regulator-min-microvolt = <1300000>;
+			regulator-max-microvolt = <1300000>;
+		};
+
+		pm8994_s4: s4 {
+			regulator-min-microvolt = <1800000>;
+			regulator-max-microvolt = <1800000>;
+			regulator-system-load = <325000>;
+			regulator-always-on;
+		};
+
+		pm8994_s5: s5 {
+			regulator-min-microvolt = <2150000>;
+			regulator-max-microvolt = <2150000>;
+		};
+
+		pm8994_s7: s7 {
+			regulator-min-microvolt = <800000>;
+			regulator-max-microvolt = <800000>;
+		};
+
+		pm8994_l1: l1 {
+			regulator-min-microvolt = <1000000>;
+			regulator-max-microvolt = <1000000>;
+		};
+
+		pm8994_l2: l2 {
+			regulator-min-microvolt = <1250000>;
+			regulator-max-microvolt = <1250000>;
+		};
+
+		pm8994_l3: l3 {
+			regulator-min-microvolt = <1100000>;
+			regulator-max-microvolt = <1100000>;
+		};
+
+		pm8994_l4: l4 {
+			regulator-min-microvolt = <1225000>;
+			regulator-max-microvolt = <1225000>;
+		};
+
+		/* L6 and L7 seem unused. */
+
+		pm8994_l8: l8 {
+			regulator-min-microvolt = <1800000>;
+			regulator-max-microvolt = <1800000>;
+		};
+
+		pm8994_l9: l9 {
+			regulator-min-microvolt = <1800000>;
+			regulator-max-microvolt = <1800000>;
+		};
+
+		pm8994_l10: l10 {
+			regulator-min-microvolt = <1800000>;
+			regulator-max-microvolt = <1800000>;
+		};
+
+		pm8994_l11: l11 {
+			regulator-min-microvolt = <1100000>;
+			regulator-max-microvolt = <1100000>;
+		};
+
+		pm8994_l12: l12 {
+			regulator-min-microvolt = <1800000>;
+			regulator-max-microvolt = <1800000>;
+			regulator-allow-set-load;
+		};
+
+		pm8994_l13: l13 {
+			regulator-min-microvolt = <1800000>;
+			regulator-max-microvolt = <2950000>;
+			regulator-system-load = <22000>;
+			regulator-allow-set-load;
+		};
+
+		pm8994_l14: l14 {
+			regulator-min-microvolt = <1700000>;
+			regulator-max-microvolt = <1900000>;
+		};
+
+		pm8994_l15: l15 {
+			regulator-min-microvolt = <1800000>;
+			regulator-max-microvolt = <1800000>;
+		};
+
+		pm8994_l16: l16 {
+			regulator-min-microvolt = <2700000>;
+			regulator-max-microvolt = <2700000>;
+		};
+
+		pm8994_l17: l17 {
+			regulator-min-microvolt = <2200000>;
+			regulator-max-microvolt = <2500000>;
+		};
+
+		pm8994_l18: l18 {
+			regulator-min-microvolt = <1800000>;
+			regulator-max-microvolt = <1800000>;
+		};
+
+		pm8994_l19: l19 {
+			regulator-min-microvolt = <3000000>;
+			regulator-max-microvolt = <3000000>;
+		};
+
+		pm8994_l20: l20 {
+			regulator-min-microvolt = <2950000>;
+			regulator-max-microvolt = <2950000>;
+			regulator-system-load = <570000>;
+			regulator-allow-set-load;
+		};
+
+		pm8994_l21: l21 {
+			regulator-min-microvolt = <2950000>;
+			regulator-max-microvolt = <2950000>;
+			regulator-system-load = <800000>;
+			regulator-allow-set-load;
+		};
+
+		pm8994_l22: l22 {
+			regulator-min-microvolt = <3000000>;
+			regulator-max-microvolt = <3000000>;
+		};
+
+		pm8994_l23: l23 {
+			regulator-min-microvolt = <2700000>;
+			regulator-max-microvolt = <2700000>;
+		};
+
+		pm8994_l24: l24 {
+			regulator-min-microvolt = <3075000>;
+			regulator-max-microvolt = <3075000>;
+			regulator-allow-set-load;
+		};
+
+		pm8994_l25: l25 {
+			regulator-min-microvolt = <1200000>;
+			regulator-max-microvolt = <1200000>;
+			regulator-allow-set-load;
+		};
+
+		pm8994_l27: l27 {
+			regulator-min-microvolt = <1000000>;
+			regulator-max-microvolt = <1200000>;
+		};
+
+		pm8994_l28: l28 {
+			regulator-min-microvolt = <925000>;
+			regulator-max-microvolt = <925000>;
+			regulator-allow-set-load;
+		};
+
+		pm8994_l29: l29 {
+			regulator-min-microvolt = <2700000>;
+			regulator-max-microvolt = <2700000>;
+		};
+
+		pm8994_l30: l30 { };
+
+		pm8994_l32: l32 {
+			regulator-min-microvolt = <1800000>;
+			regulator-max-microvolt = <1800000>;
+		};
+	};
+};
+
+&sdhc2 {
+	status = "okay";
+
+	cd-gpios = <&msmgpio 40 GPIO_ACTIVE_HIGH>;
+	vmmc-supply = <&pm8994_l21>;
+	vqmmc-supply = <&pm8994_l13>;
+};
+
+&msmgpio {
+	gpio-reserved-ranges = <0 4>;
+	pinctrl-0 = <&sw_service_gpio>;
+	pinctrl-names = "default";
+
+	disp_reset_n_gpio: disp-reset-n {
+		pins = "gpio8";
+		function = "gpio";
+		drive-strength = <2>;
+		bias-disable;
+	};
+
+	mdp_vsync_p_gpio: mdp-vsync-p {
+		pins = "gpio10";
+		function = "mdp_vsync";
+		drive-strength = <2>;
+		bias-disable;
+	};
+
+	sw_service_gpio: sw-service-gpio {
+		pins = "gpio16";
+		function = "gpio";
+		drive-strength = <2>;
+		bias-pull-up;
+	};
+
+	usb_detect: usb-detect {
+		pins = "gpio25";
+		function = "gpio";
+		drive-strength = <2>;
+		bias-disable;
+		output-high;
+	};
+
+	uim_detect_en: uim-detect-en {
+		pins = "gpio29";
+		function = "gpio";
+		drive-strength = <2>;
+		bias-disable;
+		output-high;
+	};
+
+	tray_det_pin: tray-det {
+		pins = "gpio40";
+		function = "gpio";
+		drive-strength = <2>;
+		bias-disable;
+	};
+
+	tp_vddio_en: tp-vddio-en {
+		pins = "gpio50";
+		function = "gpio";
+		drive-strength = <2>;
+		bias-disable;
+		output-high;
+	};
+
+	lcd_vddio_en: lcd-vddio-en {
+		pins = "gpio51";
+		function = "gpio";
+		drive-strength = <2>;
+		bias-disable;
+		output-low;
+	};
+
+	wl_host_wake: wl-host-wake {
+		pins = "gpio79";
+		function = "gpio";
+		drive-strength = <2>;
+		bias-pull-down;
+	};
+
+	wl_reg_on: wl-reg-on {
+		pins = "gpio84";
+		function = "gpio";
+		drive-strength = <2>;
+		bias-disable;
+		output-low;
+	};
+
+	ts_reset_n: ts-rst-n {
+		pins = "gpio89";
+		function = "gpio";
+		drive-strength = <2>;
+	};
+
+	touch_int_n: touch-int-n {
+		pins = "gpio125";
+		function = "gpio";
+		drive-strength = <2>;
+		bias-pull-up;
+	};
+
+	touch_int_sleep: touch-int-sleep {
+		pins = "gpio125";
+		function = "gpio";
+		drive-strength = <2>;
+		bias-pull-down;
+	};
+};
+
+/* USB peripheral bring-up; USB-C/charger/OTG policy still needs vendor porting. */
+&usb3 {
+	status = "okay";
+	qcom,select-utmi-as-pipe-clk;
+};
+
+&{/soc/usb@6a00000/dwc3@6a00000} {
+	extcon = <&usb3_id>;
+	dr_mode = "peripheral";
+	maximum-speed = "high-speed";
+	phys = <&hsusb_phy1>;
+	phy-names = "usb2-phy";
+	snps,hird-threshold = /bits/ 8 <0>;
+};
+
+/* The Xperia X Performance uses UFS, not the upstream board's disabled eMMC. */
+&ufsphy {
+	status = "okay";
+};
+
+&{/soc/ufshc@624000} {
+	status = "okay";
+};

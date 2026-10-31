@@ -161,6 +161,10 @@ struct fb_cursor_user {
 #define FB_EVENT_REMAP_ALL_CONSOLE      0x0F
 /*      A hardware display blank early change occurred */
 #define FB_EARLY_EVENT_BLANK		0x10
+
+/* Sony incell notifications retain the separate reference event namespace. */
+#define FB_EXT_EARLY_EVENT_BLANK		0xF0
+#define FB_EXT_EVENT_BLANK		0xF1
 /*      A hardware display blank revert early change occurred */
 #define FB_R_EARLY_EVENT_BLANK		0x11
 

@@ -3598,6 +3598,250 @@ static int qpnp_ibb_discharge_config(struct qpnp_labibb *labibb)
 	return rc;
 }
 
+#ifdef CONFIG_REGULATOR_QPNP_LABIBB_SOMC
+/** This API is used to set precharge of LAB regulator
+ * regulator: the reglator device
+ * time: precharge time
+ * en: precharge control enable or not
+ */
+int qpnp_lab_set_precharge(struct regulator *regulator, u32 time, bool en)
+{
+	struct qpnp_labibb *labibb;
+	u8 val;
+	int rc;
+
+	labibb = regulator_get_drvdata(regulator);
+
+	for (val = 0; val < ARRAY_SIZE(lab_max_precharge_table); val++)
+		if (lab_max_precharge_table[val] == time)
+			break;
+
+	if (val == ARRAY_SIZE(lab_soft_start_table))
+		val = ARRAY_SIZE(lab_max_precharge_table) - 1;
+
+	if (en)
+		val |= LAB_FAST_PRECHARGE_CTL_EN;
+
+	pr_debug("write base=0x%x val=0x%x\n",
+			(labibb->lab_base + REG_LAB_PRECHARGE_CTL), val);
+
+	mutex_lock(&(labibb->lab_vreg.lab_mutex));
+
+	rc = qpnp_labibb_write(labibb, labibb->lab_base +
+				REG_LAB_PRECHARGE_CTL, &val, 1);
+
+	mutex_unlock(&(labibb->lab_vreg.lab_mutex));
+	return rc;
+}
+EXPORT_SYMBOL(qpnp_lab_set_precharge);
+
+/** This API is used to set soft-start of LAB regulator
+ * regulator: the reglator device
+ * time: soft start time
+ */
+int qpnp_lab_set_soft_start(struct regulator *regulator, u32 time)
+{
+	struct qpnp_labibb *labibb;
+	u8 val;
+	int rc;
+
+	labibb = regulator_get_drvdata(regulator);
+
+	for (val = 0; val < sizeof(ARRAY_SIZE(lab_soft_start_table)); val++)
+		if (lab_soft_start_table[val] == time)
+			break;
+
+	if (val == ARRAY_SIZE(lab_soft_start_table))
+		val = ARRAY_SIZE(lab_soft_start_table) - 1;
+
+	pr_debug("write base=0x%x val=0x%x\n",
+			(labibb->lab_base + REG_LAB_SOFT_START_CTL), val);
+
+	mutex_lock(&(labibb->lab_vreg.lab_mutex));
+
+	rc = qpnp_labibb_write(labibb, labibb->lab_base +
+				REG_LAB_SOFT_START_CTL, &val, 1);
+
+	mutex_unlock(&(labibb->lab_vreg.lab_mutex));
+	return rc;
+}
+EXPORT_SYMBOL(qpnp_lab_set_soft_start);
+
+/** This API is used to set pull-down of LAB regulator
+ * regulator: the reglator device
+ * en: pull-down enable or not
+ * strength: strength pull-down
+ */
+int qpnp_lab_set_pull_down(struct regulator *regulator, u8 strength)
+{
+	struct qpnp_labibb *labibb;
+	u8 val;
+	int rc = 0;
+
+	if (strength > 0)
+		val = LAB_PD_CTL_STRONG_PULL;
+	else
+		val = 0;
+
+	labibb = regulator_get_drvdata(regulator);
+
+	mutex_lock(&(labibb->lab_vreg.lab_mutex));
+	rc = qpnp_labibb_masked_write(labibb, labibb->lab_base +
+				REG_LAB_PD_CTL,
+				LAB_PD_CTL_STRENGTH_MASK,
+				val);
+	mutex_unlock(&(labibb->lab_vreg.lab_mutex));
+
+	if (rc)
+		pr_err("qpnp_lab_set_pd_strength write register %x failed rc = %d\n",
+				REG_LAB_PD_CTL, rc);
+
+	return rc;
+}
+EXPORT_SYMBOL(qpnp_lab_set_pull_down);
+
+/** This API is used to set current max of LAB regulator
+ * regulator: the reglator device
+ * limit: current max of LAB regulator
+ */
+int qpnp_lab_set_current_max(struct regulator *regulator, u32 limit)
+{
+	struct qpnp_labibb *labibb;
+	int rc = 0;
+	u8 reg;
+
+	labibb = regulator_get_drvdata(regulator);
+
+	for (reg = 0; reg < ARRAY_SIZE(lab_current_limit_table); reg++)
+		if (lab_current_limit_table[reg] == limit)
+			break;
+
+	if (reg == ARRAY_SIZE(lab_current_limit_table))
+		reg = ARRAY_SIZE(lab_current_limit_table) - 1;
+
+	pr_debug("write base=0x%x val=0x%x\n",
+			(labibb->lab_base + REG_LAB_CURRENT_LIMIT) , reg);
+
+	mutex_lock(&(labibb->lab_vreg.lab_mutex));
+
+	rc = qpnp_labibb_masked_write(labibb, labibb->lab_base +
+				REG_LAB_CURRENT_LIMIT,
+				LAB_CURRENT_LIMIT_MASK,
+				reg);
+	if (rc)
+		pr_err("%s write register %x failed rc = %d\n",
+			__func__, REG_LAB_CURRENT_LIMIT, rc);
+
+	mutex_unlock(&(labibb->lab_vreg.lab_mutex));
+	return rc;
+}
+EXPORT_SYMBOL(qpnp_lab_set_current_max);
+
+/** This API is used to set soft-start of IBB regulator
+ * regulator: the reglator device
+ * time: soft start time
+ */
+int qpnp_ibb_set_soft_start(struct regulator *regulator, u32 time)
+{
+	struct qpnp_labibb *labibb;
+	u8 val;
+	int rc;
+
+	labibb = regulator_get_drvdata(regulator);
+
+	for (val = 0; val < sizeof(ARRAY_SIZE(ibb_dischg_res_table));
+		val++)
+		if (ibb_dischg_res_table[val] == time)
+			break;
+
+	if (val == ARRAY_SIZE(ibb_dischg_res_table))
+		val = ARRAY_SIZE(ibb_dischg_res_table) - 1;
+
+	pr_debug("write base=0x%x val=0x%x\n",
+			(labibb->ibb_base + REG_IBB_SOFT_START_CTL), val);
+
+	mutex_lock(&(labibb->ibb_vreg.ibb_mutex));
+
+	rc = qpnp_labibb_write(labibb, labibb->ibb_base +
+				REG_IBB_SOFT_START_CTL, &val, 1);
+
+	mutex_unlock(&(labibb->ibb_vreg.ibb_mutex));
+	return rc;
+}
+EXPORT_SYMBOL(qpnp_ibb_set_soft_start);
+
+/** This API is used to set pull-down of IBB regulator
+ * regulator: the reglator device
+ * en: pull-down enable or not
+ * strength: strength pull-down
+ */
+int qpnp_ibb_set_pull_down(struct regulator *regulator, u8 strength)
+{
+	struct qpnp_labibb *labibb;
+	u8 val;
+	int rc = 0;
+
+	if (strength > 0)
+		val = 0;
+	else
+		val = IBB_PD_CTL_HALF_STRENGTH;
+
+	labibb = regulator_get_drvdata(regulator);
+
+	mutex_lock(&(labibb->ibb_vreg.ibb_mutex));
+	rc = qpnp_labibb_masked_write(labibb, labibb->ibb_base +
+				REG_IBB_PD_CTL,
+				IBB_PD_CTL_STRENGTH_MASK,
+				val);
+	mutex_unlock(&(labibb->ibb_vreg.ibb_mutex));
+
+	if (rc)
+		pr_err("qpnp_ibb_set_pd_strength write register %x failed rc = %d\n",
+				REG_IBB_PD_CTL, rc);
+
+	return rc;
+}
+EXPORT_SYMBOL(qpnp_ibb_set_pull_down);
+
+/** This API is used to set current max of IBB regulator
+ * regulator: the reglator device
+ * limit: current max of IBB regulator
+ */
+int qpnp_ibb_set_current_max(struct regulator *regulator, u32 limit)
+{
+	struct qpnp_labibb *labibb;
+	int rc = 0;
+	u8 reg;
+
+	labibb = regulator_get_drvdata(regulator);
+
+	for (reg = 0; reg < ARRAY_SIZE(ibb_current_limit_table); reg++)
+		if (ibb_current_limit_table[reg] == limit)
+			break;
+
+	if (reg == ARRAY_SIZE(ibb_current_limit_table))
+		reg = ARRAY_SIZE(ibb_current_limit_table) - 1;
+
+	pr_debug("write base=0x%x val=0x%x\n",
+			(labibb->ibb_base + REG_IBB_CURRENT_LIMIT), reg);
+
+	mutex_lock(&(labibb->ibb_vreg.ibb_mutex));
+
+	rc = qpnp_labibb_sec_masked_write(labibb, labibb->ibb_base,
+				REG_IBB_CURRENT_LIMIT,
+				IBB_CURRENT_LIMIT_MASK,
+				reg);
+
+	if (rc)
+		pr_err("%s write register %x failed rc = %d\n",
+			__func__, REG_IBB_CURRENT_LIMIT, rc);
+
+	mutex_unlock(&(labibb->ibb_vreg.ibb_mutex));
+	return rc;
+}
+EXPORT_SYMBOL(qpnp_ibb_set_current_max);
+#endif /* CONFIG_REGULATOR_QPNP_LABIBB_SOMC */
+
 static int qpnp_ibb_dt_init(struct qpnp_labibb *labibb,
 				struct device_node *of_node)
 {

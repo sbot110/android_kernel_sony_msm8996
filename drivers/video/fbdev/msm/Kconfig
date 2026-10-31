@@ -48,6 +48,13 @@ config FB_MSM_MDP_NONE
 
 endchoice
 
+config FB_MSM_MDSS_SPECIFIC_PANEL
+	bool "Sony Tone panel and incell power sequencing"
+	depends on FB_MSM_MDSS && REGULATOR_QPNP_LABIBB_SOMC
+	help
+	  Real Sony Tone panel selection, reset and incell power state machine.
+	  Requires a completed board DT and compatible clock/PMIC providers.
+
 config FB_MSM_QPIC
 	bool
 	select FB_MSM_MDSS_COMMON

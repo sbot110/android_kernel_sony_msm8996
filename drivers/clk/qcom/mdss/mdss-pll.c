@@ -116,7 +116,18 @@ static int mdss_pll_resource_parse(struct platform_device *pdev,
 		goto err;
 	}
 
-	if (!strcmp(compatible_stream, "qcom,mdss_dsi_pll_14nm"))
+	/* The CCF 14nm implementation retains the MSM8996 revision paths. */
+	if (of_device_is_compatible(pdev->dev.of_node,
+				    "qcom,mdss_dsi_pll_8996_v2")) {
+		pll_res->pll_interface_type = MDSS_DSI_PLL_14NM;
+		pll_res->target_id = MDSS_PLL_TARGET_8996;
+		pll_res->revision = 2;
+	} else if (of_device_is_compatible(pdev->dev.of_node,
+					   "qcom,mdss_dsi_pll_8996")) {
+		pll_res->pll_interface_type = MDSS_DSI_PLL_14NM;
+		pll_res->target_id = MDSS_PLL_TARGET_8996;
+		pll_res->revision = 1;
+	} else if (!strcmp(compatible_stream, "qcom,mdss_dsi_pll_14nm"))
 		pll_res->pll_interface_type = MDSS_DSI_PLL_14NM;
 	else if (!strcmp(compatible_stream, "qcom,mdss_dp_pll_14nm"))
 		pll_res->pll_interface_type = MDSS_DP_PLL_14NM;
@@ -392,6 +403,8 @@ static int mdss_pll_remove(struct platform_device *pdev)
 }
 
 static const struct of_device_id mdss_pll_dt_match[] = {
+	{.compatible = "qcom,mdss_dsi_pll_8996"},
+	{.compatible = "qcom,mdss_dsi_pll_8996_v2"},
 	{.compatible = "qcom,mdss_dsi_pll_14nm"},
 	{.compatible = "qcom,mdss_dp_pll_14nm"},
 	{.compatible = "qcom,mdss_dsi_pll_sdm660"},
@@ -401,7 +414,7 @@ static const struct of_device_id mdss_pll_dt_match[] = {
 	{}
 };
 
-MODULE_DEVICE_TABLE(of, mdss_clock_dt_match);
+MODULE_DEVICE_TABLE(of, mdss_pll_dt_match);
 
 static struct platform_driver mdss_pll_driver = {
 	.probe = mdss_pll_probe,

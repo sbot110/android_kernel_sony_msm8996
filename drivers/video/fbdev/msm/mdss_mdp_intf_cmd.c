@@ -12,9 +12,15 @@
 #include "mdss_mdp_trace.h"
 #include "mdss_dsi_clk.h"
 #include <linux/interrupt.h>
+#ifdef CONFIG_FB_MSM_MDSS_SPECIFIC_PANEL
+#include "mdss_dsi_panel_driver.h"
+#endif /* CONFIG_FB_MSM_MDSS_SPECIFIC_PANEL */
 
 #define MAX_RECOVERY_TRIALS 10
 #define MAX_SESSIONS 2
+#ifdef CONFIG_FB_MSM_MDSS_SPECIFIC_PANEL
+#define MAX_RECOVERY_TRIALS_FOR_ESD 600
+#endif /* CONFIG_FB_MSM_MDSS_SPECIFIC_PANEL */
 
 #define SPLIT_MIXER_OFFSET 0x800
 
@@ -2002,6 +2008,11 @@ static int mdss_mdp_cmd_remove_vsync_handler(struct mdss_mdp_ctl *ctl,
 	spin_unlock_irqrestore(&ctx->clk_lock, flags);
 
 	if (disable_vsync_irq) {
+#ifdef CONFIG_FB_MSM_MDSS_SPECIFIC_PANEL
+		if (ctx->vsync_irq_cnt == 0)
+			return 0;
+#endif /* CONFIG_FB_MSM_MDSS_SPECIFIC_PANEL */
+
 		/* disable rd_ptr interrupt and clocks */
 		mdss_mdp_setup_vsync(ctx, false);
 		complete(&ctx->stop_comp);
@@ -2092,6 +2103,9 @@ static int mdss_mdp_cmd_wait4pingpong(struct mdss_mdp_ctl *ctl, void *arg)
 {
 	struct mdss_mdp_cmd_ctx *ctx;
 	struct mdss_panel_data *pdata;
+#ifdef CONFIG_FB_MSM_MDSS_SPECIFIC_PANEL
+	struct mdss_panel_specific_pdata *spec_pdata;
+#endif
 	unsigned long flags;
 	int rc = 0, te_irq;
 
@@ -2116,6 +2130,11 @@ static int mdss_mdp_cmd_wait4pingpong(struct mdss_mdp_ctl *ctl, void *arg)
 
 	if (rc <= 0) {
 		u32 status, mask;
+#ifdef CONFIG_FB_MSM_MDSS_SPECIFIC_PANEL
+		spec_pdata = mdss_panel2spec_pdata(pdata);
+		if (spec_pdata->blackscreen_det)
+			spec_pdata->blackscreen_det();
+#endif /* CONFIG_FB_MSM_MDSS_SPECIFIC_PANEL */
 
 		mask = mdss_mdp_get_irq_mask(MDSS_MDP_IRQ_TYPE_PING_PONG_COMP,
 				ctx->current_pp_num);
@@ -2331,6 +2350,12 @@ static int mdss_mdp_cmd_panel_on(struct mdss_mdp_ctl *ctl,
 			WARN(rc, "intf %d panel on error (%d)\n",
 					ctl->intf_num, rc);
 
+#ifdef CONFIG_FB_MSM_MDSS_SPECIFIC_PANEL
+			rc = mdss_mdp_ctl_intf_event(ctl,
+					MDSS_EVENT_POST_PANEL_ON, NULL, false);
+			WARN(rc, "intf %d post panel on error (%d)\n",
+					ctl->intf_num, rc);
+#endif /* CONFIG_FB_MSM_MDSS_SPECIFIC_PANEL */
 		}
 
 		rc = mdss_mdp_tearcheck_enable(ctl, true);
@@ -3024,6 +3049,10 @@ static int mdss_mdp_cmd_kickoff(struct mdss_mdp_ctl *ctl, void *arg)
 	struct mdss_mdp_ctl *sctl = NULL, *mctl = ctl;
 	struct mdss_mdp_cmd_ctx *ctx, *sctx = NULL;
 	struct mdss_data_type *mdata = mdss_mdp_get_mdata();
+#ifdef CONFIG_FB_MSM_MDSS_SPECIFIC_PANEL
+	struct mdss_panel_data *pdata = NULL;
+	struct mipi_panel_info *mipi = NULL;
+#endif /* CONFIG_FB_MSM_MDSS_SPECIFIC_PANEL */
 
 	ctx = (struct mdss_mdp_cmd_ctx *) ctl->intf_ctx[MASTER_CTX];
 	if (!ctx) {
@@ -3035,6 +3064,15 @@ static int mdss_mdp_cmd_kickoff(struct mdss_mdp_ctl *ctl, void *arg)
 		pr_err("ctx=%d stopped already\n", ctx->current_pp_num);
 		return -EPERM;
 	}
+
+#ifdef CONFIG_FB_MSM_MDSS_SPECIFIC_PANEL
+	if (IS_ERR_OR_NULL(ctl->panel_data)) {
+		pr_warn("%s: no panel data\n", __func__);
+	} else {
+		pdata = ctl->panel_data;
+		mipi  = &pdata->panel_info.mipi;
+	}
+#endif /* CONFIG_FB_MSM_MDSS_SPECIFIC_PANEL */
 
 	if (!ctl->is_master) {
 		mctl = mdss_mdp_get_main_ctl(ctl);
@@ -3096,6 +3134,25 @@ static int mdss_mdp_cmd_kickoff(struct mdss_mdp_ctl *ctl, void *arg)
 	/*
 	 * tx dcs command if had any
 	 */
+#ifdef CONFIG_FB_MSM_MDSS_SPECIFIC_PANEL
+	if (ctl->panel_data && mipi &&
+		mipi->dms_mode == DYNAMIC_MODE_RESOLUTION_SWITCH_IMMEDIATE &&
+		mipi->switch_mode_pending == true) {
+		/* enable clks and rd_ptr interrupt */
+		mdss_mdp_setup_vsync(ctx, true);
+
+		atomic_inc(&ctx->rdptr_cnt);
+		MDSS_XLOG(atomic_read(&ctx->rdptr_cnt));
+		mdss_mdp_cmd_wait4readptr(ctx);
+		MDSS_XLOG(atomic_read(&ctx->rdptr_cnt));
+
+		/* disable clks and rd_ptr interrupt */
+		mdss_mdp_setup_vsync(ctx, false);
+
+		mipi->switch_mode_pending = false;
+	}
+#endif /* CONFIG_FB_MSM_MDSS_SPECIFIC_PANEL */
+
 	mdss_mdp_ctl_intf_event(ctl, MDSS_EVENT_DSI_CMDLIST_KOFF, NULL,
 		CTL_INTF_EVENT_FLAG_DEFAULT);
 

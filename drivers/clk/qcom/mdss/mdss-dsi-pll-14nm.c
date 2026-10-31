@@ -17,6 +17,52 @@
 
 static struct dsi_pll_db pll_db[DSI_PLL_NUM];
 
+/* MSM8996 MMCC uses these parent names. Both aliases refer to real PLL
+ * outputs, so changing an MMCC DSI rate still programs the 14nm hardware.
+ */
+#define MSM8996_PLL_ALIAS(_name, _parent) { \
+	.mult = 1, .div = 1, \
+	.hw.init = &(struct clk_init_data) { \
+		.name = (_name), \
+		.parent_names = (const char *[]) { (_parent) }, \
+		.num_parents = 1, \
+		.flags = CLK_SET_RATE_PARENT, \
+		.ops = &clk_fixed_factor_ops, \
+	}, \
+}
+
+static struct clk_fixed_factor msm8996_pll_aliases[DSI_PLL_NUM][2] = {
+	{
+		MSM8996_PLL_ALIAS("dsi0pll", "dsi0_phy_pll_out_dsiclk"),
+		MSM8996_PLL_ALIAS("dsi0pllbyte", "dsi0_phy_pll_out_byteclk"),
+	},
+	{
+		MSM8996_PLL_ALIAS("dsi1pll", "dsi1_phy_pll_out_dsiclk"),
+		MSM8996_PLL_ALIAS("dsi1pllbyte", "dsi1_phy_pll_out_byteclk"),
+	},
+};
+
+static int msm8996_register_mmcc_parents(struct platform_device *pdev,
+				       unsigned int index)
+{
+	struct clk *clk;
+	int i;
+
+	if (!of_device_is_compatible(pdev->dev.of_node,
+				     "qcom,mdss_dsi_pll_8996") &&
+	    !of_device_is_compatible(pdev->dev.of_node,
+				     "qcom,mdss_dsi_pll_8996_v2"))
+		return 0;
+
+	for (i = 0; i < ARRAY_SIZE(msm8996_pll_aliases[index]); i++) {
+		clk = devm_clk_register(&pdev->dev,
+				       &msm8996_pll_aliases[index][i].hw);
+		if (IS_ERR(clk))
+			return PTR_ERR(clk);
+	}
+	return 0;
+}
+
 static struct regmap_config dsi_pll_14nm_config = {
 	.reg_bits	= 32,
 	.reg_stride	= 4,
@@ -606,6 +652,11 @@ int dsi_pll_clock_register_14nm(struct platform_device *pdev,
 	}
 
 	if (!rc) {
+		rc = msm8996_register_mmcc_parents(pdev, pll_res->index);
+		if (rc) {
+			of_clk_del_provider(pdev->dev.of_node);
+			return rc;
+		}
 		pr_info("Registered DSI PLL ndx=%d clocks successfully\n",
 						pll_res->index);
 		return rc;

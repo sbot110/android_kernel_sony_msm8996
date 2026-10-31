@@ -259,7 +259,16 @@ struct msm_fb_fps_info {
 	u32 measured_fps;
 };
 
+#ifdef CONFIG_FB_MSM_MDSS_SPECIFIC_PANEL
+struct fb_specific_data {
+	bool off_sts;
+};
+#endif /* CONFIG_FB_MSM_MDSS_SPECIFIC_PANEL */
+
 struct msm_fb_data_type {
+#ifdef CONFIG_FB_MSM_MDSS_SPECIFIC_PANEL
+	struct fb_specific_data spec_mfd;
+#endif
 	u32 key;
 	u32 index;
 	u32 ref_cnt;

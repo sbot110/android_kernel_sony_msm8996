@@ -744,6 +744,13 @@ config REGULATOR_QPNP_LABIBB
           negative boost regulator. LAB/IBB regulators can also be used
           together for LCD or AMOLED on QTI PMICs like PMI8998.
 
+config REGULATOR_QPNP_LABIBB_SOMC
+	bool "Sony LAB/IBB panel programming API"
+	depends on REGULATOR_QPNP_LABIBB
+	help
+	  Program real LAB/IBB precharge, current, soft-start and pull-down
+	  controls used by Sony Tone panel sequencing.
+
 config REGULATOR_QPNP_LCDB
         tristate "Qualcomm Technologies, Inc. QPNP LCDB support"
         depends on SPMI

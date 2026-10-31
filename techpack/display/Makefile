@@ -28,6 +28,7 @@ endif
 endif # CONFIG_DISP_QCOM_REFERENCE_PLATFORMS
 
 
+ifneq ($(filter y m,$(CONFIG_DRM)),)
 ifneq ($(CONFIG_DISP_TARGET_NO_DISPLAY), y)
  include $(srctree)/techpack/display/config/sony/disp_common.conf
  LINUXINCLUDE	+= -include $(srctree)/techpack/display/config/sony/disp_common.h
@@ -38,6 +39,7 @@ ifneq ($(CONFIG_DISP_TARGET_NO_DISPLAY), y)
  endif
 
 endif # !CONFIG_DISP_TARGET_NO_DISPLAY
+endif # CONFIG_DRM: do not inject DRM/SDE objects into an fbdev-only build
 
 ifeq ($(CONFIG_ARCH_SDM845), y)
 include $(srctree)/techpack/display/config/konadisp.conf

@@ -53,11 +53,7 @@
 #include <dhd_pcie.h>
 #include <dhd_linux.h>
 #ifdef CONFIG_ARCH_QCOM
-#if defined(CONFIG_ARCH_MSM8994) || defined(CONFIG_ARCH_MSM8996)
 #include <linux/msm_pcie.h>
-#else
-#include <mach/msm_pcie.h>
-#endif /* CONFIG_ARCH_MSM8994 */
 #endif /* CONFIG_ARCH_QCOM */
 
 #define PCI_CFG_RETRY 		10

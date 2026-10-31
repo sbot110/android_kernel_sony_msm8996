@@ -1,26 +1,7 @@
+// SPDX-License-Identifier: GPL-2.0
 /*
  * Copyright (c) 2011 Synaptics Incorporated
- *
- * This program is free software; you can redistribute it and/or modify
- * it under the terms of the GNU General Public License as published by
- * the Free Software Foundation; either version 2 of the License, or
- * (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with this program; if not, write to the Free Software
- * Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
- */
-/*
- * Copyright (C) 2015 Sony Mobile Communications Inc.
- *
- * This program is free software; you can redistribute it and/or modify
- * it under the terms of the GNU General Public License version 2, as
- * published by the Free Software Foundation.
+ * Copyright (C) 2017 Sony Mobile Communications Inc.
  */
 
 #include <linux/module.h>
@@ -33,7 +14,7 @@
 #include <linux/input.h>
 #include <linux/interrupt.h>
 #include <linux/syscalls.h>
-#include <linux/clearpad.h>
+#include <linux/input/clearpad.h>
 
 #define CHAR_DEVICE_NAME "rmi"
 #define DEVICE_CLASS_NAME "rmidev"
@@ -43,7 +24,7 @@
 #define REG_ADDR_LIMIT 0xFFFF
 
 struct rmidev_data {
-	/* mutex for file operation*/
+	/* mutex for file operation */
 	struct mutex file_mutex;
 	/* main char dev structure */
 	struct cdev main_dev;

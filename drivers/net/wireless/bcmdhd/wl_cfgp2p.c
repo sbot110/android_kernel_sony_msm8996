@@ -328,6 +328,7 @@ wl_cfgp2p_init_priv(struct bcm_cfg80211 *cfg)
 		CFGP2P_ERR(("struct p2p_info allocation failed\n"));
 		return -ENOMEM;
 	}
+	cfg->p2p->cfg = cfg;
 
 	wl_to_p2p_bss_ndev(cfg, P2PAPI_BSSCFG_PRIMARY) = bcmcfg_to_prmry_ndev(cfg);
 	wl_to_p2p_bss_bssidx(cfg, P2PAPI_BSSCFG_PRIMARY) = 0;
@@ -1348,10 +1349,11 @@ wl_cfgp2p_listen_complete(struct bcm_cfg80211 *cfg, bcm_struct_cfgdev *cfgdev,
  *  so lets do it from thread context.
  */
 void
-wl_cfgp2p_listen_expired(unsigned long data)
+wl_cfgp2p_listen_expired(struct timer_list *timer)
 {
 	wl_event_msg_t msg;
-	struct bcm_cfg80211 *cfg = (struct bcm_cfg80211 *) data;
+	struct p2p_info *p2p = from_timer(p2p, timer, listen_timer);
+	struct bcm_cfg80211 *cfg = p2p->cfg;
 	CFGP2P_DBG((" Enter\n"));
 	bzero(&msg, sizeof(wl_event_msg_t));
 	msg.event_type =  hton32(WLC_E_P2P_DISC_LISTEN_COMPLETE);

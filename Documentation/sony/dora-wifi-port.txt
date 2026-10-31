@@ -1,0 +1,50 @@
+BCMDHD BCM4359 source port to Linux 4.19
+=====================================
+
+Reference source: sbot110/android_kernel_sony_msm8996
+0c295b15b6d0fb59a64e13b9e0ef2070818ef2a1 (Sony 4.4.302 / LOS20).
+Original source licenses and notices are retained.
+
+Retained real implementations:
+- BCMDHD PCIe source, Sony controlfnc power/GPIO glue and preallocation.
+- wlan_plat.h platform ABI declaration.
+- Firmware/NVRAM paths from the Sony reference.
+- WPA/WPA2 cipher/AKM logic: wl_set_wpa_version, wl_set_set_cipher and
+  wl_set_key_mgmt function bodies compare byte-for-byte with the reference.
+  This retains the reference TEMP DIAG AES fallback, not a claim that it
+  is a universally correct WPA2 or KRACK security fix.
+- Dongle isolation is explicitly selectable through DHD_DONGLE_ISOLATION,
+  preserving the old MSM8996 compile flag without inventing ARCH_MSM8996.
+
+Adapted real APIs:
+- cfg80211 scan_done info, roam_info and scheduled scan request IDs.
+- Virtual interface callbacks and scheduled scan request capability.
+- Kernel timers via timer_setup/from_timer rather than removed init_timer.
+- CPU hotplug multi-state registration and instance cleanup.
+- netdev private destructor ownership and automatic netdev freeing.
+- kernel_read position-pointer interface and required scheduler declarations.
+- Private wakelock adapter uses native wakeup_source_register/unregister,
+  stay-awake, relax and timed wakeup events. Allocation errors abort attach
+  or reopen and unwind partial registrations; no no-op PM shim was added.
+
+Independent cleanup review corrected nested netdev double-free, early
+hotplug failure before tasklet initialization, cpumask ownership and
+watchdog wakeup-source lifetime after stop/reopen. Compilation does not
+exercise these runtime and failure paths; on-device stress tests remain.
+
+Linux 4.19 cfg80211_connect already preserves the crypto cipher fields
+when clearing a stale WEP key. The old Sony sme.c fix is present in effect;
+the diagnostic nl80211 forced-CCMP fallback was not blindly copied into
+the newer wireless core.
+
+IMPORTANT HARDWARE INTEGRATION LIMITATION
+The initial dora DT uses the upstream qcom,pcie-msm8996 controller binding.
+The retained Sony BCMDHD glue calls the vendor msm_pcie_* API and requires
+PCI_MSM, whose host binding is different. Both implementations compiling
+does not connect the two APIs or create the Sony WLAN platform device.
+The DT/PCIe/GPIO integration must be completed against real hardware;
+no synthetic controller adapter or fake successful probe is provided.
+
+Required runtime tests: real calibration/firmware load, WPA2-PSK/CCMP,
+mixed WPA/WPA2, reconnect, AP mode, scan/roam, suspend/resume, interface
+delete/recreate, CPU online/offline and allocation-failure cleanup.

@@ -39,6 +39,8 @@
 
 
 #include <linux/init.h>
+#include <linux/cpuhotplug.h>
+#include <uapi/linux/sched/types.h>
 #include <linux/kernel.h>
 #include <linux/slab.h>
 #include <linux/skbuff.h>
@@ -87,7 +89,7 @@
 #include <dhd_proto.h>
 #include <dhd_dbg.h>
 #ifdef CONFIG_HAS_WAKELOCK
-#include <linux/wakelock.h>
+#include "dhd_wakelock.h"
 #endif
 #ifdef WL_CFG80211
 #include <wl_cfg80211.h>
@@ -525,7 +527,10 @@ typedef struct dhd_info {
 	cpumask_var_t cpumask_primary, cpumask_secondary; /* configuration */
 	cpumask_var_t cpumask_primary_new, cpumask_secondary_new; /* temp */
 
-	struct notifier_block cpu_notifier;
+	struct hlist_node cpuhp_node;
+	int cpuhp_state;
+	bool lb_initialized;
+	bool lb_cpumasks_initialized;
 
 	/* Tasklet to handle Tx Completion packet freeing */
 	struct tasklet_struct tx_compl_tasklet;
@@ -949,32 +954,22 @@ void dhd_select_cpu_candidacy(dhd_info_t *dhd)
  * One of the task it does is to trigger the CPU Candidacy algorithm
  * for load balancing.
  */
-int
-dhd_cpu_callback(struct notifier_block *nfb, unsigned long action, void *hcpu)
+static int dhd_cpu_online(unsigned int cpu, struct hlist_node *node)
 {
-	unsigned int cpu = (unsigned int)(long)hcpu;
+	dhd_info_t *dhd = container_of(node, dhd_info_t, cpuhp_node);
+	DHD_LB_STATS_INCR(dhd->cpu_online_cnt[cpu]);
+	cpumask_set_cpu(cpu, dhd->cpumask_curr_avail);
+	dhd_select_cpu_candidacy(dhd);
+	return 0;
+}
 
-	dhd_info_t *dhd = container_of(nfb, dhd_info_t, cpu_notifier);
-
-	switch (action)
-	{
-		case CPU_ONLINE:
-			DHD_LB_STATS_INCR(dhd->cpu_online_cnt[cpu]);
-			cpumask_set_cpu(cpu, dhd->cpumask_curr_avail);
-			dhd_select_cpu_candidacy(dhd);
-			break;
-
-		case CPU_DOWN_PREPARE:
-		case CPU_DOWN_PREPARE_FROZEN:
-			DHD_LB_STATS_INCR(dhd->cpu_offline_cnt[cpu]);
-			cpumask_clear_cpu(cpu, dhd->cpumask_curr_avail);
-			dhd_select_cpu_candidacy(dhd);
-			break;
-		default:
-			break;
-	}
-
-	return NOTIFY_OK;
+static int dhd_cpu_offline(unsigned int cpu, struct hlist_node *node)
+{
+	dhd_info_t *dhd = container_of(node, dhd_info_t, cpuhp_node);
+	DHD_LB_STATS_INCR(dhd->cpu_offline_cnt[cpu]);
+	cpumask_clear_cpu(cpu, dhd->cpumask_curr_avail);
+	dhd_select_cpu_candidacy(dhd);
+	return 0;
 }
 
 #if defined(DHD_LB_STATS)
@@ -4417,8 +4412,7 @@ dhd_rx_frame(dhd_pub_t *dhdp, int ifidx, void *pktbuf, int numpkt, uint8 chan)
 #endif /* PROP_TXSTATUS */
 		}
 
-		if (ifp->net)
-			ifp->net->last_rx = jiffies;
+		/* net_device.last_rx was removed; RX statistics are maintained below. */
 
 		if (ntoh16(skb->protocol) != ETHER_TYPE_BRCM) {
 			dhdp->dstats.rx_bytes += skb->len;
@@ -4609,9 +4603,9 @@ dhd_watchdog_thread(void *data)
 	complete_and_exit(&tsk->completed, 0);
 }
 
-static void dhd_watchdog(ulong data)
+static void dhd_watchdog(struct timer_list *timer)
 {
-	dhd_info_t *dhd = (dhd_info_t *)data;
+	dhd_info_t *dhd = from_timer(dhd, timer, timer);
 	unsigned long flags;
 
 	if (dhd->pub.dongle_reset) {
@@ -4691,9 +4685,9 @@ dhd_rpm_state_thread(void *data)
 	complete_and_exit(&tsk->completed, 0);
 }
 
-static void dhd_runtimepm(ulong data)
+static void dhd_runtimepm(struct timer_list *timer)
 {
-	dhd_info_t *dhd = (dhd_info_t *)data;
+	dhd_info_t *dhd = from_timer(dhd, timer, rpm_timer);
 
 	if (dhd->pub.dongle_reset) {
 		return;
@@ -4956,6 +4950,7 @@ dhd_dpc_kill(dhd_pub_t *dhdp)
 #ifdef DHD_LB_RXP
 	__skb_queue_purge(&dhd->rx_pend_queue);
 #endif /* DHD_LB_RXP */
+	if (dhd->lb_initialized) {
 	/* Kill the Load Balancing Tasklets */
 #if defined(DHD_LB_TXC)
 	tasklet_disable(&dhd->tx_compl_tasklet);
@@ -4965,6 +4960,7 @@ dhd_dpc_kill(dhd_pub_t *dhdp)
 	tasklet_disable(&dhd->rx_compl_tasklet);
 	tasklet_kill(&dhd->rx_compl_tasklet);
 #endif /* DHD_LB_RXC */
+	}
 #endif /* DHD_LB */
 }
 
@@ -5779,7 +5775,8 @@ dhd_open(struct net_device *net)
 		}
 		/* Init wakelock */
 		if (!(dhd->dhd_state & DHD_ATTACH_STATE_WAKELOCKS_INIT)) {
-			DHD_OS_WAKE_LOCK_INIT(dhd);
+			if (dhd_os_wake_lock_init(dhd))
+				return -ENOMEM;
 			dhd->dhd_state |= DHD_ATTACH_STATE_WAKELOCKS_INIT;
 		}
 	}
@@ -6120,13 +6117,10 @@ dhd_allocate_if(dhd_pub_t *dhdpub, int ifidx, char *name,
 		ifp->net->name[IFNAMSIZ - 1] = '\0';
 	}
 
+	ifp->net->needs_free_netdev = true;
 #ifdef WL_CFG80211
-	if (ifidx == 0)
-		ifp->net->destructor = free_netdev;
-	else
-		ifp->net->destructor = dhd_netdev_free;
-#else
-	ifp->net->destructor = free_netdev;
+	if (ifidx != 0)
+		ifp->net->priv_destructor = dhd_netdev_free;
 #endif /* WL_CFG80211 */
 	strncpy(ifp->name, ifp->net->name, IFNAMSIZ);
 	ifp->name[IFNAMSIZ - 1] = '\0';
@@ -6881,10 +6875,14 @@ dhd_attach(osl_t *osh, struct dhd_bus *bus, uint bus_hdrlen)
 	/* Initialize Wakelock stuff */
 	spin_lock_init(&dhd->wakelock_spinlock);
 	spin_lock_init(&dhd->wakelock_evt_spinlock);
-	DHD_OS_WAKE_LOCK_INIT(dhd);
+	if (dhd_os_wake_lock_init(dhd))
+		goto fail;
 	dhd->wakelock_wd_counter = 0;
 #ifdef CONFIG_HAS_WAKELOCK
-	wake_lock_init(&dhd->wl_wdwake, WAKE_LOCK_SUSPEND, "wlan_wd_wake");
+	if (wake_lock_init(&dhd->wl_wdwake, WAKE_LOCK_SUSPEND, "wlan_wd_wake")) {
+		dhd_os_wake_lock_destroy(dhd);
+		goto fail;
+	}
 #endif /* CONFIG_HAS_WAKELOCK */
 #if (LINUX_VERSION_CODE >= KERNEL_VERSION(2, 6, 25))
 	mutex_init(&dhd->dhd_net_if_mutex);
@@ -6940,9 +6938,7 @@ dhd_attach(osl_t *osh, struct dhd_bus *bus, uint bus_hdrlen)
 
 
 	/* Set up the watchdog timer */
-	init_timer(&dhd->timer);
-	dhd->timer.data = (ulong)dhd;
-	dhd->timer.function = dhd_watchdog;
+	timer_setup(&dhd->timer, dhd_watchdog, 0);
 	dhd->default_wd_interval = dhd_watchdog_ms;
 
 	if (dhd_watchdog_prio >= 0) {
@@ -6958,9 +6954,7 @@ dhd_attach(osl_t *osh, struct dhd_bus *bus, uint bus_hdrlen)
 
 #ifdef DHD_PCIE_RUNTIMEPM
 	/* Setup up the runtime PM Idlecount timer */
-	init_timer(&dhd->rpm_timer);
-	dhd->rpm_timer.data = (ulong)dhd;
-	dhd->rpm_timer.function = dhd_runtimepm;
+	timer_setup(&dhd->rpm_timer, dhd_runtimepm, 0);
 	dhd->rpm_timer_valid = FALSE;
 
 	dhd->thr_rpm_ctl.thr_pid = DHD_PID_KT_INVALID;
@@ -7066,29 +7060,6 @@ dhd_attach(osl_t *osh, struct dhd_bus *bus, uint bus_hdrlen)
 
 	dhd_lb_set_default_cpus(dhd);
 
-	/* Initialize the CPU Masks */
-	if (dhd_cpumasks_init(dhd) ==  0) {
-
-		/* Now we have the current CPU maps, run through candidacy */
-		dhd_select_cpu_candidacy(dhd);
-
-		/*
-		 * If we are able to initialize CPU masks, lets register to the
-		 * CPU Hotplug framework to change the CPU for each job dynamically
-		 * using candidacy algorithm.
-		 */
-		dhd->cpu_notifier.notifier_call = dhd_cpu_callback;
-		register_cpu_notifier(&dhd->cpu_notifier); /* Register a callback */
-	} else {
-		/*
-		 * We are unable to initialize CPU masks, so candidacy algorithm
-		 * won't run, but still Load Balancing will be honoured based
-		 * on the CPUs allocated for a given job statically during init
-		 */
-		dhd->cpu_notifier.notifier_call = NULL;
-		DHD_ERROR(("%s(): dhd_cpumasks_init failed CPUs for JOB would be static\n",
-			__FUNCTION__));
-	}
 
 
 	DHD_LB_STATS_INIT(&dhd->pub);
@@ -7116,6 +7087,40 @@ dhd_attach(osl_t *osh, struct dhd_bus *bus, uint bus_hdrlen)
 	INIT_WORK(&dhd->rx_napi_dispatcher_work, dhd_rx_napi_dispatcher_fn);
 	DHD_INFO(("%s load balance init rx_napi_queue\n", __FUNCTION__));
 #endif /* DHD_LB_RXP */
+
+	dhd->lb_initialized = true;
+
+	/* Initialize the CPU Masks */
+	if (dhd_cpumasks_init(dhd) ==  0) {
+		dhd->lb_cpumasks_initialized = true;
+
+		/* Now we have the current CPU maps, run through candidacy */
+		dhd_select_cpu_candidacy(dhd);
+
+		/*
+		 * If we are able to initialize CPU masks, lets register to the
+		 * CPU Hotplug framework to change the CPU for each job dynamically
+		 * using candidacy algorithm.
+		 */
+		dhd->cpuhp_state = cpuhp_setup_state_multi(CPUHP_AP_ONLINE_DYN,
+				"net/bcmdhd:online", dhd_cpu_online, dhd_cpu_offline);
+		if (dhd->cpuhp_state < 0)
+			goto fail;
+		if (cpuhp_state_add_instance_nocalls(dhd->cpuhp_state, &dhd->cpuhp_node)) {
+			cpuhp_remove_multi_state(dhd->cpuhp_state);
+			dhd->cpuhp_state = 0;
+			goto fail;
+		}
+	} else {
+		/*
+		 * We are unable to initialize CPU masks, so candidacy algorithm
+		 * won't run, but still Load Balancing will be honoured based
+		 * on the CPUs allocated for a given job statically during init
+		 */
+		dhd->cpuhp_state = 0;
+		DHD_ERROR(("%s(): dhd_cpumasks_init failed CPUs for JOB would be static\n",
+			__FUNCTION__));
+	}
 
 #endif /* DHD_LB */
 
@@ -9317,6 +9322,7 @@ void dhd_detach(dhd_pub_t *dhdp)
 	}
 
 #if defined(DHD_LB)
+	if (dhd->lb_initialized) {
 	/* Kill the Load Balancing Tasklets */
 #if defined(DHD_LB_TXC)
 	tasklet_disable(&dhd->tx_compl_tasklet);
@@ -9326,9 +9332,17 @@ void dhd_detach(dhd_pub_t *dhdp)
 	tasklet_disable(&dhd->rx_compl_tasklet);
 	tasklet_kill(&dhd->rx_compl_tasklet);
 #endif /* DHD_LB_RXC */
-	if (dhd->cpu_notifier.notifier_call != NULL)
-		unregister_cpu_notifier(&dhd->cpu_notifier);
-	dhd_cpumasks_deinit(dhd);
+	if (dhd->cpuhp_state > 0) {
+		cpuhp_state_remove_instance_nocalls(dhd->cpuhp_state, &dhd->cpuhp_node);
+		cpuhp_remove_multi_state(dhd->cpuhp_state);
+		dhd->cpuhp_state = 0;
+	}
+	if (dhd->lb_cpumasks_initialized) {
+		dhd_cpumasks_deinit(dhd);
+		dhd->lb_cpumasks_initialized = false;
+	}
+	dhd->lb_initialized = false;
+	}
 #endif /* DHD_LB */
 
 #ifdef WL_CFG80211
@@ -9377,12 +9391,12 @@ void dhd_detach(dhd_pub_t *dhdp)
 		dhd->new_freq = NULL;
 		cpufreq_unregister_notifier(&dhd->freq_trans, CPUFREQ_TRANSITION_NOTIFIER);
 #endif
-	if (dhd->dhd_state & DHD_ATTACH_STATE_WAKELOCKS_INIT) {
-		DHD_TRACE(("wd wakelock count:%d\n", dhd->wakelock_wd_counter));
-		dhd->wakelock_wd_counter = 0;
+	/* Watchdog lifetime spans interface stop/open; release on final detach. */
+	dhd->wakelock_wd_counter = 0;
 #ifdef CONFIG_HAS_WAKELOCK
-		wake_lock_destroy(&dhd->wl_wdwake);
+	wake_lock_destroy(&dhd->wl_wdwake);
 #endif /* CONFIG_HAS_WAKELOCK */
+	if (dhd->dhd_state & DHD_ATTACH_STATE_WAKELOCKS_INIT) {
 		DHD_OS_WAKE_LOCK_DESTROY(dhd);
 	}
 
@@ -9900,9 +9914,7 @@ dhd_os_get_image_block(char *buf, int len, void *image)
 	if (!image)
 		return 0;
 
-	rdlen = kernel_read(fp, fp->f_pos, buf, len);
-	if (rdlen > 0)
-		fp->f_pos += rdlen;
+	rdlen = kernel_read(fp, buf, len, &fp->f_pos);
 
 	return rdlen;
 }
@@ -12276,30 +12288,42 @@ exit:
 	return ret;
 }
 
-void dhd_os_wake_lock_init(struct dhd_info *dhd)
+int dhd_os_wake_lock_init(struct dhd_info *dhd)
 {
 	DHD_TRACE(("%s: initialize wake_lock_counters\n", __FUNCTION__));
 	dhd->wakelock_event_counter = 0;
 	dhd->wakelock_counter = 0;
 	dhd->wakelock_rx_timeout_enable = 0;
 	dhd->wakelock_ctrl_timeout_enable = 0;
-#ifdef CONFIG_HAS_WAKELOCK
-	wake_lock_init(&dhd->wl_wifi, WAKE_LOCK_SUSPEND, "wlan_wake");
-	wake_lock_init(&dhd->wl_rxwake, WAKE_LOCK_SUSPEND, "wlan_rx_wake");
-	wake_lock_init(&dhd->wl_ctrlwake, WAKE_LOCK_SUSPEND, "wlan_ctrl_wake");
-	wake_lock_init(&dhd->wl_evtwake, WAKE_LOCK_SUSPEND, "wlan_evt_wake");
-	wake_lock_init(&dhd->wl_pmwake, WAKE_LOCK_SUSPEND, "wlan_pm_wake");
-	wake_lock_init(&dhd->wl_txflwake, WAKE_LOCK_SUSPEND, "wlan_txfl_wake");
-#ifdef BCMPCIE_OOB_HOST_WAKE
-	wake_lock_init(&dhd->wl_intrwake, WAKE_LOCK_SUSPEND, "wlan_oob_irq_wake");
-#endif /* BCMPCIE_OOB_HOST_WAKE */
-#ifdef DHD_USE_SCAN_WAKELOCK
-	wake_lock_init(&dhd->wl_scanwake, WAKE_LOCK_SUSPEND, "wlan_scan_wake");
-#endif /* DHD_USE_SCAN_WAKELOCK */
-#endif /* CONFIG_HAS_WAKELOCK */
 #ifdef DHD_TRACE_WAKE_LOCK
 	dhd_wk_lock_trace_init(dhd);
 #endif /* DHD_TRACE_WAKE_LOCK */
+#ifdef CONFIG_HAS_WAKELOCK
+	if (wake_lock_init(&dhd->wl_wifi, WAKE_LOCK_SUSPEND, "wlan_wake"))
+		goto fail;
+	if (wake_lock_init(&dhd->wl_rxwake, WAKE_LOCK_SUSPEND, "wlan_rx_wake"))
+		goto fail;
+	if (wake_lock_init(&dhd->wl_ctrlwake, WAKE_LOCK_SUSPEND, "wlan_ctrl_wake"))
+		goto fail;
+	if (wake_lock_init(&dhd->wl_evtwake, WAKE_LOCK_SUSPEND, "wlan_evt_wake"))
+		goto fail;
+	if (wake_lock_init(&dhd->wl_pmwake, WAKE_LOCK_SUSPEND, "wlan_pm_wake"))
+		goto fail;
+	if (wake_lock_init(&dhd->wl_txflwake, WAKE_LOCK_SUSPEND, "wlan_txfl_wake"))
+		goto fail;
+#ifdef BCMPCIE_OOB_HOST_WAKE
+	if (wake_lock_init(&dhd->wl_intrwake, WAKE_LOCK_SUSPEND, "wlan_oob_irq_wake"))
+		goto fail;
+#endif /* BCMPCIE_OOB_HOST_WAKE */
+#ifdef DHD_USE_SCAN_WAKELOCK
+	if (wake_lock_init(&dhd->wl_scanwake, WAKE_LOCK_SUSPEND, "wlan_scan_wake"))
+		goto fail;
+#endif /* DHD_USE_SCAN_WAKELOCK */
+#endif /* CONFIG_HAS_WAKELOCK */
+	return 0;
+fail:
+	dhd_os_wake_lock_destroy(dhd);
+	return -ENOMEM;
 }
 
 void dhd_os_wake_lock_destroy(struct dhd_info *dhd)
@@ -12790,7 +12814,7 @@ void dhd_get_memdump_info(dhd_pub_t *dhd)
 		DHD_ERROR(("[WIFI_SEC] %s: File [%s] doesn't exist\n", __FUNCTION__, filepath));
 		goto done;
 	} else {
-		ret = kernel_read(fp, 0, (char *)&mem_val, 4);
+		ret = kernel_read(fp, &mem_val, sizeof(mem_val), &fp->f_pos);
 		if (ret < 0) {
 			DHD_ERROR(("[WIFI_SEC] %s: File read error, ret=%d\n", __FUNCTION__, ret));
 			filp_close(fp, NULL);

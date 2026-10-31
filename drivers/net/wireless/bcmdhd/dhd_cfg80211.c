@@ -149,8 +149,7 @@ struct net_device * dhd_cfg80211_netdev_free(struct net_device *ndev)
 			kfree(ndev->ieee80211_ptr);
 			ndev->ieee80211_ptr = NULL;
 		}
-		free_netdev(ndev);
-		return NULL;
+		/* Called from priv_destructor; net core owns the netdev lifetime. */
 	}
 
 	return ndev;
@@ -161,8 +160,7 @@ void dhd_netdev_free(struct net_device *ndev)
 #ifdef WL_CFG80211
 	ndev = dhd_cfg80211_netdev_free(ndev);
 #endif
-	if (ndev)
-		free_netdev(ndev);
+	/* net core frees the device after invoking priv_destructor. */
 }
 
 static s32

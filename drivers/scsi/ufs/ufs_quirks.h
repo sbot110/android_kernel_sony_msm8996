@@ -1,4 +1,5 @@
-/* Copyright (c) 2014-2017, The Linux Foundation. All rights reserved.
+/*
+ * Copyright (c) 2014-2020, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -14,51 +15,67 @@
 #ifndef _UFS_QUIRKS_H_
 #define _UFS_QUIRKS_H_
 
+#if defined(CONFIG_ARCH_SONY_YOSHINO) || defined(CONFIG_ARCH_SONY_TAMA) || \
+    defined(CONFIG_ARCH_SONY_KUMANO)  || defined(CONFIG_ARCH_SONY_EDO)
+ #ifndef UFS_TARGET_SONY_PLATFORM
+  #define UFS_TARGET_SONY_PLATFORM
+ #endif
+#endif
+
 /* return true if s1 is a prefix of s2 */
 #define STR_PRFX_EQUAL(s1, s2) !strncmp(s1, s2, strlen(s1))
 
-#define UFS_ANY_VENDOR -1
+#define UFS_ANY_VENDOR 0xFFFF
 #define UFS_ANY_MODEL  "ANY_MODEL"
+#define UFS_ANY_VER    "ANY_VER"
 
-#define MAX_MODEL_LEN 16
-
+#define UFS_VENDOR_MICRON      0x12C
 #define UFS_VENDOR_TOSHIBA     0x198
 #define UFS_VENDOR_SAMSUNG     0x1CE
-#define UFS_VENDOR_HYNIX       0x1AD
-
-/* UFS TOSHIBA MODELS */
-#define UFS_MODEL_TOSHIBA_32GB "THGLF2G8D4KBADR"
-#define UFS_MODEL_TOSHIBA_64GB "THGLF2G9D8KBADG"
+#define UFS_VENDOR_SKHYNIX     0x1AD
+#define UFS_VENDOR_WDC         0x145
+#define UFS_VENDOR_MICRON      0x12C
 
 /**
- * ufs_card_info - ufs device details
- * @wmanufacturerid: card details
- * @model: card model
- */
-struct ufs_card_info {
-	u16 wmanufacturerid;
-	char *model;
-};
-
-/**
- * ufs_card_fix - ufs device quirk info
+ * ufs_dev_fix - ufs device quirk info
  * @card: ufs card details
  * @quirk: device quirk
  */
-struct ufs_card_fix {
-	struct ufs_card_info card;
+struct ufs_dev_fix {
+	u16 w_manufacturer_id;
+	char *model;
+#ifdef UFS_TARGET_SONY_PLATFORM
+	char *revision;
+#endif
 	unsigned int quirk;
 };
 
-#define END_FIX { { 0 } , 0 }
+#define END_FIX { 0 }
 
 /* add specific device quirk */
+#ifndef UFS_TARGET_SONY_PLATFORM
+#define UFS_FIX(_vendor, _model, _quirk) { \
+	.w_manufacturer_id = (_vendor),\
+	.model = (_model),		  \
+	.quirk = (_quirk),		   \
+}
+#else
 #define UFS_FIX(_vendor, _model, _quirk) \
 		{						  \
-				.card.wmanufacturerid = (_vendor),\
-				.card.model = (_model),		  \
+				.w_manufacturer_id = (_vendor),\
+				.model = (_model),		  \
+				.revision = (UFS_ANY_VER),		\
 				.quirk = (_quirk),		  \
 		}
+
+#define UFS_FIX_REVISION(_vendor, _model, _revision, _quirk) \
+		{						  \
+				.w_manufacturer_id = (_vendor),\
+				.model = (_model),		\
+				.revision = (_revision),		\
+				.quirk = (_quirk),		\
+		}
+#endif
 
 /*
  * If UFS device is having issue in processing LCC (Line Control
@@ -124,10 +141,18 @@ struct ufs_card_fix {
 #define UFS_DEVICE_NO_FASTAUTO		(1 << 5)
 
 /*
+ * It seems some UFS devices may keep drawing more than sleep current
+ * (atleast for 500us) from UFS rails (especially from VCCQ rail).
+ * To avoid this situation, add 2ms delay before putting these UFS
+ * rails in LPM mode.
+ */
+#define UFS_DEVICE_QUIRK_DELAY_BEFORE_LPM	(1 << 6)
+
+/*
  * Some UFS devices require host PA_TACTIVATE to be lower than device
  * PA_TACTIVATE, enabling this quirk ensure this.
  */
-#define UFS_DEVICE_QUIRK_HOST_PA_TACTIVATE	(1 << 6)
+#define UFS_DEVICE_QUIRK_HOST_PA_TACTIVATE	(1 << 7)
 
 /*
  * The max. value PA_SaveConfigTime is 250 (10us) but this is not enough for
@@ -137,7 +162,7 @@ struct ufs_card_fix {
  * software delay will not help on this case so we need to increase
  * PA_SaveConfigTime to >32us as per vendor recommendation.
  */
-#define UFS_DEVICE_QUIRK_HOST_PA_SAVECONFIGTIME	(1 << 7)
+#define UFS_DEVICE_QUIRK_HOST_PA_SAVECONFIGTIME	(1 << 8)
 
 /*
  * Some UFS devices may stop responding after switching from HS-G1 to HS-G3.
@@ -145,8 +170,36 @@ struct ufs_card_fix {
  * HS-G1 to HS-G2 followed by HS-G2 to HS-G3. Enabling this quirk for such
  * device would apply this 2 steps gear switch workaround.
  */
-#define UFS_DEVICE_QUIRK_HS_G1_TO_HS_G3_SWITCH (1 << 8)
+#define UFS_DEVICE_QUIRK_HS_G1_TO_HS_G3_SWITCH	(1 << 9)
 
-struct ufs_hba;
-void ufs_advertise_fixup_device(struct ufs_hba *hba);
+ /* Some UFS devices require VS_DebugSaveConfigTime is 0x10,
+ * enabling this quirk ensure this.
+ */
+#define UFS_DEVICE_QUIRK_HOST_VS_DEBUGSAVECONFIGTIME	(1 << 10)
+
+/*
+ * Some UFS devices need more delay after device reference clk is turned on
+ * but before initiation of the state transition to STALL from a LS-MODE or
+ * from the HIBERN8 state. Enable this quirk to give UFS devices 50us delay
+ * instead of the default delay.
+ */
+#define UFS_DEVICE_QUIRK_WAIT_AFTER_REF_CLK_UNGATE	(1 << 11)
+
+
+/*
+ * Few samsung UFS device models advertise PA_HIBERN8TIME as
+ * 200us during handshaking in link establishment b/w host and device but
+ * which may not be enough for the UFS device.
+ * To workaround this issue, host should set its PA_HIBERN8TIME time to
+ * 300us even if device advertises PA_HIBERN8TIME of 200us.
+ */
+#define UFS_DEVICE_QUIRK_PA_HIBER8TIME   (1 << 12)
+
+
+#ifdef UFS_TARGET_SONY_PLATFORM
+#define UFS_DEVICE_QUIRK_EXTEND_SYNC_LENGTH	(1 << 23)
+
+#define UFS_DEVICE_QUIRK_NO_PURGE	(1 << 24)
+
+#endif
 #endif /* UFS_QUIRKS_H_ */

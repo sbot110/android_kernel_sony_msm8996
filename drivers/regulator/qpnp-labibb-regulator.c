@@ -1,13 +1,6 @@
-/* Copyright (c) 2014-2017, 2019, The Linux Foundation. All rights reserved.
- *
- * This program is free software; you can redistribute it and/or modify
- * it under the terms of the GNU General Public License version 2 and
- * only version 2 as published by the Free Software Foundation.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
+// SPDX-License-Identifier: GPL-2.0-only
+/*
+ * Copyright (c) 2014-2020, The Linux Foundation. All rights reserved.
  */
 
 #define pr_fmt(fmt)	"%s: " fmt, __func__
@@ -34,14 +27,6 @@
 #include <linux/qpnp/qpnp-revid.h>
 #include <linux/regulator/qpnp-labibb-regulator.h>
 
-#ifdef CONFIG_REGULATOR_QPNP_LABIBB_SOMC
-#include <linux/regulator/qpnp-labibb-regulator.h>
-#endif
-#ifdef CONFIG_SOMC_LCD_OCP_ENABLED
-#include <linux/interrupt.h>
-#include <linux/input/qpnp-power-on.h>
-#endif /* CONFIG_SOMC_LCD_OCP_ENABLED */
-
 #define QPNP_LABIBB_REGULATOR_DRIVER_NAME	"qcom,qpnp-labibb-regulator"
 
 #define REG_REVISION_2			0x01
@@ -59,14 +44,6 @@
 
 /* LAB register offset definitions */
 #define REG_LAB_STATUS1			0x08
-#ifdef CONFIG_SOMC_LCD_OCP_ENABLED
-#define REG_LAB_INT_SET_TYPE		0x11
-#define REG_LAB_INT_POLARITY_HIGH	0x12
-#define REG_LAB_INT_POLARITY_LOW	0x13
-#define REG_LAB_INT_LATCHED_CLR		0x14
-#define REG_LAB_INT_EN_SET		0x15
-#define REG_LAB_INT_EN_CLR		0x16
-#endif /* CONFIG_SOMC_LCD_OCP_ENABLED */
 #define REG_LAB_SWIRE_PGM_CTL		0x40
 #define REG_LAB_VOLTAGE			0x41
 #define REG_LAB_RING_SUPPRESSION_CTL	0x42
@@ -102,33 +79,6 @@
 #define LAB_EN_SWIRE_PGM_VOUT		BIT(7)
 #define LAB_EN_SWIRE_PGM_PD		BIT(6)
 
-#ifdef CONFIG_SOMC_LCD_OCP_ENABLED
-/* REG_LAB_INT_SET_TYPE */
-#define LAB_INT_SET_TYPE_VREG_OK_MASK	BIT(0)
-#define LAB_INT_SET_TYPE_VREG_OK_LEVEL	0
-#define LAB_INT_SET_TYPE_VREG_OK_EDGE	1
-
-/* REG_LAB_INT_POLARITY_HIGH */
-#define LAB_INT_PRY_HIGH_VREG_OK_MASK	BIT(0)
-#define LAB_INT_PRY_HIGH_VREG_OK	0
-
-/* REG_LAB_INT_POLARITY_LOW */
-#define LAB_INT_PRY_LOW_VREG_OK_MASK	BIT(0)
-#define LAB_INT_PRY_LOW_VREG_OK		1
-
-/* REG_LAB_INT_LATCHED_CLR */
-#define LAB_INT_LATCHED_CLR_VREG_MASK	BIT(0)
-#define LAB_INT_LATCHED_CLR_VREG	1
-
-/* REG_LAB_INT_EN_SET */
-#define LAB_INT_EN_SET_VREG_OK_MASK	BIT(0)
-#define LAB_INT_EN_SET_VREG_OK		1
-
-/* REG_LAB_INT_EN_CLR */
-#define LAB_INT_EN_CLR_VREG_OK_MASK	BIT(0)
-#define LAB_INT_EN_CLR_VREG_OK		1
-#endif /* CONFIG_SOMC_LCD_OCP_ENABLED */
-
 /* REG_LAB_VOLTAGE */
 #define LAB_VOLTAGE_OVERRIDE_EN		BIT(7)
 #define LAB_VOLTAGE_SET_MASK		GENMASK(3, 0)
@@ -155,10 +105,6 @@
 #define LAB_CURRENT_LIMIT_MASK		GENMASK(2, 0)
 #define LAB_CURRENT_LIMIT_EN_BIT	BIT(7)
 #define LAB_OVERRIDE_CURRENT_MAX_BIT	BIT(3)
-
-#ifdef CONFIG_REGULATOR_QPNP_LABIBB_SOMC
-#define LAB_CURRENT_LIMIT_OVERRIDE	BIT(3)
-#endif /* CONFIG_REGULATOR_QPNP_LABIBB_SOMC */
 
 /* REG_LAB_CURRENT_SENSE */
 #define LAB_CURRENT_SENSE_GAIN_MASK	GENMASK(1, 0)
@@ -205,14 +151,6 @@
 /* IBB register offset definitions */
 #define REG_IBB_REVISION4		0x03
 #define REG_IBB_STATUS1			0x08
-#ifdef CONFIG_SOMC_LCD_OCP_ENABLED
-#define REG_IBB_INT_SET_TYPE		0x11
-#define REG_IBB_INT_POLARITY_HIGH	0x12
-#define REG_IBB_INT_POLARITY_LOW	0x13
-#define REG_IBB_INT_LATCHED_CLR		0x14
-#define REG_IBB_INT_EN_SET		0x15
-#define REG_IBB_INT_EN_CLR		0x16
-#endif /* CONFIG_SOMC_LCD_OCP_ENABLED */
 #define REG_IBB_VOLTAGE			0x41
 #define REG_IBB_RING_SUPPRESSION_CTL	0x42
 #define REG_IBB_LCD_AMOLED_SEL		0x44
@@ -247,33 +185,6 @@
 /* REG_IBB_STATUS1 */
 #define IBB_STATUS1_VREG_OK_BIT		BIT(7)
 #define IBB_STATUS1_SC_DETECT_BIT	BIT(6)
-
-#ifdef CONFIG_SOMC_LCD_OCP_ENABLED
-/* REG_IBB_INT_SET_TYPE */
-#define IBB_INT_SET_TYPE_VREG_OK_MASK	BIT(0)
-#define IBB_INT_SET_TYPE_VREG_OK_LEVEL	0
-#define IBB_INT_SET_TYPE_VREG_OK_EDGE	1
-
-/* REG_IBB_INT_POLARITY_HIGH */
-#define IBB_INT_PRY_HIGH_VREG_OK_MASK	BIT(0)
-#define IBB_INT_PRY_HIGH_VREG_OK	1
-
-/* REG_IBB_INT_POLARITY_LOW */
-#define IBB_INT_PRY_LOW_VREG_OK_MASK	BIT(0)
-#define IBB_INT_PRY_LOW_VREG_OK		0
-
-/* REG_IBB_INT_LATCHED_CLR */
-#define IBB_INT_LATCHED_CLR_VREG_MASK	BIT(0)
-#define IBB_INT_LATCHED_CLR_VREG	1
-
-/* REG_IBB_INT_EN_SET */
-#define IBB_INT_EN_SET_VREG_OK_MASK	BIT(0)
-#define IBB_INT_EN_SET_VREG_OK		1
-
-/* REG_IBB_INT_EN_CLR */
-#define IBB_INT_EN_CLR_VREG_OK_MASK	BIT(0)
-#define IBB_INT_EN_CLR_VREG_OK		1
-#endif /* CONFIG_SOMC_LCD_OCP_ENABLED */
 
 /* REG_IBB_VOLTAGE */
 #define IBB_VOLTAGE_OVERRIDE_EN		BIT(7)
@@ -396,64 +307,6 @@
 #define SWIRE_DEFAULT_2ND_CMD_DLY_MS		20
 #define SWIRE_DEFAULT_IBB_PS_ENABLE_DLY_MS	200
 #define IBB_HW_DEFAULT_SLEW_RATE		12000
-
-
-#ifdef CONFIG_SOMC_LCD_OCP_ENABLED
-/* request_irq */
-#define REQUEST_IRQ(chip, devnode, irq_num, irq_name, irq_handler, flags, rc)\
-do {									\
-	irq_num = of_irq_get_byname(devnode, irq_name);			\
-	if (irq_num < 0) {						\
-		dev_err(chip->dev, "Unable to get " irq_name " irq\n");	\
-		return -ENXIO;						\
-	}								\
-	rc = devm_request_irq(&chip->pdev->dev, irq_num, irq_handler,	\
-		flags, irq_name, chip);					\
-	if (rc < 0) {							\
-		dev_err(chip->dev, "Unable to request " irq_name " irq: %d\n",\
-				rc);					\
-		return -ENXIO;						\
-	}								\
-} while (0)								\
-
-/* enable_irq */
-#define ENABLE_IRQ(irq_num)						\
-do {									\
-	pr_debug("ENABLE_IRQ: %s\n", __func__);				\
-	enable_irq(irq_num);						\
-} while (0)
-
-/* disable_irq */
-#define DISABLE_IRQ(irq_num)						\
-do {									\
-	pr_debug("DISABLE_IRQ_NOSYNC: %s\n", __func__);			\
-	disable_irq_nosync(irq_num);					\
-} while (0)
-
-#define IRQF_LAB_FLAGS	(IRQF_ONESHOT | IRQF_TRIGGER_LOW)
-#define IRQF_IBB_FLAGS	(IRQF_ONESHOT | IRQF_TRIGGER_HIGH)
-
-#define CHATTER_CNT_START		1
-#define DEFAULT_TARGET_CHATTER_CNT	3
-#define DEFAULT_TARGET_CHATTER_INTERVAL	500
-#define DVDD_SHUTDOWN_RETRY_INTERVAL	500
-
-#define VREG_WORKER_ACTIVE		true
-#define VREG_WORKER_PASSIVE		false
-
-static irqreturn_t ibb_vreg_handler(int irq, void *_chip);
-static irqreturn_t lab_vreg_handler(int irq, void *_chip);
-
-static struct labibb_vreg_status_ctrl {
-	struct delayed_work vreg_check_work;
-	struct qpnp_labibb *labibb;
-	int current_chatter_cnt;
-	int target_chatter_cnt;
-	int target_chatter_check_interval;
-	bool vreg_check_working;
-} labibb_vreg_check;
-
-#endif /* CONFIG_SOMC_LCD_OCP_ENABLED */
 
 /**
  * enum qpnp_labibb_mode - working mode of LAB/IBB regulators
@@ -736,10 +589,6 @@ struct ibb_regulator {
 struct qpnp_labibb {
 	struct device			*dev;
 	struct platform_device		*pdev;
-#ifdef CONFIG_SOMC_LCD_OCP_ENABLED
-	struct device_node		*node_lab;
-	struct device_node		*node_ibb;
-#endif
 	struct regmap			*regmap;
 	struct class			labibb_class;
 	struct pmic_revid_data		*pmic_rev_id;
@@ -756,10 +605,6 @@ struct qpnp_labibb {
 	struct work_struct		lab_vreg_ok_work;
 	struct delayed_work		sc_err_recovery_work;
 	struct hrtimer			sc_err_check_timer;
-#ifdef CONFIG_SOMC_LCD_OCP_ENABLED
-	int				lab_vreg_irq;
-	int				ibb_vreg_irq;
-#endif
 	int				sc_err_count;
 	bool				standalone;
 	bool				ttw_en;
@@ -1215,7 +1060,7 @@ static int qpnp_ibb_set_default_voltage_v1(struct qpnp_labibb *labibb,
 
 	if (!use_default) {
 		if (labibb->ibb_vreg.curr_volt < labibb->ibb_vreg.min_volt) {
-			pr_err("qcom,qpnp-ibb-init-voltage %d is less than the the minimum voltage %d",
+			pr_err("qcom,qpnp-ibb-init-voltage %d is less than the the minimum voltage %d\n",
 			 labibb->ibb_vreg.curr_volt, labibb->ibb_vreg.min_volt);
 				return -EINVAL;
 		}
@@ -1224,7 +1069,7 @@ static int qpnp_ibb_set_default_voltage_v1(struct qpnp_labibb *labibb,
 				labibb->ibb_vreg.min_volt,
 				labibb->ibb_vreg.step_size);
 		if (val > IBB_VOLTAGE_SET_MASK) {
-			pr_err("qcom,qpnp-lab-init-voltage %d is larger than the max supported voltage %ld",
+			pr_err("qcom,qpnp-lab-init-voltage %d is larger than the max supported voltage %ld\n",
 				labibb->ibb_vreg.curr_volt,
 				labibb->ibb_vreg.min_volt +
 				labibb->ibb_vreg.step_size *
@@ -1258,7 +1103,7 @@ static int qpnp_ibb_set_default_voltage_v2(struct qpnp_labibb *labibb,
 	val = DIV_ROUND_UP(labibb->ibb_vreg.curr_volt,
 			labibb->ibb_vreg.step_size);
 	if (val > IBB_VOLTAGE_SET_MASK) {
-		pr_err("Invalid qcom,qpnp-ibb-init-voltage property %d",
+		pr_err("Invalid qcom,qpnp-ibb-init-voltage property %d\n",
 			labibb->ibb_vreg.curr_volt);
 		return -EINVAL;
 	}
@@ -1281,7 +1126,7 @@ static int qpnp_ibb_set_voltage_v1(struct qpnp_labibb *labibb,
 	u8 val;
 
 	if (min_uV < labibb->ibb_vreg.min_volt) {
-		pr_err("min_uV %d is less than min_volt %d", min_uV,
+		pr_err("min_uV %d is less than min_volt %d\n", min_uV,
 			labibb->ibb_vreg.min_volt);
 		return -EINVAL;
 	}
@@ -1425,7 +1270,7 @@ static int qpnp_lab_set_default_voltage_v1(struct qpnp_labibb *labibb,
 
 	if (!default_pres) {
 		if (labibb->lab_vreg.curr_volt < labibb->lab_vreg.min_volt) {
-			pr_err("qcom,qpnp-lab-init-voltage %d is less than the the minimum voltage %d",
+			pr_err("qcom,qpnp-lab-init-voltage %d is less than the the minimum voltage %d\n",
 				labibb->lab_vreg.curr_volt,
 				labibb->lab_vreg.min_volt);
 			return -EINVAL;
@@ -1435,7 +1280,7 @@ static int qpnp_lab_set_default_voltage_v1(struct qpnp_labibb *labibb,
 				labibb->lab_vreg.min_volt,
 				labibb->lab_vreg.step_size);
 		if (val > LAB_VOLTAGE_SET_MASK) {
-			pr_err("qcom,qpnp-lab-init-voltage %d is larger than the max supported voltage %ld",
+			pr_err("qcom,qpnp-lab-init-voltage %d is larger than the max supported voltage %ld\n",
 				labibb->lab_vreg.curr_volt,
 				labibb->lab_vreg.min_volt +
 				labibb->lab_vreg.step_size *
@@ -1570,327 +1415,6 @@ static int qpnp_labibb_get_matching_idx(const char *val)
 	return -EINVAL;
 }
 
-#ifdef CONFIG_SOMC_LCD_OCP_ENABLED
-static int qpnp_lab_interrupt_enable_ctl(struct qpnp_labibb *labibb,
-	bool inWork)
-{
-	int rc = 0;
-
-	if (labibb_vreg_check.vreg_check_working && !inWork) {
-		pr_debug("%s: vreg_check_worker is already being processed.\n",
-								__func__);
-		goto exit;
-	}
-
-	/* lab int latched clr */
-	rc = qpnp_labibb_masked_write(labibb, labibb->lab_base +
-		REG_LAB_INT_LATCHED_CLR,
-		LAB_INT_LATCHED_CLR_VREG_MASK,
-		LAB_INT_LATCHED_CLR_VREG);
-	if (rc) {
-		pr_err("%s: write register %x failed rc = %d\n",
-			__func__, REG_LAB_INT_LATCHED_CLR, rc);
-		goto exit;
-	}
-	/* lab int en set */
-	rc = qpnp_labibb_masked_write(labibb, labibb->lab_base +
-		REG_LAB_INT_EN_SET,
-		LAB_INT_EN_SET_VREG_OK_MASK,
-		LAB_INT_EN_SET_VREG_OK);
-	if (rc) {
-		pr_err("%s: write register %x failed rc = %d\n",
-			__func__, REG_LAB_INT_EN_SET, rc);
-		goto exit;
-	}
-	ENABLE_IRQ(labibb->lab_vreg_irq);
-exit:
-	return rc;
-}
-
-static int qpnp_lab_interrupt_disable_ctl(struct qpnp_labibb *labibb)
-{
-	int rc = 0;
-
-	if (labibb_vreg_check.vreg_check_working) {
-		pr_debug("%s: vreg_check_worker is already being processed.\n",
-								__func__);
-		goto exit;
-	}
-
-	DISABLE_IRQ(labibb->lab_vreg_irq);
-	/* lab int en clr */
-	rc = qpnp_labibb_masked_write(labibb, labibb->lab_base +
-		REG_LAB_INT_EN_CLR,
-		LAB_INT_EN_CLR_VREG_OK_MASK,
-		LAB_INT_EN_CLR_VREG_OK);
-	if (rc) {
-		pr_err("%s: write register %x failed rc = %d\n",
-			__func__, REG_LAB_INT_EN_CLR, rc);
-		goto exit;
-	}
-exit:
-	return rc;
-}
-
-static int qpnp_ibb_interrupt_enable_ctl(struct qpnp_labibb *labibb,
-	bool inWork)
-{
-	int rc = 0;
-
-	if (labibb_vreg_check.vreg_check_working && !inWork) {
-		pr_debug("%s: vreg_check_worker is already being processed.\n",
-								__func__);
-		goto exit;
-	}
-
-	/* ibb int latched clr */
-	rc = qpnp_labibb_masked_write(labibb, labibb->ibb_base +
-		REG_IBB_INT_LATCHED_CLR,
-		IBB_INT_LATCHED_CLR_VREG_MASK,
-		IBB_INT_LATCHED_CLR_VREG);
-	if (rc) {
-		pr_err("%s: write register %x failed rc = %d\n",
-			__func__, REG_IBB_INT_LATCHED_CLR, rc);
-		goto exit;
-	}
-	/* ibb int en set */
-	rc = qpnp_labibb_masked_write(labibb, labibb->ibb_base +
-		REG_IBB_INT_EN_SET,
-		IBB_INT_EN_SET_VREG_OK_MASK,
-		IBB_INT_EN_SET_VREG_OK);
-	if (rc) {
-		pr_err("%s: write register %x failed rc = %d\n",
-			__func__, REG_IBB_INT_EN_SET, rc);
-		goto exit;
-	}
-	ENABLE_IRQ(labibb->ibb_vreg_irq);
-exit:
-	return rc;
-}
-
-static int qpnp_ibb_interrupt_disable_ctl(struct qpnp_labibb *labibb)
-{
-	int rc = 0;
-
-	if (labibb_vreg_check.vreg_check_working) {
-		pr_debug("%s: vreg_check_worker is already being processed.\n",
-								__func__);
-		goto exit;
-	}
-
-	DISABLE_IRQ(labibb->ibb_vreg_irq);
-	/* ibb int en clr */
-	rc = qpnp_labibb_masked_write(labibb, labibb->ibb_base +
-		REG_IBB_INT_EN_CLR,
-		IBB_INT_EN_CLR_VREG_OK_MASK,
-		IBB_INT_EN_CLR_VREG_OK);
-	if (rc) {
-		pr_err("%s: write register %x failed rc = %d\n",
-			__func__, REG_IBB_INT_EN_CLR, rc);
-		goto exit;
-	}
-exit:
-	return rc;
-}
-
-static int qpnp_labibb_interrupt_enable_ctl(struct qpnp_labibb *labibb,
-	bool inWork)
-{
-	int rc;
-
-	rc = qpnp_lab_interrupt_enable_ctl(labibb, inWork);
-	if (rc) {
-		pr_err("%s: qpnp_lab_interrupt_enable_ctl failed rc = %d\n",
-				__func__, rc);
-		goto exit;
-	}
-
-	rc = qpnp_ibb_interrupt_enable_ctl(labibb, inWork);
-	if (rc) {
-		pr_err("%s: qpnp_ibb_interrupt_enable_ctl failed rc = %d\n",
-				__func__, rc);
-		goto exit;
-	}
-
-exit:
-	return rc;
-}
-
-static int qpnp_labibb_interrupt_disable_ctl(struct qpnp_labibb *labibb)
-{
-	int rc;
-
-	rc = qpnp_lab_interrupt_disable_ctl(labibb);
-	if (rc) {
-		pr_err("%s: qpnp_lab_interrupt_disable_ctl failed rc = %d\n",
-				__func__, rc);
-		goto exit;
-	}
-
-	rc = qpnp_ibb_interrupt_disable_ctl(labibb);
-	if (rc) {
-		pr_err("%s: qpnp_ibb_interrupt_disable_ctl failed rc = %d\n",
-				__func__, rc);
-		goto exit;
-	}
-
-exit:
-	return rc;
-}
-
-static int qpnp_lab_request_interrupt(struct qpnp_labibb *labibb)
-{
-	int rc = 0;
-
-	if (!labibb->node_lab) {
-		pr_err("%s: lab spmi_resource is NULL\n", __func__);
-		goto exit;
-	}
-
-	/* lab int set type */
-	rc = qpnp_labibb_masked_write(labibb, labibb->lab_base +
-		REG_LAB_INT_SET_TYPE,
-		LAB_INT_SET_TYPE_VREG_OK_MASK,
-		LAB_INT_SET_TYPE_VREG_OK_LEVEL);
-	if (rc) {
-		pr_err("%s: write register %x failed rc = %d\n",
-				__func__, REG_LAB_INT_SET_TYPE, rc);
-		goto exit;
-	}
-
-	/* lab int polarity high */
-	rc = qpnp_labibb_masked_write(labibb, labibb->lab_base +
-		REG_LAB_INT_POLARITY_HIGH,
-		LAB_INT_PRY_HIGH_VREG_OK_MASK,
-		LAB_INT_PRY_HIGH_VREG_OK);
-	if (rc) {
-		pr_err("%s: write register %x failed rc = %d\n",
-				__func__, REG_LAB_INT_POLARITY_HIGH, rc);
-		goto exit;
-	}
-
-	/* lab int polarity low */
-	rc = qpnp_labibb_masked_write(labibb, labibb->lab_base +
-		REG_LAB_INT_POLARITY_LOW,
-		LAB_INT_PRY_LOW_VREG_OK_MASK,
-		LAB_INT_PRY_LOW_VREG_OK);
-	if (rc) {
-		pr_err("%s: write register %x failed rc = %d\n",
-				__func__, REG_LAB_INT_POLARITY_LOW, rc);
-		goto exit;
-	}
-
-	/* lab int en set */
-	rc = qpnp_labibb_masked_write(labibb, labibb->lab_base +
-		REG_LAB_INT_EN_SET,
-		LAB_INT_EN_SET_VREG_OK_MASK,
-		LAB_INT_EN_SET_VREG_OK);
-	if (rc) {
-		pr_err("%s: write register %x failed rc = %d\n",
-				__func__, REG_LAB_INT_EN_SET, rc);
-		goto exit;
-	}
-
-	/* lab int latched clr */
-	rc = qpnp_labibb_masked_write(labibb, labibb->lab_base +
-		REG_LAB_INT_LATCHED_CLR,
-		LAB_INT_LATCHED_CLR_VREG_MASK,
-		LAB_INT_LATCHED_CLR_VREG);
-	if (rc) {
-		pr_err("%s: write register %x failed rc = %d\n",
-				__func__, REG_LAB_INT_LATCHED_CLR, rc);
-		goto exit;
-	}
-
-	/* request irq */
-	REQUEST_IRQ(labibb, labibb->node_lab,
-		labibb->lab_vreg_irq, "lab_vreg_not_ok_interrupt",
-		lab_vreg_handler, IRQF_LAB_FLAGS, rc);
-	if (rc) {
-		pr_err("lab request irq failed rc=%d\n", rc);
-		goto exit;
-	}
-exit:
-	return rc;
-}
-
-static int qpnp_ibb_request_interrupt(struct qpnp_labibb *labibb)
-{
-	int rc = 0;
-
-	if (!labibb->node_ibb) {
-		pr_err("%s: ibb spmi_resource is NULL\n", __func__);
-		goto exit;
-	}
-
-	/* ibb int set type */
-	rc = qpnp_labibb_masked_write(labibb, labibb->ibb_base +
-		REG_IBB_INT_SET_TYPE,
-		IBB_INT_SET_TYPE_VREG_OK_MASK,
-		IBB_INT_SET_TYPE_VREG_OK_LEVEL);
-	if (rc) {
-		pr_err("%s: write register %x failed rc = %d\n",
-				__func__, REG_IBB_INT_SET_TYPE, rc);
-		goto exit;
-	}
-
-	/* ibb int polarity high */
-	rc = qpnp_labibb_masked_write(labibb, labibb->ibb_base +
-		REG_IBB_INT_POLARITY_HIGH,
-		IBB_INT_PRY_HIGH_VREG_OK_MASK,
-		IBB_INT_PRY_HIGH_VREG_OK);
-	if (rc) {
-		pr_err("%s: write register %x failed rc = %d\n",
-				__func__, REG_IBB_INT_POLARITY_HIGH, rc);
-		goto exit;
-	}
-
-	/* IBB int polarity low */
-	rc = qpnp_labibb_masked_write(labibb, labibb->ibb_base +
-		REG_IBB_INT_POLARITY_LOW,
-		IBB_INT_PRY_LOW_VREG_OK_MASK,
-		IBB_INT_PRY_LOW_VREG_OK);
-	if (rc) {
-		pr_err("%s: write register %x failed rc = %d\n",
-				__func__, REG_IBB_INT_POLARITY_LOW, rc);
-		goto exit;
-	}
-
-	/* ibb int en set */
-	rc = qpnp_labibb_masked_write(labibb, labibb->ibb_base +
-		REG_IBB_INT_EN_SET,
-		IBB_INT_EN_SET_VREG_OK_MASK,
-		IBB_INT_EN_SET_VREG_OK);
-	if (rc) {
-		pr_err("%s: write register %x failed rc = %d\n",
-				__func__, REG_IBB_INT_EN_SET, rc);
-		goto exit;
-	}
-
-	/* ibb int latched clr */
-	rc = qpnp_labibb_masked_write(labibb, labibb->ibb_base +
-		REG_IBB_INT_LATCHED_CLR,
-		IBB_INT_LATCHED_CLR_VREG_MASK,
-		IBB_INT_LATCHED_CLR_VREG);
-	if (rc) {
-		pr_err("%s: write register %x failed rc = %d\n",
-				__func__, REG_IBB_INT_LATCHED_CLR, rc);
-		goto exit;
-	}
-
-	/* request irq */
-	REQUEST_IRQ(labibb, labibb->node_ibb,
-		labibb->ibb_vreg_irq, "ibb_vreg_not_ok_interrupt",
-		ibb_vreg_handler, IRQF_IBB_FLAGS, rc);
-	if (rc) {
-		pr_err("ibb request irq failed rc=%d\n", rc);
-		goto exit;
-	}
-exit:
-	return rc;
-}
-#endif /* CONFIG_SOMC_LCD_OCP_ENABLED */
-
 static int qpnp_ibb_set_mode(struct qpnp_labibb *labibb, enum ibb_mode mode)
 {
 	int rc;
@@ -1939,183 +1463,12 @@ static int qpnp_ibb_ps_config(struct qpnp_labibb *labibb, bool enable)
 	return rc;
 }
 
-static int qpnp_lab_dt_init(struct qpnp_labibb *labibb,
-				struct device_node *of_node)
+static int qpnp_lab_psrr_parse_dt_config(struct qpnp_labibb *labibb,
+					struct device_node *of_node)
 {
 	int rc = 0;
-	u8 i, val, mask;
 	u32 tmp;
-
-	/*
-	 * Do not configure LCD_AMOLED_SEL for pmi8998 as it will be done by
-	 * GPIO selector.
-	 */
-	if (labibb->pmic_rev_id->pmic_subtype != PMI8998_SUBTYPE) {
-		rc = labibb->ibb_ver_ops->sel_mode(labibb, 0);
-		if (rc < 0)
-			return rc;
-	}
-
-	val = 0;
-	if (of_property_read_bool(of_node, "qcom,qpnp-lab-full-pull-down"))
-		val |= LAB_PD_CTL_STRONG_PULL;
-
-	if (!of_property_read_bool(of_node, "qcom,qpnp-lab-pull-down-enable"))
-		val |= LAB_PD_CTL_DISABLE_PD;
-
-	mask = LAB_PD_CTL_EN_MASK | LAB_PD_CTL_STRENGTH_MASK;
-	rc = qpnp_labibb_masked_write(labibb, labibb->lab_base + REG_LAB_PD_CTL,
-					mask, val);
-
-	if (rc < 0) {
-		pr_err("write to register %x failed rc = %d\n",
-				REG_LAB_PD_CTL, rc);
-		return rc;
-	}
-
-	rc = of_property_read_u32(of_node,
-		"qcom,qpnp-lab-switching-clock-frequency", &tmp);
-	if (!rc) {
-		for (val = 0; val < ARRAY_SIZE(lab_clk_div_table); val++)
-			if (lab_clk_div_table[val] == tmp)
-				break;
-
-		if (val == ARRAY_SIZE(lab_clk_div_table)) {
-			pr_err("Invalid value in qpnp-lab-switching-clock-frequency\n");
-			return -EINVAL;
-		}
-
-		rc = qpnp_labibb_write(labibb, labibb->lab_base +
-				REG_LAB_CLK_DIV, &val, 1);
-		if (rc < 0) {
-			pr_err("write to register %x failed rc = %d\n",
-				REG_LAB_CLK_DIV, rc);
-			return rc;
-		}
-	}
-
-	if (of_property_read_bool(of_node,
-		"qcom,qpnp-lab-limit-max-current-enable")) {
-		val = LAB_CURRENT_LIMIT_EN_BIT;
-
-		rc = of_property_read_u32(of_node,
-			"qcom,qpnp-lab-limit-maximum-current", &tmp);
-
-		if (rc < 0) {
-			pr_err("get qcom,qpnp-lab-limit-maximum-current failed rc = %d\n",
-				rc);
-			return rc;
-		}
-
-		for (i = 0; i < ARRAY_SIZE(lab_current_limit_table); i++)
-			if (lab_current_limit_table[i] == tmp)
-				break;
-
-		if (i == ARRAY_SIZE(lab_current_limit_table)) {
-			pr_err("Invalid value in qcom,qpnp-lab-limit-maximum-current\n");
-			return -EINVAL;
-		}
-
-		val |= i;
-		rc = qpnp_labibb_write(labibb, labibb->lab_base +
-					REG_LAB_CURRENT_LIMIT, &val, 1);
-		if (rc < 0) {
-			pr_err("write to register %x failed rc = %d\n",
-					REG_LAB_CURRENT_LIMIT, rc);
-			return rc;
-		}
-	}
-
-	if (of_property_read_bool(of_node,
-		"qcom,qpnp-lab-ring-suppression-enable")) {
-		val = LAB_RING_SUPPRESSION_CTL_EN;
-		rc = qpnp_labibb_write(labibb, labibb->lab_base +
-					REG_LAB_RING_SUPPRESSION_CTL, &val, 1);
-		if (rc < 0) {
-			pr_err("write to register %x failed rc = %d\n",
-				REG_LAB_RING_SUPPRESSION_CTL, rc);
-			return rc;
-		}
-	}
-
-	if (of_property_read_bool(of_node, "qcom,qpnp-lab-ps-enable")) {
-
-		rc = of_property_read_u32(of_node,
-				 "qcom,qpnp-lab-ps-threshold", &tmp);
-
-		if (rc < 0) {
-			pr_err("get qcom,qpnp-lab-ps-threshold failed rc = %d\n",
-				rc);
-			return rc;
-		}
-		rc = labibb->lab_ver_ops->ps_ctl(labibb, tmp, true);
-		if (rc < 0)
-			return rc;
-	} else {
-		rc = labibb->lab_ver_ops->ps_ctl(labibb, tmp, false);
-		if (rc < 0)
-			return rc;
-	}
-
-	val = 0;
-	mask = 0;
-	rc = of_property_read_u32(of_node, "qcom,qpnp-lab-pfet-size", &tmp);
-	if (!rc) {
-		for (val = 0; val < ARRAY_SIZE(lab_rdson_pfet_table); val++)
-			if (tmp == lab_rdson_pfet_table[val])
-				break;
-
-		if (val == ARRAY_SIZE(lab_rdson_pfet_table)) {
-			pr_err("Invalid value in qcom,qpnp-lab-pfet-size\n");
-			return -EINVAL;
-		}
-		val |= LAB_RDSON_MNGMNT_PFET_SLEW_EN;
-		mask |= LAB_RDSON_MNGMNT_PFET_MASK |
-				LAB_RDSON_MNGMNT_PFET_SLEW_EN;
-	}
-
-	rc = of_property_read_u32(of_node, "qcom,qpnp-lab-nfet-size",
-				 &tmp);
-	if (!rc) {
-		for (i = 0; i < ARRAY_SIZE(lab_rdson_nfet_table); i++)
-			if (tmp == lab_rdson_nfet_table[i])
-				break;
-
-		if (i == ARRAY_SIZE(lab_rdson_nfet_table)) {
-			pr_err("Invalid value in qcom,qpnp-lab-nfet-size\n");
-			return -EINVAL;
-		}
-
-		val |= i << LAB_RDSON_MNGMNT_NFET_SHIFT;
-		val |= LAB_RDSON_MNGMNT_NFET_SLEW_EN;
-		mask |= LAB_RDSON_MNGMNT_NFET_MASK |
-				LAB_RDSON_MNGMNT_NFET_SLEW_EN;
-	}
-
-	rc = qpnp_labibb_masked_write(labibb, labibb->lab_base +
-				REG_LAB_RDSON_MNGMNT, mask, val);
-	if (rc < 0) {
-		pr_err("write to register %x failed rc = %d\n",
-			REG_LAB_RDSON_MNGMNT, rc);
-		return rc;
-	}
-
-	rc = of_property_read_u32(of_node, "qcom,qpnp-lab-init-voltage",
-				&(labibb->lab_vreg.curr_volt));
-	if (rc < 0) {
-		pr_err("get qcom,qpnp-lab-init-voltage failed, rc = %d\n",
-				 rc);
-		return rc;
-	}
-
-	if (of_property_read_bool(of_node,
-			"qcom,qpnp-lab-use-default-voltage"))
-		rc = labibb->lab_ver_ops->set_default_voltage(labibb, true);
-	else
-		rc = labibb->lab_ver_ops->set_default_voltage(labibb, false);
-
-	if (rc < 0)
-		return rc;
+	u8 val, i;
 
 	if (of_property_read_bool(of_node,
 		"qcom,qpnp-lab-enable-sw-high-psrr")) {
@@ -2126,18 +1479,6 @@ static int qpnp_lab_dt_init(struct qpnp_labibb *labibb,
 		if (rc < 0) {
 			pr_err("write to register %x failed rc = %d\n",
 				REG_LAB_SW_HIGH_PSRR_CTL, rc);
-			return rc;
-		}
-	}
-
-	rc = of_property_read_u32(of_node,
-		"qcom,qpnp-lab-ldo-pulldown-enable", (u32 *)&val);
-	if (!rc) {
-		rc = qpnp_labibb_write(labibb, labibb->lab_base +
-			REG_LAB_LDO_PD_CTL, &val, 1);
-		if (rc < 0) {
-			pr_err("write to register %x failed rc = %d\n",
-				REG_LAB_LDO_PD_CTL, rc);
 			return rc;
 		}
 	}
@@ -2177,6 +1518,243 @@ static int qpnp_lab_dt_init(struct qpnp_labibb *labibb,
 			return rc;
 		}
 	}
+
+	return rc;
+}
+
+static int qpnp_lab_rdson_nfet_config(struct qpnp_labibb *labibb, u32 tmp)
+{
+	int rc;
+	u8 val, i, mask;
+
+	for (i = 0; i < ARRAY_SIZE(lab_rdson_nfet_table); i++)
+		if (tmp == lab_rdson_nfet_table[i])
+			break;
+
+	if (i == ARRAY_SIZE(lab_rdson_nfet_table)) {
+		pr_err("Invalid value in qcom,qpnp-lab-nfet-size\n");
+		return -EINVAL;
+	}
+
+	val = (i << LAB_RDSON_MNGMNT_NFET_SHIFT) |
+			LAB_RDSON_MNGMNT_NFET_SLEW_EN;
+	mask = LAB_RDSON_MNGMNT_NFET_MASK | LAB_RDSON_MNGMNT_NFET_SLEW_EN;
+	rc = qpnp_labibb_masked_write(labibb, labibb->lab_base +
+				REG_LAB_RDSON_MNGMNT, mask, val);
+	if (rc < 0)
+		pr_err("write to register %x failed rc = %d\n",
+			REG_LAB_RDSON_MNGMNT, rc);
+
+	return rc;
+}
+
+static int qpnp_lab_rdson_pfet_config(struct qpnp_labibb *labibb, u32 tmp)
+{
+	int rc;
+	u8 val, mask;
+
+	for (val = 0; val < ARRAY_SIZE(lab_rdson_pfet_table); val++)
+		if (tmp == lab_rdson_pfet_table[val])
+			break;
+
+	if (val == ARRAY_SIZE(lab_rdson_pfet_table)) {
+		pr_err("Invalid value in qcom,qpnp-lab-pfet-size\n");
+		return -EINVAL;
+	}
+
+	val |= LAB_RDSON_MNGMNT_PFET_SLEW_EN;
+	mask = LAB_RDSON_MNGMNT_PFET_MASK | LAB_RDSON_MNGMNT_PFET_SLEW_EN;
+
+	rc = qpnp_labibb_masked_write(labibb, labibb->lab_base +
+				REG_LAB_RDSON_MNGMNT, mask, val);
+	if (rc < 0)
+		pr_err("write to register %x failed rc = %d\n",
+			REG_LAB_RDSON_MNGMNT, rc);
+
+	return rc;
+}
+
+static int qpnp_lab_current_limit_config(struct qpnp_labibb *labibb, u32 tmp)
+{
+	int rc;
+	u8 val;
+
+	for (val = 0; val < ARRAY_SIZE(lab_current_limit_table); val++)
+		if (lab_current_limit_table[val] == tmp)
+			break;
+
+	if (val == ARRAY_SIZE(lab_current_limit_table)) {
+		pr_err("Invalid value in qcom,qpnp-lab-limit-maximum-current\n");
+		return -EINVAL;
+	}
+
+	val |= LAB_CURRENT_LIMIT_EN_BIT;
+	rc = qpnp_labibb_write(labibb, labibb->lab_base + REG_LAB_CURRENT_LIMIT,
+				&val, 1);
+	if (rc < 0)
+		pr_err("write to register %x failed rc = %d\n",
+			REG_LAB_CURRENT_LIMIT, rc);
+
+	return rc;
+}
+
+static int qpnp_lab_switching_freq_config(struct qpnp_labibb *labibb, u32 tmp)
+{
+	int rc;
+	u8 val;
+
+	for (val = 0; val < ARRAY_SIZE(lab_clk_div_table); val++)
+		if (lab_clk_div_table[val] == tmp)
+			break;
+
+	if (val == ARRAY_SIZE(lab_clk_div_table)) {
+		pr_err("Invalid value in qpnp-lab-switching-clock-frequency\n");
+		return -EINVAL;
+	}
+
+	rc = qpnp_labibb_write(labibb, labibb->lab_base + REG_LAB_CLK_DIV, &val,
+				1);
+	if (rc < 0)
+		pr_err("write to register %x failed rc = %d\n", REG_LAB_CLK_DIV,
+			rc);
+
+	return rc;
+}
+
+static int qpnp_lab_dt_init(struct qpnp_labibb *labibb,
+				struct device_node *of_node)
+{
+	int rc = 0;
+	u8 val, mask;
+	u32 tmp;
+
+	/*
+	 * Do not configure LCD_AMOLED_SEL for pmi8998 as it will be done by
+	 * GPIO selector.
+	 */
+	if (labibb->pmic_rev_id->pmic_subtype != PMI8998_SUBTYPE) {
+		rc = labibb->ibb_ver_ops->sel_mode(labibb, 0);
+		if (rc < 0)
+			return rc;
+	}
+
+	val = 0;
+	if (of_property_read_bool(of_node, "qcom,qpnp-lab-full-pull-down"))
+		val |= LAB_PD_CTL_STRONG_PULL;
+
+	if (!of_property_read_bool(of_node, "qcom,qpnp-lab-pull-down-enable"))
+		val |= LAB_PD_CTL_DISABLE_PD;
+
+	mask = LAB_PD_CTL_EN_MASK | LAB_PD_CTL_STRENGTH_MASK;
+	rc = qpnp_labibb_masked_write(labibb, labibb->lab_base + REG_LAB_PD_CTL,
+					mask, val);
+	if (rc < 0) {
+		pr_err("write to register %x failed rc = %d\n",
+				REG_LAB_PD_CTL, rc);
+		return rc;
+	}
+
+	rc = of_property_read_u32(of_node,
+		"qcom,qpnp-lab-switching-clock-frequency", &tmp);
+	if (!rc) {
+		rc = qpnp_lab_switching_freq_config(labibb, tmp);
+		if (rc < 0)
+			return rc;
+	}
+
+	if (of_property_read_bool(of_node,
+		"qcom,qpnp-lab-limit-max-current-enable")) {
+		rc = of_property_read_u32(of_node,
+			"qcom,qpnp-lab-limit-maximum-current", &tmp);
+
+		if (rc < 0) {
+			pr_err("get qcom,qpnp-lab-limit-maximum-current failed rc = %d\n",
+				rc);
+			return rc;
+		}
+
+		rc = qpnp_lab_current_limit_config(labibb, tmp);
+		if (rc < 0)
+			return rc;
+	}
+
+	if (of_property_read_bool(of_node,
+		"qcom,qpnp-lab-ring-suppression-enable")) {
+		val = LAB_RING_SUPPRESSION_CTL_EN;
+		rc = qpnp_labibb_write(labibb, labibb->lab_base +
+					REG_LAB_RING_SUPPRESSION_CTL, &val, 1);
+		if (rc < 0) {
+			pr_err("write to register %x failed rc = %d\n",
+				REG_LAB_RING_SUPPRESSION_CTL, rc);
+			return rc;
+		}
+	}
+
+	if (of_property_read_bool(of_node, "qcom,qpnp-lab-ps-enable")) {
+		rc = of_property_read_u32(of_node,
+				 "qcom,qpnp-lab-ps-threshold", &tmp);
+
+		if (rc < 0) {
+			pr_err("get qcom,qpnp-lab-ps-threshold failed rc = %d\n",
+				rc);
+			return rc;
+		}
+		rc = labibb->lab_ver_ops->ps_ctl(labibb, tmp, true);
+		if (rc < 0)
+			return rc;
+	} else {
+		rc = labibb->lab_ver_ops->ps_ctl(labibb, tmp, false);
+		if (rc < 0)
+			return rc;
+	}
+
+	rc = of_property_read_u32(of_node, "qcom,qpnp-lab-pfet-size", &tmp);
+	if (!rc) {
+		rc = qpnp_lab_rdson_pfet_config(labibb, tmp);
+		if (rc < 0)
+			return rc;
+	}
+
+	rc = of_property_read_u32(of_node, "qcom,qpnp-lab-nfet-size",
+				 &tmp);
+	if (!rc) {
+		rc = qpnp_lab_rdson_nfet_config(labibb, tmp);
+		if (rc < 0)
+			return rc;
+	}
+
+	rc = of_property_read_u32(of_node, "qcom,qpnp-lab-init-voltage",
+				&(labibb->lab_vreg.curr_volt));
+	if (rc < 0) {
+		pr_err("get qcom,qpnp-lab-init-voltage failed, rc = %d\n",
+			rc);
+		return rc;
+	}
+
+	if (of_property_read_bool(of_node,
+			"qcom,qpnp-lab-use-default-voltage"))
+		rc = labibb->lab_ver_ops->set_default_voltage(labibb, true);
+	else
+		rc = labibb->lab_ver_ops->set_default_voltage(labibb, false);
+
+	if (rc < 0)
+		return rc;
+
+	rc = of_property_read_u32(of_node,
+		"qcom,qpnp-lab-ldo-pulldown-enable", (u32 *)&val);
+	if (!rc) {
+		rc = qpnp_labibb_write(labibb, labibb->lab_base +
+			REG_LAB_LDO_PD_CTL, &val, 1);
+		if (rc < 0) {
+			pr_err("write to register %x failed rc = %d\n",
+				REG_LAB_LDO_PD_CTL, rc);
+			return rc;
+		}
+	}
+
+	rc = qpnp_lab_psrr_parse_dt_config(labibb, of_node);
+	if (rc < 0)
+		return rc;
 
 	if (labibb->swire_control) {
 		rc = qpnp_ibb_set_mode(labibb, IBB_HW_CONTROL);
@@ -2439,7 +2017,7 @@ static int qpnp_labibb_ttw_enter_ibb_pmi8950(struct qpnp_labibb *labibb)
 				REG_IBB_MODULE_RDY, &val, 1);
 	if (rc < 0)
 		pr_err("write to register %x failed rc = %d\n",
-				REG_IBB_MODULE_RDY, rc);
+			REG_IBB_MODULE_RDY, rc);
 
 	return rc;
 }
@@ -2593,7 +2171,7 @@ static int qpnp_labibb_regulator_ttw_mode_exit(struct qpnp_labibb *labibb)
 	u8 val, reg;
 
 	if (!labibb->ibb_settings_saved) {
-		pr_err("IBB settings are not saved!\n");
+		pr_err("IBB settings are not saved\n");
 		return -EINVAL;
 	}
 
@@ -2812,9 +2390,8 @@ static int qpnp_labibb_regulator_enable(struct qpnp_labibb *labibb)
 		goto err_out;
 	}
 
-	pr_debug("soft=%d %d up=%d dly=%d\n",
-		labibb->lab_vreg.soft_start, labibb->ibb_vreg.soft_start,
-				labibb->ibb_vreg.pwrup_dly, dly);
+	pr_debug("soft=%d %d up=%d dly=%d\n", labibb->lab_vreg.soft_start,
+		labibb->ibb_vreg.soft_start, labibb->ibb_vreg.pwrup_dly, dly);
 
 	if (!(val & LAB_STATUS1_VREG_OK_BIT)) {
 		pr_err("failed for LAB %x\n", val);
@@ -2847,9 +2424,6 @@ static int qpnp_labibb_regulator_enable(struct qpnp_labibb *labibb)
 
 	labibb->lab_vreg.vreg_enabled = 1;
 	labibb->ibb_vreg.vreg_enabled = 1;
-#ifdef CONFIG_SOMC_LCD_OCP_ENABLED
-	qpnp_labibb_interrupt_enable_ctl(labibb, VREG_WORKER_PASSIVE);
-#endif /* CONFIG_SOMC_LCD_OCP_ENABLED */
 
 	return 0;
 err_out:
@@ -2869,10 +2443,6 @@ static int qpnp_labibb_regulator_disable(struct qpnp_labibb *labibb)
 	int retries;
 	bool disabled = false;
 
-#ifdef CONFIG_SOMC_LCD_OCP_ENABLED
-	qpnp_labibb_interrupt_disable_ctl(labibb);
-#endif /* CONFIG_SOMC_LCD_OCP_ENABLED */
-
 	/*
 	 * When TTW mode is enabled and LABIBB regulators are disabled, it is
 	 * recommended not to disable IBB through IBB_ENABLE_CTL when switching
@@ -2887,8 +2457,15 @@ static int qpnp_labibb_regulator_disable(struct qpnp_labibb *labibb)
 			pr_err("Error in entering TTW mode rc = %d\n", rc);
 			return rc;
 		}
+#ifdef CONFIG_ARCH_SONY_TAMA
+		if (labibb->lab_vreg.rdev->use_count == 1)
+			labibb->lab_vreg.vreg_enabled = 0;
+		if (labibb->ibb_vreg.rdev->use_count == 1)
+			labibb->ibb_vreg.vreg_enabled = 0;
+#else
 		labibb->lab_vreg.vreg_enabled = 0;
 		labibb->ibb_vreg.vreg_enabled = 0;
+#endif /* CONFIG_ARCH_SONY_TAMA */
 		return 0;
 	}
 
@@ -2931,8 +2508,15 @@ static int qpnp_labibb_regulator_disable(struct qpnp_labibb *labibb)
 		}
 	}
 
+#ifdef CONFIG_ARCH_SONY_TAMA
+	if (labibb->lab_vreg.rdev->use_count == 1)
+		labibb->lab_vreg.vreg_enabled = 0;
+	if (labibb->ibb_vreg.rdev->use_count == 1)
+		labibb->ibb_vreg.vreg_enabled = 0;
+#else
 	labibb->lab_vreg.vreg_enabled = 0;
 	labibb->ibb_vreg.vreg_enabled = 0;
+#endif /* CONFIG_ARCH_SONY_TAMA */
 
 	return 0;
 }
@@ -2946,7 +2530,7 @@ static int qpnp_lab_regulator_enable(struct regulator_dev *rdev)
 		return 0;
 
 	if (labibb->sc_detected) {
-		pr_info("Short circuit detected: disabled LAB/IBB rails\n");
+		pr_warn("Short circuit detected: disabled LAB/IBB rails\n");
 		return 0;
 	}
 
@@ -2968,9 +2552,6 @@ static int qpnp_lab_regulator_enable(struct regulator_dev *rdev)
 			return rc;
 		}
 		labibb->lab_vreg.vreg_enabled = 1;
-#ifdef CONFIG_SOMC_LCD_OCP_ENABLED
-		qpnp_lab_interrupt_enable_ctl(labibb, VREG_WORKER_PASSIVE);
-#endif /* CONFIG_SOMC_LCD_OCP_ENABLED */
 	}
 
 	if (labibb->notify_lab_vreg_ok_sts || labibb->detect_lab_sc)
@@ -2997,12 +2578,16 @@ static int qpnp_lab_regulator_disable(struct regulator_dev *rdev)
 		rc = qpnp_labibb_write(labibb,
 			labibb->lab_base + REG_LAB_ENABLE_CTL, &val, 1);
 		if (rc < 0) {
-			pr_err("qpnp_lab_regulator_enable write register %x failed rc = %d\n",
+			pr_err("write register %x failed rc = %d\n",
 				REG_LAB_ENABLE_CTL, rc);
 			return rc;
 		}
-
+#ifdef CONFIG_ARCH_SONY_TAMA
+		if (rdev->use_count == 1)
+			labibb->lab_vreg.vreg_enabled = 0;
+#else
 		labibb->lab_vreg.vreg_enabled = 0;
+#endif /* CONFIG_ARCH_SONY_TAMA */
 	}
 	return 0;
 }
@@ -3185,7 +2770,7 @@ static int qpnp_lab_regulator_set_voltage(struct regulator_dev *rdev,
 		return 0;
 
 	if (min_uV < labibb->lab_vreg.min_volt) {
-		pr_err("min_uV %d is less than min_volt %d", min_uV,
+		pr_err("min_uV %d is less than min_volt %d\n", min_uV,
 			labibb->lab_vreg.min_volt);
 		return -EINVAL;
 	}
@@ -3345,86 +2930,58 @@ static struct regulator_ops qpnp_lab_ops = {
 	.get_voltage		= qpnp_lab_regulator_get_voltage,
 };
 
-static int register_qpnp_lab_regulator(struct qpnp_labibb *labibb,
+static int qpnp_lab_current_sense_config(struct qpnp_labibb *labibb,
 					struct device_node *of_node)
 {
-	int rc = 0;
-	struct regulator_init_data *init_data;
-	struct regulator_desc *rdesc = &labibb->lab_vreg.rdesc;
-	struct regulator_config cfg = {};
-	u8 val, mask;
 	const char *current_sense_str;
+	int rc = 0;
+	u8 val;
 	bool config_current_sense = false;
-	u32 tmp;
 
-	if (!of_node) {
-		dev_err(labibb->dev, "qpnp lab regulator device tree node is missing\n");
-		return -EINVAL;
+	if (labibb->mode == QPNP_LABIBB_AMOLED_MODE &&
+		labibb->pmic_rev_id->pmic_subtype != PM660L_SUBTYPE) {
+		/*
+		 * default to 1.5 times current gain if
+		 * user doesn't specify the current-sense
+		 * dt parameter
+		 */
+		current_sense_str = "1.5x";
+		val = qpnp_labibb_get_matching_idx(current_sense_str);
+		config_current_sense = true;
 	}
 
-	init_data = of_get_regulator_init_data(labibb->dev, of_node, rdesc);
-	if (!init_data) {
-		pr_err("unable to get regulator init data for qpnp lab regulator\n");
-		return -ENOMEM;
-	}
-
-	rc = of_property_read_u32(of_node, "qcom,qpnp-lab-min-voltage",
-					&(labibb->lab_vreg.min_volt));
-	if (rc < 0) {
-		pr_err("qcom,qpnp-lab-min-voltage is missing, rc = %d\n",
-			rc);
-		return rc;
-	}
-
-	rc = of_property_read_u32(of_node, "qcom,qpnp-lab-step-size",
-					&(labibb->lab_vreg.step_size));
-	if (rc < 0) {
-		pr_err("qcom,qpnp-lab-step-size is missing, rc = %d\n", rc);
-		return rc;
-	}
-
-	rc = of_property_read_u32(of_node, "qcom,qpnp-lab-slew-rate",
-					&(labibb->lab_vreg.slew_rate));
-	if (rc < 0) {
-		pr_err("qcom,qpnp-lab-slew-rate is missing, rc = %d\n",
-			rc);
-		return rc;
-	}
-
-	labibb->notify_lab_vreg_ok_sts = of_property_read_bool(of_node,
-					"qcom,notify-lab-vreg-ok-sts");
-
-	labibb->lab_vreg.sc_wait_time_ms = -EINVAL;
-	if (labibb->pmic_rev_id->pmic_subtype == PM660L_SUBTYPE &&
-					labibb->detect_lab_sc)
-		of_property_read_u32(of_node, "qcom,qpnp-lab-sc-wait-time-ms",
-					&labibb->lab_vreg.sc_wait_time_ms);
-
-	rc = of_property_read_u32(of_node, "qcom,qpnp-lab-soft-start",
-					&(labibb->lab_vreg.soft_start));
-	if (!rc) {
-		for (val = 0; val < ARRAY_SIZE(lab_soft_start_table); val++)
-			if (lab_soft_start_table[val] ==
-					labibb->lab_vreg.soft_start)
-				break;
-
-		if (val == ARRAY_SIZE(lab_soft_start_table))
-			val = ARRAY_SIZE(lab_soft_start_table) - 1;
-
-		rc = qpnp_labibb_write(labibb, labibb->lab_base +
-				REG_LAB_SOFT_START_CTL, &val, 1);
+	if (of_find_property(of_node, "qcom,qpnp-lab-current-sense", NULL)) {
+		rc = of_property_read_string(of_node,
+			"qcom,qpnp-lab-current-sense", &current_sense_str);
 		if (rc < 0) {
-			pr_err("qpnp_labibb_write register %x failed rc = %d\n",
-				REG_LAB_SOFT_START_CTL, rc);
+			pr_err("qcom,qpnp-lab-current-sense configured incorrectly rc = %d\n",
+				rc);
 			return rc;
 		}
 
-		labibb->lab_vreg.soft_start = lab_soft_start_table
-				[val & LAB_SOFT_START_CTL_MASK];
+		config_current_sense = true;
+		val = qpnp_labibb_get_matching_idx(current_sense_str);
 	}
 
-	val = 0;
-	mask = 0;
+	if (config_current_sense) {
+		rc = qpnp_labibb_masked_write(labibb, labibb->lab_base +
+			REG_LAB_CURRENT_SENSE, LAB_CURRENT_SENSE_GAIN_MASK,
+			val);
+		if (rc < 0)
+			pr_err("write register %x failed rc = %d\n",
+				REG_LAB_CURRENT_SENSE, rc);
+	}
+
+	return rc;
+}
+
+static int qpnp_lab_precharge_config(struct qpnp_labibb *labibb,
+					struct device_node *of_node)
+{
+	int rc;
+	u32 tmp;
+	u8 val = 0, mask = 0;
+
 	rc = of_property_read_u32(of_node,
 		"qcom,qpnp-lab-max-precharge-time", &tmp);
 	if (!rc) {
@@ -3448,56 +3005,145 @@ static int register_qpnp_lab_regulator(struct qpnp_labibb *labibb,
 
 	rc = qpnp_labibb_masked_write(labibb, labibb->lab_base +
 				REG_LAB_PRECHARGE_CTL, mask, val);
-	if (rc < 0) {
-		pr_err("qpnp_lab_dt_init write register %x failed rc = %d\n",
+	if (rc < 0)
+		pr_err("write register %x failed rc = %d\n",
 			REG_LAB_PRECHARGE_CTL, rc);
+
+	return rc;
+}
+
+static int qpnp_lab_soft_start_config(struct qpnp_labibb *labibb, u32 delay)
+{
+	int rc;
+	u8 val, index;
+
+	for (val = 0; val < ARRAY_SIZE(lab_soft_start_table); val++) {
+		if (lab_soft_start_table[val] == delay)
+			break;
+	}
+
+	if (val == ARRAY_SIZE(lab_soft_start_table))
+		val = ARRAY_SIZE(lab_soft_start_table) - 1;
+
+	rc = qpnp_labibb_write(labibb, labibb->lab_base +
+			REG_LAB_SOFT_START_CTL, &val, 1);
+	if (rc < 0) {
+		pr_err("write register %x failed rc = %d\n",
+			REG_LAB_SOFT_START_CTL, rc);
 		return rc;
 	}
 
-	if (labibb->mode == QPNP_LABIBB_AMOLED_MODE &&
-		labibb->pmic_rev_id->pmic_subtype != PM660L_SUBTYPE) {
-		/*
-		 * default to 1.5 times current gain if
-		 * user doesn't specify the current-sense
-		 * dt parameter
-		 */
-		current_sense_str = "1.5x";
-		val = qpnp_labibb_get_matching_idx(current_sense_str);
-		config_current_sense = true;
-	}
+	index = val & LAB_SOFT_START_CTL_MASK;
+	labibb->lab_vreg.soft_start = lab_soft_start_table[index];
+	return 0;
+}
 
-	if (of_find_property(of_node,
-		"qcom,qpnp-lab-current-sense", NULL)) {
-		config_current_sense = true;
-		rc = of_property_read_string(of_node,
-			"qcom,qpnp-lab-current-sense",
-			&current_sense_str);
-		if (!rc) {
-			val = qpnp_labibb_get_matching_idx(
-					current_sense_str);
-		} else {
-			pr_err("qcom,qpnp-lab-current-sense configured incorrectly rc = %d\n",
+static int qpnp_lab_register_interrupts(struct qpnp_labibb *labibb)
+{
+	int rc;
+
+	if (is_lab_vreg_ok_irq_available(labibb)) {
+		irq_set_status_flags(labibb->lab_vreg.lab_vreg_ok_irq,
+				     IRQ_DISABLE_UNLAZY);
+		rc = devm_request_threaded_irq(labibb->dev,
+				labibb->lab_vreg.lab_vreg_ok_irq, NULL,
+				lab_vreg_ok_handler,
+				IRQF_ONESHOT | IRQF_TRIGGER_RISING,
+				"lab-vreg-ok", labibb);
+		if (rc) {
+			pr_err("Failed to register 'lab-vreg-ok' irq rc=%d\n",
 				rc);
 			return rc;
 		}
 	}
 
-	if (config_current_sense) {
-		rc = qpnp_labibb_masked_write(labibb, labibb->lab_base +
-			REG_LAB_CURRENT_SENSE,
-			LAB_CURRENT_SENSE_GAIN_MASK,
-			val);
-		if (rc < 0) {
-			pr_err("qpnp_labibb_write register %x failed rc = %d\n",
-				REG_LAB_CURRENT_SENSE, rc);
+	if (labibb->lab_vreg.lab_sc_irq != -EINVAL) {
+		irq_set_status_flags(labibb->lab_vreg.lab_sc_irq,
+				     IRQ_DISABLE_UNLAZY);
+		rc = devm_request_threaded_irq(labibb->dev,
+				labibb->lab_vreg.lab_sc_irq, NULL,
+				labibb_sc_err_handler,
+				IRQF_ONESHOT | IRQF_TRIGGER_RISING,
+				"lab-sc-err", labibb);
+		if (rc) {
+			pr_err("Failed to register 'lab-sc-err' irq rc=%d\n",
+				rc);
 			return rc;
 		}
 	}
 
+	return 0;
+}
+
+static int register_qpnp_lab_regulator(struct qpnp_labibb *labibb,
+					struct device_node *of_node)
+{
+	struct regulator_init_data *init_data;
+	struct regulator_desc *rdesc = &labibb->lab_vreg.rdesc;
+	struct regulator_config cfg = {};
+	int rc = 0;
+	u32 tmp;
+	u8 val;
+
+	if (!of_node) {
+		dev_err(labibb->dev, "qpnp lab regulator device tree node is missing\n");
+		return -EINVAL;
+	}
+
+	init_data = of_get_regulator_init_data(labibb->dev, of_node, rdesc);
+	if (!init_data) {
+		pr_err("unable to get regulator init data for qpnp lab regulator\n");
+		return -ENOMEM;
+	}
+
+	rc = of_property_read_u32(of_node, "qcom,qpnp-lab-min-voltage",
+					&(labibb->lab_vreg.min_volt));
+	if (rc < 0) {
+		pr_err("qcom,qpnp-lab-min-voltage is missing, rc = %d\n", rc);
+		return rc;
+	}
+
+	rc = of_property_read_u32(of_node, "qcom,qpnp-lab-step-size",
+					&(labibb->lab_vreg.step_size));
+	if (rc < 0) {
+		pr_err("qcom,qpnp-lab-step-size is missing, rc = %d\n", rc);
+		return rc;
+	}
+
+	rc = of_property_read_u32(of_node, "qcom,qpnp-lab-slew-rate",
+					&(labibb->lab_vreg.slew_rate));
+	if (rc < 0) {
+		pr_err("qcom,qpnp-lab-slew-rate is missing, rc = %d\n", rc);
+		return rc;
+	}
+
+	labibb->notify_lab_vreg_ok_sts = of_property_read_bool(of_node,
+					"qcom,notify-lab-vreg-ok-sts");
+
+	labibb->lab_vreg.sc_wait_time_ms = -EINVAL;
+	if (labibb->pmic_rev_id->pmic_subtype == PM660L_SUBTYPE &&
+					labibb->detect_lab_sc)
+		of_property_read_u32(of_node, "qcom,qpnp-lab-sc-wait-time-ms",
+					&labibb->lab_vreg.sc_wait_time_ms);
+
+	rc = of_property_read_u32(of_node, "qcom,qpnp-lab-soft-start", &tmp);
+	if (!rc) {
+		rc = qpnp_lab_soft_start_config(labibb, tmp);
+		if (rc < 0)
+			return rc;
+	}
+
+	rc = qpnp_lab_precharge_config(labibb, of_node);
+	if (rc < 0)
+		return rc;
+
+	rc = qpnp_lab_current_sense_config(labibb, of_node);
+	if (rc < 0)
+		return rc;
+
 	val = (labibb->standalone) ? 0 : LAB_IBB_EN_RDY_EN;
 	rc = qpnp_labibb_sec_write(labibb, labibb->lab_base,
 				REG_LAB_IBB_EN_RDY, val);
-
 	if (rc < 0) {
 		pr_err("qpnp_lab_sec_write register %x failed rc = %d\n",
 			REG_LAB_IBB_EN_RDY, rc);
@@ -3507,8 +3153,8 @@ static int register_qpnp_lab_regulator(struct qpnp_labibb *labibb,
 	rc = qpnp_labibb_read(labibb, labibb->ibb_base + REG_IBB_ENABLE_CTL,
 				&val, 1);
 	if (rc < 0) {
-		pr_err("qpnp_labibb_read register %x failed rc = %d\n",
-			REG_IBB_ENABLE_CTL, rc);
+		pr_err("read register %x failed rc = %d\n", REG_IBB_ENABLE_CTL,
+			rc);
 		return rc;
 	}
 
@@ -3516,8 +3162,7 @@ static int register_qpnp_lab_regulator(struct qpnp_labibb *labibb,
 		/* SWIRE_RDY and IBB_MODULE_EN not enabled */
 		rc = qpnp_lab_dt_init(labibb, of_node);
 		if (rc < 0) {
-			pr_err("qpnp-lab: wrong DT parameter specified: rc = %d\n",
-				rc);
+			pr_err("wrong DT parameter specified: rc = %d\n", rc);
 			return rc;
 		}
 	} else {
@@ -3526,7 +3171,7 @@ static int register_qpnp_lab_regulator(struct qpnp_labibb *labibb,
 		rc = qpnp_labibb_read(labibb, labibb->lab_base +
 					REG_LAB_VOLTAGE, &val, 1);
 		if (rc < 0) {
-			pr_err("qpnp_lab_read read register %x failed rc = %d\n",
+			pr_err("read register %x failed rc = %d\n",
 				REG_LAB_VOLTAGE, rc);
 			return rc;
 		}
@@ -3557,51 +3202,17 @@ static int register_qpnp_lab_regulator(struct qpnp_labibb *labibb,
 		}
 
 		labibb->lab_vreg.vreg_enabled = 1;
-#ifdef CONFIG_SOMC_LCD_OCP_ENABLED
-		/* request interrupt */
-		rc = qpnp_lab_request_interrupt(labibb);
-		if (rc) {
-			pr_err("lab request interrupt failed rc=%d\n",
-								rc);
-			return rc;
-		}
-#endif /* CONFIG_SOMC_LCD_OCP_ENABLED */
 	}
 
-	if (is_lab_vreg_ok_irq_available(labibb)) {
-		irq_set_status_flags(labibb->lab_vreg.lab_vreg_ok_irq,
-				     IRQ_DISABLE_UNLAZY);
-		rc = devm_request_threaded_irq(labibb->dev,
-				labibb->lab_vreg.lab_vreg_ok_irq, NULL,
-				lab_vreg_ok_handler,
-				IRQF_ONESHOT | IRQF_TRIGGER_RISING,
-				"lab-vreg-ok", labibb);
-		if (rc) {
-			pr_err("Failed to register 'lab-vreg-ok' irq rc=%d\n",
-						rc);
-			return rc;
-		}
-	}
+	rc = qpnp_lab_register_interrupts(labibb);
+	if (rc < 0)
+		return rc;
 
-	if (labibb->lab_vreg.lab_sc_irq != -EINVAL) {
-		irq_set_status_flags(labibb->lab_vreg.lab_sc_irq,
-				     IRQ_DISABLE_UNLAZY);
-		rc = devm_request_threaded_irq(labibb->dev,
-				labibb->lab_vreg.lab_sc_irq, NULL,
-				labibb_sc_err_handler,
-				IRQF_ONESHOT | IRQF_TRIGGER_RISING,
-				"lab-sc-err", labibb);
-		if (rc) {
-			pr_err("Failed to register 'lab-sc-err' irq rc=%d\n",
-						rc);
-			return rc;
-		}
-	}
 	rc = qpnp_labibb_read(labibb, labibb->lab_base + REG_LAB_MODULE_RDY,
 				&val, 1);
 	if (rc < 0) {
-		pr_err("qpnp_lab_read read register %x failed rc = %d\n",
-			REG_LAB_MODULE_RDY, rc);
+		pr_err("read register %x failed rc = %d\n", REG_LAB_MODULE_RDY,
+			rc);
 		return rc;
 	}
 
@@ -3612,7 +3223,7 @@ static int register_qpnp_lab_regulator(struct qpnp_labibb *labibb,
 			REG_LAB_MODULE_RDY, &val, 1);
 
 		if (rc < 0) {
-			pr_err("qpnp_lab_dt_init write register %x failed rc = %d\n",
+			pr_err("write register %x failed rc = %d\n",
 				REG_LAB_MODULE_RDY, rc);
 			return rc;
 		}
@@ -3646,6 +3257,9 @@ static int register_qpnp_lab_regulator(struct qpnp_labibb *labibb,
 
 			return rc;
 		}
+#ifdef CONFIG_ARCH_SONY_TAMA
+		labibb->lab_vreg.rdev->use_count = 1;
+#endif /* CONFIG_ARCH_SONY_TAMA */
 	} else {
 		dev_err(labibb->dev, "qpnp lab regulator name missing\n");
 		return -EINVAL;
@@ -3701,8 +3315,8 @@ static int qpnp_ibb_pfm_mode_enable(struct qpnp_labibb *labibb,
 	rc = qpnp_labibb_write(labibb, labibb->ibb_base +
 				REG_IBB_PFM_CTL, &val, 1);
 	if (rc < 0)
-		pr_err("qpnp_ibb_pfm_ctl write register %x failed rc = %d\n",
-					REG_IBB_PFM_CTL, rc);
+		pr_err("write register %x failed rc = %d\n", REG_IBB_PFM_CTL,
+			rc);
 
 	return rc;
 }
@@ -3716,16 +3330,16 @@ static int qpnp_labibb_pbs_mode_enable(struct qpnp_labibb *labibb,
 				REG_IBB_SWIRE_CTL,
 				IBB_SWIRE_VOUT_UPD_EN, 0);
 	if (rc < 0) {
-		pr_err("qpnp_ibb_swire_ctl write register %x failed rc = %d\n",
-					REG_IBB_SWIRE_CTL, rc);
+		pr_err("write register %x failed rc = %d\n", REG_IBB_SWIRE_CTL,
+			rc);
 		return rc;
 	}
 
 	rc = qpnp_labibb_masked_write(labibb, labibb->ibb_base +
 				REG_IBB_PD_CTL, IBB_SWIRE_PD_UPD, 0);
 	if (rc < 0) {
-		pr_err("qpnp_ibb_pd_ctl write register %x failed rc = %d\n",
-					REG_IBB_PD_CTL, rc);
+		pr_err("write register %x failed rc = %d\n", REG_IBB_PD_CTL,
+			rc);
 		return rc;
 	}
 
@@ -3733,8 +3347,8 @@ static int qpnp_labibb_pbs_mode_enable(struct qpnp_labibb *labibb,
 				REG_LAB_SWIRE_PGM_CTL, LAB_EN_SWIRE_PGM_VOUT |
 				LAB_EN_SWIRE_PGM_PD, 0);
 	if (rc < 0)
-		pr_err("qpnp_lab_swire_pgm_ctl write register %x failed rc = %d\n",
-					REG_LAB_SWIRE_PGM_CTL, rc);
+		pr_err("write register %x failed rc = %d\n",
+			REG_LAB_SWIRE_PGM_CTL, rc);
 
 	return rc;
 }
@@ -3789,7 +3403,7 @@ static int qpnp_ibb_slew_rate_config(struct qpnp_labibb *labibb,
 				REG_IBB_OUTPUT_SLEW_CTL,
 				mask, val);
 	if (rc < 0)
-		pr_err("qpnp_labibb_write register %x failed rc = %d\n",
+		pr_err("write register %x failed rc = %d\n",
 			REG_IBB_OUTPUT_SLEW_CTL, rc);
 
 	return rc;
@@ -3803,369 +3417,194 @@ static bool qpnp_ibb_poff_ctl_required(struct qpnp_labibb *labibb)
 	return true;
 }
 
-#ifdef CONFIG_SOMC_LCD_OCP_ENABLED
-static void force_labibb_regulator_disable(struct qpnp_labibb *labibb)
+static int qpnp_ibb_pd_config(struct qpnp_labibb *labibb,
+				struct device_node *of_node)
 {
 	int rc;
-	u8 val;
+	u8 val = 0, mask;
 
-	val = 0;
-	rc = qpnp_labibb_write(labibb,
-			labibb->ibb_base + REG_IBB_ENABLE_CTL, &val, 1);
-	if (rc) {
-		pr_err("%s: write register %x failed rc = %d\n",
-			__func__, REG_IBB_ENABLE_CTL, rc);
-		goto exit;
-	}
-
-	if (!labibb->standalone)
-		goto exit;
-
-	val = 0;
-	rc = qpnp_labibb_write(labibb,
-			labibb->lab_base + REG_LAB_ENABLE_CTL, &val, 1);
-	if (rc) {
-		pr_err("%s: write register %x failed rc = %d\n",
-			__func__, REG_LAB_ENABLE_CTL, rc);
-		goto exit;
-	}
-exit:
-	return;
-}
-
-static void vreg_check_worker(struct work_struct *work)
-{
-	u8 val;
-	int rc;
-	struct qpnp_labibb *labibb = labibb_vreg_check.labibb;
-
-	if ((!labibb->lab_vreg.vreg_enabled) ||
-	    (!labibb->ibb_vreg.vreg_enabled)) {
-		pr_debug("%s: false detection display is off\n", __func__);
-		goto exit;
-	}
-
-	/* lab vreg status check */
-	rc = qpnp_labibb_read(labibb, labibb->lab_base + REG_LAB_STATUS1,
-				&val, 1);
-	if (rc) {
-		pr_err("%s: read register %x failed rc = %d\n",
-				__func__, REG_LAB_STATUS1, rc);
-		goto read_error;
-	}
-
-	if (!(val & LAB_STATUS1_VREG_OK_BIT))
-		goto status_error;
-
-	/* ibb vreg status check */
-	rc = qpnp_labibb_read(labibb, labibb->ibb_base + REG_IBB_STATUS1,
-				&val, 1);
-	if (rc) {
-		pr_err("%s: read register %x failed rc = %d\n",
-				__func__, REG_IBB_STATUS1, rc);
-		goto read_error;
-	}
-
-	if (!(val & IBB_STATUS1_VREG_OK_BIT))
-		goto status_error;
-
-	rc = qpnp_labibb_interrupt_enable_ctl(labibb, VREG_WORKER_ACTIVE);
-	if (rc) {
-		pr_err("%s: qpnp_labibb_interrupt_enable_ctl error\n",
-							__func__);
-		goto write_error;
-	}
-
-	pr_debug("%s: vreg_check_worker done.\n", __func__);
-	goto exit;
-
-status_error:
-	labibb_vreg_check.current_chatter_cnt++;
-	pr_err("%s: VREG_NG Detection [%d]\n",
-			__func__, labibb_vreg_check.current_chatter_cnt);
-	if (labibb_vreg_check.current_chatter_cnt >=
-			labibb_vreg_check.target_chatter_cnt) {
-		pr_err("%s: execute qpnp_pon_dvdd_shutdown.\n", __func__);
-
-		/* disable vreg */
-		force_labibb_regulator_disable(labibb);
-		/* shutdown */
-		do {
-			rc = qpnp_pon_dvdd_shutdown();
-			if (rc) {
-				pr_debug("%s: qpnp_pon_dvdd_shutdown failed rc=%d\n",
-						__func__, rc);
-				msleep(DVDD_SHUTDOWN_RETRY_INTERVAL);
-			}
-		} while (rc);
-		goto exit;
-	}
-
-read_error:
-write_error:
-	schedule_delayed_work(&labibb_vreg_check.vreg_check_work,
-		msecs_to_jiffies(
-			labibb_vreg_check.target_chatter_check_interval));
-	return;
-
-exit:
-	/* initialize */
-	labibb_vreg_check.current_chatter_cnt = 0;
-	labibb_vreg_check.vreg_check_working = false;
-	return;
-}
-#endif /* CONFIG_SOMC_LCD_OCP_ENABLED */
-
-#ifdef CONFIG_REGULATOR_QPNP_LABIBB_SOMC
-/** This API is used to set precharge of LAB regulator
- * regulator: the reglator device
- * time: precharge time
- * en: precharge control enable or not
- */
-int qpnp_lab_set_precharge(struct regulator *regulator, u32 time, bool en)
-{
-	struct qpnp_labibb *labibb;
-	u8 val;
-	int rc;
-
-	labibb = regulator_get_drvdata(regulator);
-
-	for (val = 0; val < ARRAY_SIZE(lab_max_precharge_table); val++)
-		if (lab_max_precharge_table[val] == time)
-			break;
-
-	if (val == ARRAY_SIZE(lab_soft_start_table))
-		val = ARRAY_SIZE(lab_max_precharge_table) - 1;
-
-	if (en)
-		val |= LAB_FAST_PRECHARGE_CTL_EN;
-
-	pr_debug("write base=0x%x val=0x%x\n",
-			(labibb->lab_base + REG_LAB_PRECHARGE_CTL), val);
-
-	mutex_lock(&(labibb->lab_vreg.lab_mutex));
-
-	rc = qpnp_labibb_write(labibb, labibb->lab_base +
-				REG_LAB_PRECHARGE_CTL, &val, 1);
-
-	mutex_unlock(&(labibb->lab_vreg.lab_mutex));
-	return rc;
-}
-EXPORT_SYMBOL(qpnp_lab_set_precharge);
-
-/** This API is used to set soft-start of LAB regulator
- * regulator: the reglator device
- * time: soft start time
- */
-int qpnp_lab_set_soft_start(struct regulator *regulator, u32 time)
-{
-	struct qpnp_labibb *labibb;
-	u8 val;
-	int rc;
-
-	labibb = regulator_get_drvdata(regulator);
-
-	for (val = 0; val < sizeof(ARRAY_SIZE(lab_soft_start_table)); val++)
-		if (lab_soft_start_table[val] == time)
-			break;
-
-	if (val == ARRAY_SIZE(lab_soft_start_table))
-		val = ARRAY_SIZE(lab_soft_start_table) - 1;
-
-	pr_debug("write base=0x%x val=0x%x\n",
-			(labibb->lab_base + REG_LAB_SOFT_START_CTL), val);
-
-	mutex_lock(&(labibb->lab_vreg.lab_mutex));
-
-	rc = qpnp_labibb_write(labibb, labibb->lab_base +
-				REG_LAB_SOFT_START_CTL, &val, 1);
-
-	mutex_unlock(&(labibb->lab_vreg.lab_mutex));
-	return rc;
-}
-EXPORT_SYMBOL(qpnp_lab_set_soft_start);
-
-/** This API is used to set pull-down of LAB regulator
- * regulator: the reglator device
- * en: pull-down enable or not
- * strength: strength pull-down
- */
-int qpnp_lab_set_pull_down(struct regulator *regulator, u8 strength)
-{
-	struct qpnp_labibb *labibb;
-	u8 val;
-	int rc = 0;
-
-	if (strength > 0)
-		val = LAB_PD_CTL_STRONG_PULL;
-	else
-		val = 0;
-
-	labibb = regulator_get_drvdata(regulator);
-
-	mutex_lock(&(labibb->lab_vreg.lab_mutex));
-	rc = qpnp_labibb_masked_write(labibb, labibb->lab_base +
-				REG_LAB_PD_CTL,
-				LAB_PD_CTL_STRENGTH_MASK,
-				val);
-	mutex_unlock(&(labibb->lab_vreg.lab_mutex));
-
-	if (rc)
-		pr_err("qpnp_lab_set_pd_strength write register %x failed rc = %d\n",
-				REG_LAB_PD_CTL, rc);
-
-	return rc;
-}
-EXPORT_SYMBOL(qpnp_lab_set_pull_down);
-
-/** This API is used to set current max of LAB regulator
- * regulator: the reglator device
- * limit: current max of LAB regulator
- */
-int qpnp_lab_set_current_max(struct regulator *regulator, u32 limit)
-{
-	struct qpnp_labibb *labibb;
-	int rc = 0;
-	u8 reg;
-
-	labibb = regulator_get_drvdata(regulator);
-
-	for (reg = 0; reg < ARRAY_SIZE(lab_current_limit_table); reg++)
-		if (lab_current_limit_table[reg] == limit)
-			break;
-
-	if (reg == ARRAY_SIZE(lab_current_limit_table))
-		reg = ARRAY_SIZE(lab_current_limit_table) - 1;
-
-	pr_debug("write base=0x%x val=0x%x\n",
-			(labibb->lab_base + REG_LAB_CURRENT_LIMIT) , reg);
-
-	mutex_lock(&(labibb->lab_vreg.lab_mutex));
-
-	rc = qpnp_labibb_masked_write(labibb, labibb->lab_base +
-				REG_LAB_CURRENT_LIMIT,
-				LAB_CURRENT_LIMIT_MASK,
-				reg);
-	if (rc)
-		pr_err("%s write register %x failed rc = %d\n",
-			__func__, REG_LAB_CURRENT_LIMIT, rc);
-
-	mutex_unlock(&(labibb->lab_vreg.lab_mutex));
-	return rc;
-}
-EXPORT_SYMBOL(qpnp_lab_set_current_max);
-
-/** This API is used to set soft-start of IBB regulator
- * regulator: the reglator device
- * time: soft start time
- */
-int qpnp_ibb_set_soft_start(struct regulator *regulator, u32 time)
-{
-	struct qpnp_labibb *labibb;
-	u8 val;
-	int rc;
-
-	labibb = regulator_get_drvdata(regulator);
-
-	for (val = 0; val < sizeof(ARRAY_SIZE(ibb_dischg_res_table));
-		val++)
-		if (ibb_dischg_res_table[val] == time)
-			break;
-
-	if (val == ARRAY_SIZE(ibb_dischg_res_table))
-		val = ARRAY_SIZE(ibb_dischg_res_table) - 1;
-
-	pr_debug("write base=0x%x val=0x%x\n",
-			(labibb->ibb_base + REG_IBB_SOFT_START_CTL), val);
-
-	mutex_lock(&(labibb->ibb_vreg.ibb_mutex));
-
-	rc = qpnp_labibb_write(labibb, labibb->ibb_base +
-				REG_IBB_SOFT_START_CTL, &val, 1);
-
-	mutex_unlock(&(labibb->ibb_vreg.ibb_mutex));
-	return rc;
-}
-EXPORT_SYMBOL(qpnp_ibb_set_soft_start);
-
-/** This API is used to set pull-down of IBB regulator
- * regulator: the reglator device
- * en: pull-down enable or not
- * strength: strength pull-down
- */
-int qpnp_ibb_set_pull_down(struct regulator *regulator, u8 strength)
-{
-	struct qpnp_labibb *labibb;
-	u8 val;
-	int rc = 0;
-
-	if (strength > 0)
-		val = 0;
-	else
+	if (!of_property_read_bool(of_node, "qcom,qpnp-ibb-full-pull-down"))
 		val = IBB_PD_CTL_HALF_STRENGTH;
 
-	labibb = regulator_get_drvdata(regulator);
+	if (of_property_read_bool(of_node, "qcom,qpnp-ibb-pull-down-enable"))
+		val |= IBB_PD_CTL_EN;
 
-	mutex_lock(&(labibb->ibb_vreg.ibb_mutex));
-	rc = qpnp_labibb_masked_write(labibb, labibb->ibb_base +
-				REG_IBB_PD_CTL,
-				IBB_PD_CTL_STRENGTH_MASK,
-				val);
-	mutex_unlock(&(labibb->ibb_vreg.ibb_mutex));
-
-	if (rc)
-		pr_err("qpnp_ibb_set_pd_strength write register %x failed rc = %d\n",
-				REG_IBB_PD_CTL, rc);
+	mask = IBB_PD_CTL_STRENGTH_MASK | IBB_PD_CTL_EN;
+	rc = qpnp_labibb_masked_write(labibb,
+			labibb->ibb_base + REG_IBB_PD_CTL, mask, val);
+	if (rc < 0)
+		pr_err("write register %x failed rc = %d\n", REG_IBB_PD_CTL,
+			rc);
 
 	return rc;
 }
-EXPORT_SYMBOL(qpnp_ibb_set_pull_down);
 
-/** This API is used to set current max of IBB regulator
- * regulator: the reglator device
- * limit: current max of IBB regulator
- */
-int qpnp_ibb_set_current_max(struct regulator *regulator, u32 limit)
+static int qpnp_ibb_debounce_cycle_config(struct qpnp_labibb *labibb, u32 tmp)
 {
-	struct qpnp_labibb *labibb;
-	int rc = 0;
-	u8 reg;
+	int rc;
+	u8 val, mask;
 
-	labibb = regulator_get_drvdata(regulator);
-
-	for (reg = 0; reg < ARRAY_SIZE(ibb_current_limit_table); reg++)
-		if (ibb_current_limit_table[reg] == limit)
+	for (val = 0; val < ARRAY_SIZE(ibb_debounce_table); val++) {
+		if (ibb_debounce_table[val] == tmp)
 			break;
+	}
 
-	if (reg == ARRAY_SIZE(ibb_current_limit_table))
-		reg = ARRAY_SIZE(ibb_current_limit_table) - 1;
+	if (val == ARRAY_SIZE(ibb_debounce_table)) {
+		pr_err("Invalid value in qcom,qpnp-ibb-debounce-cycle\n");
+		return -EINVAL;
+	}
 
-	pr_debug("write base=0x%x val=0x%x\n",
-			(labibb->ibb_base + REG_IBB_CURRENT_LIMIT), reg);
+	val = val << IBB_CURRENT_LIMIT_DEBOUNCE_SHIFT;
+	mask = IBB_CURRENT_LIMIT_DEBOUNCE_MASK;
+	rc = qpnp_labibb_sec_masked_write(labibb, labibb->ibb_base,
+				REG_IBB_CURRENT_LIMIT, mask, val);
+	if (rc < 0)
+		pr_err("qpnp_labibb_sec_write register %x failed rc = %d\n",
+			REG_IBB_CURRENT_LIMIT, rc);
 
-	mutex_lock(&(labibb->ibb_vreg.ibb_mutex));
+	return rc;
+}
+
+static int qpnp_ibb_current_limit_config(struct qpnp_labibb *labibb, u32 tmp)
+{
+	int rc;
+	u8 val, mask;
+
+	for (val = 0; val < ARRAY_SIZE(ibb_current_limit_table); val++) {
+		if (ibb_current_limit_table[val] == tmp)
+			break;
+	}
+
+	if (val == ARRAY_SIZE(ibb_current_limit_table)) {
+		pr_err("Invalid value in qcom,qpnp-ibb-limit-maximum-current\n");
+		return -EINVAL;
+	}
+
+	mask = IBB_CURRENT_LIMIT_MASK | IBB_CURRENT_LIMIT_EN;
+	val |= IBB_CURRENT_LIMIT_EN;
+	rc = qpnp_labibb_sec_masked_write(labibb, labibb->ibb_base,
+				REG_IBB_CURRENT_LIMIT, mask, val);
+	if (rc < 0)
+		pr_err("qpnp_labibb_sec_write register %x failed rc = %d\n",
+			REG_IBB_CURRENT_LIMIT, rc);
+
+	return rc;
+}
+
+static int qpnp_ibb_switching_freq_config(struct qpnp_labibb *labibb, u32 tmp)
+{
+	int rc;
+	u8 val;
+
+	for (val = 0; val < ARRAY_SIZE(ibb_clk_div_table); val++) {
+		if (ibb_clk_div_table[val] == tmp)
+			break;
+	}
+
+	if (val == ARRAY_SIZE(ibb_clk_div_table)) {
+		pr_err("Invalid value in qpnp-ibb-switching-clock-frequency\n");
+		return -EINVAL;
+	}
+
+	rc = labibb->ibb_ver_ops->set_clk_div(labibb, val);
+	if (rc < 0)
+		pr_err("write register %x failed rc = %d\n", REG_IBB_CLK_DIV,
+			rc);
+
+	return rc;
+}
+
+static int qpnp_ibb_pwrdn_config(struct qpnp_labibb *labibb, u32 tmp)
+{
+	int rc;
+	u8 val = 0, mask;
+
+	if (tmp > 0) {
+		for (val = 0; val < ARRAY_SIZE(ibb_pwrdn_dly_table); val++) {
+			if (ibb_pwrdn_dly_table[val] == tmp)
+				break;
+		}
+
+		if (val == ARRAY_SIZE(ibb_pwrdn_dly_table)) {
+			pr_err("Invalid value in qcom,qpnp-ibb-lab-pwrdn-delay\n");
+			return -EINVAL;
+		}
+	}
+
+	labibb->ibb_vreg.pwrdn_dly = tmp;
+
+	if (tmp > 0)
+		val |= IBB_PWRUP_PWRDN_CTL_1_EN_DLY2;
+
+	mask = IBB_PWRUP_PWRDN_CTL_1_EN_DLY2;
+	rc = qpnp_labibb_sec_masked_write(labibb, labibb->ibb_base,
+				REG_IBB_PWRUP_PWRDN_CTL_1, mask, val);
+	if (rc < 0)
+		pr_err("qpnp_labibb_sec_write register %x failed rc = %d\n",
+			REG_IBB_PWRUP_PWRDN_CTL_1, rc);
+
+	return rc;
+}
+
+static int qpnp_ibb_pwrup_config(struct qpnp_labibb *labibb, u32 tmp)
+{
+	int rc;
+	u8 val = 0, mask;
+
+	if (tmp > 0) {
+		for (val = 0; val < ARRAY_SIZE(ibb_pwrup_dly_table); val++) {
+			if (ibb_pwrup_dly_table[val] == tmp)
+				break;
+		}
+
+		if (val == ARRAY_SIZE(ibb_pwrup_dly_table)) {
+			pr_err("Invalid value in qcom,qpnp-ibb-lab-pwrup-delay\n");
+			return -EINVAL;
+		}
+	}
+
+	labibb->ibb_vreg.pwrup_dly = tmp;
+
+	val = (val << IBB_PWRUP_PWRDN_CTL_1_DLY1_SHIFT);
+	val |= IBB_PWRUP_PWRDN_CTL_1_LAB_VREG_OK;
+	if (tmp > 0)
+		val |= IBB_PWRUP_PWRDN_CTL_1_EN_DLY1;
+
+	mask = (IBB_PWRUP_PWRDN_CTL_1_EN_DLY1 |
+		IBB_PWRUP_PWRDN_CTL_1_DLY1_MASK |
+		IBB_PWRUP_PWRDN_CTL_1_LAB_VREG_OK);
 
 	rc = qpnp_labibb_sec_masked_write(labibb, labibb->ibb_base,
-				REG_IBB_CURRENT_LIMIT,
-				IBB_CURRENT_LIMIT_MASK,
-				reg);
+				REG_IBB_PWRUP_PWRDN_CTL_1, mask, val);
+	if (rc < 0)
+		pr_err("qpnp_labibb_sec_write register %x failed rc = %d\n",
+			REG_IBB_PWRUP_PWRDN_CTL_1, rc);
 
-	if (rc)
-		pr_err("%s write register %x failed rc = %d\n",
-			__func__, REG_IBB_CURRENT_LIMIT, rc);
-
-	mutex_unlock(&(labibb->ibb_vreg.ibb_mutex));
 	return rc;
 }
-EXPORT_SYMBOL(qpnp_ibb_set_current_max);
-#endif /* CONFIG_REGULATOR_QPNP_LABIBB_SOMC */
+
+static int qpnp_ibb_discharge_config(struct qpnp_labibb *labibb)
+{
+	int rc;
+	u8 val, mask;
+
+	val = mask = PWRUP_PWRDN_CTL_1_DISCHARGE_EN;
+	rc = qpnp_labibb_sec_masked_write(labibb, labibb->ibb_base,
+			REG_IBB_PWRUP_PWRDN_CTL_1, mask, val);
+	if (rc < 0)
+		pr_err("qpnp_labibb_sec_write register %x failed rc = %d\n",
+			REG_IBB_PWRUP_PWRDN_CTL_1, rc);
+
+	return rc;
+}
 
 static int qpnp_ibb_dt_init(struct qpnp_labibb *labibb,
 				struct device_node *of_node)
 {
 	int rc = 0;
-	u32 i = 0, tmp = 0;
-	u8 val, mask;
+	u32 tmp = 0;
+	u8 val;
+	bool ibb_ps_enable, use_default_voltage;
 
 	/*
 	 * Do not configure LCD_AMOLED_SEL for pmi8998 as it will be done by
@@ -4176,8 +3615,8 @@ static int qpnp_ibb_dt_init(struct qpnp_labibb *labibb,
 		rc = qpnp_labibb_read(labibb, labibb->ibb_base +
 				REG_IBB_LCD_AMOLED_SEL, &val, 1);
 		if (rc) {
-			pr_err("qpnp_labibb_read register %x failed rc = %d\n",
-						REG_IBB_LCD_AMOLED_SEL, rc);
+			pr_err("read register %x failed rc = %d\n",
+				REG_IBB_LCD_AMOLED_SEL, rc);
 			return rc;
 		}
 		if (val == REG_LAB_IBB_AMOLED_MODE)
@@ -4193,189 +3632,84 @@ static int qpnp_ibb_dt_init(struct qpnp_labibb *labibb,
 		}
 	}
 
-	val = 0;
-	mask = 0;
 	rc = of_property_read_u32(of_node,
 		"qcom,qpnp-ibb-lab-pwrdn-delay", &tmp);
 	if (!rc) {
-		if (tmp > 0) {
-			for (i = 0; i < ARRAY_SIZE(ibb_pwrdn_dly_table); i++) {
-				if (ibb_pwrdn_dly_table[i] == tmp)
-					break;
-			}
-
-			if (i == ARRAY_SIZE(ibb_pwrdn_dly_table)) {
-				pr_err("Invalid value in qcom,qpnp-ibb-lab-pwrdn-delay\n");
-				return -EINVAL;
-			}
-		}
-
-		labibb->ibb_vreg.pwrdn_dly = tmp;
-
-		if (tmp > 0)
-			val = i | IBB_PWRUP_PWRDN_CTL_1_EN_DLY2;
-
-		mask |= IBB_PWRUP_PWRDN_CTL_1_EN_DLY2;
+		rc = qpnp_ibb_pwrdn_config(labibb, tmp);
+		if (rc < 0)
+			return rc;
 	}
 
 	rc = of_property_read_u32(of_node,
 			"qcom,qpnp-ibb-lab-pwrup-delay", &tmp);
 	if (!rc) {
-		if (tmp > 0) {
-			for (i = 0; i < ARRAY_SIZE(ibb_pwrup_dly_table); i++) {
-				if (ibb_pwrup_dly_table[i] == tmp)
-					break;
-			}
-
-			if (i == ARRAY_SIZE(ibb_pwrup_dly_table)) {
-				pr_err("Invalid value in qcom,qpnp-ibb-lab-pwrup-delay\n");
-				return -EINVAL;
-			}
-		}
-
-		labibb->ibb_vreg.pwrup_dly = tmp;
-
-		if (tmp > 0)
-			val |= IBB_PWRUP_PWRDN_CTL_1_EN_DLY1;
-
-		val |= (i << IBB_PWRUP_PWRDN_CTL_1_DLY1_SHIFT);
-		val |= IBB_PWRUP_PWRDN_CTL_1_LAB_VREG_OK;
-		mask |= (IBB_PWRUP_PWRDN_CTL_1_EN_DLY1 |
-			IBB_PWRUP_PWRDN_CTL_1_DLY1_MASK |
-			IBB_PWRUP_PWRDN_CTL_1_LAB_VREG_OK);
+		rc = qpnp_ibb_pwrup_config(labibb, tmp);
+		if (rc < 0)
+			return rc;
 	}
 
 	if (of_property_read_bool(of_node,
 				"qcom,qpnp-ibb-en-discharge")) {
-		val |= PWRUP_PWRDN_CTL_1_DISCHARGE_EN;
-		mask |= PWRUP_PWRDN_CTL_1_DISCHARGE_EN;
-	}
-
-	rc = qpnp_labibb_sec_masked_write(labibb, labibb->ibb_base,
-				REG_IBB_PWRUP_PWRDN_CTL_1, mask, val);
-	if (rc < 0) {
-		pr_err("qpnp_labibb_sec_write register %x failed rc = %d\n",
-			REG_IBB_PWRUP_PWRDN_CTL_1, rc);
-		return rc;
+		rc = qpnp_ibb_discharge_config(labibb);
+		if (rc < 0)
+			return rc;
 	}
 
 	if (of_property_read_bool(of_node, "qcom,qpnp-ibb-slew-rate-config")) {
-
 		rc = qpnp_ibb_slew_rate_config(labibb, of_node);
 		if (rc < 0)
 			return rc;
 	}
 
-	val = 0;
-	if (!of_property_read_bool(of_node, "qcom,qpnp-ibb-full-pull-down"))
-		val = IBB_PD_CTL_HALF_STRENGTH;
-
-	if (of_property_read_bool(of_node, "qcom,qpnp-ibb-pull-down-enable"))
-		val |= IBB_PD_CTL_EN;
-
-	mask = IBB_PD_CTL_STRENGTH_MASK | IBB_PD_CTL_EN;
-	rc = qpnp_labibb_masked_write(labibb,
-			labibb->ibb_base + REG_IBB_PD_CTL, mask, val);
-
-	if (rc < 0) {
-		pr_err("qpnp_lab_dt_init write register %x failed rc = %d\n",
-				REG_IBB_PD_CTL, rc);
+	rc = qpnp_ibb_pd_config(labibb, of_node);
+	if (rc < 0)
 		return rc;
-	}
 
 	rc = of_property_read_u32(of_node,
 		"qcom,qpnp-ibb-switching-clock-frequency", &tmp);
 	if (!rc) {
-		for (val = 0; val < ARRAY_SIZE(ibb_clk_div_table); val++)
-			if (ibb_clk_div_table[val] == tmp)
-				break;
-
-		if (val == ARRAY_SIZE(ibb_clk_div_table)) {
-			pr_err("Invalid value in qpnp-ibb-switching-clock-frequency\n");
-			return -EINVAL;
-		}
-		rc = labibb->ibb_ver_ops->set_clk_div(labibb, val);
-		if (rc < 0) {
-			pr_err("qpnp_ibb_dt_init write register %x failed rc = %d\n",
-				REG_IBB_CLK_DIV, rc);
+		rc = qpnp_ibb_switching_freq_config(labibb, tmp);
+		if (rc < 0)
 			return rc;
-		}
 	}
 
-	val = 0;
-	mask = 0;
-	rc = of_property_read_u32(of_node,
-		"qcom,qpnp-ibb-limit-maximum-current", &tmp);
-	if (!rc) {
-		for (val = 0; val < ARRAY_SIZE(ibb_current_limit_table); val++)
-			if (ibb_current_limit_table[val] == tmp)
-				break;
-
-		if (val == ARRAY_SIZE(ibb_current_limit_table)) {
-			pr_err("Invalid value in qcom,qpnp-ibb-limit-maximum-current\n");
-			return -EINVAL;
+	if (of_property_read_bool(of_node,
+		"qcom,qpnp-ibb-limit-max-current-enable")) {
+		rc = of_property_read_u32(of_node,
+			"qcom,qpnp-ibb-limit-maximum-current", &tmp);
+		if (!rc) {
+			rc = qpnp_ibb_current_limit_config(labibb, tmp);
+			if (rc < 0)
+				return rc;
 		}
-
-		mask = IBB_CURRENT_LIMIT_MASK;
 	}
 
 	rc = of_property_read_u32(of_node,
 		"qcom,qpnp-ibb-debounce-cycle", &tmp);
 	if (!rc) {
-		for (i = 0; i < ARRAY_SIZE(ibb_debounce_table); i++)
-			if (ibb_debounce_table[i] == tmp)
-				break;
-
-		if (i == ARRAY_SIZE(ibb_debounce_table)) {
-			pr_err("Invalid value in qcom,qpnp-ibb-debounce-cycle\n");
-			return -EINVAL;
-		}
-
-		val |= (i << IBB_CURRENT_LIMIT_DEBOUNCE_SHIFT);
-		mask |= IBB_CURRENT_LIMIT_DEBOUNCE_MASK;
-	}
-
-	if (of_property_read_bool(of_node,
-		"qcom,qpnp-ibb-limit-max-current-enable")) {
-		val |= IBB_CURRENT_LIMIT_EN;
-		mask |= IBB_CURRENT_LIMIT_EN;
-	}
-
-	rc = qpnp_labibb_sec_masked_write(labibb, labibb->ibb_base,
-				REG_IBB_CURRENT_LIMIT, mask, val);
-	if (rc < 0) {
-		pr_err("qpnp_labibb_sec_write register %x failed rc = %d\n",
-				REG_IBB_CURRENT_LIMIT, rc);
-		return rc;
+		rc = qpnp_ibb_debounce_cycle_config(labibb, tmp);
+		if (rc < 0)
+			return rc;
 	}
 
 	if (of_property_read_bool(of_node,
 		"qcom,qpnp-ibb-ring-suppression-enable")) {
 		val = IBB_RING_SUPPRESSION_CTL_EN;
 		rc = qpnp_labibb_write(labibb, labibb->ibb_base +
-					REG_IBB_RING_SUPPRESSION_CTL,
-					&val,
-					1);
+					REG_IBB_RING_SUPPRESSION_CTL, &val, 1);
 		if (rc < 0) {
-			pr_err("qpnp_ibb_dt_init write register %x failed rc = %d\n",
+			pr_err("write register %x failed rc = %d\n",
 				REG_IBB_RING_SUPPRESSION_CTL, rc);
 			return rc;
 		}
 	}
 
-	if (of_property_read_bool(of_node, "qcom,qpnp-ibb-ps-enable")) {
-		rc = qpnp_ibb_ps_config(labibb, true);
-		if (rc < 0) {
-			pr_err("qpnp_ibb_dt_init PS enable failed rc=%d\n", rc);
-			return rc;
-		}
-	} else {
-		rc = qpnp_ibb_ps_config(labibb, false);
-		if (rc < 0) {
-			pr_err("qpnp_ibb_dt_init PS disable failed rc=%d\n",
-									rc);
-			return rc;
-		}
+	ibb_ps_enable = of_property_read_bool(of_node,
+				"qcom,qpnp-ibb-ps-enable");
+	rc = qpnp_ibb_ps_config(labibb, ibb_ps_enable);
+	if (rc < 0) {
+		pr_err("IBB_PS config failed rc=%d\n", rc);
+		return rc;
 	}
 
 	if (of_property_read_bool(of_node,
@@ -4389,8 +3723,7 @@ static int qpnp_ibb_dt_init(struct qpnp_labibb *labibb,
 		rc = labibb->ibb_ver_ops->smart_ps_config(labibb, true,
 					labibb->ibb_vreg.num_swire_trans, tmp);
 		if (rc < 0) {
-			pr_err("qpnp_ibb_dt_init smart PS enable failed rc=%d\n",
-					 rc);
+			pr_err("smart PS enable failed rc=%d\n", rc);
 			return rc;
 		}
 
@@ -4403,12 +3736,10 @@ static int qpnp_ibb_dt_init(struct qpnp_labibb *labibb,
 		return rc;
 	}
 
-	if (of_property_read_bool(of_node,
-			"qcom,qpnp-ibb-use-default-voltage"))
-		rc = labibb->ibb_ver_ops->set_default_voltage(labibb, true);
-	else
-		rc = labibb->ibb_ver_ops->set_default_voltage(labibb, false);
-
+	use_default_voltage = of_property_read_bool(of_node,
+					"qcom,qpnp-ibb-use-default-voltage");
+	rc = labibb->ibb_ver_ops->set_default_voltage(labibb,
+					use_default_voltage);
 	if (rc < 0)
 		return rc;
 
@@ -4430,7 +3761,7 @@ static int qpnp_ibb_regulator_enable(struct regulator_dev *rdev)
 		return 0;
 
 	if (labibb->sc_detected) {
-		pr_info("Short circuit detected: disabled LAB/IBB rails\n");
+		pr_warn("Short circuit detected: disabled LAB/IBB rails\n");
 		return 0;
 	}
 
@@ -4444,9 +3775,6 @@ static int qpnp_ibb_regulator_enable(struct regulator_dev *rdev)
 			return rc;
 		}
 		labibb->ibb_vreg.vreg_enabled = 1;
-#ifdef CONFIG_SOMC_LCD_OCP_ENABLED
-		qpnp_ibb_interrupt_enable_ctl(labibb, VREG_WORKER_PASSIVE);
-#endif /* CONFIG_SOMC_LCD_OCP_ENABLED */
 	}
 
 	return 0;
@@ -4459,9 +3787,6 @@ static int qpnp_ibb_regulator_disable(struct regulator_dev *rdev)
 
 	if (labibb->secure_mode)
 		return 0;
-#ifdef CONFIG_SOMC_LCD_OCP_ENABLED
-		qpnp_lab_interrupt_disable_ctl(labibb);
-#endif /* CONFIG_SOMC_LCD_OCP_ENABLED */
 
 	if (labibb->ibb_vreg.vreg_enabled && !labibb->swire_control) {
 
@@ -4474,7 +3799,12 @@ static int qpnp_ibb_regulator_disable(struct regulator_dev *rdev)
 			return rc;
 		}
 
+#ifdef CONFIG_ARCH_SONY_TAMA
+		if (rdev->use_count == 1)
+			labibb->ibb_vreg.vreg_enabled = 0;
+#else
 		labibb->ibb_vreg.vreg_enabled = 0;
+#endif /* CONFIG_ARCH_SONY_TAMA */
 	}
 	return 0;
 }
@@ -4521,6 +3851,155 @@ static struct regulator_ops qpnp_ibb_ops = {
 	.get_voltage		= qpnp_ibb_regulator_get_voltage,
 };
 
+static int qpnp_ibb_get_current_voltage(struct qpnp_labibb *labibb,
+				    struct device_node *of_node)
+{
+	int rc;
+	u8 val;
+	u32 tmp;
+
+	rc = qpnp_labibb_read(labibb, labibb->ibb_base +
+				REG_IBB_VOLTAGE, &val, 1);
+	if (rc < 0) {
+		pr_err("qpnp_labibb_read read register %x failed rc = %d\n",
+			REG_IBB_VOLTAGE, rc);
+		return rc;
+	}
+
+	val &= IBB_VOLTAGE_SET_MASK;
+	labibb->ibb_vreg.curr_volt = (val * labibb->ibb_vreg.step_size) +
+					labibb->ibb_vreg.min_volt;
+
+	if (labibb->mode == QPNP_LABIBB_LCD_MODE) {
+		rc = of_property_read_u32(of_node,
+			"qcom,qpnp-ibb-init-lcd-voltage", &tmp);
+		if (rc < 0) {
+			pr_err("get qcom,qpnp-ibb-init-lcd-voltage failed, rc = %d\n",
+				rc);
+			return rc;
+		}
+		labibb->ibb_vreg.curr_volt = tmp;
+	} else if (!(val & IBB_VOLTAGE_OVERRIDE_EN)) {
+		rc = of_property_read_u32(of_node,
+			"qcom,qpnp-ibb-init-amoled-voltage", &tmp);
+		if (rc < 0) {
+			pr_err("get qcom,qpnp-ibb-init-amoled-voltage failed, rc = %d\n",
+				rc);
+			return rc;
+		}
+		labibb->ibb_vreg.curr_volt = tmp;
+	}
+
+	return 0;
+}
+
+static int qpnp_ibb_poff_ctl_config(struct qpnp_labibb *labibb)
+{
+	int rc;
+	u8 val;
+	bool poff_ctl_config;
+
+	poff_ctl_config = (labibb->mode == QPNP_LABIBB_AMOLED_MODE &&
+				qpnp_ibb_poff_ctl_required(labibb));
+
+	if (!poff_ctl_config)
+		return 0;
+
+	val = IBB_OVERRIDE_NONOVERLAP | IBB_NFET_GATE_DELAY_2;
+	rc = qpnp_labibb_sec_masked_write(labibb, labibb->ibb_base,
+			REG_IBB_NONOVERLAP_TIME_1,
+			IBB_OVERRIDE_NONOVERLAP | IBB_NONOVERLAP_NFET_MASK,
+			val);
+	if (rc < 0) {
+		pr_err("qpnp_labibb_sec_masked_write register %x failed rc = %d\n",
+			REG_IBB_NONOVERLAP_TIME_1, rc);
+		return rc;
+	}
+
+	val = IBB_N2P_MUX_SEL;
+	rc = qpnp_labibb_sec_write(labibb, labibb->ibb_base,
+			REG_IBB_NONOVERLAP_TIME_2, val);
+	if (rc < 0) {
+		pr_err("qpnp_labibb_sec_write register %x failed rc = %d\n",
+			REG_IBB_NONOVERLAP_TIME_2, rc);
+		return rc;
+	}
+
+	val = IBB_FASTER_PFET_OFF;
+	rc = qpnp_labibb_masked_write(labibb,
+			labibb->ibb_base + REG_IBB_SPARE_CTL,
+			IBB_POFF_CTL_MASK, val);
+	if (rc < 0) {
+		pr_err("write to register %x failed rc = %d\n",
+			REG_IBB_SPARE_CTL, rc);
+		return rc;
+	}
+
+	return 0;
+}
+
+static int qpnp_ibb_get_delay(struct qpnp_labibb *labibb)
+{
+	int rc;
+	u8 val, index;
+
+	rc = qpnp_labibb_read(labibb, labibb->ibb_base +
+			REG_IBB_PWRUP_PWRDN_CTL_1, &val, 1);
+	if (rc < 0) {
+		pr_err("read register %x failed rc = %d\n",
+			REG_IBB_PWRUP_PWRDN_CTL_1, rc);
+		return rc;
+	}
+
+	index = (val & IBB_PWRUP_PWRDN_CTL_1_DLY1_MASK) >>
+			IBB_PWRUP_PWRDN_CTL_1_DLY1_SHIFT;
+
+	if (index > ARRAY_SIZE(ibb_pwrup_dly_table) - 1)
+		return -EINVAL;
+
+	labibb->ibb_vreg.pwrup_dly = ibb_pwrup_dly_table[index];
+	index = val & IBB_PWRUP_PWRDN_CTL_1_DLY2_MASK;
+
+	if (index > ARRAY_SIZE(ibb_pwrdn_dly_table) - 1)
+		return -EINVAL;
+
+	labibb->ibb_vreg.pwrdn_dly =  ibb_pwrdn_dly_table[index];
+	return 0;
+}
+
+static int qpnp_ibb_output_one_pulse_config(struct qpnp_labibb *labibb,
+					    struct device_node *of_node)
+{
+	int rc;
+	u32 tmp;
+
+	if (!of_find_property(of_node, "qcom,output-voltage-one-pulse", NULL))
+		return 0;
+
+	if (!labibb->swire_control) {
+		pr_err("output-voltage-one-pulse valid for SWIRE only\n");
+		return -EINVAL;
+	}
+
+	rc = of_property_read_u32(of_node, "qcom,output-voltage-one-pulse",
+				&tmp);
+	if (rc < 0) {
+		pr_err("failed to read qcom,output-voltage-one-pulse rc=%d\n",
+			rc);
+		return rc;
+	}
+
+	if (tmp > MAX_OUTPUT_PULSE_VOLTAGE_MV ||
+			tmp < MIN_OUTPUT_PULSE_VOLTAGE_MV) {
+		pr_err("Invalid one-pulse voltage range %d\n", tmp);
+		return -EINVAL;
+	}
+
+	rc = labibb->ibb_ver_ops->voltage_at_one_pulse(labibb, tmp);
+
+	return rc;
+}
+
 static int register_qpnp_ibb_regulator(struct qpnp_labibb *labibb,
 					struct device_node *of_node)
 {
@@ -4528,8 +4007,7 @@ static int register_qpnp_ibb_regulator(struct qpnp_labibb *labibb,
 	struct regulator_init_data *init_data;
 	struct regulator_desc *rdesc = &labibb->ibb_vreg.rdesc;
 	struct regulator_config cfg = {};
-	u8 val, ibb_enable_ctl, index;
-	u32 tmp;
+	u8 val, ibb_enable_ctl;
 
 	if (!of_node) {
 		dev_err(labibb->dev, "qpnp ibb regulator device tree node is missing\n");
@@ -4545,8 +4023,7 @@ static int register_qpnp_ibb_regulator(struct qpnp_labibb *labibb,
 	rc = of_property_read_u32(of_node, "qcom,qpnp-ibb-min-voltage",
 					&(labibb->ibb_vreg.min_volt));
 	if (rc < 0) {
-		pr_err("qcom,qpnp-ibb-min-voltage is missing, rc = %d\n",
-			rc);
+		pr_err("qcom,qpnp-ibb-min-voltage is missing, rc = %d\n", rc);
 		return rc;
 	}
 
@@ -4562,33 +4039,15 @@ static int register_qpnp_ibb_regulator(struct qpnp_labibb *labibb,
 	if (rc < 0)
 		labibb->ibb_vreg.slew_rate = IBB_HW_DEFAULT_SLEW_RATE;
 
+	rc = qpnp_ibb_output_one_pulse_config(labibb, of_node);
+	if (rc < 0)
+		return rc;
+
 	rc = labibb->ibb_ver_ops->soft_start_ctl(labibb, of_node);
 	if (rc < 0) {
-		pr_err("qpnp_labibb_write register %x failed rc = %d\n",
+		pr_err("write register %x failed rc = %d\n",
 			REG_IBB_SOFT_START_CTL, rc);
 		return rc;
-	}
-
-	if (of_find_property(of_node, "qcom,output-voltage-one-pulse", NULL)) {
-		if (!labibb->swire_control) {
-			pr_err("output-voltage-one-pulse valid for SWIRE only\n");
-			return -EINVAL;
-		}
-		rc = of_property_read_u32(of_node,
-				"qcom,output-voltage-one-pulse", &tmp);
-		if (rc < 0) {
-			pr_err("failed to read qcom,output-voltage-one-pulse rc=%d\n",
-									rc);
-			return rc;
-		}
-		if (tmp > MAX_OUTPUT_PULSE_VOLTAGE_MV ||
-				tmp < MIN_OUTPUT_PULSE_VOLTAGE_MV) {
-			pr_err("Invalid one-pulse voltage range %d\n", tmp);
-			return -EINVAL;
-		}
-		rc = labibb->ibb_ver_ops->voltage_at_one_pulse(labibb, tmp);
-		if (rc < 0)
-			return rc;
 	}
 
 	rc = qpnp_labibb_read(labibb, labibb->ibb_base + REG_IBB_ENABLE_CTL,
@@ -4609,116 +4068,34 @@ static int register_qpnp_ibb_regulator(struct qpnp_labibb *labibb,
 
 	if (ibb_enable_ctl &
 		(IBB_ENABLE_CTL_SWIRE_RDY | IBB_ENABLE_CTL_MODULE_EN)) {
-
 		rc = labibb->ibb_ver_ops->get_mode(labibb);
 		if (rc < 0) {
 			pr_err("qpnp_labibb_read register %x failed rc = %d\n",
 				REG_IBB_LCD_AMOLED_SEL, rc);
 			return rc;
 		}
-		rc = qpnp_labibb_read(labibb, labibb->ibb_base +
-					REG_IBB_VOLTAGE, &val, 1);
-		if (rc < 0) {
-			pr_err("qpnp_labibb_read read register %x failed rc = %d\n",
-				REG_IBB_VOLTAGE, rc);
+
+		rc = qpnp_ibb_get_current_voltage(labibb, of_node);
+		if (rc < 0)
 			return rc;
-		}
 
-		labibb->ibb_vreg.curr_volt =
-			(val & IBB_VOLTAGE_SET_MASK) *
-			labibb->ibb_vreg.step_size +
-			labibb->ibb_vreg.min_volt;
-
-		if (labibb->mode == QPNP_LABIBB_LCD_MODE) {
-			rc = of_property_read_u32(of_node,
-				"qcom,qpnp-ibb-init-lcd-voltage",
-				&(labibb->ibb_vreg.curr_volt));
-			if (rc < 0) {
-				pr_err("get qcom,qpnp-ibb-init-lcd-voltage failed, rc = %d\n",
-					rc);
-				return rc;
-			}
-		} else if (!(val & IBB_VOLTAGE_OVERRIDE_EN)) {
-			rc = of_property_read_u32(of_node,
-				"qcom,qpnp-ibb-init-amoled-voltage",
-				&(labibb->ibb_vreg.curr_volt));
-			if (rc < 0) {
-				pr_err("get qcom,qpnp-ibb-init-amoled-voltage failed, rc = %d\n",
-					rc);
-				return rc;
-			}
-
-		}
-
-		rc = qpnp_labibb_read(labibb, labibb->ibb_base +
-				REG_IBB_PWRUP_PWRDN_CTL_1, &val, 1);
-		if (rc < 0) {
-			pr_err("qpnp_labibb_config_init read register %x failed rc = %d\n",
-				REG_IBB_PWRUP_PWRDN_CTL_1, rc);
+		rc = qpnp_ibb_get_delay(labibb);
+		if (rc < 0)
 			return rc;
-		}
-
-		index = (val & IBB_PWRUP_PWRDN_CTL_1_DLY1_MASK) >>
-				IBB_PWRUP_PWRDN_CTL_1_DLY1_SHIFT;
-		labibb->ibb_vreg.pwrup_dly = ibb_pwrup_dly_table[index];
-		index = val & IBB_PWRUP_PWRDN_CTL_1_DLY2_MASK;
-		labibb->ibb_vreg.pwrdn_dly =  ibb_pwrdn_dly_table[index];
 
 		labibb->ibb_vreg.vreg_enabled = 1;
-#ifdef CONFIG_SOMC_LCD_OCP_ENABLED
-		/* request interrupt */
-		rc = qpnp_ibb_request_interrupt(labibb);
-		if (rc) {
-			pr_err("ibb request interrupt failed rc=%d\n",
-								rc);
-			return rc;
-		}
-#endif /* CONFIG_SOMC_LCD_OCP_ENABLED */
 	} else {
 		/* SWIRE_RDY and IBB_MODULE_EN not enabled */
 		rc = qpnp_ibb_dt_init(labibb, of_node);
 		if (rc < 0) {
-			pr_err("qpnp-ibb: wrong DT parameter specified: rc = %d\n",
-				rc);
+			pr_err("wrong DT parameter specified: rc = %d\n", rc);
 			return rc;
 		}
 	}
 
-	if (labibb->mode == QPNP_LABIBB_AMOLED_MODE &&
-			qpnp_ibb_poff_ctl_required(labibb)) {
-
-		val = IBB_OVERRIDE_NONOVERLAP | IBB_NFET_GATE_DELAY_2;
-		rc = qpnp_labibb_sec_masked_write(labibb, labibb->ibb_base,
-			REG_IBB_NONOVERLAP_TIME_1,
-			IBB_OVERRIDE_NONOVERLAP | IBB_NONOVERLAP_NFET_MASK,
-			val);
-
-		if (rc < 0) {
-			pr_err("qpnp_labibb_sec_masked_write register %x failed rc = %d\n",
-				REG_IBB_NONOVERLAP_TIME_1, rc);
-			return rc;
-		}
-
-		val = IBB_N2P_MUX_SEL;
-		rc = qpnp_labibb_sec_write(labibb, labibb->ibb_base,
-			REG_IBB_NONOVERLAP_TIME_2, val);
-
-		if (rc < 0) {
-			pr_err("qpnp_labibb_sec_write register %x failed rc = %d\n",
-				REG_IBB_NONOVERLAP_TIME_2, rc);
-			return rc;
-		}
-
-		val = IBB_FASTER_PFET_OFF;
-		rc = qpnp_labibb_masked_write(labibb,
-				labibb->ibb_base + REG_IBB_SPARE_CTL,
-				IBB_POFF_CTL_MASK, val);
-		if (rc < 0) {
-			pr_err("write to register %x failed rc = %d\n",
-				 REG_IBB_SPARE_CTL, rc);
-			return rc;
-		}
-	}
+	rc = qpnp_ibb_poff_ctl_config(labibb);
+	if (rc < 0)
+		return rc;
 
 	if (labibb->standalone) {
 		val = 0;
@@ -4743,7 +4120,7 @@ static int register_qpnp_ibb_regulator(struct qpnp_labibb *labibb,
 				"ibb-sc-err", labibb);
 		if (rc) {
 			pr_err("Failed to register 'ibb-sc-err' irq rc=%d\n",
-						rc);
+				rc);
 			return rc;
 		}
 	}
@@ -4751,19 +4128,18 @@ static int register_qpnp_ibb_regulator(struct qpnp_labibb *labibb,
 	rc = qpnp_labibb_read(labibb, labibb->ibb_base + REG_IBB_MODULE_RDY,
 				&val, 1);
 	if (rc < 0) {
-		pr_err("qpnp_ibb_read read register %x failed rc = %d\n",
-			REG_IBB_MODULE_RDY, rc);
+		pr_err("read register %x failed rc = %d\n", REG_IBB_MODULE_RDY,
+			rc);
 		return rc;
 	}
 
 	if (!(val & IBB_MODULE_RDY_EN)) {
 		val = IBB_MODULE_RDY_EN;
-
 		rc = qpnp_labibb_write(labibb, labibb->ibb_base +
 			REG_IBB_MODULE_RDY, &val, 1);
 
 		if (rc < 0) {
-			pr_err("qpnp_ibb_dt_init write register %x failed rc = %d\n",
+			pr_err("write register %x failed rc = %d\n",
 				REG_IBB_MODULE_RDY, rc);
 			return rc;
 		}
@@ -4810,6 +4186,9 @@ static int register_qpnp_ibb_regulator(struct qpnp_labibb *labibb,
 
 			return rc;
 		}
+#ifdef CONFIG_ARCH_SONY_TAMA
+		labibb->ibb_vreg.rdev->use_count = 1;
+#endif /* CONFIG_ARCH_SONY_TAMA */
 	} else {
 		dev_err(labibb->dev, "qpnp ibb regulator name missing\n");
 		return -EINVAL;
@@ -4867,7 +4246,7 @@ static int qpnp_labibb_check_ttw_supported(struct qpnp_labibb *labibb)
 		rc = qpnp_labibb_read(labibb, labibb->ibb_base +
 					REG_IBB_REVISION4, &val, 1);
 		if (rc < 0) {
-			pr_err("qpnp_labibb_read register %x failed rc = %d\n",
+			pr_err("read register %x failed rc = %d\n",
 				REG_IBB_REVISION4, rc);
 			return rc;
 		}
@@ -4875,7 +4254,7 @@ static int qpnp_labibb_check_ttw_supported(struct qpnp_labibb *labibb)
 		/* PMI8996 has revision 1 */
 		if (val < 1) {
 			pr_err("TTW feature cannot be enabled for revision %d\n",
-									val);
+				val);
 			labibb->ttw_en = false;
 		}
 		/* FORCE_LAB_ON in TTW is not required for PMI8996 */
@@ -4889,7 +4268,7 @@ static int qpnp_labibb_check_ttw_supported(struct qpnp_labibb *labibb)
 		break;
 	default:
 		pr_info("TTW mode not supported for PMIC-subtype = %d\n",
-					labibb->pmic_rev_id->pmic_subtype);
+			labibb->pmic_rev_id->pmic_subtype);
 		labibb->ttw_en = false;
 		break;
 
@@ -4897,9 +4276,9 @@ static int qpnp_labibb_check_ttw_supported(struct qpnp_labibb *labibb)
 	return rc;
 }
 
-static ssize_t qpnp_labibb_irq_control(struct class *c,
-				       struct class_attribute *attr,
-				       const char *buf, size_t count)
+static ssize_t secure_mode_store(struct class *c,
+					struct class_attribute *attr,
+					const char *buf, size_t count)
 {
 	struct qpnp_labibb *labibb = container_of(c, struct qpnp_labibb,
 						  labibb_class);
@@ -4934,110 +4313,14 @@ static ssize_t qpnp_labibb_irq_control(struct class *c,
 	return count;
 }
 
-static struct class_attribute labibb_attributes[] = {
-	[0] = __ATTR(secure_mode, 0664, NULL,
-			 qpnp_labibb_irq_control),
-	 __ATTR_NULL,
+static CLASS_ATTR_WO(secure_mode);
+
+static struct attribute *labibb_attrs[] = {
+	&class_attr_secure_mode.attr,
+	NULL,
 };
+ATTRIBUTE_GROUPS(labibb);
 
-#ifdef CONFIG_SOMC_LCD_OCP_ENABLED
-static irqreturn_t lab_vreg_handler(int irq, void *_chip)
-{
-	u8 val;
-	int rc;
-	struct qpnp_labibb *labibb = _chip;
-
-	pr_err("%s: LAB VREG_NG interrupt!\n", __func__);
-	qpnp_labibb_interrupt_disable_ctl(labibb);
-
-	if (!labibb->lab_vreg.vreg_enabled) {
-		pr_err("%s: false detection display is off\n", __func__);
-		goto exit;
-	}
-
-	/* lab status1 */
-	rc = qpnp_labibb_read(labibb, labibb->lab_base + REG_LAB_STATUS1, 
-				&val, 1);
-	if (rc) {
-		pr_err("%s: read register %x failed rc = %d\n",
-				__func__, REG_LAB_STATUS1, rc);
-		goto exit;
-	}
-
-	if (!(val & LAB_STATUS1_VREG_OK_BIT))
-		pr_err("%s: LAB VREG NG!!!\n", __func__);
-	else
-		goto false_detection;
-
-	/* start vreg check */
-	if (labibb_vreg_check.vreg_check_working)
-		goto exit;
-
-	labibb_vreg_check.vreg_check_working = true;
-	labibb_vreg_check.current_chatter_cnt = CHATTER_CNT_START;
-	schedule_delayed_work(&labibb_vreg_check.vreg_check_work,
-		msecs_to_jiffies(
-			labibb_vreg_check.target_chatter_check_interval));
-	goto exit;
-
-false_detection:
-	rc = qpnp_labibb_interrupt_enable_ctl(labibb, VREG_WORKER_PASSIVE);
-	if (rc)
-		pr_err("%s: qpnp_labibb_interrupt_enable_ctl error\n",
-							__func__);
-exit:
-	return IRQ_HANDLED;
-}
-
-static irqreturn_t ibb_vreg_handler(int irq, void *_chip)
-{
-	u8 val;
-	int rc;
-	struct qpnp_labibb *labibb = _chip;
-
-	pr_err("%s: IBB VREG_NG interrupt!\n", __func__);
-	qpnp_labibb_interrupt_disable_ctl(labibb);
-
-	if (!labibb->ibb_vreg.vreg_enabled) {
-		pr_err("%s: false detection display is off\n", __func__);
-		goto exit;
-	}
-
-	/* ibb status1 */
-	rc = qpnp_labibb_read(labibb, labibb->ibb_base + REG_IBB_STATUS1,
-				&val, 1);
-	if (rc) {
-		pr_err("%s: read register %x failed rc = %d\n",
-				__func__, REG_IBB_STATUS1, rc);
-		goto exit;
-	}
-
-	if (!(val & IBB_STATUS1_VREG_OK_BIT))
-		pr_err("%s: IBB VREG NG!!!\n", __func__);
-	else
-		goto false_detection;
-
-	/* start vreg check */
-	if (labibb_vreg_check.vreg_check_working)
-		goto exit;
-
-	labibb_vreg_check.vreg_check_working = true;
-	labibb_vreg_check.current_chatter_cnt = CHATTER_CNT_START;
-	schedule_delayed_work(&labibb_vreg_check.vreg_check_work,
-		msecs_to_jiffies(
-			labibb_vreg_check.target_chatter_check_interval));
-	goto exit;
-
-false_detection:
-	rc = qpnp_labibb_interrupt_enable_ctl(labibb, VREG_WORKER_PASSIVE);
-	if (rc)
-		pr_err("%s: qpnp_labibb_interrupt_enable_ctl error\n",
-							__func__);
-
-exit:
-	return IRQ_HANDLED;
-}
-#endif /* CONFIG_SOMC_LCD_OCP_ENABLED */
 
 static int qpnp_labibb_regulator_probe(struct platform_device *pdev)
 {
@@ -5115,31 +4398,6 @@ static int qpnp_labibb_regulator_probe(struct platform_device *pdev)
 	labibb->standalone = of_property_read_bool(labibb->dev->of_node,
 				"qcom,labibb-standalone");
 
-#ifdef CONFIG_SOMC_LCD_OCP_ENABLED
-	/* initialize labibb_vreg_status_ctrl */
-	labibb_vreg_check.labibb = labibb;
-	labibb_vreg_check.current_chatter_cnt = 0;
-	labibb_vreg_check.vreg_check_working = false;
-	labibb_vreg_check.target_chatter_cnt = DEFAULT_TARGET_CHATTER_CNT;
-	rc = of_property_read_u32(labibb->dev->of_node,
-		"somc,vreg-target-chatter-cnt",
-		&(labibb_vreg_check.target_chatter_cnt));
-	if (rc)
-		pr_info("qpnp_labibb: Target chatter count sets default.\n");
-
-	labibb_vreg_check.target_chatter_check_interval
-					= DEFAULT_TARGET_CHATTER_INTERVAL;
-	rc = of_property_read_u32(labibb->dev->of_node,
-		"somc,vreg-target-chatter-interval",
-		&(labibb_vreg_check.target_chatter_check_interval));
-	if (rc)
-		pr_info("qpnp_labibb: Target chatter interval sets default.\n");
-
-	/* initialize vreg_check_worker */
-	INIT_DELAYED_WORK(&labibb_vreg_check.vreg_check_work,
-				vreg_check_worker);
-#endif /* CONFIG_SOMC_LCD_OCP_ENABLED */
-
 	labibb->ttw_en = of_property_read_bool(labibb->dev->of_node,
 				"qcom,labibb-touch-to-wake-en");
 	if (labibb->ttw_en && labibb->mode != QPNP_LABIBB_LCD_MODE) {
@@ -5188,8 +4446,7 @@ static int qpnp_labibb_regulator_probe(struct platform_device *pdev)
 	for_each_available_child_of_node(pdev->dev.of_node, child) {
 		rc = of_property_read_u32(child, "reg", &base);
 		if (rc < 0) {
-			dev_err(&pdev->dev,
-				"Couldn't find reg in node = %s rc = %d\n",
+			dev_err(&pdev->dev, "Couldn't find reg in node = %s rc = %d\n",
 				child->full_name, rc);
 			return rc;
 		}
@@ -5210,37 +4467,28 @@ static int qpnp_labibb_regulator_probe(struct platform_device *pdev)
 
 		switch (type) {
 		case QPNP_LAB_TYPE:
-#ifdef CONFIG_SOMC_LCD_OCP_ENABLED
-			labibb->node_lab = child;
-#endif
 			labibb->lab_base = base;
 			labibb->lab_dig_major = revision;
 			rc = qpnp_lab_register_irq(child, labibb);
 			if (rc) {
 				pr_err("Failed to register LAB IRQ rc=%d\n",
-							rc);
+					rc);
 				goto fail_registration;
 			}
 			rc = register_qpnp_lab_regulator(labibb, child);
 			if (rc < 0)
 				goto fail_registration;
-		break;
-
+			break;
 		case QPNP_IBB_TYPE:
-#ifdef CONFIG_SOMC_LCD_OCP_ENABLED
-			labibb->node_ibb = child;
-#endif
 			labibb->ibb_base = base;
 			labibb->ibb_dig_major = revision;
 			qpnp_ibb_register_irq(child, labibb);
 			rc = register_qpnp_ibb_regulator(labibb, child);
 			if (rc < 0)
 				goto fail_registration;
-		break;
-
+			break;
 		default:
-			pr_err("qpnp_labibb: unknown peripheral type %x\n",
-				type);
+			pr_err("Unknown peripheral type %x\n", type);
 			rc = -EINVAL;
 			goto fail_registration;
 		}
@@ -5250,7 +4498,7 @@ static int qpnp_labibb_regulator_probe(struct platform_device *pdev)
 		rc = qpnp_labibb_check_ttw_supported(labibb);
 		if (rc < 0) {
 			pr_err("pmic revision check failed for TTW rc=%d\n",
-									rc);
+				rc);
 			goto fail_registration;
 		}
 	}
@@ -5265,7 +4513,7 @@ static int qpnp_labibb_regulator_probe(struct platform_device *pdev)
 
 	labibb->labibb_class.name = "lcd_bias";
 	labibb->labibb_class.owner = THIS_MODULE;
-	labibb->labibb_class.class_attrs = labibb_attributes;
+	labibb->labibb_class.class_groups = labibb_groups;
 
 	rc = class_register(&labibb->labibb_class);
 	if (rc < 0) {
@@ -5274,9 +4522,8 @@ static int qpnp_labibb_regulator_probe(struct platform_device *pdev)
 	}
 
 	pr_info("LAB/IBB registered successfully, lab_vreg enable=%d ibb_vreg enable=%d swire_control=%d\n",
-						labibb->lab_vreg.vreg_enabled,
-						labibb->ibb_vreg.vreg_enabled,
-						labibb->swire_control);
+		labibb->lab_vreg.vreg_enabled, labibb->ibb_vreg.vreg_enabled,
+		labibb->swire_control);
 
 	return 0;
 
@@ -5285,12 +4532,7 @@ fail_registration:
 		regulator_unregister(labibb->lab_vreg.rdev);
 	if (labibb->ibb_vreg.rdev)
 		regulator_unregister(labibb->ibb_vreg.rdev);
-#ifdef CONFIG_SOMC_LCD_OCP_ENABLED
-	if (labibb->lab_vreg_irq)
-		free_irq(labibb->lab_vreg_irq, labibb);
-	if (labibb->ibb_vreg_irq)
-		free_irq(labibb->ibb_vreg_irq, labibb);
-#endif /* CONFIG_SOMC_LCD_OCP_ENABLED */
+
 	return rc;
 }
 
@@ -5317,14 +4559,6 @@ static int qpnp_labibb_regulator_remove(struct platform_device *pdev)
 			regulator_unregister(labibb->ibb_vreg.rdev);
 
 		cancel_work_sync(&labibb->lab_vreg_ok_work);
-
-#ifdef CONFIG_SOMC_LCD_OCP_ENABLED
-		if (labibb->lab_vreg_irq)
-			free_irq(labibb->lab_vreg_irq, labibb);
-		if (labibb->ibb_vreg_irq)
-			free_irq(labibb->ibb_vreg_irq, labibb);
-		cancel_delayed_work_sync(&labibb_vreg_check.vreg_check_work);
-#endif /* CONFIG_SOMC_LCD_OCP_ENABLED */
 	}
 	return 0;
 }

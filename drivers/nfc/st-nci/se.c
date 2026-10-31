@@ -1,19 +1,8 @@
+// SPDX-License-Identifier: GPL-2.0-only
 /*
  * Secure Element driver for STMicroelectronics NFC NCI chip
  *
  * Copyright (C) 2014-2015 STMicroelectronics SAS. All rights reserved.
- *
- * This program is free software; you can redistribute it and/or modify it
- * under the terms and conditions of the GNU General Public License,
- * version 2, as published by the Free Software Foundation.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
- * GNU General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with this program; if not, see <http://www.gnu.org/licenses/>.
  */
 
 #include <linux/module.h>
@@ -112,8 +101,6 @@ static struct nci_hci_gate st_nci_gates[] = {
 					ST_NCI_HOST_CONTROLLER_ID},
 
 	{NCI_HCI_IDENTITY_MGMT_GATE, NCI_HCI_INVALID_PIPE,
-					ST_NCI_HOST_CONTROLLER_ID},
-	{NCI_HCI_LOOPBACK_GATE, NCI_HCI_INVALID_PIPE,
 					ST_NCI_HOST_CONTROLLER_ID},
 
 	/* Secure element pipes are created by secure element host */
@@ -222,7 +209,7 @@ int st_nci_hci_load_session(struct nci_dev *ndev)
 		 */
 		dm_pipe_info = (struct st_nci_pipe_info *)skb_pipe_info->data;
 		if (dm_pipe_info->dst_gate_id == ST_NCI_APDU_READER_GATE &&
-		    dm_pipe_info->src_host_id != ST_NCI_ESE_HOST_ID) {
+		    dm_pipe_info->src_host_id == ST_NCI_UICC_HOST_ID) {
 			pr_err("Unexpected apdu_reader pipe on host %x\n",
 			       dm_pipe_info->src_host_id);
 			kfree_skb(skb_pipe_info);
@@ -289,7 +276,6 @@ static int st_nci_hci_apdu_reader_event_received(struct nci_dev *ndev,
 						   u8 event,
 						   struct sk_buff *skb)
 {
-	int r = 0;
 	struct st_nci_info *info = nci_get_drvdata(ndev);
 
 	pr_debug("apdu reader gate event: %x\n", event);
@@ -311,7 +297,7 @@ static int st_nci_hci_apdu_reader_event_received(struct nci_dev *ndev,
 	}
 
 	kfree_skb(skb);
-	return r;
+	return 0;
 }
 
 /*
@@ -326,12 +312,14 @@ static int st_nci_hci_connectivity_event_received(struct nci_dev *ndev,
 	int r = 0;
 	struct device *dev = &ndev->nfc_dev->dev;
 	struct nfc_evt_transaction *transaction;
+	u32 aid_len;
+	u8 params_len;
 
 	pr_debug("connectivity gate event: %x\n", event);
 
 	switch (event) {
 	case ST_NCI_EVT_CONNECTIVITY:
-
+		r = nfc_se_connectivity(ndev->nfc_dev, host);
 	break;
 	case ST_NCI_EVT_TRANSACTION:
 		/* According to specification etsi 102 622
@@ -339,27 +327,47 @@ static int st_nci_hci_connectivity_event_received(struct nci_dev *ndev,
 		 * Description  Tag     Length
 		 * AID          81      5 to 16
 		 * PARAMETERS   82      0 to 255
+		 *
+		 * The key differences are aid storage length is variably sized
+		 * in the packet, but fixed in nfc_evt_transaction, and that
+		 * the aid_len is u8 in the packet, but u32 in the structure,
+		 * and the tags in the packet are not included in
+		 * nfc_evt_transaction.
+		 *
+		 * size(b):  1          1       5-16 1             1           0-255
+		 * offset:   0          1       2    aid_len + 2   aid_len + 3 aid_len + 4
+		 * mem name: aid_tag(M) aid_len aid  params_tag(M) params_len  params
+		 * example:  0x81       5-16    X    0x82          0-255       X
 		 */
-		if (skb->len < NFC_MIN_AID_LENGTH + 2 &&
-		    skb->data[0] != NFC_EVT_TRANSACTION_AID_TAG)
+		if (skb->len < 2 || skb->data[0] != NFC_EVT_TRANSACTION_AID_TAG)
 			return -EPROTO;
 
-		transaction = (struct nfc_evt_transaction *)devm_kzalloc(dev,
-					    skb->len - 2, GFP_KERNEL);
+		aid_len = skb->data[1];
+
+		if (skb->len < aid_len + 4 ||
+		    aid_len > sizeof(transaction->aid))
+			return -EPROTO;
+
+		params_len = skb->data[aid_len + 3];
+
+		/* Verify PARAMETERS tag is (82), and final check that there is
+		 * enough space in the packet to read everything.
+		 */
+		if (skb->data[aid_len + 2] != NFC_EVT_TRANSACTION_PARAMS_TAG ||
+		    skb->len < aid_len + 4 + params_len)
+			return -EPROTO;
+
+		transaction = devm_kzalloc(dev, sizeof(*transaction) +
+					   params_len, GFP_KERNEL);
 		if (!transaction)
 			return -ENOMEM;
 
-		transaction->aid_len = skb->data[1];
-		memcpy(transaction->aid, &skb->data[2], transaction->aid_len);
+		transaction->aid_len = aid_len;
+		transaction->params_len = params_len;
 
-		/* Check next byte is PARAMETERS tag (82) */
-		if (skb->data[transaction->aid_len + 2] !=
-		    NFC_EVT_TRANSACTION_PARAMS_TAG)
-			return -EPROTO;
-
-		transaction->params_len = skb->data[transaction->aid_len + 3];
-		memcpy(transaction->params, skb->data +
-		       transaction->aid_len + 4, transaction->params_len);
+		memcpy(transaction->aid, &skb->data[2], aid_len);
+		memcpy(transaction->params, &skb->data[aid_len + 4],
+		       params_len);
 
 		r = nfc_se_transaction(ndev->nfc_dev, host, transaction);
 		break;
@@ -387,13 +395,9 @@ void st_nci_hci_event_received(struct nci_dev *ndev, u8 pipe,
 	case ST_NCI_CONNECTIVITY_GATE:
 		st_nci_hci_connectivity_event_received(ndev, host, event, skb);
 	break;
-	case NCI_HCI_LOOPBACK_GATE:
-		st_nci_hci_loopback_event_received(ndev, event, skb);
-	break;
 	}
 }
 EXPORT_SYMBOL_GPL(st_nci_hci_event_received);
-
 
 void st_nci_hci_cmd_received(struct nci_dev *ndev, u8 pipe, u8 cmd,
 			       struct sk_buff *skb)
@@ -489,8 +493,6 @@ int st_nci_disable_se(struct nci_dev *ndev, u32 se_idx)
 {
 	int r;
 
-	pr_debug("st_nci_disable_se\n");
-
 	/*
 	 * According to upper layer, se_idx == NFC_SE_UICC when
 	 * info->se_info.se_status->is_uicc_enable is true should never happen
@@ -515,15 +517,13 @@ int st_nci_enable_se(struct nci_dev *ndev, u32 se_idx)
 {
 	int r;
 
-	pr_debug("st_nci_enable_se\n");
-
 	/*
 	 * According to upper layer, se_idx == NFC_SE_UICC when
 	 * info->se_info.se_status->is_uicc_enable is true should never happen.
 	 * Same for eSE.
 	 */
 	r = st_nci_control_se(ndev, se_idx, ST_NCI_SE_MODE_ON);
-	if (r == ST_NCI_HCI_HOST_ID_ESE) {
+	if (r == ST_NCI_ESE_HOST_ID) {
 		st_nci_se_get_atr(ndev);
 		r = nci_hci_send_event(ndev, ST_NCI_APDU_READER_GATE,
 				ST_NCI_EVT_SE_SOFT_RESET, NULL, 0);
@@ -553,10 +553,8 @@ static int st_nci_hci_network_init(struct nci_dev *ndev)
 	dest_params =
 		kzalloc(sizeof(struct core_conn_create_dest_spec_params) +
 			sizeof(struct dest_spec_params), GFP_KERNEL);
-	if (dest_params == NULL) {
-		r = -ENOMEM;
-		goto exit;
-	}
+	if (dest_params == NULL)
+		return -ENOMEM;
 
 	dest_params->type = NCI_DESTINATION_SPECIFIC_PARAM_NFCEE_TYPE;
 	dest_params->length = sizeof(struct dest_spec_params);
@@ -603,16 +601,16 @@ static int st_nci_hci_network_init(struct nci_dev *ndev)
 	 * HCI will be used here only for proprietary commands.
 	 */
 	if (test_bit(ST_NCI_FACTORY_MODE, &info->flags))
-		r = nci_nfcee_mode_set(ndev, ndev->hci_dev->conn_info->id,
+		r = nci_nfcee_mode_set(ndev,
+				       ndev->hci_dev->conn_info->dest_params->id,
 				       NCI_NFCEE_DISABLE);
 	else
-		r = nci_nfcee_mode_set(ndev, ndev->hci_dev->conn_info->id,
+		r = nci_nfcee_mode_set(ndev,
+				       ndev->hci_dev->conn_info->dest_params->id,
 				       NCI_NFCEE_ENABLE);
 
 free_dest_params:
 	kfree(dest_params);
-
-exit:
 	return r;
 }
 
@@ -623,8 +621,6 @@ int st_nci_discover_se(struct nci_dev *ndev)
 	int se_count = 0;
 	struct st_nci_info *info = nci_get_drvdata(ndev);
 
-	pr_debug("st_nci_discover_se\n");
-
 	r = st_nci_hci_network_init(ndev);
 	if (r != 0)
 		return r;
@@ -632,17 +628,10 @@ int st_nci_discover_se(struct nci_dev *ndev)
 	if (test_bit(ST_NCI_FACTORY_MODE, &info->flags))
 		return 0;
 
-	if (info->se_info.se_status->is_ese_present &&
-	    info->se_info.se_status->is_uicc_present) {
+	if (info->se_info.se_status->is_uicc_present)
 		white_list[wl_size++] = ST_NCI_UICC_HOST_ID;
+	if (info->se_info.se_status->is_ese_present)
 		white_list[wl_size++] = ST_NCI_ESE_HOST_ID;
-	} else if (!info->se_info.se_status->is_ese_present &&
-		   info->se_info.se_status->is_uicc_present) {
-		white_list[wl_size++] = ST_NCI_UICC_HOST_ID;
-	} else if (info->se_info.se_status->is_ese_present &&
-		   !info->se_info.se_status->is_uicc_present) {
-		white_list[wl_size++] = ST_NCI_ESE_HOST_ID;
-	}
 
 	if (wl_size) {
 		r = nci_hci_set_param(ndev, NCI_HCI_ADMIN_GATE,
@@ -675,7 +664,7 @@ int st_nci_se_io(struct nci_dev *ndev, u32 se_idx,
 	pr_debug("\n");
 
 	switch (se_idx) {
-	case ST_NCI_HCI_HOST_ID_ESE:
+	case ST_NCI_ESE_HOST_ID:
 		info->se_info.cb = cb;
 		info->se_info.cb_context = cb_context;
 		mod_timer(&info->se_info.bwi_timer, jiffies +
@@ -685,12 +674,18 @@ int st_nci_se_io(struct nci_dev *ndev, u32 se_idx,
 					ST_NCI_EVT_TRANSMIT_DATA, apdu,
 					apdu_length);
 	default:
+		/* Need to free cb_context here as at the moment we can't
+		 * clearly indicate to the caller if the callback function
+		 * would be called (and free it) or not. In both cases a
+		 * negative value may be returned to the caller.
+		 */
+		kfree(cb_context);
 		return -ENODEV;
 	}
 }
 EXPORT_SYMBOL(st_nci_se_io);
 
-static void st_nci_se_wt_timeout(unsigned long data)
+static void st_nci_se_wt_timeout(struct timer_list *t)
 {
 	/*
 	 * No answer from the secure element
@@ -703,7 +698,7 @@ static void st_nci_se_wt_timeout(unsigned long data)
 	 */
 	/* hardware reset managed through VCC_UICC_OUT power supply */
 	u8 param = 0x01;
-	struct st_nci_info *info = (struct st_nci_info *) data;
+	struct st_nci_info *info = from_timer(info, t, se_info.bwi_timer);
 
 	pr_debug("\n");
 
@@ -721,9 +716,10 @@ static void st_nci_se_wt_timeout(unsigned long data)
 	info->se_info.cb(info->se_info.cb_context, NULL, 0, -ETIME);
 }
 
-static void st_nci_se_activation_timeout(unsigned long data)
+static void st_nci_se_activation_timeout(struct timer_list *t)
 {
-	struct st_nci_info *info = (struct st_nci_info *) data;
+	struct st_nci_info *info = from_timer(info, t,
+					      se_info.se_active_timer);
 
 	pr_debug("\n");
 
@@ -738,15 +734,11 @@ int st_nci_se_init(struct nci_dev *ndev, struct st_nci_se_status *se_status)
 
 	init_completion(&info->se_info.req_completion);
 	/* initialize timers */
-	init_timer(&info->se_info.bwi_timer);
-	info->se_info.bwi_timer.data = (unsigned long)info;
-	info->se_info.bwi_timer.function = st_nci_se_wt_timeout;
+	timer_setup(&info->se_info.bwi_timer, st_nci_se_wt_timeout, 0);
 	info->se_info.bwi_active = false;
 
-	init_timer(&info->se_info.se_active_timer);
-	info->se_info.se_active_timer.data = (unsigned long)info;
-	info->se_info.se_active_timer.function =
-			st_nci_se_activation_timeout;
+	timer_setup(&info->se_info.se_active_timer,
+		    st_nci_se_activation_timeout, 0);
 	info->se_info.se_active = false;
 
 	info->se_info.xch_error = false;

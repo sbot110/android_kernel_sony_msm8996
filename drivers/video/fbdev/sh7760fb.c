@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-2.0
 /*
  * SH7760/SH7763 LCDC Framebuffer driver.
  *
@@ -5,11 +6,7 @@
  *             Manuel Lauss <mano@roarinelk.homelinux.net>
  * (c) 2008 Nobuhiro Iwamatsu <iwamatsu.nobuhiro@renesas.com>
  *
- *  This file is subject to the terms and conditions of the GNU General
- *  Public License.  See the file COPYING in the main directory of this
- *  archive for more details.
- *
- * PLEASE HAVE A LOOK AT Documentation/fb/sh7760fb.txt!
+ * PLEASE HAVE A LOOK AT Documentation/fb/sh7760fb.rst!
  *
  * Thanks to Siegfried Schaefer <s.schaefer at schaefer-edv.de>
  *     for his original source and testing!
@@ -344,7 +341,7 @@ static int sh7760fb_set_par(struct fb_info *info)
 	return 0;
 }
 
-static struct fb_ops sh7760fb_ops = {
+static const struct fb_ops sh7760fb_ops = {
 	.owner = THIS_MODULE,
 	.fb_blank = sh7760fb_blank,
 	.fb_check_var = sh7760fb_check_var,
@@ -362,7 +359,7 @@ static void sh7760fb_free_mem(struct fb_info *info)
 	if (!info->screen_base)
 		return;
 
-	dma_free_coherent(info->dev, info->screen_size,
+	dma_free_coherent(info->device, info->screen_size,
 			  info->screen_base, par->fbdma);
 
 	par->fbdma = 0;
@@ -411,14 +408,13 @@ static int sh7760fb_alloc_mem(struct fb_info *info)
 	if (vram < PAGE_SIZE)
 		vram = PAGE_SIZE;
 
-	fbmem = dma_alloc_coherent(info->dev, vram, &par->fbdma, GFP_KERNEL);
-
+	fbmem = dma_alloc_coherent(info->device, vram, &par->fbdma, GFP_KERNEL);
 	if (!fbmem)
 		return -ENOMEM;
 
 	if ((par->fbdma & SH7760FB_DMA_MASK) != SH7760FB_DMA_MASK) {
-		sh7760fb_free_mem(info);
-		dev_err(info->dev, "kernel gave me memory at 0x%08lx, which is"
+		dma_free_coherent(info->device, vram, fbmem, par->fbdma);
+		dev_err(info->device, "kernel gave me memory at 0x%08lx, which is"
 			"unusable for the LCDC\n", (unsigned long)par->fbdma);
 		return -ENOMEM;
 	}
@@ -466,7 +462,7 @@ static int sh7760fb_probe(struct platform_device *pdev)
 		goto out_fb;
 	}
 
-	par->base = ioremap_nocache(res->start, resource_size(res));
+	par->base = ioremap(res->start, resource_size(res));
 	if (!par->base) {
 		dev_err(&pdev->dev, "cannot remap\n");
 		ret = -ENODEV;
@@ -489,7 +485,7 @@ static int sh7760fb_probe(struct platform_device *pdev)
 
 	ret = sh7760fb_alloc_mem(info);
 	if (ret) {
-		dev_dbg(info->dev, "framebuffer memory allocation failed!\n");
+		dev_dbg(info->device, "framebuffer memory allocation failed!\n");
 		goto out_unmap;
 	}
 
@@ -587,4 +583,4 @@ module_platform_driver(sh7760_lcdc_driver);
 
 MODULE_AUTHOR("Nobuhiro Iwamatsu, Manuel Lauss");
 MODULE_DESCRIPTION("FBdev for SH7760/63 integrated LCD Controller");
-MODULE_LICENSE("GPL");
+MODULE_LICENSE("GPL v2");

@@ -1,10 +1,10 @@
+// SPDX-License-Identifier: GPL-2.0-only
 /*
  * This only handles 32bit MTRR on 32bit hosts. This is strictly wrong
  * because MTRRs can span up to 40 bits (36bits on most modern x86)
  */
-#define DEBUG
 
-#include <linux/module.h>
+#include <linux/export.h>
 #include <linux/init.h>
 #include <linux/io.h>
 #include <linux/mm.h>
@@ -14,7 +14,7 @@
 #include <asm/tlbflush.h>
 #include <asm/mtrr.h>
 #include <asm/msr.h>
-#include <asm/pat.h>
+#include <asm/memtype.h>
 
 #include "mtrr.h"
 
@@ -42,7 +42,7 @@ EXPORT_SYMBOL_GPL(mtrr_state);
  * "BIOS and Kernel Developer's Guide for the AMD Athlon 64 and AMD
  * Opteron Processors" (26094 Rev. 3.30 February 2006), section
  * "13.2.1.2 SYSCFG Register": "The MtrrFixDramModEn bit should be set
- * to 1 during BIOS initalization of the fixed MTRRs, then cleared to
+ * to 1 during BIOS initialization of the fixed MTRRs, then cleared to
  * 0 for operation."
  */
 static inline void k8_check_syscfg_dram_mod_en(void)
@@ -53,13 +53,13 @@ static inline void k8_check_syscfg_dram_mod_en(void)
 	      (boot_cpu_data.x86 >= 0x0f)))
 		return;
 
-	rdmsr(MSR_K8_SYSCFG, lo, hi);
+	rdmsr(MSR_AMD64_SYSCFG, lo, hi);
 	if (lo & K8_MTRRFIXRANGE_DRAM_MODIFY) {
-		printk(KERN_ERR FW_WARN "MTRR: CPU %u: SYSCFG[MtrrFixDramModEn]"
+		pr_err(FW_WARN "MTRR: CPU %u: SYSCFG[MtrrFixDramModEn]"
 		       " not cleared by BIOS, clearing this bit\n",
 		       smp_processor_id());
 		lo &= ~K8_MTRRFIXRANGE_DRAM_MODIFY;
-		mtrr_wrmsr(MSR_K8_SYSCFG, lo, hi);
+		mtrr_wrmsr(MSR_AMD64_SYSCFG, lo, hi);
 	}
 }
 
@@ -349,7 +349,7 @@ static void get_fixed_ranges(mtrr_type *frs)
 
 void mtrr_save_fixed_ranges(void *info)
 {
-	if (boot_cpu_has(X86_FEATURE_MTRR))
+	if (mtrr_state.have_fixed)
 		get_fixed_ranges(mtrr_state.fixed_ranges);
 }
 
@@ -505,14 +505,14 @@ void __init mtrr_state_warn(void)
 	if (!mask)
 		return;
 	if (mask & MTRR_CHANGE_MASK_FIXED)
-		pr_warning("mtrr: your CPUs had inconsistent fixed MTRR settings\n");
+		pr_warn("mtrr: your CPUs had inconsistent fixed MTRR settings\n");
 	if (mask & MTRR_CHANGE_MASK_VARIABLE)
-		pr_warning("mtrr: your CPUs had inconsistent variable MTRR settings\n");
+		pr_warn("mtrr: your CPUs had inconsistent variable MTRR settings\n");
 	if (mask & MTRR_CHANGE_MASK_DEFTYPE)
-		pr_warning("mtrr: your CPUs had inconsistent MTRRdefType settings\n");
+		pr_warn("mtrr: your CPUs had inconsistent MTRRdefType settings\n");
 
-	printk(KERN_INFO "mtrr: probably your BIOS does not setup all CPUs.\n");
-	printk(KERN_INFO "mtrr: corrected configuration.\n");
+	pr_info("mtrr: probably your BIOS does not setup all CPUs.\n");
+	pr_info("mtrr: corrected configuration.\n");
 }
 
 /*
@@ -523,8 +523,7 @@ void __init mtrr_state_warn(void)
 void mtrr_wrmsr(unsigned msr, unsigned a, unsigned b)
 {
 	if (wrmsr_safe(msr, a, b) < 0) {
-		printk(KERN_ERR
-			"MTRR: CPU %u: Writing MSR %x to %x:%x failed\n",
+		pr_err("MTRR: CPU %u: Writing MSR %x to %x:%x failed\n",
 			smp_processor_id(), msr, a, b);
 	}
 }
@@ -611,7 +610,7 @@ static void generic_get_mtrr(unsigned int reg, unsigned long *base,
 		tmp |= ~((1ULL<<(hi - 1)) - 1);
 
 		if (tmp != mask) {
-			printk(KERN_WARNING "mtrr: your BIOS has configured an incorrect mask, fixing it.\n");
+			pr_warn("mtrr: your BIOS has configured an incorrect mask, fixing it.\n");
 			add_taint(TAINT_FIRMWARE_WORKAROUND, LOCKDEP_STILL_OK);
 			mask = tmp;
 		}
@@ -743,31 +742,42 @@ static void prepare_set(void) __acquires(set_atomicity_lock)
 	/* Enter the no-fill (CD=1, NW=0) cache mode and flush caches. */
 	cr0 = read_cr0() | X86_CR0_CD;
 	write_cr0(cr0);
-	wbinvd();
+
+	/*
+	 * Cache flushing is the most time-consuming step when programming
+	 * the MTRRs. Fortunately, as per the Intel Software Development
+	 * Manual, we can skip it if the processor supports cache self-
+	 * snooping.
+	 */
+	if (!static_cpu_has(X86_FEATURE_SELFSNOOP))
+		wbinvd();
 
 	/* Save value of CR4 and clear Page Global Enable (bit 7) */
-	if (cpu_has_pge) {
+	if (boot_cpu_has(X86_FEATURE_PGE)) {
 		cr4 = __read_cr4();
 		__write_cr4(cr4 & ~X86_CR4_PGE);
 	}
 
 	/* Flush all TLBs via a mov %cr3, %reg; mov %reg, %cr3 */
 	count_vm_tlb_event(NR_TLB_LOCAL_FLUSH_ALL);
-	__flush_tlb();
+	flush_tlb_local();
 
 	/* Save MTRR state */
 	rdmsr(MSR_MTRRdefType, deftype_lo, deftype_hi);
 
 	/* Disable MTRRs, and set the default type to uncached */
 	mtrr_wrmsr(MSR_MTRRdefType, deftype_lo & ~0xcff, deftype_hi);
-	wbinvd();
+
+	/* Again, only flush caches if we have to. */
+	if (!static_cpu_has(X86_FEATURE_SELFSNOOP))
+		wbinvd();
 }
 
 static void post_set(void) __releases(set_atomicity_lock)
 {
 	/* Flush TLBs (no need to flush caches - they are disabled) */
 	count_vm_tlb_event(NR_TLB_LOCAL_FLUSH_ALL);
-	__flush_tlb();
+	flush_tlb_local();
 
 	/* Intel (P6) standard MTRRs */
 	mtrr_wrmsr(MSR_MTRRdefType, deftype_lo, deftype_hi);
@@ -776,7 +786,7 @@ static void post_set(void) __releases(set_atomicity_lock)
 	write_cr0(read_cr0() & ~X86_CR0_CD);
 
 	/* Restore value of CR4 */
-	if (cpu_has_pge)
+	if (boot_cpu_has(X86_FEATURE_PGE))
 		__write_cr4(cr4);
 	raw_spin_unlock(&set_atomicity_lock);
 }
@@ -799,7 +809,7 @@ static void generic_set_all(void)
 	local_irq_restore(flags);
 
 	/* Use the atomic bitops to update the global mask */
-	for (count = 0; count < sizeof mask * 8; ++count) {
+	for (count = 0; count < sizeof(mask) * 8; ++count) {
 		if (mask & 0x01)
 			set_bit(count, &smp_changes_mask);
 		mask >>= 1;
@@ -862,13 +872,13 @@ int generic_validate_add_page(unsigned long base, unsigned long size,
 	    boot_cpu_data.x86_model == 1 &&
 	    boot_cpu_data.x86_stepping <= 7) {
 		if (base & ((1 << (22 - PAGE_SHIFT)) - 1)) {
-			pr_warning("mtrr: base(0x%lx000) is not 4 MiB aligned\n", base);
+			pr_warn("mtrr: base(0x%lx000) is not 4 MiB aligned\n", base);
 			return -EINVAL;
 		}
 		if (!(base + size < 0x70000 || base > 0x7003F) &&
 		    (type == MTRR_TYPE_WRCOMB
 		     || type == MTRR_TYPE_WRBACK)) {
-			pr_warning("mtrr: writable mtrr between 0x70000000 and 0x7003FFFF may hang the CPU.\n");
+			pr_warn("mtrr: writable mtrr between 0x70000000 and 0x7003FFFF may hang the CPU.\n");
 			return -EINVAL;
 		}
 	}
@@ -882,7 +892,7 @@ int generic_validate_add_page(unsigned long base, unsigned long size,
 	     lbase = lbase >> 1, last = last >> 1)
 		;
 	if (lbase != last) {
-		pr_warning("mtrr: base(0x%lx000) is not aligned on a size(0x%lx000) boundary\n", base, size);
+		pr_warn("mtrr: base(0x%lx000) is not aligned on a size(0x%lx000) boundary\n", base, size);
 		return -EINVAL;
 	}
 	return 0;

@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-2.0
 /*
  * Driver for Comtrol RocketPort EXPRESS/INFINITY cards
  *
@@ -10,10 +11,6 @@
  *
  *   rocketport_infinity_express-linux-1.20.tar.gz
  *     Copyright (C) 2004-2011 Comtrol, Inc.
- *
- * This program is free software; you can redistribute it and/or modify it
- * under the terms of the GNU General Public License version 2 as published
- * by the Free Software Foundation.
  */
 
 #include <linux/bitops.h>
@@ -426,9 +423,7 @@ static void rp2_rx_chars(struct rp2_uart_port *up)
 		up->port.icount.rx++;
 	}
 
-	spin_unlock(&up->port.lock);
 	tty_flip_buffer_push(port);
-	spin_lock(&up->port.lock);
 }
 
 static void rp2_tx_chars(struct rp2_uart_port *up)
@@ -603,8 +598,8 @@ static void rp2_reset_asic(struct rp2_card *card, unsigned int asic_id)
 	u32 clk_cfg;
 
 	writew(1, base + RP2_GLOBAL_CMD);
-	readw(base + RP2_GLOBAL_CMD);
 	msleep(100);
+	readw(base + RP2_GLOBAL_CMD);
 	writel(0, base + RP2_CLK_PRESCALER);
 
 	/* TDM clock configuration */
@@ -758,7 +753,7 @@ static int rp2_probe(struct pci_dev *pdev,
 
 	rp2_init_card(card);
 
-	ports = devm_kzalloc(&pdev->dev, sizeof(*ports) * card->n_ports,
+	ports = devm_kcalloc(&pdev->dev, card->n_ports, sizeof(*ports),
 			     GFP_KERNEL);
 	if (!ports)
 		return -ENOMEM;

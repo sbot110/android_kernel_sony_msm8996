@@ -1,22 +1,14 @@
+// SPDX-License-Identifier: GPL-2.0-only
 /*
  * arch/arm64/kernel/probes/decode-insn.c
  *
  * Copyright (C) 2013 Linaro Limited.
- *
- * This program is free software; you can redistribute it and/or modify
- * it under the terms of the GNU General Public License version 2 as
- * published by the Free Software Foundation.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
- * General Public License for more details.
  */
 
 #include <linux/kernel.h>
 #include <linux/kprobes.h>
 #include <linux/module.h>
-#include <asm/kprobes.h>
+#include <linux/kallsyms.h>
 #include <asm/insn.h>
 #include <asm/sections.h>
 
@@ -37,7 +29,8 @@ static bool __kprobes aarch64_insn_is_steppable(u32 insn)
 		    aarch64_insn_is_msr_imm(insn) ||
 		    aarch64_insn_is_msr_reg(insn) ||
 		    aarch64_insn_is_exception(insn) ||
-		    aarch64_insn_is_eret(insn))
+		    aarch64_insn_is_eret(insn) ||
+		    aarch64_insn_is_eret_auth(insn))
 			return false;
 
 		/*
@@ -50,11 +43,13 @@ static bool __kprobes aarch64_insn_is_steppable(u32 insn)
 			     != AARCH64_INSN_SPCLREG_DAIF;
 
 		/*
-		 * The HINT instruction is is problematic when single-stepping,
-		 * except for the NOP case.
+		 * The HINT instruction is steppable only if it is in whitelist
+		 * and the rest of other such instructions are blocked for
+		 * single stepping as they may cause exception or other
+		 * unintended behaviour.
 		 */
 		if (aarch64_insn_is_hint(insn))
-			return aarch64_insn_is_nop(insn);
+			return aarch64_insn_is_steppable_hint(insn);
 
 		return true;
 	}
@@ -104,10 +99,6 @@ arm_probe_decode_insn(probe_opcode_t insn, struct arch_probe_insn *api)
 	    aarch64_insn_is_blr(insn) ||
 	    aarch64_insn_is_ret(insn)) {
 		api->handler = simulate_br_blr_ret;
-	} else if (aarch64_insn_is_ldr_lit(insn)) {
-		api->handler = simulate_ldr_literal;
-	} else if (aarch64_insn_is_ldrsw_lit(insn)) {
-		api->handler = simulate_ldrsw_literal;
 	} else {
 		/*
 		 * Instruction cannot be stepped out-of-line and we don't
@@ -123,7 +114,7 @@ arm_probe_decode_insn(probe_opcode_t insn, struct arch_probe_insn *api)
 static bool __kprobes
 is_probed_address_atomic(kprobe_opcode_t *scan_start, kprobe_opcode_t *scan_end)
 {
-	while (scan_start > scan_end) {
+	while (scan_start >= scan_end) {
 		/*
 		 * atomic region starts from exclusive load and ends with
 		 * exclusive store.
@@ -143,33 +134,40 @@ arm_kprobe_decode_insn(kprobe_opcode_t *addr, struct arch_specific_insn *asi)
 {
 	enum probe_insn decoded;
 	probe_opcode_t insn = le32_to_cpu(*addr);
-	probe_opcode_t *scan_start = addr - 1;
-	probe_opcode_t *scan_end = addr - MAX_ATOMIC_CONTEXT_SIZE;
-#if defined(CONFIG_MODULES) && defined(MODULES_VADDR)
-	struct module *mod;
-#endif
+	probe_opcode_t *scan_end = NULL;
+	unsigned long size = 0, offset = 0;
+	struct arch_probe_insn *api = &asi->api;
 
-	if (addr >= (kprobe_opcode_t *)_text &&
-	    scan_end < (kprobe_opcode_t *)_text)
-		scan_end = (kprobe_opcode_t *)_text;
-#if defined(CONFIG_MODULES) && defined(MODULES_VADDR)
-	else {
-		preempt_disable();
-		mod = __module_address((unsigned long)addr);
-		if (mod && within_module_init((unsigned long)addr, mod) &&
-			!within_module_init((unsigned long)scan_end, mod))
-			scan_end = (kprobe_opcode_t *)mod->module_init;
-		else if (mod && within_module_core((unsigned long)addr, mod) &&
-			!within_module_core((unsigned long)scan_end, mod))
-			scan_end = (kprobe_opcode_t *)mod->module_core;
-		preempt_enable();
+	if (aarch64_insn_is_ldr_lit(insn)) {
+		api->handler = simulate_ldr_literal;
+		decoded = INSN_GOOD_NO_SLOT;
+	} else if (aarch64_insn_is_ldrsw_lit(insn)) {
+		api->handler = simulate_ldrsw_literal;
+		decoded = INSN_GOOD_NO_SLOT;
+	} else {
+		decoded = arm_probe_decode_insn(insn, &asi->api);
 	}
-#endif
-	decoded = arm_probe_decode_insn(insn, &asi->api);
 
-	if (decoded == INSN_REJECTED ||
-			is_probed_address_atomic(scan_start, scan_end))
-		return INSN_REJECTED;
+	/*
+	 * If there's a symbol defined in front of and near enough to
+	 * the probe address assume it is the entry point to this
+	 * code and use it to further limit how far back we search
+	 * when determining if we're in an atomic sequence. If we could
+	 * not find any symbol skip the atomic test altogether as we
+	 * could otherwise end up searching irrelevant text/literals.
+	 * KPROBES depends on KALLSYMS so this last case should never
+	 * happen.
+	 */
+	if (kallsyms_lookup_size_offset((unsigned long) addr, &size, &offset)) {
+		if (offset < (MAX_ATOMIC_CONTEXT_SIZE*sizeof(kprobe_opcode_t)))
+			scan_end = addr - (offset / sizeof(kprobe_opcode_t));
+		else
+			scan_end = addr - MAX_ATOMIC_CONTEXT_SIZE;
+	}
+
+	if (decoded != INSN_REJECTED && scan_end)
+		if (is_probed_address_atomic(addr - 1, scan_end))
+			return INSN_REJECTED;
 
 	return decoded;
 }

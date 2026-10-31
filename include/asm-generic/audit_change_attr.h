@@ -1,3 +1,4 @@
+/* SPDX-License-Identifier: GPL-2.0 */
 #ifdef __NR_chmod
 __NR_chmod,
 #endif
@@ -18,6 +19,9 @@ __NR_fremovexattr,
 #ifdef __NR_fchownat
 __NR_fchownat,
 __NR_fchmodat,
+#endif
+#ifdef __NR_fchmodat2
+__NR_fchmodat2,
 #endif
 #ifdef __NR_chown32
 __NR_chown32,

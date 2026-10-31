@@ -1,902 +1,1094 @@
-/* Copyright (c) 2017, The Linux Foundation. All rights reserved.
- *
- * This program is free software; you can redistribute it and/or modify
- * it under the terms of the GNU General Public License version 2 and
- * only version 2 as published by the Free Software Foundation.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
+// SPDX-License-Identifier: ISC
+/*
+ * Copyright (c) 2018 The Linux Foundation. All rights reserved.
  */
-#include <soc/qcom/subsystem_notif.h>
-#include <soc/qcom/subsystem_restart.h>
-#include <soc/qcom/service-notifier.h>
-#include <soc/qcom/msm_qmi_interface.h>
-#include <soc/qcom/icnss.h>
-#include <soc/qcom/service-locator.h>
-#include "core.h"
-#include "qmi.h"
+
+#include <linux/completion.h>
+#include <linux/device.h>
+#include <linux/debugfs.h>
+#include <linux/idr.h>
+#include <linux/kernel.h>
+#include <linux/of.h>
+#include <linux/of_address.h>
+#include <linux/module.h>
+#include <linux/net.h>
+#include <linux/platform_device.h>
+#include <linux/qcom_scm.h>
+#include <linux/string.h>
+#include <net/sock.h>
+
+#include "debug.h"
 #include "snoc.h"
-#include "wcn3990_qmi_service_v01.h"
 
-static DECLARE_WAIT_QUEUE_HEAD(ath10k_fw_ready_wait_event);
+#define ATH10K_QMI_CLIENT_ID		0x4b4e454c
+#define ATH10K_QMI_TIMEOUT		30
 
-static int
-ath10k_snoc_service_notifier_notify(struct notifier_block *nb,
-				    unsigned long notification, void *data)
+static int ath10k_qmi_map_msa_permission(struct ath10k_qmi *qmi,
+					 struct ath10k_msa_mem_info *mem_info)
 {
-	struct ath10k_snoc *ar_snoc = container_of(nb, struct ath10k_snoc,
-					       service_notifier_nb);
-	enum pd_subsys_state *state = data;
-	struct ath10k *ar = ar_snoc->ar;
-	struct ath10k_snoc_qmi_config *qmi_cfg = &ar_snoc->qmi_cfg;
+	struct qcom_scm_vmperm dst_perms[3];
+	struct ath10k *ar = qmi->ar;
+	unsigned int src_perms;
+	u32 perm_count;
 	int ret;
 
-	switch (notification) {
-	case SERVREG_NOTIF_SERVICE_STATE_DOWN_V01:
-		ath10k_dbg(ar, ATH10K_DBG_SNOC, "Service down, data: 0x%pK\n",
-			   data);
+	src_perms = BIT(QCOM_SCM_VMID_HLOS);
 
-		if (!state || *state != ROOT_PD_SHUTDOWN) {
-			atomic_set(&ar_snoc->fw_crashed, 1);
-			atomic_set(&qmi_cfg->fw_ready, 0);
+	dst_perms[0].vmid = QCOM_SCM_VMID_MSS_MSA;
+	dst_perms[0].perm = QCOM_SCM_PERM_RW;
+	dst_perms[1].vmid = QCOM_SCM_VMID_WLAN;
+	dst_perms[1].perm = QCOM_SCM_PERM_RW;
+
+	if (mem_info->secure) {
+		perm_count = 2;
+	} else {
+		dst_perms[2].vmid = QCOM_SCM_VMID_WLAN_CE;
+		dst_perms[2].perm = QCOM_SCM_PERM_RW;
+		perm_count = 3;
+	}
+
+	ret = qcom_scm_assign_mem(mem_info->addr, mem_info->size,
+				  &src_perms, dst_perms, perm_count);
+	if (ret < 0)
+		ath10k_err(ar, "failed to assign msa map permissions: %d\n", ret);
+
+	return ret;
+}
+
+static int ath10k_qmi_unmap_msa_permission(struct ath10k_qmi *qmi,
+					   struct ath10k_msa_mem_info *mem_info)
+{
+	struct qcom_scm_vmperm dst_perms;
+	struct ath10k *ar = qmi->ar;
+	unsigned int src_perms;
+	int ret;
+
+	src_perms = BIT(QCOM_SCM_VMID_MSS_MSA) | BIT(QCOM_SCM_VMID_WLAN);
+
+	if (!mem_info->secure)
+		src_perms |= BIT(QCOM_SCM_VMID_WLAN_CE);
+
+	dst_perms.vmid = QCOM_SCM_VMID_HLOS;
+	dst_perms.perm = QCOM_SCM_PERM_RW;
+
+	ret = qcom_scm_assign_mem(mem_info->addr, mem_info->size,
+				  &src_perms, &dst_perms, 1);
+	if (ret < 0)
+		ath10k_err(ar, "failed to unmap msa permissions: %d\n", ret);
+
+	return ret;
+}
+
+static int ath10k_qmi_setup_msa_permissions(struct ath10k_qmi *qmi)
+{
+	int ret;
+	int i;
+
+	if (qmi->msa_fixed_perm)
+		return 0;
+
+	for (i = 0; i < qmi->nr_mem_region; i++) {
+		ret = ath10k_qmi_map_msa_permission(qmi, &qmi->mem_region[i]);
+		if (ret)
+			goto err_unmap;
+	}
+
+	return 0;
+
+err_unmap:
+	for (i--; i >= 0; i--)
+		ath10k_qmi_unmap_msa_permission(qmi, &qmi->mem_region[i]);
+	return ret;
+}
+
+static void ath10k_qmi_remove_msa_permission(struct ath10k_qmi *qmi)
+{
+	int i;
+
+	if (qmi->msa_fixed_perm)
+		return;
+
+	for (i = 0; i < qmi->nr_mem_region; i++)
+		ath10k_qmi_unmap_msa_permission(qmi, &qmi->mem_region[i]);
+}
+
+static int ath10k_qmi_msa_mem_info_send_sync_msg(struct ath10k_qmi *qmi)
+{
+	struct wlfw_msa_info_resp_msg_v01 resp = {};
+	struct wlfw_msa_info_req_msg_v01 req = {};
+	struct ath10k *ar = qmi->ar;
+	phys_addr_t max_mapped_addr;
+	struct qmi_txn txn;
+	int ret;
+	int i;
+
+	req.msa_addr = ar->msa.paddr;
+	req.size = ar->msa.mem_size;
+
+	ret = qmi_txn_init(&qmi->qmi_hdl, &txn,
+			   wlfw_msa_info_resp_msg_v01_ei, &resp);
+	if (ret < 0)
+		goto out;
+
+	ret = qmi_send_request(&qmi->qmi_hdl, NULL, &txn,
+			       QMI_WLFW_MSA_INFO_REQ_V01,
+			       WLFW_MSA_INFO_REQ_MSG_V01_MAX_MSG_LEN,
+			       wlfw_msa_info_req_msg_v01_ei, &req);
+	if (ret < 0) {
+		qmi_txn_cancel(&txn);
+		ath10k_err(ar, "failed to send msa mem info req: %d\n", ret);
+		goto out;
+	}
+
+	ret = qmi_txn_wait(&txn, ATH10K_QMI_TIMEOUT * HZ);
+	if (ret < 0)
+		goto out;
+
+	if (resp.resp.result != QMI_RESULT_SUCCESS_V01) {
+		ath10k_err(ar, "msa info req rejected: %d\n", resp.resp.error);
+		ret = -EINVAL;
+		goto out;
+	}
+
+	if (resp.mem_region_info_len > QMI_WLFW_MAX_MEM_REG_V01) {
+		ath10k_err(ar, "invalid memory region length received: %d\n",
+			   resp.mem_region_info_len);
+		ret = -EINVAL;
+		goto out;
+	}
+
+	max_mapped_addr = ar->msa.paddr + ar->msa.mem_size;
+	qmi->nr_mem_region = resp.mem_region_info_len;
+	for (i = 0; i < resp.mem_region_info_len; i++) {
+		if (resp.mem_region_info[i].size > ar->msa.mem_size ||
+		    resp.mem_region_info[i].region_addr > max_mapped_addr ||
+		    resp.mem_region_info[i].region_addr < ar->msa.paddr ||
+		    resp.mem_region_info[i].size +
+		    resp.mem_region_info[i].region_addr > max_mapped_addr) {
+			ath10k_err(ar, "received out of range memory region address 0x%llx with size 0x%x, aborting\n",
+				   resp.mem_region_info[i].region_addr,
+				   resp.mem_region_info[i].size);
+			ret = -EINVAL;
+			goto fail_unwind;
 		}
+		qmi->mem_region[i].addr = resp.mem_region_info[i].region_addr;
+		qmi->mem_region[i].size = resp.mem_region_info[i].size;
+		qmi->mem_region[i].secure = resp.mem_region_info[i].secure_flag;
+		ath10k_dbg(ar, ATH10K_DBG_QMI,
+			   "qmi msa mem region %d addr 0x%pa size 0x%x flag 0x%08x\n",
+			   i, &qmi->mem_region[i].addr,
+			   qmi->mem_region[i].size,
+			   qmi->mem_region[i].secure);
+	}
 
-		ath10k_dbg(ar, ATH10K_DBG_SNOC, "PD went down %d\n",
-			   atomic_read(&ar_snoc->fw_crashed));
-		break;
-	case SERVREG_NOTIF_SERVICE_STATE_UP_V01:
-		ath10k_dbg(ar, ATH10K_DBG_SNOC, "Service up\n");
-		ret = wait_event_timeout(ath10k_fw_ready_wait_event,
-					 (atomic_read(&qmi_cfg->fw_ready) &&
-				   atomic_read(&qmi_cfg->server_connected)),
-			msecs_to_jiffies(ATH10K_SNOC_WLAN_FW_READY_TIMEOUT));
-		if (ret) {
-			queue_work(ar->workqueue, &ar->restart_work);
+	ath10k_dbg(ar, ATH10K_DBG_QMI, "qmi msa mem info request completed\n");
+	return 0;
+
+fail_unwind:
+	memset(&qmi->mem_region[0], 0, sizeof(qmi->mem_region[0]) * i);
+out:
+	return ret;
+}
+
+static int ath10k_qmi_msa_ready_send_sync_msg(struct ath10k_qmi *qmi)
+{
+	struct wlfw_msa_ready_resp_msg_v01 resp = {};
+	struct wlfw_msa_ready_req_msg_v01 req = {};
+	struct ath10k *ar = qmi->ar;
+	struct qmi_txn txn;
+	int ret;
+
+	ret = qmi_txn_init(&qmi->qmi_hdl, &txn,
+			   wlfw_msa_ready_resp_msg_v01_ei, &resp);
+	if (ret < 0)
+		goto out;
+
+	ret = qmi_send_request(&qmi->qmi_hdl, NULL, &txn,
+			       QMI_WLFW_MSA_READY_REQ_V01,
+			       WLFW_MSA_READY_REQ_MSG_V01_MAX_MSG_LEN,
+			       wlfw_msa_ready_req_msg_v01_ei, &req);
+	if (ret < 0) {
+		qmi_txn_cancel(&txn);
+		ath10k_err(ar, "failed to send msa mem ready request: %d\n", ret);
+		goto out;
+	}
+
+	ret = qmi_txn_wait(&txn, ATH10K_QMI_TIMEOUT * HZ);
+	if (ret < 0)
+		goto out;
+
+	if (resp.resp.result != QMI_RESULT_SUCCESS_V01) {
+		ath10k_err(ar, "msa ready request rejected: %d\n", resp.resp.error);
+		ret = -EINVAL;
+	}
+
+	ath10k_dbg(ar, ATH10K_DBG_QMI, "qmi msa mem ready request completed\n");
+	return 0;
+
+out:
+	return ret;
+}
+
+static int ath10k_qmi_bdf_dnld_send_sync(struct ath10k_qmi *qmi)
+{
+	struct wlfw_bdf_download_resp_msg_v01 resp = {};
+	struct wlfw_bdf_download_req_msg_v01 *req;
+	struct ath10k *ar = qmi->ar;
+	unsigned int remaining;
+	struct qmi_txn txn;
+	const u8 *temp;
+	int ret;
+
+	req = kzalloc(sizeof(*req), GFP_KERNEL);
+	if (!req)
+		return -ENOMEM;
+
+	temp = ar->normal_mode_fw.board_data;
+	remaining = ar->normal_mode_fw.board_len;
+
+	while (remaining) {
+		req->valid = 1;
+		req->file_id_valid = 1;
+		req->file_id = 0;
+		req->total_size_valid = 1;
+		req->total_size = ar->normal_mode_fw.board_len;
+		req->seg_id_valid = 1;
+		req->data_valid = 1;
+		req->end_valid = 1;
+
+		if (remaining > QMI_WLFW_MAX_DATA_SIZE_V01) {
+			req->data_len = QMI_WLFW_MAX_DATA_SIZE_V01;
 		} else {
-			ath10k_err(ar, "restart failed, fw_ready timed out\n");
-			return NOTIFY_OK;
+			req->data_len = remaining;
+			req->end = 1;
 		}
-		break;
-	default:
-		ath10k_dbg(ar, ATH10K_DBG_SNOC,
-			   "Service state Unknown, notification: 0x%lx\n",
-			    notification);
-		return NOTIFY_DONE;
-	}
-	return NOTIFY_OK;
-}
 
-static int ath10k_snoc_get_service_location_notify(struct notifier_block *nb,
-						   unsigned long opcode,
-						   void *data)
-{
-	struct ath10k_snoc *ar_snoc = container_of(nb, struct ath10k_snoc,
-						   get_service_nb);
-	struct ath10k *ar = ar_snoc->ar;
-	struct pd_qmi_client_data *pd = data;
-	int curr_state;
-	int ret;
-	int i;
-	struct ath10k_service_notifier_context *notifier;
+		memcpy(req->data, temp, req->data_len);
 
-	ath10k_dbg(ar, ATH10K_DBG_SNOC, "Get service notify opcode: %lu\n",
-		   opcode);
+		ret = qmi_txn_init(&qmi->qmi_hdl, &txn,
+				   wlfw_bdf_download_resp_msg_v01_ei,
+				   &resp);
+		if (ret < 0)
+			goto out;
 
-	if (opcode != LOCATOR_UP)
-		return NOTIFY_DONE;
-
-	if (!pd->total_domains) {
-		ath10k_err(ar, "Did not find any domains\n");
-		ret = -ENOENT;
-		goto out;
-	}
-
-	notifier = kcalloc(pd->total_domains,
-			   sizeof(struct ath10k_service_notifier_context),
-			   GFP_KERNEL);
-	if (!notifier) {
-		ret = -ENOMEM;
-		goto out;
-	}
-
-	ar_snoc->service_notifier_nb.notifier_call =
-					ath10k_snoc_service_notifier_notify;
-
-	for (i = 0; i < pd->total_domains; i++) {
-		ath10k_dbg(ar, ATH10K_DBG_SNOC,
-			   "%d: domain_name: %s, instance_id: %d\n", i,
-				   pd->domain_list[i].name,
-				   pd->domain_list[i].instance_id);
-
-		notifier[i].handle =
-			service_notif_register_notifier(
-					pd->domain_list[i].name,
-					pd->domain_list[i].instance_id,
-					&ar_snoc->service_notifier_nb,
-					&curr_state);
-		notifier[i].instance_id = pd->domain_list[i].instance_id;
-		strlcpy(notifier[i].name, pd->domain_list[i].name,
-			QMI_SERVREG_LOC_NAME_LENGTH_V01 + 1);
-
-		if (IS_ERR(notifier[i].handle)) {
-			ath10k_err(ar, "%d: Unable to register notifier for %s(0x%x)\n",
-				   i, pd->domain_list->name,
-				   pd->domain_list->instance_id);
-			ret = PTR_ERR(notifier[i].handle);
-			goto free_handle;
+		ret = qmi_send_request(&qmi->qmi_hdl, NULL, &txn,
+				       QMI_WLFW_BDF_DOWNLOAD_REQ_V01,
+				       WLFW_BDF_DOWNLOAD_REQ_MSG_V01_MAX_MSG_LEN,
+				       wlfw_bdf_download_req_msg_v01_ei, req);
+		if (ret < 0) {
+			qmi_txn_cancel(&txn);
+			goto out;
 		}
-	}
 
-	ar_snoc->service_notifier = notifier;
-	ar_snoc->total_domains = pd->total_domains;
+		ret = qmi_txn_wait(&txn, ATH10K_QMI_TIMEOUT * HZ);
 
-	ath10k_dbg(ar, ATH10K_DBG_SNOC, "PD restart enabled\n");
+		if (ret < 0)
+			goto out;
 
-	return NOTIFY_OK;
-
-free_handle:
-	for (i = 0; i < pd->total_domains; i++) {
-		if (notifier[i].handle) {
-			service_notif_unregister_notifier(
-						notifier[i].handle,
-						&ar_snoc->service_notifier_nb);
+		/* end = 1 triggers a CRC check on the BDF.  If this fails, we
+		 * get a QMI_ERR_MALFORMED_MSG_V01 error, but the FW is still
+		 * willing to use the BDF.  For some platforms, all the valid
+		 * released BDFs fail this CRC check, so attempt to detect this
+		 * scenario and treat it as non-fatal.
+		 */
+		if (resp.resp.result != QMI_RESULT_SUCCESS_V01 &&
+		    !(req->end == 1 &&
+		      resp.resp.result == QMI_ERR_MALFORMED_MSG_V01)) {
+			ath10k_err(ar, "failed to download board data file: %d\n",
+				   resp.resp.error);
+			ret = -EINVAL;
+			goto out;
 		}
-	}
-	kfree(notifier);
 
-out:
-	ath10k_err(ar, "PD restart not enabled: %d\n", ret);
-
-	return NOTIFY_OK;
-}
-
-int ath10k_snoc_pd_restart_enable(struct ath10k *ar)
-{
-	int ret;
-	struct ath10k_snoc *ar_snoc = ath10k_snoc_priv(ar);
-
-	ath10k_dbg(ar, ATH10K_DBG_SNOC, "Get service location\n");
-
-	ar_snoc->get_service_nb.notifier_call =
-		ath10k_snoc_get_service_location_notify;
-	ret = get_service_location(ATH10K_SERVICE_LOCATION_CLIENT_NAME,
-				   ATH10K_WLAN_SERVICE_NAME,
-				   &ar_snoc->get_service_nb);
-	if (ret) {
-		ath10k_err(ar, "Get service location failed: %d\n", ret);
-		goto out;
+		remaining -= req->data_len;
+		temp += req->data_len;
+		req->seg_id++;
 	}
 
+	ath10k_dbg(ar, ATH10K_DBG_QMI, "qmi bdf download request completed\n");
+
+	kfree(req);
 	return 0;
+
 out:
-	ath10k_err(ar, "PD restart not enabled: %d\n", ret);
+	kfree(req);
 	return ret;
 }
 
-int ath10k_snoc_pdr_unregister_notifier(struct ath10k *ar)
+static int ath10k_qmi_send_cal_report_req(struct ath10k_qmi *qmi)
 {
-	int i;
+	struct wlfw_cal_report_resp_msg_v01 resp = {};
+	struct wlfw_cal_report_req_msg_v01 req = {};
+	struct ath10k *ar = qmi->ar;
 	struct ath10k_snoc *ar_snoc = ath10k_snoc_priv(ar);
+	struct qmi_txn txn;
+	int i, j = 0;
+	int ret;
 
-	for (i = 0; i < ar_snoc->total_domains; i++) {
-		if (ar_snoc->service_notifier[i].handle)
-			service_notif_unregister_notifier(
-				ar_snoc->service_notifier[i].handle,
-				&ar_snoc->service_notifier_nb);
+	if (ar_snoc->xo_cal_supported) {
+		req.xo_cal_data_valid = 1;
+		req.xo_cal_data = ar_snoc->xo_cal_data;
 	}
 
-	kfree(ar_snoc->service_notifier);
+	ret = qmi_txn_init(&qmi->qmi_hdl, &txn, wlfw_cal_report_resp_msg_v01_ei,
+			   &resp);
+	if (ret < 0)
+		goto out;
 
-	ar_snoc->service_notifier = NULL;
-
-	return 0;
-}
-
-static int ath10k_snoc_modem_notifier_nb(struct notifier_block *nb,
-					 unsigned long code,
-					 void *data)
-{
-	struct notif_data *notif = data;
-	struct ath10k_snoc *ar_snoc = container_of(nb, struct ath10k_snoc,
-						   modem_ssr_nb);
-	struct ath10k *ar = ar_snoc->ar;
-	struct ath10k_snoc_qmi_config *qmi_cfg = &ar_snoc->qmi_cfg;
-
-	if (code != SUBSYS_BEFORE_SHUTDOWN)
-		return NOTIFY_OK;
-
-	if (notif->crashed) {
-		atomic_set(&ar_snoc->fw_crashed, 1);
-		atomic_set(&qmi_cfg->fw_ready, 0);
-	}
-
-	ath10k_dbg(ar, ATH10K_DBG_SNOC, "Modem went down %d\n",
-		   atomic_read(&ar_snoc->fw_crashed));
-
-	return NOTIFY_OK;
-}
-
-int ath10k_snoc_modem_ssr_register_notifier(struct ath10k *ar)
-{
-	int ret = 0;
-	struct ath10k_snoc *ar_snoc = ath10k_snoc_priv(ar);
-
-	ar_snoc->modem_ssr_nb.notifier_call = ath10k_snoc_modem_notifier_nb;
-
-	ar_snoc->modem_notify_handler =
-		subsys_notif_register_notifier("modem", &ar_snoc->modem_ssr_nb);
-
-	if (IS_ERR(ar_snoc->modem_notify_handler)) {
-		ret = PTR_ERR(ar_snoc->modem_notify_handler);
-		ath10k_err(ar, "Modem register notifier failed: %d\n", ret);
-	}
-
-	return ret;
-}
-
-int ath10k_snoc_modem_ssr_unregister_notifier(struct ath10k *ar)
-{
-	struct ath10k_snoc *ar_snoc = ath10k_snoc_priv(ar);
-
-	subsys_notif_unregister_notifier(ar_snoc->modem_notify_handler,
-					 &ar_snoc->modem_ssr_nb);
-	ar_snoc->modem_notify_handler = NULL;
-
-	return 0;
-}
-
-static char *
-ath10k_snoc_driver_event_to_str(enum ath10k_snoc_driver_event_type type)
-{
-	switch (type) {
-	case ATH10K_SNOC_DRIVER_EVENT_SERVER_ARRIVE:
-		return "SERVER_ARRIVE";
-	case ATH10K_SNOC_DRIVER_EVENT_SERVER_EXIT:
-		return "SERVER_EXIT";
-	case ATH10K_SNOC_DRIVER_EVENT_FW_READY_IND:
-		return "FW_READY";
-	case ATH10K_SNOC_DRIVER_EVENT_MAX:
-		return "EVENT_MAX";
-	}
-
-	return "UNKNOWN";
-};
-
-static int
-ath10k_snoc_driver_event_post(enum ath10k_snoc_driver_event_type type,
-			      u32 flags, void *data)
-{
-	int ret = 0;
-	int i = 0;
-	unsigned long irq_flags;
-	struct ath10k *ar = (struct ath10k *)data;
-	struct ath10k_snoc *ar_snoc = ath10k_snoc_priv(ar);
-	struct ath10k_snoc_qmi_config *qmi_cfg = &ar_snoc->qmi_cfg;
-
-	ath10k_dbg(ar, ATH10K_DBG_SNOC, "Posting event: %s type: %d\n",
-		   ath10k_snoc_driver_event_to_str(type), type);
-
-	if (type >= ATH10K_SNOC_DRIVER_EVENT_MAX) {
-		ath10k_err(ar, "Invalid Event type: %d, can't post", type);
-		return -EINVAL;
-	}
-
-	spin_lock_irqsave(&qmi_cfg->event_lock, irq_flags);
-
-	for (i = 0; i < ATH10K_SNOC_DRIVER_EVENT_MAX; i++) {
-		if (atomic_read(&qmi_cfg->qmi_ev_list[i].event_handled)) {
-			qmi_cfg->qmi_ev_list[i].type = type;
-			qmi_cfg->qmi_ev_list[i].data = data;
-			init_completion(&qmi_cfg->qmi_ev_list[i].complete);
-			qmi_cfg->qmi_ev_list[i].ret =
-					ATH10K_SNOC_EVENT_PENDING;
-			qmi_cfg->qmi_ev_list[i].sync =
-					!!(flags & ATH10K_SNOC_EVENT_SYNC);
-			atomic_set(&qmi_cfg->qmi_ev_list[i].event_handled, 0);
-			list_add_tail(&qmi_cfg->qmi_ev_list[i].list,
-				      &qmi_cfg->event_list);
-			break;
+	for (i = 0; i < QMI_WLFW_MAX_NUM_CAL_V01; i++) {
+		if (qmi->cal_data[i].total_size &&
+		    qmi->cal_data[i].data) {
+			req.meta_data[j] = qmi->cal_data[i].cal_id;
+			j++;
 		}
 	}
+	req.meta_data_len = j;
 
-	if (i >= ATH10K_SNOC_DRIVER_EVENT_MAX)
-		i = ATH10K_SNOC_DRIVER_EVENT_SERVER_ARRIVE;
-
-	spin_unlock_irqrestore(&qmi_cfg->event_lock, irq_flags);
-
-	queue_work(qmi_cfg->event_wq, &qmi_cfg->event_work);
-
-	if (!(flags & ATH10K_SNOC_EVENT_SYNC))
-		goto out;
-
-	if (flags & ATH10K_SNOC_EVENT_UNINTERRUPTIBLE)
-		wait_for_completion(&qmi_cfg->qmi_ev_list[i].complete);
-	else
-		ret = wait_for_completion_interruptible(
-			&qmi_cfg->qmi_ev_list[i].complete);
-
-	ath10k_dbg(ar, ATH10K_DBG_SNOC, "Completed event: %s(%d)\n",
-		   ath10k_snoc_driver_event_to_str(type), type);
-
-	spin_lock_irqsave(&qmi_cfg->event_lock, irq_flags);
-	if (ret == -ERESTARTSYS &&
-	    qmi_cfg->qmi_ev_list[i].ret == ATH10K_SNOC_EVENT_PENDING) {
-		qmi_cfg->qmi_ev_list[i].sync = false;
-		atomic_set(&qmi_cfg->qmi_ev_list[i].event_handled, 1);
-		spin_unlock_irqrestore(&qmi_cfg->event_lock, irq_flags);
-		ret = -EINTR;
+	ret = qmi_send_request(&qmi->qmi_hdl, NULL, &txn,
+			       QMI_WLFW_CAL_REPORT_REQ_V01,
+			       WLFW_CAL_REPORT_REQ_MSG_V01_MAX_MSG_LEN,
+			       wlfw_cal_report_req_msg_v01_ei, &req);
+	if (ret < 0) {
+		qmi_txn_cancel(&txn);
+		ath10k_err(ar, "failed to send calibration request: %d\n", ret);
 		goto out;
 	}
-	spin_unlock_irqrestore(&qmi_cfg->event_lock, irq_flags);
+
+	ret = qmi_txn_wait(&txn, ATH10K_QMI_TIMEOUT * HZ);
+	if (ret < 0)
+		goto out;
+
+	if (resp.resp.result != QMI_RESULT_SUCCESS_V01) {
+		ath10k_err(ar, "calibration request rejected: %d\n", resp.resp.error);
+		ret = -EINVAL;
+		goto out;
+	}
+
+	ath10k_dbg(ar, ATH10K_DBG_QMI, "qmi cal report request completed\n");
+	return 0;
 
 out:
 	return ret;
 }
 
 static int
-ath10k_snoc_wlan_mode_send_sync_msg(struct ath10k *ar,
-				    enum wlfw_driver_mode_enum_v01 mode)
+ath10k_qmi_mode_send_sync_msg(struct ath10k *ar, enum wlfw_driver_mode_enum_v01 mode)
 {
-	int ret;
-	struct wlfw_wlan_mode_req_msg_v01 req;
-	struct wlfw_wlan_mode_resp_msg_v01 resp;
-	struct msg_desc req_desc, resp_desc;
 	struct ath10k_snoc *ar_snoc = ath10k_snoc_priv(ar);
-	struct ath10k_snoc_qmi_config *qmi_cfg = &ar_snoc->qmi_cfg;
+	struct ath10k_qmi *qmi = ar_snoc->qmi;
+	struct wlfw_wlan_mode_resp_msg_v01 resp = {};
+	struct wlfw_wlan_mode_req_msg_v01 req = {};
+	struct qmi_txn txn;
+	int ret;
 
-	if (!qmi_cfg || !qmi_cfg->wlfw_clnt)
-		return -ENODEV;
-
-	ath10k_dbg(ar, ATH10K_DBG_SNOC,
-		   "Sending Mode request, mode: %d\n", mode);
-
-	memset(&req, 0, sizeof(req));
-	memset(&resp, 0, sizeof(resp));
+	ret = qmi_txn_init(&qmi->qmi_hdl, &txn,
+			   wlfw_wlan_mode_resp_msg_v01_ei,
+			   &resp);
+	if (ret < 0)
+		goto out;
 
 	req.mode = mode;
 	req.hw_debug_valid = 1;
 	req.hw_debug = 0;
 
-	req_desc.max_msg_len = WLFW_WLAN_MODE_REQ_MSG_V01_MAX_MSG_LEN;
-	req_desc.msg_id = QMI_WLFW_WLAN_MODE_REQ_V01;
-	req_desc.ei_array = wlfw_wlan_mode_req_msg_v01_ei;
-
-	resp_desc.max_msg_len = WLFW_WLAN_MODE_RESP_MSG_V01_MAX_MSG_LEN;
-	resp_desc.msg_id = QMI_WLFW_WLAN_MODE_RESP_V01;
-	resp_desc.ei_array = wlfw_wlan_mode_resp_msg_v01_ei;
-
-	ret = qmi_send_req_wait(qmi_cfg->wlfw_clnt,
-				&req_desc, &req, sizeof(req),
-				&resp_desc, &resp, sizeof(resp),
-				WLFW_TIMEOUT_MS);
+	ret = qmi_send_request(&qmi->qmi_hdl, NULL, &txn,
+			       QMI_WLFW_WLAN_MODE_REQ_V01,
+			       WLFW_WLAN_MODE_REQ_MSG_V01_MAX_MSG_LEN,
+			       wlfw_wlan_mode_req_msg_v01_ei, &req);
 	if (ret < 0) {
-		ath10k_err(ar, "Send mode req failed, mode: %d ret: %d\n",
-			   mode, ret);
-		return ret;
+		qmi_txn_cancel(&txn);
+		ath10k_err(ar, "failed to send wlan mode %d request: %d\n", mode, ret);
+		goto out;
 	}
+
+	ret = qmi_txn_wait(&txn, ATH10K_QMI_TIMEOUT * HZ);
+	if (ret < 0)
+		goto out;
 
 	if (resp.resp.result != QMI_RESULT_SUCCESS_V01) {
-		ath10k_err(ar, "QMI mode request rejected:");
-		ath10k_err(ar, "mode:%d result:%d error:%d\n",
-			   mode, resp.resp.result, resp.resp.error);
-		ret = resp.resp.result;
-		return ret;
+		ath10k_err(ar, "more request rejected: %d\n", resp.resp.error);
+		ret = -EINVAL;
+		goto out;
 	}
 
-	ath10k_dbg(ar, ATH10K_DBG_SNOC,
-		   "wlan Mode request send success, mode: %d\n", mode);
+	ath10k_dbg(ar, ATH10K_DBG_QMI, "qmi wlan mode req completed: %d\n", mode);
 	return 0;
+
+out:
+	return ret;
 }
 
 static int
-ath10k_snoc_wlan_cfg_send_sync_msg(struct ath10k *ar,
-				   struct wlfw_wlan_cfg_req_msg_v01 *data)
+ath10k_qmi_cfg_send_sync_msg(struct ath10k *ar,
+			     struct ath10k_qmi_wlan_enable_cfg *config,
+			     const char *version)
 {
-	int ret;
-	struct wlfw_wlan_cfg_req_msg_v01 req;
-	struct wlfw_wlan_cfg_resp_msg_v01 resp;
-	struct msg_desc req_desc, resp_desc;
 	struct ath10k_snoc *ar_snoc = ath10k_snoc_priv(ar);
-	struct ath10k_snoc_qmi_config *qmi_cfg = &ar_snoc->qmi_cfg;
-
-	if (!qmi_cfg || !qmi_cfg->wlfw_clnt)
-		return -ENODEV;
-
-	ath10k_dbg(ar, ATH10K_DBG_SNOC, "Sending config request\n");
-
-	memset(&req, 0, sizeof(req));
-	memset(&resp, 0, sizeof(resp));
-	memcpy(&req, data, sizeof(req));
-
-	req_desc.max_msg_len = WLFW_WLAN_CFG_REQ_MSG_V01_MAX_MSG_LEN;
-	req_desc.msg_id = QMI_WLFW_WLAN_CFG_REQ_V01;
-	req_desc.ei_array = wlfw_wlan_cfg_req_msg_v01_ei;
-
-	resp_desc.max_msg_len = WLFW_WLAN_CFG_RESP_MSG_V01_MAX_MSG_LEN;
-	resp_desc.msg_id = QMI_WLFW_WLAN_CFG_RESP_V01;
-	resp_desc.ei_array = wlfw_wlan_cfg_resp_msg_v01_ei;
-
-	ret = qmi_send_req_wait(qmi_cfg->wlfw_clnt,
-				&req_desc, &req, sizeof(req),
-				&resp_desc, &resp, sizeof(resp),
-				WLFW_TIMEOUT_MS);
-	if (ret < 0) {
-		ath10k_err(ar, "Send config req failed %d\n", ret);
-		return ret;
-	}
-
-	if (resp.resp.result != QMI_RESULT_SUCCESS_V01) {
-		ath10k_err(ar, "QMI config request rejected:");
-		ath10k_err(ar, "result:%d error:%d\n",
-			   resp.resp.result, resp.resp.error);
-		ret = resp.resp.result;
-		return ret;
-	}
-
-	ath10k_dbg(ar, ATH10K_DBG_SNOC, "wlan config request success..\n");
-	return 0;
-}
-
-int ath10k_snoc_qmi_wlan_enable(struct ath10k *ar,
-				struct ath10k_wlan_enable_cfg *config,
-				enum ath10k_driver_mode mode,
-				const char *host_version)
-{
-	struct wlfw_wlan_cfg_req_msg_v01 req;
+	struct ath10k_qmi *qmi = ar_snoc->qmi;
+	struct wlfw_wlan_cfg_resp_msg_v01 resp = {};
+	struct wlfw_wlan_cfg_req_msg_v01 *req;
+	struct qmi_txn txn;
+	int ret;
 	u32 i;
-	int ret;
-	struct ath10k_snoc *ar_snoc = ath10k_snoc_priv(ar);
-	struct ath10k_snoc_qmi_config *qmi_cfg = &ar_snoc->qmi_cfg;
-	unsigned long time_left;
 
-	ath10k_dbg(ar, ATH10K_DBG_SNOC,
-		   "Mode: %d, config: %p, host_version: %s\n",
-		   mode, config, host_version);
+	req = kzalloc(sizeof(*req), GFP_KERNEL);
+	if (!req)
+		return -ENOMEM;
 
-	memset(&req, 0, sizeof(req));
-	if (!config || !host_version) {
-		ath10k_err(ar, "WLAN_EN Config Invalid:%p: host_version:%p\n",
-			   config, host_version);
-		ret = -EINVAL;
-		return ret;
-	}
+	ret = qmi_txn_init(&qmi->qmi_hdl, &txn,
+			   wlfw_wlan_cfg_resp_msg_v01_ei,
+			   &resp);
+	if (ret < 0)
+		goto out;
 
-	time_left = wait_event_timeout(
-			   ath10k_fw_ready_wait_event,
-			   (atomic_read(&qmi_cfg->fw_ready) &&
-			    atomic_read(&qmi_cfg->server_connected)),
-			   msecs_to_jiffies(ATH10K_SNOC_WLAN_FW_READY_TIMEOUT));
-	if (time_left == 0) {
-		ath10k_err(ar, "Wait for FW ready and server connect timed out\n");
-		return -ETIMEDOUT;
-	}
+	req->host_version_valid = 0;
 
-	req.host_version_valid = 1;
-	strlcpy(req.host_version, host_version,
-		QMI_WLFW_MAX_STR_LEN_V01 + 1);
-
-	req.tgt_cfg_valid = 1;
+	req->tgt_cfg_valid = 1;
 	if (config->num_ce_tgt_cfg > QMI_WLFW_MAX_NUM_CE_V01)
-		req.tgt_cfg_len = QMI_WLFW_MAX_NUM_CE_V01;
+		req->tgt_cfg_len = QMI_WLFW_MAX_NUM_CE_V01;
 	else
-		req.tgt_cfg_len = config->num_ce_tgt_cfg;
-	for (i = 0; i < req.tgt_cfg_len; i++) {
-		req.tgt_cfg[i].pipe_num = config->ce_tgt_cfg[i].pipe_num;
-		req.tgt_cfg[i].pipe_dir = config->ce_tgt_cfg[i].pipe_dir;
-		req.tgt_cfg[i].nentries = config->ce_tgt_cfg[i].nentries;
-		req.tgt_cfg[i].nbytes_max = config->ce_tgt_cfg[i].nbytes_max;
-		req.tgt_cfg[i].flags = config->ce_tgt_cfg[i].flags;
+		req->tgt_cfg_len = config->num_ce_tgt_cfg;
+	for (i = 0; i < req->tgt_cfg_len; i++) {
+		req->tgt_cfg[i].pipe_num = config->ce_tgt_cfg[i].pipe_num;
+		req->tgt_cfg[i].pipe_dir = config->ce_tgt_cfg[i].pipe_dir;
+		req->tgt_cfg[i].nentries = config->ce_tgt_cfg[i].nentries;
+		req->tgt_cfg[i].nbytes_max = config->ce_tgt_cfg[i].nbytes_max;
+		req->tgt_cfg[i].flags = config->ce_tgt_cfg[i].flags;
 	}
 
-	req.svc_cfg_valid = 1;
+	req->svc_cfg_valid = 1;
 	if (config->num_ce_svc_pipe_cfg > QMI_WLFW_MAX_NUM_SVC_V01)
-		req.svc_cfg_len = QMI_WLFW_MAX_NUM_SVC_V01;
+		req->svc_cfg_len = QMI_WLFW_MAX_NUM_SVC_V01;
 	else
-		req.svc_cfg_len = config->num_ce_svc_pipe_cfg;
-	for (i = 0; i < req.svc_cfg_len; i++) {
-		req.svc_cfg[i].service_id = config->ce_svc_cfg[i].service_id;
-		req.svc_cfg[i].pipe_dir = config->ce_svc_cfg[i].pipe_dir;
-		req.svc_cfg[i].pipe_num = config->ce_svc_cfg[i].pipe_num;
+		req->svc_cfg_len = config->num_ce_svc_pipe_cfg;
+	for (i = 0; i < req->svc_cfg_len; i++) {
+		req->svc_cfg[i].service_id = config->ce_svc_cfg[i].service_id;
+		req->svc_cfg[i].pipe_dir = config->ce_svc_cfg[i].pipe_dir;
+		req->svc_cfg[i].pipe_num = config->ce_svc_cfg[i].pipe_num;
 	}
 
-	req.shadow_reg_valid = 1;
+	req->shadow_reg_valid = 1;
 	if (config->num_shadow_reg_cfg >
 	    QMI_WLFW_MAX_NUM_SHADOW_REG_V01)
-		req.shadow_reg_len = QMI_WLFW_MAX_NUM_SHADOW_REG_V01;
+		req->shadow_reg_len = QMI_WLFW_MAX_NUM_SHADOW_REG_V01;
 	else
-		req.shadow_reg_len = config->num_shadow_reg_cfg;
+		req->shadow_reg_len = config->num_shadow_reg_cfg;
 
-	memcpy(req.shadow_reg, config->shadow_reg_cfg,
-	       sizeof(struct wlfw_shadow_reg_cfg_s_v01) * req.shadow_reg_len);
+	memcpy(req->shadow_reg, config->shadow_reg_cfg,
+	       sizeof(struct wlfw_shadow_reg_cfg_s_v01) * req->shadow_reg_len);
 
-	ret = ath10k_snoc_wlan_cfg_send_sync_msg(ar, &req);
+	ret = qmi_send_request(&qmi->qmi_hdl, NULL, &txn,
+			       QMI_WLFW_WLAN_CFG_REQ_V01,
+			       WLFW_WLAN_CFG_REQ_MSG_V01_MAX_MSG_LEN,
+			       wlfw_wlan_cfg_req_msg_v01_ei, req);
+	if (ret < 0) {
+		qmi_txn_cancel(&txn);
+		ath10k_err(ar, "failed to send config request: %d\n", ret);
+		goto out;
+	}
+
+	ret = qmi_txn_wait(&txn, ATH10K_QMI_TIMEOUT * HZ);
+	if (ret < 0)
+		goto out;
+
+	if (resp.resp.result != QMI_RESULT_SUCCESS_V01) {
+		ath10k_err(ar, "config request rejected: %d\n", resp.resp.error);
+		ret = -EINVAL;
+		goto out;
+	}
+
+	ath10k_dbg(ar, ATH10K_DBG_QMI, "qmi config request completed\n");
+	kfree(req);
+	return 0;
+
+out:
+	kfree(req);
+	return ret;
+}
+
+int ath10k_qmi_wlan_enable(struct ath10k *ar,
+			   struct ath10k_qmi_wlan_enable_cfg *config,
+			   enum wlfw_driver_mode_enum_v01 mode,
+			   const char *version)
+{
+	int ret;
+
+	ath10k_dbg(ar, ATH10K_DBG_QMI, "qmi mode %d config %p\n",
+		   mode, config);
+
+	ret = ath10k_qmi_cfg_send_sync_msg(ar, config, version);
 	if (ret) {
-		ath10k_err(ar, "WLAN config send failed\n");
+		ath10k_err(ar, "failed to send qmi config: %d\n", ret);
 		return ret;
 	}
 
-	ret = ath10k_snoc_wlan_mode_send_sync_msg(ar, mode);
+	ret = ath10k_qmi_mode_send_sync_msg(ar, mode);
 	if (ret) {
-		ath10k_err(ar, "WLAN mode send failed\n");
+		ath10k_err(ar, "failed to send qmi mode: %d\n", ret);
 		return ret;
 	}
 
 	return 0;
 }
 
-int ath10k_snoc_qmi_wlan_disable(struct ath10k *ar)
+int ath10k_qmi_wlan_disable(struct ath10k *ar)
 {
-	return ath10k_snoc_wlan_mode_send_sync_msg(ar, QMI_WLFW_OFF_V01);
+	return ath10k_qmi_mode_send_sync_msg(ar, QMI_WLFW_OFF_V01);
 }
 
-static int ath10k_snoc_ind_register_send_sync_msg(struct ath10k *ar)
+static int ath10k_qmi_cap_send_sync_msg(struct ath10k_qmi *qmi)
 {
-	int ret;
-	struct wlfw_ind_register_req_msg_v01 req;
-	struct wlfw_ind_register_resp_msg_v01 resp;
-	struct msg_desc req_desc, resp_desc;
+	struct wlfw_cap_resp_msg_v01 *resp;
+	struct wlfw_cap_req_msg_v01 req = {};
+	struct ath10k *ar = qmi->ar;
 	struct ath10k_snoc *ar_snoc = ath10k_snoc_priv(ar);
-	struct ath10k_snoc_qmi_config *qmi_cfg = &ar_snoc->qmi_cfg;
+	struct qmi_txn txn;
+	int ret;
 
-	ath10k_dbg(ar, ATH10K_DBG_SNOC,
-		   "Sending indication register message,\n");
+	resp = kzalloc(sizeof(*resp), GFP_KERNEL);
+	if (!resp)
+		return -ENOMEM;
 
-	memset(&req, 0, sizeof(req));
-	memset(&resp, 0, sizeof(resp));
+	ret = qmi_txn_init(&qmi->qmi_hdl, &txn, wlfw_cap_resp_msg_v01_ei, resp);
+	if (ret < 0)
+		goto out;
+
+	ret = qmi_send_request(&qmi->qmi_hdl, NULL, &txn,
+			       QMI_WLFW_CAP_REQ_V01,
+			       WLFW_CAP_REQ_MSG_V01_MAX_MSG_LEN,
+			       wlfw_cap_req_msg_v01_ei, &req);
+	if (ret < 0) {
+		qmi_txn_cancel(&txn);
+		ath10k_err(ar, "failed to send capability request: %d\n", ret);
+		goto out;
+	}
+
+	ret = qmi_txn_wait(&txn, ATH10K_QMI_TIMEOUT * HZ);
+	if (ret < 0)
+		goto out;
+
+	if (resp->resp.result != QMI_RESULT_SUCCESS_V01) {
+		ath10k_err(ar, "capability req rejected: %d\n", resp->resp.error);
+		ret = -EINVAL;
+		goto out;
+	}
+
+	if (resp->chip_info_valid) {
+		qmi->chip_info.chip_id = resp->chip_info.chip_id;
+		qmi->chip_info.chip_family = resp->chip_info.chip_family;
+	} else {
+		qmi->chip_info.chip_id = 0xFF;
+	}
+
+	if (resp->board_info_valid)
+		qmi->board_info.board_id = resp->board_info.board_id;
+	else
+		qmi->board_info.board_id = 0xFF;
+
+	if (resp->soc_info_valid)
+		qmi->soc_info.soc_id = resp->soc_info.soc_id;
+
+	if (resp->fw_version_info_valid) {
+		qmi->fw_version = resp->fw_version_info.fw_version;
+		strlcpy(qmi->fw_build_timestamp, resp->fw_version_info.fw_build_timestamp,
+			sizeof(qmi->fw_build_timestamp));
+	}
+
+	if (resp->fw_build_id_valid)
+		strlcpy(qmi->fw_build_id, resp->fw_build_id,
+			MAX_BUILD_ID_LEN + 1);
+
+	if (!test_bit(ATH10K_SNOC_FLAG_REGISTERED, &ar_snoc->flags)) {
+		ath10k_info(ar, "qmi chip_id 0x%x chip_family 0x%x board_id 0x%x soc_id 0x%x",
+			    qmi->chip_info.chip_id, qmi->chip_info.chip_family,
+			    qmi->board_info.board_id, qmi->soc_info.soc_id);
+		ath10k_info(ar, "qmi fw_version 0x%x fw_build_timestamp %s fw_build_id %s",
+			    qmi->fw_version, qmi->fw_build_timestamp, qmi->fw_build_id);
+	}
+
+	kfree(resp);
+	return 0;
+
+out:
+	kfree(resp);
+	return ret;
+}
+
+static int ath10k_qmi_host_cap_send_sync(struct ath10k_qmi *qmi)
+{
+	struct wlfw_host_cap_resp_msg_v01 resp = {};
+	struct wlfw_host_cap_req_msg_v01 req = {};
+	struct qmi_elem_info *req_ei;
+	struct ath10k *ar = qmi->ar;
+	struct ath10k_snoc *ar_snoc = ath10k_snoc_priv(ar);
+	struct qmi_txn txn;
+	int ret;
+
+	req.daemon_support_valid = 1;
+	req.daemon_support = 0;
+
+	ret = qmi_txn_init(&qmi->qmi_hdl, &txn, wlfw_host_cap_resp_msg_v01_ei,
+			   &resp);
+	if (ret < 0)
+		goto out;
+
+	if (test_bit(ATH10K_SNOC_FLAG_8BIT_HOST_CAP_QUIRK, &ar_snoc->flags))
+		req_ei = wlfw_host_cap_8bit_req_msg_v01_ei;
+	else
+		req_ei = wlfw_host_cap_req_msg_v01_ei;
+
+	ret = qmi_send_request(&qmi->qmi_hdl, NULL, &txn,
+			       QMI_WLFW_HOST_CAP_REQ_V01,
+			       WLFW_HOST_CAP_REQ_MSG_V01_MAX_MSG_LEN,
+			       req_ei, &req);
+	if (ret < 0) {
+		qmi_txn_cancel(&txn);
+		ath10k_err(ar, "failed to send host capability request: %d\n", ret);
+		goto out;
+	}
+
+	ret = qmi_txn_wait(&txn, ATH10K_QMI_TIMEOUT * HZ);
+	if (ret < 0)
+		goto out;
+
+	/* older FW didn't support this request, which is not fatal */
+	if (resp.resp.result != QMI_RESULT_SUCCESS_V01 &&
+	    resp.resp.error != QMI_ERR_NOT_SUPPORTED_V01) {
+		ath10k_err(ar, "host capability request rejected: %d\n", resp.resp.error);
+		ret = -EINVAL;
+		goto out;
+	}
+
+	ath10k_dbg(ar, ATH10K_DBG_QMI, "qmi host capability request completed\n");
+	return 0;
+
+out:
+	return ret;
+}
+
+int ath10k_qmi_set_fw_log_mode(struct ath10k *ar, u8 fw_log_mode)
+{
+	struct ath10k_snoc *ar_snoc = ath10k_snoc_priv(ar);
+	struct wlfw_ini_resp_msg_v01 resp = {};
+	struct ath10k_qmi *qmi = ar_snoc->qmi;
+	struct wlfw_ini_req_msg_v01 req = {};
+	struct qmi_txn txn;
+	int ret;
+
+	req.enablefwlog_valid = 1;
+	req.enablefwlog = fw_log_mode;
+
+	ret = qmi_txn_init(&qmi->qmi_hdl, &txn, wlfw_ini_resp_msg_v01_ei,
+			   &resp);
+	if (ret < 0)
+		goto out;
+
+	ret = qmi_send_request(&qmi->qmi_hdl, NULL, &txn,
+			       QMI_WLFW_INI_REQ_V01,
+			       WLFW_INI_REQ_MSG_V01_MAX_MSG_LEN,
+			       wlfw_ini_req_msg_v01_ei, &req);
+	if (ret < 0) {
+		qmi_txn_cancel(&txn);
+		ath10k_err(ar, "failed to send fw log request: %d\n", ret);
+		goto out;
+	}
+
+	ret = qmi_txn_wait(&txn, ATH10K_QMI_TIMEOUT * HZ);
+	if (ret < 0)
+		goto out;
+
+	if (resp.resp.result != QMI_RESULT_SUCCESS_V01) {
+		ath10k_err(ar, "fw log request rejected: %d\n",
+			   resp.resp.error);
+		ret = -EINVAL;
+		goto out;
+	}
+	ath10k_dbg(ar, ATH10K_DBG_QMI, "qmi fw log request completed, mode: %d\n",
+		   fw_log_mode);
+	return 0;
+
+out:
+	return ret;
+}
+
+static int
+ath10k_qmi_ind_register_send_sync_msg(struct ath10k_qmi *qmi)
+{
+	struct wlfw_ind_register_resp_msg_v01 resp = {};
+	struct wlfw_ind_register_req_msg_v01 req = {};
+	struct ath10k *ar = qmi->ar;
+	struct ath10k_snoc *ar_snoc = ath10k_snoc_priv(ar);
+	struct qmi_txn txn;
+	int ret;
 
 	req.client_id_valid = 1;
-	req.client_id = WLFW_CLIENT_ID;
+	req.client_id = ATH10K_QMI_CLIENT_ID;
 	req.fw_ready_enable_valid = 1;
 	req.fw_ready_enable = 1;
 	req.msa_ready_enable_valid = 1;
 	req.msa_ready_enable = 1;
 
-	req_desc.max_msg_len = WLFW_IND_REGISTER_REQ_MSG_V01_MAX_MSG_LEN;
-	req_desc.msg_id = QMI_WLFW_IND_REGISTER_REQ_V01;
-	req_desc.ei_array = wlfw_ind_register_req_msg_v01_ei;
-
-	resp_desc.max_msg_len = WLFW_IND_REGISTER_RESP_MSG_V01_MAX_MSG_LEN;
-	resp_desc.msg_id = QMI_WLFW_IND_REGISTER_RESP_V01;
-	resp_desc.ei_array = wlfw_ind_register_resp_msg_v01_ei;
-
-	ret = qmi_send_req_wait(qmi_cfg->wlfw_clnt,
-				&req_desc, &req, sizeof(req),
-				&resp_desc, &resp, sizeof(resp),
-				WLFW_TIMEOUT_MS);
-	if (ret < 0) {
-		ath10k_err(ar, "Send indication register req failed %d\n", ret);
-		return ret;
+	if (ar_snoc->xo_cal_supported) {
+		req.xo_cal_enable_valid = 1;
+		req.xo_cal_enable = 1;
 	}
+
+	ret = qmi_txn_init(&qmi->qmi_hdl, &txn,
+			   wlfw_ind_register_resp_msg_v01_ei, &resp);
+	if (ret < 0)
+		goto out;
+
+	ret = qmi_send_request(&qmi->qmi_hdl, NULL, &txn,
+			       QMI_WLFW_IND_REGISTER_REQ_V01,
+			       WLFW_IND_REGISTER_REQ_MSG_V01_MAX_MSG_LEN,
+			       wlfw_ind_register_req_msg_v01_ei, &req);
+	if (ret < 0) {
+		qmi_txn_cancel(&txn);
+		ath10k_err(ar, "failed to send indication registered request: %d\n", ret);
+		goto out;
+	}
+
+	ret = qmi_txn_wait(&txn, ATH10K_QMI_TIMEOUT * HZ);
+	if (ret < 0)
+		goto out;
 
 	if (resp.resp.result != QMI_RESULT_SUCCESS_V01) {
-		ath10k_err(ar, "QMI indication register request rejected:");
-		ath10k_err(ar, "resut:%d error:%d\n",
-			   resp.resp.result, resp.resp.error);
-		ret = resp.resp.result;
-		return ret;
+		ath10k_err(ar, "indication request rejected: %d\n", resp.resp.error);
+		ret = -EINVAL;
+		goto out;
 	}
 
-	return 0;
-}
-
-static void ath10k_snoc_qmi_wlfw_clnt_notify_work(struct work_struct *work)
-{
-	int ret;
-	struct ath10k_snoc_qmi_config *qmi_cfg =
-		container_of(work, struct ath10k_snoc_qmi_config,
-			     qmi_recv_msg_work);
-	struct ath10k_snoc *ar_snoc =
-		container_of(qmi_cfg, struct ath10k_snoc, qmi_cfg);
-	struct ath10k *ar = ar_snoc->ar;
-
-	ath10k_dbg(ar, ATH10K_DBG_SNOC,
-		   "Receiving Event in work queue context\n");
-
-	do {
-	} while ((ret = qmi_recv_msg(qmi_cfg->wlfw_clnt)) == 0);
-
-	if (ret != -ENOMSG)
-		ath10k_err(ar, "Error receiving message: %d\n", ret);
-
-	ath10k_dbg(ar, ATH10K_DBG_SNOC, "Receiving Event completed\n");
-}
-
-static void
-ath10k_snoc_qmi_wlfw_clnt_notify(struct qmi_handle *handle,
-				 enum qmi_event_type event,
-				 void *notify_priv)
-{
-	struct ath10k_snoc_qmi_config *qmi_cfg =
-		(struct ath10k_snoc_qmi_config *)notify_priv;
-	struct ath10k_snoc *ar_snoc =
-		container_of(qmi_cfg, struct ath10k_snoc, qmi_cfg);
-	struct ath10k *ar = ar_snoc->ar;
-
-	ath10k_dbg(ar, ATH10K_DBG_SNOC, "QMI client notify: %d\n", event);
-
-	if (!qmi_cfg || !qmi_cfg->wlfw_clnt)
-		return;
-
-	switch (event) {
-	case QMI_RECV_MSG:
-		schedule_work(&qmi_cfg->qmi_recv_msg_work);
-		break;
-	default:
-		ath10k_dbg(ar, ATH10K_DBG_SNOC, "Unknown Event: %d\n", event);
-		break;
+	if (resp.fw_status_valid) {
+		if (resp.fw_status & QMI_WLFW_FW_READY_V01)
+			qmi->fw_ready = true;
 	}
-}
-
-static void
-ath10k_snoc_qmi_wlfw_clnt_ind(struct qmi_handle *handle,
-			      unsigned int msg_id, void *msg,
-			      unsigned int msg_len, void *ind_cb_priv)
-{
-	struct ath10k_snoc_qmi_config *qmi_cfg =
-		(struct ath10k_snoc_qmi_config *)ind_cb_priv;
-	struct ath10k_snoc *ar_snoc =
-		container_of(qmi_cfg, struct ath10k_snoc, qmi_cfg);
-	struct ath10k *ar = ar_snoc->ar;
-
-	ath10k_dbg(ar, ATH10K_DBG_SNOC,
-		   "Received Ind 0x%x, msg_len: %d\n", msg_id, msg_len);
-	switch (msg_id) {
-	case QMI_WLFW_FW_READY_IND_V01:
-		ath10k_snoc_driver_event_post(
-			ATH10K_SNOC_DRIVER_EVENT_FW_READY_IND, 0, ar);
-		break;
-	case QMI_WLFW_MSA_READY_IND_V01:
-		qmi_cfg->msa_ready = true;
-		ath10k_dbg(ar, ATH10K_DBG_SNOC,
-			   "Received MSA Ready, ind = 0x%x\n", msg_id);
-		break;
-	default:
-		ath10k_err(ar, "Invalid msg_id 0x%x\n", msg_id);
-		break;
-	}
-}
-
-static int ath10k_snoc_driver_event_server_arrive(struct ath10k *ar)
-{
-	int ret = 0;
-	struct ath10k_snoc *ar_snoc = ath10k_snoc_priv(ar);
-	struct ath10k_snoc_qmi_config *qmi_cfg = &ar_snoc->qmi_cfg;
-
-	if (!qmi_cfg)
-		return -ENODEV;
-
-	qmi_cfg->wlfw_clnt = qmi_handle_create(
-			ath10k_snoc_qmi_wlfw_clnt_notify, qmi_cfg);
-	if (!qmi_cfg->wlfw_clnt) {
-		ath10k_dbg(ar, ATH10K_DBG_SNOC,
-			   "QMI client handle create failed\n");
-		return -ENOMEM;
-	}
-
-	ret = qmi_connect_to_service(qmi_cfg->wlfw_clnt,
-				     WLFW_SERVICE_ID_V01,
-				     WLFW_SERVICE_VERS_V01,
-				     WLFW_SERVICE_INS_ID_V01);
-	if (ret < 0) {
-		ath10k_err(ar, "QMI WLAN Service not found : %d\n", ret);
-		goto err_qmi_config;
-	}
-
-	ret = qmi_register_ind_cb(qmi_cfg->wlfw_clnt,
-				  ath10k_snoc_qmi_wlfw_clnt_ind, qmi_cfg);
-	if (ret < 0) {
-		ath10k_err(ar, "Failed to register indication callback: %d\n",
-			   ret);
-		goto err_qmi_config;
-	}
-
-	ret = ath10k_snoc_ind_register_send_sync_msg(ar);
-	if (ret) {
-		ath10k_err(ar, "Failed to config qmi ind register\n");
-		goto err_qmi_config;
-	}
-
-	atomic_set(&qmi_cfg->server_connected, 1);
-	wake_up_all(&ath10k_fw_ready_wait_event);
-	ath10k_dbg(ar, ATH10K_DBG_SNOC,
-		   "QMI Server Arrive Configuration Success\n");
+	ath10k_dbg(ar, ATH10K_DBG_QMI, "qmi indication register request completed\n");
 	return 0;
 
-err_qmi_config:
-	qmi_handle_destroy(qmi_cfg->wlfw_clnt);
-	qmi_cfg->wlfw_clnt = NULL;
+out:
 	return ret;
 }
 
-static int ath10k_snoc_driver_event_server_exit(struct ath10k *ar)
+static void ath10k_qmi_event_server_arrive(struct ath10k_qmi *qmi)
 {
-	struct ath10k_snoc *ar_snoc = ath10k_snoc_priv(ar);
-	struct ath10k_snoc_qmi_config *qmi_cfg = &ar_snoc->qmi_cfg;
-
-	ath10k_dbg(ar, ATH10K_DBG_SNOC, "QMI Server Exit event received\n");
-	atomic_set(&qmi_cfg->fw_ready, 0);
-	qmi_cfg->msa_ready = false;
-	atomic_set(&qmi_cfg->server_connected, 0);
-	qmi_handle_destroy(qmi_cfg->wlfw_clnt);
-	return 0;
-}
-
-static int ath10k_snoc_driver_event_fw_ready_ind(struct ath10k *ar)
-{
-	struct ath10k_snoc *ar_snoc = ath10k_snoc_priv(ar);
-	struct ath10k_snoc_qmi_config *qmi_cfg = &ar_snoc->qmi_cfg;
-
-	ath10k_dbg(ar, ATH10K_DBG_SNOC, "FW Ready event received.\n");
-	atomic_set(&qmi_cfg->fw_ready, 1);
-	wake_up_all(&ath10k_fw_ready_wait_event);
-
-	return 0;
-}
-
-static void ath10k_snoc_driver_event_work(struct work_struct *work)
-{
+	struct ath10k *ar = qmi->ar;
 	int ret;
-	unsigned long irq_flags;
-	struct ath10k_snoc_qmi_driver_event *event;
-	struct ath10k_snoc_qmi_config *qmi_cfg =
-		container_of(work, struct ath10k_snoc_qmi_config, event_work);
-	struct ath10k_snoc *ar_snoc =
-		container_of(qmi_cfg, struct ath10k_snoc, qmi_cfg);
-	struct ath10k *ar = ar_snoc->ar;
 
-	spin_lock_irqsave(&qmi_cfg->event_lock, irq_flags);
+	ret = ath10k_qmi_ind_register_send_sync_msg(qmi);
+	if (ret)
+		return;
 
-	while (!list_empty(&qmi_cfg->event_list)) {
-		event = list_first_entry(&qmi_cfg->event_list,
-					 struct ath10k_snoc_qmi_driver_event,
-					 list);
-		list_del(&event->list);
-		spin_unlock_irqrestore(&qmi_cfg->event_lock, irq_flags);
-
-		ath10k_dbg(ar, ATH10K_DBG_SNOC, "Processing event: %s%s(%d)\n",
-			   ath10k_snoc_driver_event_to_str(event->type),
-			   event->sync ? "-sync" : "", event->type);
-
-		switch (event->type) {
-		case ATH10K_SNOC_DRIVER_EVENT_SERVER_ARRIVE:
-			ret = ath10k_snoc_driver_event_server_arrive(ar);
-			break;
-		case ATH10K_SNOC_DRIVER_EVENT_SERVER_EXIT:
-			ret = ath10k_snoc_driver_event_server_exit(ar);
-			break;
-		case ATH10K_SNOC_DRIVER_EVENT_FW_READY_IND:
-			ret = ath10k_snoc_driver_event_fw_ready_ind(ar);
-			break;
-		default:
-			ath10k_err(ar, "Invalid Event type: %d", event->type);
-			kfree(event);
-			continue;
-		}
-
-		atomic_set(&event->event_handled, 1);
-		ath10k_dbg(ar, ATH10K_DBG_SNOC,
-			   "Event Processed: %s%s(%d), ret: %d\n",
-			   ath10k_snoc_driver_event_to_str(event->type),
-			   event->sync ? "-sync" : "", event->type, ret);
-		spin_lock_irqsave(&qmi_cfg->event_lock, irq_flags);
-		if (event->sync) {
-			event->ret = ret;
-			complete(&event->complete);
-			continue;
-		}
-		spin_unlock_irqrestore(&qmi_cfg->event_lock, irq_flags);
-		spin_lock_irqsave(&qmi_cfg->event_lock, irq_flags);
+	if (qmi->fw_ready) {
+		ath10k_snoc_fw_indication(ar, ATH10K_QMI_EVENT_FW_READY_IND);
+		return;
 	}
 
-	spin_unlock_irqrestore(&qmi_cfg->event_lock, irq_flags);
+	ret = ath10k_qmi_host_cap_send_sync(qmi);
+	if (ret)
+		return;
+
+	ret = ath10k_qmi_msa_mem_info_send_sync_msg(qmi);
+	if (ret)
+		return;
+
+	/*
+	 * HACK: sleep for a while inbetween receiving the msa info response
+	 * and the XPU update to prevent SDM845 from crashing due to a security
+	 * violation, when running MPSS.AT.4.0.c2-01184-SDM845_GEN_PACK-1.
+	 */
+	msleep(20);
+
+	ret = ath10k_qmi_setup_msa_permissions(qmi);
+	if (ret)
+		return;
+
+	ret = ath10k_qmi_msa_ready_send_sync_msg(qmi);
+	if (ret)
+		goto err_setup_msa;
+
+	ret = ath10k_qmi_cap_send_sync_msg(qmi);
+	if (ret)
+		goto err_setup_msa;
+
+	return;
+
+err_setup_msa:
+	ath10k_qmi_remove_msa_permission(qmi);
+}
+
+static int ath10k_qmi_fetch_board_file(struct ath10k_qmi *qmi)
+{
+	struct ath10k *ar = qmi->ar;
+	int ret;
+
+	ar->hif.bus = ATH10K_BUS_SNOC;
+	ar->id.qmi_ids_valid = true;
+	ar->id.qmi_board_id = qmi->board_info.board_id;
+	ar->id.qmi_chip_id = qmi->chip_info.chip_id;
+	ar->hw_params.fw.dir = WCN3990_HW_1_0_FW_DIR;
+
+	ret = ath10k_core_check_dt(ar);
+	if (ret)
+		ath10k_dbg(ar, ATH10K_DBG_QMI, "DT bdf variant name not set.\n");
+
+	return ath10k_core_fetch_board_file(qmi->ar, ATH10K_BD_IE_BOARD);
 }
 
 static int
-ath10k_snoc_qmi_wlfw_clnt_svc_event_notify(struct notifier_block *this,
-					   unsigned long code,
-					   void *_cmd)
+ath10k_qmi_driver_event_post(struct ath10k_qmi *qmi,
+			     enum ath10k_qmi_driver_event_type type,
+			     void *data)
 {
-	int ret = 0;
-	struct ath10k_snoc_qmi_config *qmi_cfg =
-		container_of(this, struct ath10k_snoc_qmi_config, wlfw_clnt_nb);
-	struct ath10k_snoc *ar_snoc =
-			container_of(qmi_cfg, struct ath10k_snoc, qmi_cfg);
-	struct ath10k *ar = ar_snoc->ar;
+	struct ath10k_qmi_driver_event *event;
 
-	ath10k_dbg(ar, ATH10K_DBG_SNOC, "Event Notify: code: %ld", code);
+	event = kzalloc(sizeof(*event), GFP_ATOMIC);
+	if (!event)
+		return -ENOMEM;
 
-	switch (code) {
-	case QMI_SERVER_ARRIVE:
-		ret = ath10k_snoc_driver_event_post(
-			ATH10K_SNOC_DRIVER_EVENT_SERVER_ARRIVE, 0, ar);
-		break;
-	case QMI_SERVER_EXIT:
-		ret = ath10k_snoc_driver_event_post(
-			ATH10K_SNOC_DRIVER_EVENT_SERVER_EXIT, 0, ar);
-		break;
-	default:
-		ath10k_err(ar, "Invalid code: %ld", code);
-		break;
-	}
+	event->type = type;
+	event->data = data;
 
-	return ret;
+	spin_lock(&qmi->event_lock);
+	list_add_tail(&event->list, &qmi->event_list);
+	spin_unlock(&qmi->event_lock);
+
+	queue_work(qmi->event_wq, &qmi->event_work);
+
+	return 0;
 }
 
-int ath10k_snoc_start_qmi_service(struct ath10k *ar)
+static void ath10k_qmi_event_server_exit(struct ath10k_qmi *qmi)
+{
+	struct ath10k *ar = qmi->ar;
+	struct ath10k_snoc *ar_snoc = ath10k_snoc_priv(ar);
+
+	ath10k_qmi_remove_msa_permission(qmi);
+	ath10k_core_free_board_files(ar);
+	if (!test_bit(ATH10K_SNOC_FLAG_UNREGISTERING, &ar_snoc->flags) &&
+	    !test_bit(ATH10K_SNOC_FLAG_MODEM_STOPPED, &ar_snoc->flags))
+		ath10k_snoc_fw_crashed_dump(ar);
+
+	ath10k_snoc_fw_indication(ar, ATH10K_QMI_EVENT_FW_DOWN_IND);
+	ath10k_dbg(ar, ATH10K_DBG_QMI, "wifi fw qmi service disconnected\n");
+}
+
+static void ath10k_qmi_event_msa_ready(struct ath10k_qmi *qmi)
 {
 	int ret;
-	int i;
-	struct ath10k_snoc *ar_snoc = ath10k_snoc_priv(ar);
-	struct ath10k_snoc_qmi_config *qmi_cfg = &ar_snoc->qmi_cfg;
 
-	qmi_cfg->event_wq = alloc_workqueue("ath10k_snoc_driver_event",
-					    WQ_UNBOUND, 1);
-	if (!qmi_cfg->event_wq) {
-		ath10k_err(ar, "Workqueue creation failed\n");
-		return -EFAULT;
-	}
+	ret = ath10k_qmi_fetch_board_file(qmi);
+	if (ret)
+		goto out;
 
-	spin_lock_init(&qmi_cfg->event_lock);
-	atomic_set(&qmi_cfg->fw_ready, 0);
-	atomic_set(&qmi_cfg->server_connected, 0);
+	ret = ath10k_qmi_bdf_dnld_send_sync(qmi);
+	if (ret)
+		goto out;
 
-	INIT_WORK(&qmi_cfg->event_work, ath10k_snoc_driver_event_work);
-	INIT_WORK(&qmi_cfg->qmi_recv_msg_work,
-		  ath10k_snoc_qmi_wlfw_clnt_notify_work);
-	INIT_LIST_HEAD(&qmi_cfg->event_list);
+	ret = ath10k_qmi_send_cal_report_req(qmi);
 
-	for (i = 0; i < ATH10K_SNOC_DRIVER_EVENT_MAX; i++)
-		atomic_set(&qmi_cfg->qmi_ev_list[i].event_handled, 1);
+out:
+	return;
+}
 
-	qmi_cfg->wlfw_clnt_nb.notifier_call =
-		ath10k_snoc_qmi_wlfw_clnt_svc_event_notify;
-	ret = qmi_svc_event_notifier_register(WLFW_SERVICE_ID_V01,
-					      WLFW_SERVICE_VERS_V01,
-					      WLFW_SERVICE_INS_ID_V01,
-					      &qmi_cfg->wlfw_clnt_nb);
-	if (ret < 0) {
-		ath10k_err(ar, "Notifier register failed: %d\n", ret);
-		ret = -EFAULT;
-		goto out_destroy_wq;
-	}
+static int ath10k_qmi_event_fw_ready_ind(struct ath10k_qmi *qmi)
+{
+	struct ath10k *ar = qmi->ar;
 
-	if (!icnss_is_fw_ready()) {
-		ath10k_err(ar, "failed to get fw ready indication\n");
-		ret = -EFAULT;
-		goto err_fw_ready;
-	}
+	ath10k_dbg(ar, ATH10K_DBG_QMI, "wifi fw ready event received\n");
+	ath10k_snoc_fw_indication(ar, ATH10K_QMI_EVENT_FW_READY_IND);
 
-	atomic_set(&qmi_cfg->fw_ready, 1);
-	ath10k_dbg(ar, ATH10K_DBG_SNOC, "QMI service started successfully\n");
 	return 0;
+}
 
-err_fw_ready:
-	qmi_svc_event_notifier_unregister(WLFW_SERVICE_ID_V01,
-					  WLFW_SERVICE_VERS_V01,
-					  WLFW_SERVICE_INS_ID_V01,
-					  &qmi_cfg->wlfw_clnt_nb);
-out_destroy_wq:
-	destroy_workqueue(qmi_cfg->event_wq);
+static void ath10k_qmi_fw_ready_ind(struct qmi_handle *qmi_hdl,
+				    struct sockaddr_qrtr *sq,
+				    struct qmi_txn *txn, const void *data)
+{
+	struct ath10k_qmi *qmi = container_of(qmi_hdl, struct ath10k_qmi, qmi_hdl);
+
+	ath10k_qmi_driver_event_post(qmi, ATH10K_QMI_EVENT_FW_READY_IND, NULL);
+}
+
+static void ath10k_qmi_msa_ready_ind(struct qmi_handle *qmi_hdl,
+				     struct sockaddr_qrtr *sq,
+				     struct qmi_txn *txn, const void *data)
+{
+	struct ath10k_qmi *qmi = container_of(qmi_hdl, struct ath10k_qmi, qmi_hdl);
+
+	ath10k_qmi_driver_event_post(qmi, ATH10K_QMI_EVENT_MSA_READY_IND, NULL);
+}
+
+static const struct qmi_msg_handler qmi_msg_handler[] = {
+	{
+		.type = QMI_INDICATION,
+		.msg_id = QMI_WLFW_FW_READY_IND_V01,
+		.ei = wlfw_fw_ready_ind_msg_v01_ei,
+		.decoded_size = sizeof(struct wlfw_fw_ready_ind_msg_v01),
+		.fn = ath10k_qmi_fw_ready_ind,
+	},
+	{
+		.type = QMI_INDICATION,
+		.msg_id = QMI_WLFW_MSA_READY_IND_V01,
+		.ei = wlfw_msa_ready_ind_msg_v01_ei,
+		.decoded_size = sizeof(struct wlfw_msa_ready_ind_msg_v01),
+		.fn = ath10k_qmi_msa_ready_ind,
+	},
+	{}
+};
+
+static int ath10k_qmi_new_server(struct qmi_handle *qmi_hdl,
+				 struct qmi_service *service)
+{
+	struct ath10k_qmi *qmi = container_of(qmi_hdl, struct ath10k_qmi, qmi_hdl);
+	struct sockaddr_qrtr *sq = &qmi->sq;
+	struct ath10k *ar = qmi->ar;
+	int ret;
+
+	sq->sq_family = AF_QIPCRTR;
+	sq->sq_node = service->node;
+	sq->sq_port = service->port;
+
+	ath10k_dbg(ar, ATH10K_DBG_QMI, "wifi fw qmi service found\n");
+
+	ret = kernel_connect(qmi_hdl->sock, (struct sockaddr *)&qmi->sq,
+			     sizeof(qmi->sq), 0);
+	if (ret) {
+		ath10k_err(ar, "failed to connect to a remote QMI service port\n");
+		return ret;
+	}
+
+	ath10k_dbg(ar, ATH10K_DBG_QMI, "qmi wifi fw qmi service connected\n");
+	ath10k_qmi_driver_event_post(qmi, ATH10K_QMI_EVENT_SERVER_ARRIVE, NULL);
+
 	return ret;
 }
 
-void ath10k_snoc_stop_qmi_service(struct ath10k *ar)
+static void ath10k_qmi_del_server(struct qmi_handle *qmi_hdl,
+				  struct qmi_service *service)
+{
+	struct ath10k_qmi *qmi =
+		container_of(qmi_hdl, struct ath10k_qmi, qmi_hdl);
+
+	qmi->fw_ready = false;
+
+	/*
+	 * The del_server event is to be processed only if coming from
+	 * the qmi server. The qmi infrastructure sends del_server, when
+	 * any client releases the qmi handle. In this case do not process
+	 * this del_server event.
+	 */
+	if (qmi->state == ATH10K_QMI_STATE_INIT_DONE)
+		ath10k_qmi_driver_event_post(qmi, ATH10K_QMI_EVENT_SERVER_EXIT,
+					     NULL);
+}
+
+static const struct qmi_ops ath10k_qmi_ops = {
+	.new_server = ath10k_qmi_new_server,
+	.del_server = ath10k_qmi_del_server,
+};
+
+static void ath10k_qmi_driver_event_work(struct work_struct *work)
+{
+	struct ath10k_qmi *qmi = container_of(work, struct ath10k_qmi,
+					      event_work);
+	struct ath10k_qmi_driver_event *event;
+	struct ath10k *ar = qmi->ar;
+
+	spin_lock(&qmi->event_lock);
+	while (!list_empty(&qmi->event_list)) {
+		event = list_first_entry(&qmi->event_list,
+					 struct ath10k_qmi_driver_event, list);
+		list_del(&event->list);
+		spin_unlock(&qmi->event_lock);
+
+		switch (event->type) {
+		case ATH10K_QMI_EVENT_SERVER_ARRIVE:
+			ath10k_qmi_event_server_arrive(qmi);
+			break;
+		case ATH10K_QMI_EVENT_SERVER_EXIT:
+			ath10k_qmi_event_server_exit(qmi);
+			break;
+		case ATH10K_QMI_EVENT_FW_READY_IND:
+			ath10k_qmi_event_fw_ready_ind(qmi);
+			break;
+		case ATH10K_QMI_EVENT_MSA_READY_IND:
+			ath10k_qmi_event_msa_ready(qmi);
+			break;
+		default:
+			ath10k_warn(ar, "invalid event type: %d", event->type);
+			break;
+		}
+		kfree(event);
+		spin_lock(&qmi->event_lock);
+	}
+	spin_unlock(&qmi->event_lock);
+}
+
+int ath10k_qmi_init(struct ath10k *ar, u32 msa_size)
 {
 	struct ath10k_snoc *ar_snoc = ath10k_snoc_priv(ar);
-	struct ath10k_snoc_qmi_config *qmi_cfg = &ar_snoc->qmi_cfg;
+	struct device *dev = ar->dev;
+	struct ath10k_qmi *qmi;
+	int ret;
 
-	ath10k_dbg(ar, ATH10K_DBG_SNOC, "Removing QMI service..\n");
+	qmi = kzalloc(sizeof(*qmi), GFP_KERNEL);
+	if (!qmi)
+		return -ENOMEM;
 
-	wake_up_all(&ath10k_fw_ready_wait_event);
-	cancel_work_sync(&qmi_cfg->event_work);
-	cancel_work_sync(&qmi_cfg->qmi_recv_msg_work);
-	qmi_svc_event_notifier_unregister(WLFW_SERVICE_ID_V01,
-					  WLFW_SERVICE_VERS_V01,
-					  WLFW_SERVICE_INS_ID_V01,
-					  &qmi_cfg->wlfw_clnt_nb);
-	destroy_workqueue(qmi_cfg->event_wq);
-	qmi_handle_destroy(qmi_cfg->wlfw_clnt);
-	qmi_cfg = NULL;
+	qmi->ar = ar;
+	ar_snoc->qmi = qmi;
+
+	if (of_property_read_bool(dev->of_node, "qcom,msa-fixed-perm"))
+		qmi->msa_fixed_perm = true;
+
+	ret = qmi_handle_init(&qmi->qmi_hdl,
+			      WLFW_BDF_DOWNLOAD_REQ_MSG_V01_MAX_MSG_LEN,
+			      &ath10k_qmi_ops, qmi_msg_handler);
+	if (ret)
+		goto err;
+
+	qmi->event_wq = alloc_workqueue("ath10k_qmi_driver_event",
+					WQ_UNBOUND, 1);
+	if (!qmi->event_wq) {
+		ath10k_err(ar, "failed to allocate workqueue\n");
+		ret = -EFAULT;
+		goto err_release_qmi_handle;
+	}
+
+	INIT_LIST_HEAD(&qmi->event_list);
+	spin_lock_init(&qmi->event_lock);
+	INIT_WORK(&qmi->event_work, ath10k_qmi_driver_event_work);
+
+	ret = qmi_add_lookup(&qmi->qmi_hdl, WLFW_SERVICE_ID_V01,
+			     WLFW_SERVICE_VERS_V01, 0);
+	if (ret)
+		goto err_qmi_lookup;
+
+	qmi->state = ATH10K_QMI_STATE_INIT_DONE;
+	return 0;
+
+err_qmi_lookup:
+	destroy_workqueue(qmi->event_wq);
+
+err_release_qmi_handle:
+	qmi_handle_release(&qmi->qmi_hdl);
+
+err:
+	kfree(qmi);
+	return ret;
+}
+
+int ath10k_qmi_deinit(struct ath10k *ar)
+{
+	struct ath10k_snoc *ar_snoc = ath10k_snoc_priv(ar);
+	struct ath10k_qmi *qmi = ar_snoc->qmi;
+
+	qmi->state = ATH10K_QMI_STATE_DEINIT;
+	qmi_handle_release(&qmi->qmi_hdl);
+	cancel_work_sync(&qmi->event_work);
+	destroy_workqueue(qmi->event_wq);
+	kfree(qmi);
+	ar_snoc->qmi = NULL;
+
+	return 0;
 }

@@ -1,15 +1,15 @@
+// SPDX-License-Identifier: GPL-2.0-only
 /*
  * aes-ce-cipher.c - core AES cipher using ARMv8 Crypto Extensions
  *
- * Copyright (C) 2013 - 2014 Linaro Ltd <ard.biesheuvel@linaro.org>
- *
- * This program is free software; you can redistribute it and/or modify
- * it under the terms of the GNU General Public License version 2 as
- * published by the Free Software Foundation.
+ * Copyright (C) 2013 - 2017 Linaro Ltd <ard.biesheuvel@linaro.org>
  */
 
 #include <asm/neon.h>
+#include <asm/simd.h>
+#include <asm/unaligned.h>
 #include <crypto/aes.h>
+#include <crypto/internal/simd.h>
 #include <linux/cpufeature.h>
 #include <linux/crypto.h>
 #include <linux/module.h>
@@ -47,7 +47,12 @@ static void aes_cipher_encrypt(struct crypto_tfm *tfm, u8 dst[], u8 const src[])
 {
 	struct crypto_aes_ctx *ctx = crypto_tfm_ctx(tfm);
 
-	kernel_neon_begin_partial(4);
+	if (!crypto_simd_usable()) {
+		aes_encrypt(ctx, dst, src);
+		return;
+	}
+
+	kernel_neon_begin();
 	__aes_ce_encrypt(ctx->key_enc, dst, src, num_rounds(ctx));
 	kernel_neon_end();
 }
@@ -56,7 +61,12 @@ static void aes_cipher_decrypt(struct crypto_tfm *tfm, u8 dst[], u8 const src[])
 {
 	struct crypto_aes_ctx *ctx = crypto_tfm_ctx(tfm);
 
-	kernel_neon_begin_partial(4);
+	if (!crypto_simd_usable()) {
+		aes_decrypt(ctx, dst, src);
+		return;
+	}
+
+	kernel_neon_begin();
 	__aes_ce_decrypt(ctx->key_dec, dst, src, num_rounds(ctx));
 	kernel_neon_end();
 }
@@ -80,20 +90,16 @@ int ce_aes_expandkey(struct crypto_aes_ctx *ctx, const u8 *in_key,
 	    key_len != AES_KEYSIZE_256)
 		return -EINVAL;
 
-	memcpy(ctx->key_enc, in_key, key_len);
 	ctx->key_length = key_len;
+	for (i = 0; i < kwords; i++)
+		ctx->key_enc[i] = get_unaligned_le32(in_key + i * sizeof(u32));
 
-	kernel_neon_begin_partial(2);
+	kernel_neon_begin();
 	for (i = 0; i < sizeof(rcon); i++) {
 		u32 *rki = ctx->key_enc + (i * kwords);
 		u32 *rko = rki + kwords;
 
-#ifndef CONFIG_CPU_BIG_ENDIAN
 		rko[0] = ror32(__aes_ce_sub(rki[kwords - 1]), 8) ^ rcon[i] ^ rki[0];
-#else
-		rko[0] = rol32(__aes_ce_sub(rki[kwords - 1]), 8) ^ (rcon[i] << 24) ^
-			 rki[0];
-#endif
 		rko[1] = rko[0] ^ rki[1];
 		rko[2] = rko[1] ^ rki[2];
 		rko[3] = rko[2] ^ rki[3];
@@ -137,14 +143,8 @@ int ce_aes_setkey(struct crypto_tfm *tfm, const u8 *in_key,
 		  unsigned int key_len)
 {
 	struct crypto_aes_ctx *ctx = crypto_tfm_ctx(tfm);
-	int ret;
 
-	ret = ce_aes_expandkey(ctx, in_key, key_len);
-	if (!ret)
-		return 0;
-
-	tfm->crt_flags |= CRYPTO_TFM_RES_BAD_KEY_LEN;
-	return -EINVAL;
+	return ce_aes_expandkey(ctx, in_key, key_len);
 }
 EXPORT_SYMBOL(ce_aes_setkey);
 

@@ -7,7 +7,7 @@
  */
 
 #include <linux/init.h>
-#include <linux/bootmem.h>
+#include <linux/memblock.h>
 #include <linux/smp.h>
 #include <asm/bootinfo.h>
 #include <asm/bmips.h>
@@ -93,8 +93,4 @@ void __init prom_init(void)
 		 * FIXME: we really should have some sort of hazard barrier here
 		 */
 	}
-}
-
-void __init prom_free_prom_memory(void)
-{
 }

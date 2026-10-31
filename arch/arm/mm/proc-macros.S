@@ -1,12 +1,16 @@
+/* SPDX-License-Identifier: GPL-2.0 */
 /*
  * We need constants.h for:
  *  VMA_VM_MM
  *  VMA_VM_FLAGS
  *  VM_EXEC
  */
-#include <linux/const.h>
 #include <asm/asm-offsets.h>
 #include <asm/thread_info.h>
+
+#ifdef CONFIG_CPU_V7M
+#include <asm/v7m.h>
+#endif
 
 /*
  * vma_vm_mm - get mm pointer from vma pointer (vma->vm_mm)
@@ -22,19 +26,16 @@
 	ldr	\rd, [\rn, #VMA_VM_FLAGS]
 	.endm
 
-	.macro	tsk_mm, rd, rn
-	ldr	\rd, [\rn, #TI_TASK]
-	ldr	\rd, [\rd, #TSK_ACTIVE_MM]
-	.endm
-
 /*
  * act_mm - get current->active_mm
  */
 	.macro	act_mm, rd
-	bic	\rd, sp, #(THREAD_SIZE - 1) & ~63
-	bic	\rd, \rd, #63
+	get_thread_info \rd
 	ldr	\rd, [\rd, #TI_TASK]
-	ldr	\rd, [\rd, #TSK_ACTIVE_MM]
+	.if (TSK_ACTIVE_MM > IMM12_MASK)
+	add	\rd, \rd, #TSK_ACTIVE_MM & ~IMM12_MASK
+	.endif
+	ldr	\rd, [\rd, #TSK_ACTIVE_MM & IMM12_MASK]
 	.endm
 
 /*
@@ -71,7 +72,13 @@
  * on ARMv7.
  */
 	.macro	dcache_line_size, reg, tmp
+#ifdef CONFIG_CPU_V7M
+	movw	\tmp, #:lower16:BASEADDR_V7M_SCB + V7M_SCB_CTR
+	movt	\tmp, #:upper16:BASEADDR_V7M_SCB + V7M_SCB_CTR
+	ldr     \tmp, [\tmp]
+#else
 	mrc	p15, 0, \tmp, c0, c0, 1		@ read ctr
+#endif
 	lsr	\tmp, \tmp, #16
 	and	\tmp, \tmp, #0xf		@ cache line size encoding
 	mov	\reg, #4			@ bytes per word
@@ -83,7 +90,13 @@
  * on ARMv7.
  */
 	.macro	icache_line_size, reg, tmp
+#ifdef CONFIG_CPU_V7M
+	movw	\tmp, #:lower16:BASEADDR_V7M_SCB + V7M_SCB_CTR
+	movt	\tmp, #:upper16:BASEADDR_V7M_SCB + V7M_SCB_CTR
+	ldr     \tmp, [\tmp]
+#else
 	mrc	p15, 0, \tmp, c0, c0, 1		@ read ctr
+#endif
 	and	\tmp, \tmp, #0xf		@ cache line size encoding
 	mov	\reg, #4			@ bytes per word
 	mov	\reg, \reg, lsl \tmp		@ actual cache line size
@@ -321,8 +334,6 @@ ENTRY(\name\()_cache_fns)
 	.long	\name\()_flush_kern_dcache_area
 	.long	\name\()_dma_map_area
 	.long	\name\()_dma_unmap_area
-	.long   \name\()_dma_inv_range
-	.long   \name\()_dma_clean_range
 	.long	\name\()_dma_flush_range
 	.size	\name\()_cache_fns, . - \name\()_cache_fns
 .endm

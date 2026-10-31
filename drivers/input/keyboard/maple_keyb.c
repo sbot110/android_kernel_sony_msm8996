@@ -1,23 +1,9 @@
+// SPDX-License-Identifier: GPL-2.0-or-later
 /*
  * SEGA Dreamcast keyboard driver
  * Based on drivers/usb/usbkbd.c
  * Copyright (c) YAEGASHI Takeshi, 2001
  * Porting to 2.6 Copyright (c) Adrian McMenamin, 2007 - 2009
- *
- * This program is free software; you can redistribute it and/or modify
- * it under the terms of the GNU General Public License as published by
- * the Free Software Foundation; either version 2 of the License, or
- * (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with this program; if not, see the file COPYING, or write
- * to the Free Software Foundation, Inc.,
- * 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
  */
 
 #include <linux/kernel.h>
@@ -183,6 +169,8 @@ static int probe_maple_kbd(struct device *dev)
 	kbd->dev = idev;
 	memcpy(kbd->keycode, dc_kbd_keycode, sizeof(kbd->keycode));
 
+	maple_set_drvdata(mdev, kbd);
+
 	idev->name = mdev->product_name;
 	idev->evbit[0] = BIT(EV_KEY) | BIT(EV_REP);
 	idev->keycode = kbd->keycode;
@@ -196,7 +184,6 @@ static int probe_maple_kbd(struct device *dev)
 	__clear_bit(KEY_RESERVED, idev->keybit);
 
 	input_set_capability(idev, EV_MSC, MSC_SCAN);
-	input_set_drvdata(idev, kbd);
 
 	error = input_register_device(idev);
 	if (error)
@@ -207,8 +194,6 @@ static int probe_maple_kbd(struct device *dev)
 		MAPLE_FUNC_KEYBOARD);
 
 	mdev->driver = mdrv;
-
-	maple_set_drvdata(mdev, kbd);
 
 	return error;
 

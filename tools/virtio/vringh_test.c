@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-2.0
 /* Simple test of virtio code, entirely in userpsace. */
 #define _GNU_SOURCE
 #include <sched.h>
@@ -158,7 +159,12 @@ static int parallel_test(u64 features,
 
 	/* Parent and child use separate addresses, to check our mapping logic! */
 	host_map = mmap(NULL, mapsize, PROT_READ|PROT_WRITE, MAP_SHARED, fd, 0);
+	if (host_map == MAP_FAILED)
+		err(1, "mmap host_map");
+
 	guest_map = mmap(NULL, mapsize, PROT_READ|PROT_WRITE, MAP_SHARED, fd, 0);
+	if (guest_map == MAP_FAILED)
+		err(1, "mmap guest_map");
 
 	pipe(to_guest);
 	pipe(to_host);
@@ -306,6 +312,8 @@ static int parallel_test(u64 features,
 		close(to_host[0]);
 
 		gvdev.vdev.features = features;
+		INIT_LIST_HEAD(&gvdev.vdev.vqs);
+		spin_lock_init(&gvdev.vdev.vqs_list_lock);
 		gvdev.to_host_fd = to_host[1];
 		gvdev.notifies = 0;
 
@@ -314,7 +322,8 @@ static int parallel_test(u64 features,
 			err(1, "Could not set affinity to cpu %u", first_cpu);
 
 		vq = vring_new_virtqueue(0, RINGSIZE, ALIGN, &gvdev.vdev, true,
-					 guest_map, fast_vringh ? no_notify_host
+					 false, guest_map,
+					 fast_vringh ? no_notify_host
 					 : parallel_notify_host,
 					 never_callback_guest, "guest vq");
 
@@ -451,6 +460,8 @@ int main(int argc, char *argv[])
 
 	getrange = getrange_iov;
 	vdev.features = 0;
+	INIT_LIST_HEAD(&vdev.vqs);
+	spin_lock_init(&vdev.vqs_list_lock);
 
 	while (argv[1]) {
 		if (strcmp(argv[1], "--indirect") == 0)
@@ -479,7 +490,7 @@ int main(int argc, char *argv[])
 	memset(__user_addr_min, 0, vring_size(RINGSIZE, ALIGN));
 
 	/* Set up guest side. */
-	vq = vring_new_virtqueue(0, RINGSIZE, ALIGN, &vdev, true,
+	vq = vring_new_virtqueue(0, RINGSIZE, ALIGN, &vdev, true, false,
 				 __user_addr_min,
 				 never_notify_host, never_callback_guest,
 				 "guest vq");
@@ -663,7 +674,7 @@ int main(int argc, char *argv[])
 		/* Force creation of direct, which we modify. */
 		__virtio_clear_bit(&vdev, VIRTIO_RING_F_INDIRECT_DESC);
 		vq = vring_new_virtqueue(0, RINGSIZE, ALIGN, &vdev, true,
-					 __user_addr_min,
+					 false, __user_addr_min,
 					 never_notify_host,
 					 never_callback_guest,
 					 "guest vq");

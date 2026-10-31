@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-2.0
 /*
  *  fs/partitions/aix.c
  *
@@ -5,7 +6,6 @@
  */
 
 #include "check.h"
-#include "aix.h"
 
 struct lvm_rec {
 	char lvm_id[4]; /* "_LVM" */
@@ -67,29 +67,13 @@ struct pvd {
 #define LVM_MAXLVS 256
 
 /**
- * last_lba(): return number of last logical block of device
- * @bdev: block device
- *
- * Description: Returns last LBA value on success, 0 on error.
- * This is stored (by sd and ide-geometry) in
- *  the part[0] entry for this disk, and is the number of
- *  physical sectors available on the disk.
- */
-static u64 last_lba(struct block_device *bdev)
-{
-	if (!bdev || !bdev->bd_inode)
-		return 0;
-	return (bdev->bd_inode->i_size >> 9) - 1ULL;
-}
-
-/**
  * read_lba(): Read bytes from disk, starting at given LBA
  * @state
  * @lba
  * @buffer
  * @count
  *
- * Description:  Reads @count bytes from @state->bdev into @buffer.
+ * Description:  Reads @count bytes from @state->disk into @buffer.
  * Returns number of bytes read on success, 0 on error.
  */
 static size_t read_lba(struct parsed_partitions *state, u64 lba, u8 *buffer,
@@ -97,7 +81,7 @@ static size_t read_lba(struct parsed_partitions *state, u64 lba, u8 *buffer,
 {
 	size_t totalreadcount = 0;
 
-	if (!buffer || lba + count / 512 > last_lba(state->bdev))
+	if (!buffer || lba + count / 512 > get_capacity(state->disk) - 1ULL)
 		return 0;
 
 	while (count) {
@@ -243,6 +227,15 @@ int aix_partition(struct parsed_partitions *state)
 		int cur_lv_ix = -1;
 		int next_lp_ix = 1;
 		int lp_ix;
+
+		/*
+		 * pvd was read into a fixed-size struct pvd whose ppe[] array
+		 * holds ARRAY_SIZE(pvd->ppe) entries.  pp_count is an
+		 * unvalidated on-disk __be16, so clamp the scan to the array
+		 * size to avoid walking past the allocation.
+		 */
+		if (numpps > ARRAY_SIZE(pvd->ppe))
+			numpps = ARRAY_SIZE(pvd->ppe);
 
 		for (i = 0; i < numpps; i += 1) {
 			struct ppe *p = pvd->ppe + i;

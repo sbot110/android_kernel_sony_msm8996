@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-2.0-only
 /*
  *	SEGA Dreamcast controller driver
  *	Based on drivers/usb/iforce.c
@@ -111,6 +112,8 @@ static int probe_maple_controller(struct device *dev)
 	pad->dev = idev;
 	pad->mdev = mdev;
 
+	maple_set_drvdata(mdev, pad);
+
 	idev->open = dc_pad_open;
 	idev->close = dc_pad_close;
 
@@ -139,14 +142,12 @@ static int probe_maple_controller(struct device *dev)
 	idev->dev.parent = &mdev->dev;
 	idev->name = mdev->product_name;
 	idev->id.bustype = BUS_HOST;
-	input_set_drvdata(idev, pad);
 
 	error = input_register_device(idev);
 	if (error)
 		goto fail;
 
 	mdev->driver = mdrv;
-	maple_set_drvdata(mdev, pad);
 
 	return 0;
 

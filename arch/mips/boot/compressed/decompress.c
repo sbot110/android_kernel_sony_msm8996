@@ -1,14 +1,10 @@
+// SPDX-License-Identifier: GPL-2.0-or-later
 /*
  * Copyright 2001 MontaVista Software Inc.
  * Author: Matt Porter <mporter@mvista.com>
  *
  * Copyright (C) 2009 Lemote, Inc.
  * Author: Wu Zhangjin <wuzhangjin@gmail.com>
- *
- * This program is free software; you can redistribute	it and/or modify it
- * under  the terms of	the GNU General	 Public License as published by the
- * Free Software Foundation;  either version 2 of the  License, or (at your
- * option) any later version.
  */
 
 #define DISABLE_BRANCH_PROFILING
@@ -16,8 +12,11 @@
 #include <linux/types.h>
 #include <linux/kernel.h>
 #include <linux/string.h>
+#include <linux/libfdt.h>
 
 #include <asm/addrspace.h>
+#include <asm/unaligned.h>
+#include <asm-generic/vmlinux.lds.h>
 
 /*
  * These two variables specify the free mem region
@@ -37,6 +36,8 @@ extern void puthex(unsigned long long val);
 #define puts(s) do {} while (0)
 #define puthex(val) do {} while (0)
 #endif
+
+extern char __appended_dtb[];
 
 void error(char *x)
 {
@@ -75,12 +76,11 @@ void error(char *x)
 #include "../../../../lib/decompress_unxz.c"
 #endif
 
-unsigned long __stack_chk_guard;
+#ifdef CONFIG_KERNEL_ZSTD
+#include "../../../../lib/decompress_unzstd.c"
+#endif
 
-void __stack_chk_guard_setup(void)
-{
-	__stack_chk_guard = 0x000a0dff;
-}
+const unsigned long __stack_chk_guard = 0x000a0dff;
 
 void __stack_chk_fail(void)
 {
@@ -90,8 +90,6 @@ void __stack_chk_fail(void)
 void decompress_kernel(unsigned long boot_heap_start)
 {
 	unsigned long zimage_start, zimage_size;
-
-	__stack_chk_guard_setup();
 
 	zimage_start = (unsigned long)(&__image_begin);
 	zimage_size = (unsigned long)(&__image_end) -
@@ -115,6 +113,27 @@ void decompress_kernel(unsigned long boot_heap_start)
 	/* Decompress the kernel with according algorithm */
 	__decompress((char *)zimage_start, zimage_size, 0, 0,
 		   (void *)VMLINUX_LOAD_ADDRESS_ULL, 0, 0, error);
+
+	if (IS_ENABLED(CONFIG_MIPS_RAW_APPENDED_DTB) &&
+	    fdt_magic((void *)&__appended_dtb) == FDT_MAGIC) {
+		unsigned int image_size, dtb_size;
+
+		dtb_size = fdt_totalsize((void *)&__appended_dtb);
+
+		/* last four bytes is always image size in little endian */
+		image_size = get_unaligned_le32((void *)&__image_end - 4);
+
+		/* The device tree's address must be properly aligned  */
+		image_size = ALIGN(image_size, STRUCT_ALIGNMENT);
+
+		puts("Copy device tree to address  ");
+		puthex(VMLINUX_LOAD_ADDRESS_ULL + image_size);
+		puts("\n");
+
+		/* copy dtb to where the booted kernel will expect it */
+		memcpy((void *)VMLINUX_LOAD_ADDRESS_ULL + image_size,
+		       __appended_dtb, dtb_size);
+	}
 
 	/* FIXME: should we flush cache here? */
 	puts("Now, booting the kernel...\n");

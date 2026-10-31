@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-2.0
 /********************************
  * adapted from font_sun12x22.c *
  * by Jurriaan Kalkman 06-2005  *
@@ -5136,6 +5137,7 @@ const struct font_desc font_10x18 = {
 	.name	= "10x18",
 	.width	= 10,
 	.height	= 18,
+	.charcount = 256,
 	.data	= fontdata_10x18.data,
 #ifdef __sparc__
 	.pref	= 5,

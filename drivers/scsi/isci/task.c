@@ -160,7 +160,7 @@ int isci_task_execute_task(struct sas_task *task, gfp_t gfp_flags)
 
 			isci_task_refuse(ihost, task,
 					 SAS_TASK_UNDELIVERED,
-					 SAM_STAT_TASK_ABORTED);
+					 SAS_SAM_STAT_TASK_ABORTED);
 		} else {
 			task->task_state_flags |= SAS_TASK_AT_INITIATOR;
 			spin_unlock_irqrestore(&task->task_state_lock, flags);
@@ -369,7 +369,7 @@ static void isci_task_build_abort_task_tmf(struct isci_tmf *tmf,
 	tmf->io_tag = old_request->io_tag;
 }
 
-/**
+/*
  * isci_task_send_lu_reset_sas() - This function is called by of the SAS Domain
  *    Template functions.
  * @lun: This parameter specifies the lun to be reset.
@@ -511,7 +511,7 @@ int isci_task_abort_task(struct sas_task *task)
 		 "%s: dev = %p (%s%s), task = %p, old_request == %p\n",
 		 __func__, idev,
 		 (dev_is_sata(task->dev) ? "STP/SATA"
-					 : ((dev_is_expander(task->dev))
+					 : ((dev_is_expander(task->dev->dev_type))
 						? "SMP"
 						: "SSP")),
 		 ((idev) ? ((test_bit(IDEV_GONE, &idev->flags))
@@ -626,24 +626,6 @@ int isci_task_abort_task_set(
 
 
 /**
- * isci_task_clear_aca() - This function is one of the SAS Domain Template
- *    functions. This is one of the Task Management functoins called by libsas.
- * @d_device: This parameter specifies the domain device associated with this
- *    request.
- * @lun: This parameter specifies the lun	 associated with this request.
- *
- * status, zero indicates success.
- */
-int isci_task_clear_aca(
-	struct domain_device *d_device,
-	u8 *lun)
-{
-	return TMF_RESP_FUNC_FAILED;
-}
-
-
-
-/**
  * isci_task_clear_task_set() - This function is one of the SAS Domain Template
  *    functions. This is one of the Task Management functoins called by libsas.
  * @d_device: This parameter specifies the domain device associated with this
@@ -668,7 +650,6 @@ int isci_task_clear_task_set(
  *    returned, libsas turns this into a LUN reset; when FUNC_FAILED is
  *    returned, libsas will turn this into a target reset
  * @task: This parameter specifies the sas task being queried.
- * @lun: This parameter specifies the lun associated with this request.
  *
  * status, zero indicates success.
  */
@@ -710,8 +691,8 @@ isci_task_request_complete(struct isci_host *ihost,
 		tmf->status = completion_status;
 
 		if (tmf->proto == SAS_PROTOCOL_SSP) {
-			memcpy(&tmf->resp.resp_iu,
-			       &ireq->ssp.rsp,
+			memcpy(tmf->resp.rsp_buf,
+			       ireq->ssp.rsp_buf,
 			       SSP_RESP_IU_MAX_SIZE);
 		} else if (tmf->proto == SAS_PROTOCOL_SATA) {
 			memcpy(&tmf->resp.d2h_fis,

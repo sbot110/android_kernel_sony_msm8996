@@ -1,12 +1,9 @@
+# SPDX-License-Identifier: GPL-2.0
 KBUILD_DEFCONFIG := mmu_defconfig
 
-ifeq ($(CONFIG_MMU),y)
 UTS_SYSNAME = -DUTS_SYSNAME=\"Linux\"
-else
-UTS_SYSNAME = -DUTS_SYSNAME=\"uClinux\"
-endif
 
-# What CPU vesion are we building for, and crack it open
+# What CPU version are we building for, and crack it open
 # as major.minor.rev
 CPU_VER   := $(shell echo $(CONFIG_XILINX_MICROBLAZE0_HW_VER))
 CPU_MAJOR := $(shell echo $(CPU_VER) | cut -d '.' -f 1)
@@ -36,49 +33,49 @@ CPUFLAGS-$(CONFIG_XILINX_MICROBLAZE0_USE_DIV) += -mno-xl-soft-div
 CPUFLAGS-$(CONFIG_XILINX_MICROBLAZE0_USE_BARREL) += -mxl-barrel-shift
 CPUFLAGS-$(CONFIG_XILINX_MICROBLAZE0_USE_PCMP_INSTR) += -mxl-pattern-compare
 
+ifdef CONFIG_CPU_BIG_ENDIAN
+KBUILD_CFLAGS += -mbig-endian
+KBUILD_AFLAGS += -mbig-endian
+KBUILD_LDFLAGS += -EB
+else
+KBUILD_CFLAGS += -mlittle-endian
+KBUILD_AFLAGS += -mlittle-endian
+KBUILD_LDFLAGS += -EL
+endif
+
 CPUFLAGS-1 += $(call cc-option,-mcpu=v$(CPU_VER))
 
 # r31 holds current when in kernel mode
-KBUILD_CFLAGS += -ffixed-r31 $(CPUFLAGS-1) $(CPUFLAGS-2)
-
-LDFLAGS		:=
-LDFLAGS_vmlinux	:=
+KBUILD_CFLAGS += -ffixed-r31 $(CPUFLAGS-y) $(CPUFLAGS-1) $(CPUFLAGS-2)
 
 head-y := arch/microblaze/kernel/head.o
 libs-y += arch/microblaze/lib/
-core-y += arch/microblaze/kernel/
-core-y += arch/microblaze/mm/
-core-$(CONFIG_PCI) += arch/microblaze/pci/
-
-drivers-$(CONFIG_OPROFILE) += arch/microblaze/oprofile/
 
 boot := arch/microblaze/boot
 
 # Are we making a simpleImage.<boardname> target? If so, crack out the boardname
 DTB:=$(subst simpleImage.,,$(filter simpleImage.%, $(MAKECMDGOALS)))
 
-ifneq ($(DTB),)
-	core-y	+= $(boot)/dts/
-endif
-
-# defines filename extension depending memory management type
-ifeq ($(CONFIG_MMU),)
-MMU := -nommu
-endif
-
-export MMU DTB
+export DTB
 
 all: linux.bin
 
 archclean:
 	$(Q)$(MAKE) $(clean)=$(boot)
 
-linux.bin linux.bin.gz linux.bin.ub: vmlinux
+archheaders:
+	$(Q)$(MAKE) $(build)=arch/microblaze/kernel/syscalls all
+
+PHONY += linux.bin linux.bin.gz linux.bin.ub
+linux.bin.ub linux.bin.gz: linux.bin
+linux.bin: vmlinux
+linux.bin linux.bin.gz linux.bin.ub:
 	$(Q)$(MAKE) $(build)=$(boot) $(boot)/$@
 	@echo 'Kernel: $(boot)/$@ is ready' ' (#'`cat .version`')'
 
-simpleImage.%: vmlinux
-	$(Q)$(MAKE) $(build)=$(boot) $(boot)/$@
+PHONY += simpleImage.$(DTB)
+simpleImage.$(DTB): vmlinux
+	$(Q)$(MAKE) $(build)=$(boot) $(addprefix $(boot)/$@., ub unstrip strip)
 	@echo 'Kernel: $(boot)/$@ is ready' ' (#'`cat .version`')'
 
 define archhelp

@@ -8,30 +8,40 @@
 #include <linux/netdevice.h>
 #include <linux/version.h>
 #include <uapi/linux/bpf.h>
-#include "bpf_helpers.h"
+#include <uapi/linux/perf_event.h>
+#include <bpf/bpf_helpers.h>
+#include <bpf/bpf_tracing.h>
 
-struct bpf_map_def SEC("maps") my_map = {
-	.type = BPF_MAP_TYPE_HASH,
-	.key_size = sizeof(long),
-	.value_size = sizeof(long),
-	.max_entries = 1024,
-};
-struct bpf_map_def SEC("maps") my_map2 = {
-	.type = BPF_MAP_TYPE_PERCPU_HASH,
-	.key_size = sizeof(long),
-	.value_size = sizeof(long),
-	.max_entries = 1024,
-};
+struct {
+	__uint(type, BPF_MAP_TYPE_HASH);
+	__type(key, long);
+	__type(value, long);
+	__uint(max_entries, 1024);
+} my_map SEC(".maps");
+struct {
+	__uint(type, BPF_MAP_TYPE_PERCPU_HASH);
+	__uint(key_size, sizeof(long));
+	__uint(value_size, sizeof(long));
+	__uint(max_entries, 1024);
+} my_map2 SEC(".maps");
+
+struct {
+	__uint(type, BPF_MAP_TYPE_STACK_TRACE);
+	__uint(key_size, sizeof(u32));
+	__uint(value_size, PERF_MAX_STACK_DEPTH * sizeof(u64));
+	__uint(max_entries, 10000);
+} stackmap SEC(".maps");
 
 #define PROG(foo) \
 int foo(struct pt_regs *ctx) \
 { \
-	long v = ctx->ip, *val; \
+	long v = PT_REGS_IP(ctx), *val; \
 \
 	val = bpf_map_lookup_elem(&my_map, &v); \
 	bpf_map_update_elem(&my_map, &v, &v, BPF_ANY); \
 	bpf_map_update_elem(&my_map2, &v, &v, BPF_ANY); \
 	bpf_map_delete_elem(&my_map2, &v); \
+	bpf_get_stackid(ctx, &stackmap, BPF_F_REUSE_STACKID); \
 	return 0; \
 }
 

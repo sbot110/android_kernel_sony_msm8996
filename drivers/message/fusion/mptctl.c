@@ -58,7 +58,7 @@
 #include <linux/compat.h>
 
 #include <asm/io.h>
-#include <asm/uaccess.h>
+#include <linux/uaccess.h>
 
 #include <scsi/scsi.h>
 #include <scsi/scsi_cmnd.h>
@@ -321,7 +321,6 @@ mptctl_do_taskmgmt(MPT_ADAPTER *ioc, u8 tm_type, u8 bus_id, u8 target_id)
 	int		 ii;
 	int		 retval;
 	unsigned long	 timeout;
-	unsigned long	 time_count;
 	u16		 iocstatus;
 
 
@@ -383,7 +382,6 @@ mptctl_do_taskmgmt(MPT_ADAPTER *ioc, u8 tm_type, u8 bus_id, u8 target_id)
 		ioc->name, tm_type, timeout));
 
 	INITIALIZE_MGMT_STATUS(ioc->taskmgmt_cmds.status)
-	time_count = jiffies;
 	if ((ioc->facts.IOCCapabilities & MPI_IOCFACTS_CAPABILITY_HIGH_PRI_Q) &&
 	    (ioc->facts.MsgVersion >= MPI_VERSION_01_05))
 		mpt_put_msg_frame_hi_pri(mptctl_taskmgmt_id, ioc, mf);
@@ -565,7 +563,7 @@ mptctl_event_process(MPT_ADAPTER *ioc, EventNotificationReply_t *pEvReply)
 	 * TODO - this define is not in MPI spec yet,
 	 * but they plan to set it to 0x21
 	 */
-	 if (event == 0x21 ) {
+	if (event == 0x21) {
 		ioc->aen_event_read_flag=1;
 		dctlprintk(ioc, printk(MYIOC_s_DEBUG_FMT "Raised SIGIO to application\n",
 		    ioc->name));
@@ -1369,7 +1367,6 @@ mptctl_gettargetinfo (MPT_ADAPTER *ioc, unsigned long arg)
 	int			lun;
 	int			maxWordsLeft;
 	int			numBytes;
-	u8			port;
 	struct scsi_device 	*sdev;
 
 	if (copy_from_user(&karg, uarg, sizeof(struct mpt_ioctl_targetinfo))) {
@@ -1381,13 +1378,8 @@ mptctl_gettargetinfo (MPT_ADAPTER *ioc, unsigned long arg)
 
 	dctlprintk(ioc, printk(MYIOC_s_DEBUG_FMT "mptctl_gettargetinfo called.\n",
 	    ioc->name));
-	/* Get the port number and set the maximum number of bytes
-	 * in the returned structure.
-	 * Ignore the port setting.
-	 */
 	numBytes = karg.hdr.maxDataSize - sizeof(mpt_ioctl_header);
 	maxWordsLeft = numBytes/sizeof(int);
-	port = karg.hdr.port;
 
 	if (maxWordsLeft <= 0) {
 		printk(MYIOC_s_ERR_FMT "%s@%d::mptctl_gettargetinfo() - no memory available!\n",
@@ -2376,24 +2368,13 @@ mptctl_hp_hostinfo(MPT_ADAPTER *ioc, unsigned long arg, unsigned int data_size)
 	else
 		karg.host_no =  -1;
 
-	/* Reformat the fw_version into a string
-	 */
-	karg.fw_version[0] = ioc->facts.FWVersion.Struct.Major >= 10 ?
-		((ioc->facts.FWVersion.Struct.Major / 10) + '0') : '0';
-	karg.fw_version[1] = (ioc->facts.FWVersion.Struct.Major % 10 ) + '0';
-	karg.fw_version[2] = '.';
-	karg.fw_version[3] = ioc->facts.FWVersion.Struct.Minor >= 10 ?
-		((ioc->facts.FWVersion.Struct.Minor / 10) + '0') : '0';
-	karg.fw_version[4] = (ioc->facts.FWVersion.Struct.Minor % 10 ) + '0';
-	karg.fw_version[5] = '.';
-	karg.fw_version[6] = ioc->facts.FWVersion.Struct.Unit >= 10 ?
-		((ioc->facts.FWVersion.Struct.Unit / 10) + '0') : '0';
-	karg.fw_version[7] = (ioc->facts.FWVersion.Struct.Unit % 10 ) + '0';
-	karg.fw_version[8] = '.';
-	karg.fw_version[9] = ioc->facts.FWVersion.Struct.Dev >= 10 ?
-		((ioc->facts.FWVersion.Struct.Dev / 10) + '0') : '0';
-	karg.fw_version[10] = (ioc->facts.FWVersion.Struct.Dev % 10 ) + '0';
-	karg.fw_version[11] = '\0';
+	/* Reformat the fw_version into a string */
+	snprintf(karg.fw_version, sizeof(karg.fw_version),
+		 "%.2hhu.%.2hhu.%.2hhu.%.2hhu",
+		 ioc->facts.FWVersion.Struct.Major,
+		 ioc->facts.FWVersion.Struct.Minor,
+		 ioc->facts.FWVersion.Struct.Unit,
+		 ioc->facts.FWVersion.Struct.Dev);
 
 	/* Issue a config request to get the device serial number
 	 */
@@ -2420,8 +2401,8 @@ mptctl_hp_hostinfo(MPT_ADAPTER *ioc, unsigned long arg, unsigned int data_size)
 				if (mpt_config(ioc, &cfg) == 0) {
 					ManufacturingPage0_t *pdata = (ManufacturingPage0_t *) pbuf;
 					if (strlen(pdata->BoardTracerNumber) > 1) {
-						strncpy(karg.serial_number, 									    pdata->BoardTracerNumber, 24);
-						karg.serial_number[24-1]='\0';
+						strlcpy(karg.serial_number,
+							pdata->BoardTracerNumber, 24);
 					}
 				}
 				pci_free_consistent(ioc->pcidev, hdr.PageLength * 4, pbuf, buf_dma);
@@ -2604,7 +2585,7 @@ mptctl_hp_targetinfo(MPT_ADAPTER *ioc, unsigned long arg)
        /* Get the data transfer speeds
         */
 	data_sz = ioc->spi_data.sdp0length * 4;
-	pg0_alloc = (SCSIDevicePage0_t *) pci_alloc_consistent(ioc->pcidev, data_sz, &page_dma);
+	pg0_alloc = pci_alloc_consistent(ioc->pcidev, data_sz, &page_dma);
 	if (pg0_alloc) {
 		hdr.PageVersion = ioc->spi_data.sdp0version;
 		hdr.PageLength = data_sz;
@@ -2668,8 +2649,7 @@ mptctl_hp_targetinfo(MPT_ADAPTER *ioc, unsigned long arg)
 		/* Issue the second config page request */
 		cfg.action = MPI_CONFIG_ACTION_PAGE_READ_CURRENT;
 		data_sz = (int) cfg.cfghdr.hdr->PageLength * 4;
-		pg3_alloc = (SCSIDevicePage3_t *) pci_alloc_consistent(
-							ioc->pcidev, data_sz, &page_dma);
+		pg3_alloc = pci_alloc_consistent(ioc->pcidev, data_sz, &page_dma);
 		if (pg3_alloc) {
 			cfg.physAddr = page_dma;
 			cfg.pageAddr = (karg.hdr.channel << 8) | karg.hdr.id;

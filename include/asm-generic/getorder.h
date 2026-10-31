@@ -1,3 +1,4 @@
+/* SPDX-License-Identifier: GPL-2.0 */
 #ifndef __ASM_GENERIC_GETORDER_H
 #define __ASM_GENERIC_GETORDER_H
 
@@ -25,7 +26,7 @@
  *
  * The result is undefined if the size is 0.
  */
-static inline __attribute_const__ int get_order(unsigned long size)
+static __always_inline __attribute_const__ int get_order(unsigned long size)
 {
 	if (__builtin_constant_p(size)) {
 		if (!size)

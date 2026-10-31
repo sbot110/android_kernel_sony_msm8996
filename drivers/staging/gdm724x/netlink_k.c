@@ -1,19 +1,10 @@
-/*
- * Copyright (c) 2012 GCT Semiconductor, Inc. All rights reserved.
- *
- * This software is licensed under the terms of the GNU General Public
- * License version 2, as published by the Free Software Foundation, and
- * may be copied, distributed, and modified under those terms.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
- * GNU General Public License for more details.
- */
+// SPDX-License-Identifier: GPL-2.0
+/* Copyright (c) 2012 GCT Semiconductor, Inc. All rights reserved. */
 
 #define pr_fmt(fmt) KBUILD_MODNAME ": " fmt
 
 #include <linux/export.h>
+#include <linux/mutex.h>
 #include <linux/etherdevice.h>
 #include <linux/netlink.h>
 #include <asm/byteorder.h>
@@ -21,21 +12,15 @@
 
 #include "netlink_k.h"
 
-#if defined(DEFINE_MUTEX)
 static DEFINE_MUTEX(netlink_mutex);
-#else
-static struct semaphore netlink_mutex;
-#define mutex_lock(x)		down(x)
-#define mutex_unlock(x)		up(x)
-#endif
 
 #define ND_MAX_GROUP		30
 #define ND_IFINDEX_LEN		sizeof(int)
 #define ND_NLMSG_SPACE(len)	(NLMSG_SPACE(len) + ND_IFINDEX_LEN)
 #define ND_NLMSG_DATA(nlh)	((void *)((char *)NLMSG_DATA(nlh) + \
 						  ND_IFINDEX_LEN))
-#define ND_NLMSG_S_LEN(len)	(len + ND_IFINDEX_LEN)
-#define ND_NLMSG_R_LEN(nlh)	(nlh->nlmsg_len - ND_IFINDEX_LEN)
+#define ND_NLMSG_S_LEN(len)	((len) + ND_IFINDEX_LEN)
+#define ND_NLMSG_R_LEN(nlh)	((nlh)->nlmsg_len - ND_IFINDEX_LEN)
 #define ND_NLMSG_IFIDX(nlh)	NLMSG_DATA(nlh)
 #define ND_MAX_MSG_LEN		(1024 * 32)
 
@@ -88,16 +73,13 @@ static void netlink_rcv(struct sk_buff *skb)
 }
 
 struct sock *netlink_init(int unit,
-	void (*cb)(struct net_device *dev, u16 type, void *msg, int len))
+			  void (*cb)(struct net_device *dev, u16 type,
+				     void *msg, int len))
 {
 	struct sock *sock;
 	struct netlink_kernel_cfg cfg = {
 		.input  = netlink_rcv,
 	};
-
-#if !defined(DEFINE_MUTEX)
-	init_MUTEX(&netlink_mutex);
-#endif
 
 	sock = netlink_kernel_create(&init_net, unit, &cfg);
 
@@ -107,12 +89,8 @@ struct sock *netlink_init(int unit,
 	return sock;
 }
 
-void netlink_exit(struct sock *sock)
-{
-	sock_release(sock->sk_socket);
-}
-
-int netlink_send(struct sock *sock, int group, u16 type, void *msg, int len)
+int netlink_send(struct sock *sock, int group, u16 type, void *msg, int len,
+		 struct net_device *dev)
 {
 	static u32 seq;
 	struct sk_buff *skb = NULL;
@@ -141,8 +119,8 @@ int netlink_send(struct sock *sock, int group, u16 type, void *msg, int len)
 		return len;
 
 	if (ret != -ESRCH)
-		pr_err("nl broadcast g=%d, t=%d, l=%d, r=%d\n",
-		       group, type, len, ret);
+		netdev_err(dev, "nl broadcast g=%d, t=%d, l=%d, r=%d\n",
+			   group, type, len, ret);
 	else if (netlink_has_listeners(sock, group + 1))
 		return -EAGAIN;
 

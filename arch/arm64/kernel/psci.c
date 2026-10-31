@@ -1,12 +1,5 @@
+// SPDX-License-Identifier: GPL-2.0-only
 /*
- * This program is free software; you can redistribute it and/or modify
- * it under the terms of the GNU General Public License version 2 as
- * published by the Free Software Foundation.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
  *
  * Copyright (C) 2013 ARM Limited
  *
@@ -19,19 +12,17 @@
 #include <linux/of.h>
 #include <linux/smp.h>
 #include <linux/delay.h>
-#include <linux/mm.h>
 #include <linux/psci.h>
+#include <linux/mm.h>
 
 #include <uapi/linux/psci.h>
 
-#include <asm/compiler.h>
 #include <asm/cpu_ops.h>
 #include <asm/errno.h>
 #include <asm/smp_plat.h>
 
 static int __init cpu_psci_cpu_init(unsigned int cpu)
 {
-	pr_info("Initializing psci_cpu_init\n");
 	return 0;
 }
 
@@ -47,8 +38,8 @@ static int __init cpu_psci_cpu_prepare(unsigned int cpu)
 
 static int cpu_psci_cpu_boot(unsigned int cpu)
 {
-	int err = psci_ops.cpu_on(cpu_logical_map(cpu),
-				  __pa_symbol(secondary_entry));
+	phys_addr_t pa_secondary_entry = __pa_symbol(function_nocfi(secondary_entry));
+	int err = psci_ops.cpu_on(cpu_logical_map(cpu), pa_secondary_entry);
 	if (err)
 		pr_err("failed to boot CPU%d (%d)\n", cpu, err);
 
@@ -56,6 +47,11 @@ static int cpu_psci_cpu_boot(unsigned int cpu)
 }
 
 #ifdef CONFIG_HOTPLUG_CPU
+static bool cpu_psci_cpu_can_disable(unsigned int cpu)
+{
+	return !psci_tos_resident_on(cpu);
+}
+
 static int cpu_psci_cpu_disable(unsigned int cpu)
 {
 	/* Fail early if we don't have CPU_OFF support */
@@ -99,7 +95,7 @@ static int cpu_psci_cpu_kill(unsigned int cpu)
 	do {
 		err = psci_ops.affinity_info(cpu_logical_map(cpu), 0);
 		if (err == PSCI_0_2_AFFINITY_LEVEL_OFF) {
-			pr_debug("CPU%d killed (polled %d ms)\n", cpu,
+			pr_info("CPU%d killed (polled %d ms)\n", cpu,
 				jiffies_to_msecs(jiffies - start));
 			return 0;
 		}
@@ -115,14 +111,11 @@ static int cpu_psci_cpu_kill(unsigned int cpu)
 
 const struct cpu_operations cpu_psci_ops = {
 	.name		= "psci",
-#ifdef CONFIG_CPU_IDLE
-	.cpu_init_idle	= psci_cpu_init_idle,
-	.cpu_suspend	= psci_cpu_suspend_enter,
-#endif
 	.cpu_init	= cpu_psci_cpu_init,
 	.cpu_prepare	= cpu_psci_cpu_prepare,
 	.cpu_boot	= cpu_psci_cpu_boot,
 #ifdef CONFIG_HOTPLUG_CPU
+	.cpu_can_disable = cpu_psci_cpu_can_disable,
 	.cpu_disable	= cpu_psci_cpu_disable,
 	.cpu_die	= cpu_psci_cpu_die,
 	.cpu_kill	= cpu_psci_cpu_kill,

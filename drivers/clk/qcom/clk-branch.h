@@ -1,15 +1,5 @@
-/*
- * Copyright (c) 2013, 2016, The Linux Foundation. All rights reserved.
- *
- * This software is licensed under the terms of the GNU General Public
- * License version 2, as published by the Free Software Foundation, and
- * may be copied, distributed, and modified under those terms.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
- */
+/* SPDX-License-Identifier: GPL-2.0 */
+/* Copyright (c) 2013, The Linux Foundation. All rights reserved. */
 
 #ifndef __QCOM_CLK_BRANCH_H__
 #define __QCOM_CLK_BRANCH_H__
@@ -42,41 +32,43 @@ struct clk_branch {
 #define BRANCH_HALT_ENABLE		1 /* pol: 0 = halt */
 #define BRANCH_HALT_ENABLE_VOTED	(BRANCH_HALT_ENABLE | BRANCH_VOTED)
 #define BRANCH_HALT_DELAY		2 /* No bit to check; just delay */
+#define BRANCH_HALT_SKIP		3 /* Don't check halt bit */
 
 	struct clk_regmap clkr;
 };
 
-/**
- * struct clk_gate2 - gating clock with status bit and dynamic hardware gating
- * @udelay: halt delay in microseconds on clock branch Enable/Disable
- * @clkr: handle between common and hardware-specific interfaces
- *
- * Clock which can gate its output.
- */
-struct clk_gate2 {
-	u32	udelay;
-	struct	clk_regmap clkr;
-};
+/* Branch clock common bits for HLOS-owned clocks */
+#define CBCR_FORCE_MEM_CORE_ON		BIT(14)
+#define CBCR_FORCE_MEM_PERIPH_ON	BIT(13)
+#define CBCR_FORCE_MEM_PERIPH_OFF	BIT(12)
+
+static inline void qcom_branch_set_force_mem_core(struct regmap *regmap,
+						  struct clk_branch clk, bool on)
+{
+	regmap_update_bits(regmap, clk.halt_reg, CBCR_FORCE_MEM_CORE_ON,
+			   on ? CBCR_FORCE_MEM_CORE_ON : 0);
+}
+
+static inline void qcom_branch_set_force_periph_on(struct regmap *regmap,
+						   struct clk_branch clk, bool on)
+{
+	regmap_update_bits(regmap, clk.halt_reg, CBCR_FORCE_MEM_PERIPH_ON,
+			   on ? CBCR_FORCE_MEM_PERIPH_ON : 0);
+}
+
+static inline void qcom_branch_set_force_periph_off(struct regmap *regmap,
+						    struct clk_branch clk, bool on)
+{
+	regmap_update_bits(regmap, clk.halt_reg, CBCR_FORCE_MEM_PERIPH_OFF,
+			   on ? CBCR_FORCE_MEM_PERIPH_OFF : 0);
+}
 
 extern const struct clk_ops clk_branch_ops;
 extern const struct clk_ops clk_branch2_ops;
-extern const struct clk_ops clk_gate2_ops;
 extern const struct clk_ops clk_branch_simple_ops;
-extern const struct clk_ops clk_branch2_hw_ctl_ops;
+extern const struct clk_ops clk_branch2_aon_ops;
 
 #define to_clk_branch(_hw) \
 	container_of(to_clk_regmap(_hw), struct clk_branch, clkr)
-
-#define to_clk_gate2(_hw) \
-	container_of(to_clk_regmap(_hw), struct clk_gate2, clkr)
-
-enum branch_mem_flags {
-	CLKFLAG_RETAIN_PERIPH,
-	CLKFLAG_NORETAIN_PERIPH,
-	CLKFLAG_RETAIN_MEM,
-	CLKFLAG_NORETAIN_MEM,
-	CLKFLAG_PERIPH_OFF_SET,
-	CLKFLAG_PERIPH_OFF_CLEAR,
-};
 
 #endif

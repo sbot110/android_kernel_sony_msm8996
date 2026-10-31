@@ -1,15 +1,10 @@
+// SPDX-License-Identifier: GPL-2.0-or-later
 /*
  * I2C access for DA9052 PMICs.
  *
  * Copyright(c) 2011 Dialog Semiconductor Ltd.
  *
  * Author: David Dajun Chen <dchen@diasemi.com>
- *
- * This program is free software; you can redistribute it and/or modify
- * it under the terms of the GNU General Public License as published by
- * the Free Software Foundation; either version 2 of the License, or
- * (at your option) any later version.
- *
  */
 
 #include <linux/device.h>
@@ -70,7 +65,7 @@ static int da9052_i2c_fix(struct da9052 *da9052, unsigned char reg)
 	case DA9053_BA:
 	case DA9053_BB:
 		/* A dummy read to a safe register address. */
-	if (!i2c_safe_reg(reg))
+		if (!i2c_safe_reg(reg))
 			return regmap_read(da9052->regmap,
 					   DA9052_PARK_REGISTER,
 					   &val);
@@ -160,13 +155,8 @@ static int da9052_i2c_probe(struct i2c_client *client,
 		return ret;
 
 #ifdef CONFIG_OF
-	if (!id) {
-		struct device_node *np = client->dev.of_node;
-		const struct of_device_id *deviceid;
-
-		deviceid = of_match_node(dialog_dt_ids, np);
-		id = deviceid->data;
-	}
+	if (!id)
+		id = of_device_get_match_data(&client->dev);
 #endif
 
 	if (!id) {

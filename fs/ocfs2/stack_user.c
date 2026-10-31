@@ -1,20 +1,10 @@
-/* -*- mode: c; c-basic-offset: 8; -*-
- * vim: noexpandtab sw=8 ts=8 sts=0:
- *
+// SPDX-License-Identifier: GPL-2.0-only
+/*
  * stack_user.c
  *
  * Code which interfaces ocfs2 with fs/dlm and a userspace stack.
  *
  * Copyright (C) 2007 Oracle.  All rights reserved.
- *
- * This program is free software; you can redistribute it and/or
- * modify it under the terms of the GNU General Public
- * License as published by the Free Software Foundation, version 2.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
- * General Public License for more details.
  */
 
 #include <linux/module.h>
@@ -24,7 +14,7 @@
 #include <linux/slab.h>
 #include <linux/reboot.h>
 #include <linux/sched.h>
-#include <asm/uaccess.h>
+#include <linux/uaccess.h>
 
 #include "stackglue.h"
 
@@ -336,17 +326,13 @@ static int ocfs2_control_install_private(struct file *file)
 		ocfs2_control_this_node = p->op_this_node;
 		running_proto.pv_major = p->op_proto.pv_major;
 		running_proto.pv_minor = p->op_proto.pv_minor;
-	}
-
-out_unlock:
-	mutex_unlock(&ocfs2_control_lock);
-
-	if (!rc && set_p) {
-		/* We set the global values successfully */
 		atomic_inc(&ocfs2_control_opened);
 		ocfs2_control_set_handshake_state(file,
 					OCFS2_CONTROL_HANDSHAKE_VALID);
 	}
+
+out_unlock:
+	mutex_unlock(&ocfs2_control_lock);
 
 	return rc;
 }
@@ -398,7 +384,7 @@ static int ocfs2_control_do_setnode_msg(struct file *file,
 
 static int ocfs2_control_do_setversion_msg(struct file *file,
 					   struct ocfs2_control_message_setv *msg)
- {
+{
 	long major, minor;
 	char *ptr = NULL;
 	struct ocfs2_control_private *p = file->private_data;
@@ -1007,10 +993,17 @@ static int user_cluster_connect(struct ocfs2_cluster_connection *conn)
 	lc->oc_type = NO_CONTROLD;
 
 	rc = dlm_new_lockspace(conn->cc_name, conn->cc_cluster_name,
-			       DLM_LSFL_FS, DLM_LVB_LEN,
+			       DLM_LSFL_FS | DLM_LSFL_NEWEXCL, DLM_LVB_LEN,
 			       &ocfs2_ls_ops, conn, &ops_rv, &fsdlm);
-	if (rc)
+	if (rc) {
+		if (rc == -EEXIST || rc == -EPROTO)
+			printk(KERN_ERR "ocfs2: Unable to create the "
+				"lockspace %s (%d), because a ocfs2-tools "
+				"program is running on this file system "
+				"with the same name lockspace\n",
+				conn->cc_name, rc);
 		goto out;
+	}
 
 	if (ops_rv == -EOPNOTSUPP) {
 		lc->oc_type = WITH_CONTROLD;
@@ -1033,6 +1026,7 @@ static int user_cluster_connect(struct ocfs2_cluster_connection *conn)
 			printk(KERN_ERR "ocfs2: Could not determine"
 					" locking version\n");
 			user_cluster_disconnect(conn);
+			lc = NULL;
 			goto out;
 		}
 		wait_event(lc->oc_wait, (atomic_read(&lc->oc_this_node) > 0));

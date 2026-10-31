@@ -41,7 +41,7 @@ $(DISTFILES_PATH)/$(1):
 	flock -x $$@.lock -c '[ -f $$@ ] && exit 0; wget -O $$@.tmp $(MIRROR)$(1) || wget -O $$@.tmp $(2)$(1) || rm -f $$@.tmp; [ -f $$@.tmp ] || exit 1; if echo "$(3)  $$@.tmp" | sha256sum -c -; then mv $$@.tmp $$@; else rm -f $$@.tmp; exit 71; fi'
 endef
 
-$(eval $(call tar_download,MUSL,musl,1.1.24,.tar.gz,https://www.musl-libc.org/releases/,1370c9a812b2cf2a7d92802510cca0058cc37e66a7bedd70051f0a34015022a3))
+$(eval $(call tar_download,MUSL,musl,1.2.0,.tar.gz,https://musl.libc.org/releases/,c6de7b191139142d3f9a7b5b702c9cae1b5ee6e7f57e582da9328629408fd4e8))
 $(eval $(call tar_download,IPERF,iperf,3.7,.tar.gz,https://downloads.es.net/pub/iperf/,d846040224317caf2f75c843d309a950a7db23f9b44b94688ccbe557d6d1710c))
 $(eval $(call tar_download,BASH,bash,5.0,.tar.gz,https://ftp.gnu.org/gnu/bash/,b4a80f2ac66170b2913efbfb9f2594f1f76c7b1afd11f799e22035d63077fb4d))
 $(eval $(call tar_download,IPROUTE2,iproute2,5.6.0,.tar.xz,https://www.kernel.org/pub/linux/utils/net/iproute2/,1b5b0e25ce6e23da7526ea1da044e814ad85ba761b10dd29c2b027c056b04692))
@@ -68,10 +68,8 @@ CROSS_COMPILE_FLAG := --build=$(CBUILD) --host=$(CHOST)
 export CROSS_COMPILE=$(CBUILD)-
 STRIP := $(CBUILD)-strip
 endif
-QEMU_VPORT_RESULT :=
 ifeq ($(ARCH),aarch64)
 QEMU_ARCH := aarch64
-QEMU_VPORT_RESULT := virtio-serial-device
 KERNEL_ARCH := arm64
 KERNEL_BZIMAGE := $(KERNEL_BUILD_PATH)/arch/arm64/boot/Image
 ifeq ($(HOST_ARCH),$(ARCH))
@@ -82,7 +80,6 @@ CFLAGS += -march=armv8-a -mtune=cortex-a53
 endif
 else ifeq ($(ARCH),aarch64_be)
 QEMU_ARCH := aarch64
-QEMU_VPORT_RESULT := virtio-serial-device
 KERNEL_ARCH := arm64
 KERNEL_BZIMAGE := $(KERNEL_BUILD_PATH)/arch/arm64/boot/Image
 ifeq ($(HOST_ARCH),$(ARCH))
@@ -93,7 +90,6 @@ CFLAGS += -march=armv8-a -mtune=cortex-a53
 endif
 else ifeq ($(ARCH),arm)
 QEMU_ARCH := arm
-QEMU_VPORT_RESULT := virtio-serial-device
 KERNEL_ARCH := arm
 KERNEL_BZIMAGE := $(KERNEL_BUILD_PATH)/arch/arm/boot/zImage
 ifeq ($(HOST_ARCH),$(ARCH))
@@ -104,7 +100,6 @@ CFLAGS += -march=armv7-a -mtune=cortex-a15 -mabi=aapcs-linux
 endif
 else ifeq ($(ARCH),armeb)
 QEMU_ARCH := arm
-QEMU_VPORT_RESULT := virtio-serial-device
 KERNEL_ARCH := arm
 KERNEL_BZIMAGE := $(KERNEL_BUILD_PATH)/arch/arm/boot/zImage
 ifeq ($(HOST_ARCH),$(ARCH))
@@ -204,7 +199,7 @@ KERNEL_ARCH := m68k
 KERNEL_BZIMAGE := $(KERNEL_BUILD_PATH)/vmlinux
 KERNEL_CMDLINE := $(shell sed -n 's/CONFIG_CMDLINE=\(.*\)/\1/p' arch/m68k.config)
 ifeq ($(HOST_ARCH),$(ARCH))
-QEMU_MACHINE := -cpu host,accel=kvm -machine q800 -append $(KERNEL_CMDLINE)
+QEMU_MACHINE := -cpu host,accel=kvm -machine q800 -smp 1 -append $(KERNEL_CMDLINE)
 else
 QEMU_MACHINE := -machine q800 -smp 1 -append $(KERNEL_CMDLINE)
 endif
@@ -217,7 +212,6 @@ MUSL_CC := $(BUILD_PATH)/musl-gcc
 export CC := $(MUSL_CC)
 USERSPACE_DEPS := $(MUSL_CC) $(BUILD_PATH)/include/.installed $(BUILD_PATH)/include/linux/.installed
 
-comma := ,
 build: $(KERNEL_BZIMAGE)
 qemu: $(KERNEL_BZIMAGE)
 	rm -f $(BUILD_PATH)/result
@@ -228,8 +222,7 @@ qemu: $(KERNEL_BZIMAGE)
 		$(QEMU_MACHINE) \
 		-m $$(grep -q CONFIG_DEBUG_KMEMLEAK=y $(KERNEL_BUILD_PATH)/.config && echo 1G || echo 256M) \
 		-serial stdio \
-		-chardev file,path=$(BUILD_PATH)/result,id=result \
-		$(if $(QEMU_VPORT_RESULT),-device $(QEMU_VPORT_RESULT) -device virtserialport$(comma)chardev=result,-serial chardev:result) \
+		-serial file:$(BUILD_PATH)/result \
 		-no-reboot \
 		-monitor none \
 		-kernel $<

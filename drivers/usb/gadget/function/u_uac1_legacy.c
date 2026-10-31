@@ -1,12 +1,9 @@
+// SPDX-License-Identifier: GPL-2.0+
 /*
  * u_uac1.c -- ALSA audio utilities for Gadget stack
  *
  * Copyright (C) 2008 Bryan Wu <cooloney@kernel.org>
  * Copyright (C) 2008 Analog Devices, Inc
- *
- * Enter bugs at http://blackfin.uclinux.org/
- *
- * Licensed under the GPL-2 or later.
  */
 
 #include <linux/kernel.h>
@@ -26,7 +23,7 @@
 
 /*-------------------------------------------------------------------------*/
 
-/**
+/*
  * Some ALSA internal helper functions
  */
 static int snd_interval_refine_set(struct snd_interval *i, unsigned int val)
@@ -89,7 +86,7 @@ static int _snd_pcm_hw_param_set(struct snd_pcm_hw_params *params,
 }
 /*-------------------------------------------------------------------------*/
 
-/**
+/*
  * Set default hardware params
  */
 static int playback_default_hw_params(struct gaudio_snd_dev *snd)
@@ -149,7 +146,7 @@ static int playback_default_hw_params(struct gaudio_snd_dev *snd)
 	return 0;
 }
 
-/**
+/*
  * Playback audio buffer data by ALSA PCM device
  */
 size_t u_audio_playback(struct gaudio *card, void *buf, size_t count)
@@ -157,7 +154,6 @@ size_t u_audio_playback(struct gaudio *card, void *buf, size_t count)
 	struct gaudio_snd_dev	*snd = &card->playback;
 	struct snd_pcm_substream *substream = snd->substream;
 	struct snd_pcm_runtime *runtime = substream->runtime;
-	mm_segment_t old_fs;
 	ssize_t result;
 	snd_pcm_sframes_t frames;
 
@@ -174,15 +170,11 @@ try_again:
 	}
 
 	frames = bytes_to_frames(runtime, count);
-	old_fs = get_fs();
-	set_fs(KERNEL_DS);
-	result = snd_pcm_lib_write(snd->substream, (void __user *)buf, frames);
+	result = snd_pcm_kernel_write(snd->substream, buf, frames);
 	if (result != frames) {
 		ERROR(card, "Playback error: %d\n", (int)result);
-		set_fs(old_fs);
 		goto try_again;
 	}
-	set_fs(old_fs);
 
 	return 0;
 }
@@ -197,7 +189,7 @@ int u_audio_get_playback_rate(struct gaudio *card)
 	return card->playback.rate;
 }
 
-/**
+/*
  * Open ALSA PCM and control device files
  * Initial the PCM or control device
  */
@@ -258,7 +250,7 @@ static int gaudio_open_snd_dev(struct gaudio *card)
 	return 0;
 }
 
-/**
+/*
  * Close ALSA PCM and control device files
  */
 static int gaudio_close_snd_dev(struct gaudio *gau)
@@ -267,29 +259,23 @@ static int gaudio_close_snd_dev(struct gaudio *gau)
 
 	/* Close control device */
 	snd = &gau->control;
-	if (snd->filp) {
+	if (snd->filp)
 		filp_close(snd->filp, NULL);
-		snd->filp = NULL;
-	}
 
 	/* Close PCM playback device and setup substream */
 	snd = &gau->playback;
-	if (snd->filp) {
+	if (snd->filp)
 		filp_close(snd->filp, NULL);
-		snd->filp = NULL;
-	}
 
 	/* Close PCM capture device and setup substream */
 	snd = &gau->capture;
-	if (snd->filp) {
+	if (snd->filp)
 		filp_close(snd->filp, NULL);
-		snd->filp = NULL;
-	}
 
 	return 0;
 }
 
-/**
+/*
  * gaudio_setup - setup ALSA interface and preparing for USB transfer
  *
  * This sets up PCM, mixer or MIDI ALSA devices fore USB gadget using.
@@ -308,7 +294,7 @@ int gaudio_setup(struct gaudio *card)
 
 }
 
-/**
+/*
  * gaudio_cleanup - remove ALSA device interface
  *
  * This is called to free all resources allocated by @gaudio_setup().

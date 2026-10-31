@@ -1,3 +1,4 @@
+/* SPDX-License-Identifier: GPL-2.0 WITH Linux-syscall-note */
 /*
  *
  * Copyright (c) 2011, Microsoft Corporation.
@@ -25,7 +26,7 @@
 #ifndef _UAPI_HYPERV_H
 #define _UAPI_HYPERV_H
 
-#include <linux/uuid.h>
+#include <linux/types.h>
 
 /*
  * Framework version for util services.
@@ -118,8 +119,8 @@ enum hv_fcopy_op {
 
 struct hv_fcopy_hdr {
 	__u32 operation;
-	uuid_le service_id0; /* currently unused */
-	uuid_le service_id1; /* currently unused */
+	__u8 service_id0[16]; /* currently unused */
+	__u8 service_id1[16]; /* currently unused */
 } __attribute__((packed));
 
 #define OVER_WRITE	0x1
@@ -218,7 +219,7 @@ struct hv_do_fcopy {
  * kernel and user-level daemon communicate using a connector channel.
  *
  * The user mode component first registers with the
- * the kernel component. Subsequently, the kernel component requests, data
+ * kernel component. Subsequently, the kernel component requests, data
  * for the specified keys. In response to this message the user mode component
  * fills in the value corresponding to the specified key. We overload the
  * sequence field in the cn_msg header to define our KVP message types.
@@ -350,7 +351,7 @@ struct hv_kvp_exchg_msg_value {
 		__u8 value[HV_KVP_EXCHANGE_MAX_VALUE_SIZE];
 		__u32 value_u32;
 		__u64 value_u64;
-	};
+	} __attribute__((packed));
 } __attribute__((packed));
 
 struct hv_kvp_msg_enumerate {

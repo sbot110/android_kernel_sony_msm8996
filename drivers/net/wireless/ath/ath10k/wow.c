@@ -1,23 +1,12 @@
+// SPDX-License-Identifier: ISC
 /*
- * Copyright (c) 2015 Qualcomm Atheros, Inc.
- *
- * Permission to use, copy, modify, and/or distribute this software for any
- * purpose with or without fee is hereby granted, provided that the above
- * copyright notice and this permission notice appear in all copies.
- *
- * THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES
- * WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF
- * MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR
- * ANY SPECIAL, DIRECT, INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES
- * WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN AN
- * ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF
- * OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
+ * Copyright (c) 2015-2017 Qualcomm Atheros, Inc.
+ * Copyright (c) 2018, The Linux Foundation. All rights reserved.
  */
 
 #include "mac.h"
 
 #include <net/mac80211.h>
-#include <net/addrconf.h>
 #include "hif.h"
 #include "core.h"
 #include "debug.h"
@@ -26,9 +15,7 @@
 
 static const struct wiphy_wowlan_support ath10k_wowlan_support = {
 	.flags = WIPHY_WOWLAN_DISCONNECT |
-		WIPHY_WOWLAN_MAGIC_PKT |
-		WIPHY_WOWLAN_SUPPORTS_GTK_REKEY |
-		WIPHY_WOWLAN_GTK_REKEY_FAILURE,
+		 WIPHY_WOWLAN_MAGIC_PKT,
 	.pattern_min_len = WOW_MIN_PATTERN_SIZE,
 	.pattern_max_len = WOW_MAX_PATTERN_SIZE,
 	.max_pkt_offset = WOW_MAX_PKT_OFFSET,
@@ -79,13 +66,208 @@ static int ath10k_wow_cleanup(struct ath10k *ar)
 	return 0;
 }
 
+/*
+ * Convert a 802.3 format to a 802.11 format.
+ *         +------------+-----------+--------+----------------+
+ * 802.3:  |dest mac(6B)|src mac(6B)|type(2B)|     body...    |
+ *         +------------+-----------+--------+----------------+
+ *                |__         |_______    |____________  |________
+ *                   |                |                |          |
+ *         +--+------------+----+-----------+---------------+-----------+
+ * 802.11: |4B|dest mac(6B)| 6B |src mac(6B)|  8B  |type(2B)|  body...  |
+ *         +--+------------+----+-----------+---------------+-----------+
+ */
+static void ath10k_wow_convert_8023_to_80211(struct cfg80211_pkt_pattern *new,
+					     const struct cfg80211_pkt_pattern *old)
+{
+	u8 hdr_8023_pattern[ETH_HLEN] = {};
+	u8 hdr_8023_bit_mask[ETH_HLEN] = {};
+	u8 hdr_80211_pattern[WOW_HDR_LEN] = {};
+	u8 hdr_80211_bit_mask[WOW_HDR_LEN] = {};
+
+	int total_len = old->pkt_offset + old->pattern_len;
+	int hdr_80211_end_offset;
+
+	struct ieee80211_hdr_3addr *new_hdr_pattern =
+		(struct ieee80211_hdr_3addr *)hdr_80211_pattern;
+	struct ieee80211_hdr_3addr *new_hdr_mask =
+		(struct ieee80211_hdr_3addr *)hdr_80211_bit_mask;
+	struct ethhdr *old_hdr_pattern = (struct ethhdr *)hdr_8023_pattern;
+	struct ethhdr *old_hdr_mask = (struct ethhdr *)hdr_8023_bit_mask;
+	int hdr_len = sizeof(*new_hdr_pattern);
+
+	struct rfc1042_hdr *new_rfc_pattern =
+		(struct rfc1042_hdr *)(hdr_80211_pattern + hdr_len);
+	struct rfc1042_hdr *new_rfc_mask =
+		(struct rfc1042_hdr *)(hdr_80211_bit_mask + hdr_len);
+	int rfc_len = sizeof(*new_rfc_pattern);
+
+	memcpy(hdr_8023_pattern + old->pkt_offset,
+	       old->pattern, ETH_HLEN - old->pkt_offset);
+	memcpy(hdr_8023_bit_mask + old->pkt_offset,
+	       old->mask, ETH_HLEN - old->pkt_offset);
+
+	/* Copy destination address */
+	memcpy(new_hdr_pattern->addr1, old_hdr_pattern->h_dest, ETH_ALEN);
+	memcpy(new_hdr_mask->addr1, old_hdr_mask->h_dest, ETH_ALEN);
+
+	/* Copy source address */
+	memcpy(new_hdr_pattern->addr3, old_hdr_pattern->h_source, ETH_ALEN);
+	memcpy(new_hdr_mask->addr3, old_hdr_mask->h_source, ETH_ALEN);
+
+	/* Copy logic link type */
+	memcpy(&new_rfc_pattern->snap_type,
+	       &old_hdr_pattern->h_proto,
+	       sizeof(old_hdr_pattern->h_proto));
+	memcpy(&new_rfc_mask->snap_type,
+	       &old_hdr_mask->h_proto,
+	       sizeof(old_hdr_mask->h_proto));
+
+	/* Calculate new pkt_offset */
+	if (old->pkt_offset < ETH_ALEN)
+		new->pkt_offset = old->pkt_offset +
+			offsetof(struct ieee80211_hdr_3addr, addr1);
+	else if (old->pkt_offset < offsetof(struct ethhdr, h_proto))
+		new->pkt_offset = old->pkt_offset +
+			offsetof(struct ieee80211_hdr_3addr, addr3) -
+			offsetof(struct ethhdr, h_source);
+	else
+		new->pkt_offset = old->pkt_offset + hdr_len + rfc_len - ETH_HLEN;
+
+	/* Calculate new hdr end offset */
+	if (total_len > ETH_HLEN)
+		hdr_80211_end_offset = hdr_len + rfc_len;
+	else if (total_len > offsetof(struct ethhdr, h_proto))
+		hdr_80211_end_offset = hdr_len + rfc_len + total_len - ETH_HLEN;
+	else if (total_len > ETH_ALEN)
+		hdr_80211_end_offset = total_len - ETH_ALEN +
+			offsetof(struct ieee80211_hdr_3addr, addr3);
+	else
+		hdr_80211_end_offset = total_len +
+			offsetof(struct ieee80211_hdr_3addr, addr1);
+
+	new->pattern_len = hdr_80211_end_offset - new->pkt_offset;
+
+	memcpy((u8 *)new->pattern,
+	       hdr_80211_pattern + new->pkt_offset,
+	       new->pattern_len);
+	memcpy((u8 *)new->mask,
+	       hdr_80211_bit_mask + new->pkt_offset,
+	       new->pattern_len);
+
+	if (total_len > ETH_HLEN) {
+		/* Copy frame body */
+		memcpy((u8 *)new->pattern + new->pattern_len,
+		       (void *)old->pattern + ETH_HLEN - old->pkt_offset,
+		       total_len - ETH_HLEN);
+		memcpy((u8 *)new->mask + new->pattern_len,
+		       (void *)old->mask + ETH_HLEN - old->pkt_offset,
+		       total_len - ETH_HLEN);
+
+		new->pattern_len += total_len - ETH_HLEN;
+	}
+}
+
+static int ath10k_wmi_pno_check(struct ath10k *ar, u32 vdev_id,
+				struct cfg80211_sched_scan_request *nd_config,
+				struct wmi_pno_scan_req *pno)
+{
+	int i, j, ret = 0;
+	u8 ssid_len;
+
+	pno->enable = 1;
+	pno->vdev_id = vdev_id;
+	pno->uc_networks_count = nd_config->n_match_sets;
+
+	if (!pno->uc_networks_count ||
+	    pno->uc_networks_count > WMI_PNO_MAX_SUPP_NETWORKS)
+		return -EINVAL;
+
+	if (nd_config->n_channels > WMI_PNO_MAX_NETW_CHANNELS_EX)
+		return -EINVAL;
+
+	/* Filling per profile  params */
+	for (i = 0; i < pno->uc_networks_count; i++) {
+		ssid_len = nd_config->match_sets[i].ssid.ssid_len;
+
+		if (ssid_len == 0 || ssid_len > 32)
+			return -EINVAL;
+
+		pno->a_networks[i].ssid.ssid_len = __cpu_to_le32(ssid_len);
+
+		memcpy(pno->a_networks[i].ssid.ssid,
+		       nd_config->match_sets[i].ssid.ssid,
+		       nd_config->match_sets[i].ssid.ssid_len);
+		pno->a_networks[i].authentication = 0;
+		pno->a_networks[i].encryption     = 0;
+		pno->a_networks[i].bcast_nw_type  = 0;
+
+		/*Copying list of valid channel into request */
+		pno->a_networks[i].channel_count = nd_config->n_channels;
+		pno->a_networks[i].rssi_threshold = nd_config->match_sets[i].rssi_thold;
+
+		for (j = 0; j < nd_config->n_channels; j++) {
+			pno->a_networks[i].channels[j] =
+					nd_config->channels[j]->center_freq;
+		}
+	}
+
+	/* set scan to passive if no SSIDs are specified in the request */
+	if (nd_config->n_ssids == 0)
+		pno->do_passive_scan = true;
+	else
+		pno->do_passive_scan = false;
+
+	for (i = 0; i < nd_config->n_ssids; i++) {
+		j = 0;
+		while (j < pno->uc_networks_count) {
+			if (__le32_to_cpu(pno->a_networks[j].ssid.ssid_len) ==
+				nd_config->ssids[i].ssid_len &&
+			(memcmp(pno->a_networks[j].ssid.ssid,
+				nd_config->ssids[i].ssid,
+				__le32_to_cpu(pno->a_networks[j].ssid.ssid_len)) == 0)) {
+				pno->a_networks[j].bcast_nw_type = BCAST_HIDDEN;
+				break;
+			}
+			j++;
+		}
+	}
+
+	if (nd_config->n_scan_plans == 2) {
+		pno->fast_scan_period = nd_config->scan_plans[0].interval * MSEC_PER_SEC;
+		pno->fast_scan_max_cycles = nd_config->scan_plans[0].iterations;
+		pno->slow_scan_period =
+			nd_config->scan_plans[1].interval * MSEC_PER_SEC;
+	} else if (nd_config->n_scan_plans == 1) {
+		pno->fast_scan_period = nd_config->scan_plans[0].interval * MSEC_PER_SEC;
+		pno->fast_scan_max_cycles = 1;
+		pno->slow_scan_period = nd_config->scan_plans[0].interval * MSEC_PER_SEC;
+	} else {
+		ath10k_warn(ar, "Invalid number of scan plans %d !!",
+			    nd_config->n_scan_plans);
+	}
+
+	if (nd_config->flags & NL80211_SCAN_FLAG_RANDOM_ADDR) {
+		/* enable mac randomization */
+		pno->enable_pno_scan_randomization = 1;
+		memcpy(pno->mac_addr, nd_config->mac_addr, ETH_ALEN);
+		memcpy(pno->mac_addr_mask, nd_config->mac_addr_mask, ETH_ALEN);
+	}
+
+	pno->delay_start_time = nd_config->delay;
+
+	/* Current FW does not support min-max range for dwell time */
+	pno->active_max_time = WMI_ACTIVE_MAX_CHANNEL_TIME;
+	pno->passive_max_time = WMI_PASSIVE_MAX_CHANNEL_TIME;
+	return ret;
+}
+
 static int ath10k_vif_wow_set_wakeups(struct ath10k_vif *arvif,
 				      struct cfg80211_wowlan *wowlan)
 {
 	int ret, i;
 	unsigned long wow_mask = 0;
 	struct ath10k *ar = arvif->ar;
-	struct ieee80211_bss_conf *bss = &arvif->vif->bss_conf;
 	const struct cfg80211_pkt_pattern *patterns = wowlan->patterns;
 	int pattern_id = 0;
 
@@ -93,7 +275,7 @@ static int ath10k_vif_wow_set_wakeups(struct ath10k_vif *arvif,
 	switch (arvif->vdev_type) {
 	case WMI_VDEV_TYPE_IBSS:
 		__set_bit(WOW_BEACON_EVENT, &wow_mask);
-		 /* fall through */
+		fallthrough;
 	case WMI_VDEV_TYPE_AP:
 		__set_bit(WOW_DEAUTH_RECVD_EVENT, &wow_mask);
 		__set_bit(WOW_DISASSOC_RECVD_EVENT, &wow_mask);
@@ -104,18 +286,34 @@ static int ath10k_vif_wow_set_wakeups(struct ath10k_vif *arvif,
 		__set_bit(WOW_RA_MATCH_EVENT, &wow_mask);
 		break;
 	case WMI_VDEV_TYPE_STA:
-		if (arvif->is_up && bss->assoc) {
-			if (wowlan->disconnect) {
-				__set_bit(WOW_DEAUTH_RECVD_EVENT, &wow_mask);
-				__set_bit(WOW_DISASSOC_RECVD_EVENT, &wow_mask);
-				__set_bit(WOW_BMISS_EVENT, &wow_mask);
-				__set_bit(WOW_CSA_IE_EVENT, &wow_mask);
+		if (wowlan->disconnect) {
+			__set_bit(WOW_DEAUTH_RECVD_EVENT, &wow_mask);
+			__set_bit(WOW_DISASSOC_RECVD_EVENT, &wow_mask);
+			__set_bit(WOW_BMISS_EVENT, &wow_mask);
+			__set_bit(WOW_CSA_IE_EVENT, &wow_mask);
+		}
+
+		if (wowlan->magic_pkt)
+			__set_bit(WOW_MAGIC_PKT_RECVD_EVENT, &wow_mask);
+
+		if (wowlan->nd_config) {
+			struct wmi_pno_scan_req *pno;
+			int ret;
+
+			pno = kzalloc(sizeof(*pno), GFP_KERNEL);
+			if (!pno)
+				return -ENOMEM;
+
+			ar->nlo_enabled = true;
+
+			ret = ath10k_wmi_pno_check(ar, arvif->vdev_id,
+						   wowlan->nd_config, pno);
+			if (!ret) {
+				ath10k_wmi_wow_config_pno(ar, arvif->vdev_id, pno);
+				__set_bit(WOW_NLO_DETECTED_EVENT, &wow_mask);
 			}
 
-			if (wowlan->magic_pkt)
-				__set_bit(WOW_MAGIC_PKT_RECVD_EVENT, &wow_mask);
-			if (wowlan->gtk_rekey_failure)
-				__set_bit(WOW_GTK_ERR_EVENT, &wow_mask);
+			kfree(pno);
 		}
 		break;
 	default:
@@ -124,22 +322,41 @@ static int ath10k_vif_wow_set_wakeups(struct ath10k_vif *arvif,
 
 	for (i = 0; i < wowlan->n_patterns; i++) {
 		u8 bitmask[WOW_MAX_PATTERN_SIZE] = {};
+		u8 ath_pattern[WOW_MAX_PATTERN_SIZE] = {};
+		u8 ath_bitmask[WOW_MAX_PATTERN_SIZE] = {};
+		struct cfg80211_pkt_pattern new_pattern = {};
+		struct cfg80211_pkt_pattern old_pattern = patterns[i];
 		int j;
 
+		new_pattern.pattern = ath_pattern;
+		new_pattern.mask = ath_bitmask;
 		if (patterns[i].pattern_len > WOW_MAX_PATTERN_SIZE)
 			continue;
-
 		/* convert bytemask to bitmask */
 		for (j = 0; j < patterns[i].pattern_len; j++)
 			if (patterns[i].mask[j / 8] & BIT(j % 8))
 				bitmask[j] = 0xff;
+		old_pattern.mask = bitmask;
+
+		if (ar->wmi.rx_decap_mode == ATH10K_HW_TXRX_NATIVE_WIFI) {
+			if (patterns[i].pkt_offset < ETH_HLEN) {
+				ath10k_wow_convert_8023_to_80211(&new_pattern,
+								 &old_pattern);
+			} else {
+				new_pattern = old_pattern;
+				new_pattern.pkt_offset += WOW_HDR_LEN - ETH_HLEN;
+			}
+		}
+
+		if (WARN_ON(new_pattern.pattern_len > WOW_MAX_PATTERN_SIZE))
+			return -EINVAL;
 
 		ret = ath10k_wmi_wow_add_pattern(ar, arvif->vdev_id,
 						 pattern_id,
-						 patterns[i].pattern,
-						 bitmask,
-						 patterns[i].pattern_len,
-						 patterns[i].pkt_offset);
+						 new_pattern.pattern,
+						 new_pattern.mask,
+						 new_pattern.pattern_len,
+						 new_pattern.pkt_offset);
 		if (ret) {
 			ath10k_warn(ar, "failed to add pattern %i to vdev %i: %d\n",
 				    pattern_id,
@@ -177,6 +394,51 @@ static int ath10k_wow_set_wakeups(struct ath10k *ar,
 		ret = ath10k_vif_wow_set_wakeups(arvif, wowlan);
 		if (ret) {
 			ath10k_warn(ar, "failed to set wow wakeups on vdev %i: %d\n",
+				    arvif->vdev_id, ret);
+			return ret;
+		}
+	}
+
+	return 0;
+}
+
+static int ath10k_vif_wow_clean_nlo(struct ath10k_vif *arvif)
+{
+	int ret = 0;
+	struct ath10k *ar = arvif->ar;
+
+	switch (arvif->vdev_type) {
+	case WMI_VDEV_TYPE_STA:
+		if (ar->nlo_enabled) {
+			struct wmi_pno_scan_req *pno;
+
+			pno = kzalloc(sizeof(*pno), GFP_KERNEL);
+			if (!pno)
+				return -ENOMEM;
+
+			pno->enable = 0;
+			ar->nlo_enabled = false;
+			ret = ath10k_wmi_wow_config_pno(ar, arvif->vdev_id, pno);
+			kfree(pno);
+		}
+		break;
+	default:
+		break;
+	}
+	return ret;
+}
+
+static int ath10k_wow_nlo_cleanup(struct ath10k *ar)
+{
+	struct ath10k_vif *arvif;
+	int ret = 0;
+
+	lockdep_assert_held(&ar->conf_mutex);
+
+	list_for_each_entry(arvif, &ar->arvifs, list) {
+		ret = ath10k_vif_wow_clean_nlo(arvif);
+		if (ret) {
+			ath10k_warn(ar, "failed to clean nlo settings on vdev %i: %d\n",
 				    arvif->vdev_id, ret);
 			return ret;
 		}
@@ -232,253 +494,6 @@ static int ath10k_wow_wakeup(struct ath10k *ar)
 	return 0;
 }
 
-static int
-ath10k_wow_fill_vdev_ns_offload_struct(struct ath10k_vif *arvif,
-				       bool enable_offload)
-{
-	struct in6_addr addr[TARGET_NUM_STATIONS];
-	struct wmi_ns_arp_offload_req *ns;
-	struct wireless_dev *wdev;
-	struct inet6_dev *in6_dev;
-	struct in6_addr addr_type;
-	struct inet6_ifaddr *ifa;
-	struct ifacaddr6 *ifaca;
-	struct list_head *addr_list;
-	u32 scope, count = 0;
-	int i;
-
-	ns = &arvif->ns_offload;
-	if (!enable_offload) {
-		ns->offload_type = __cpu_to_le16(WMI_NS_ARP_OFFLOAD);
-		ns->enable_offload = __cpu_to_le16(WMI_ARP_NS_OFFLOAD_DISABLE);
-		return 0;
-	}
-
-	wdev = ieee80211_vif_to_wdev(arvif->vif);
-	if (!wdev)
-		return -ENODEV;
-
-	in6_dev = __in6_dev_get(wdev->netdev);
-	if (!in6_dev)
-		return -ENODEV;
-
-	memset(&addr, 0, TARGET_NUM_STATIONS * sizeof(struct in6_addr));
-	memset(&addr_type, 0, sizeof(struct in6_addr));
-
-	/* Unicast Addresses */
-	read_lock_bh(&in6_dev->lock);
-	list_for_each(addr_list, &in6_dev->addr_list) {
-		if (count >= TARGET_NUM_STATIONS) {
-			read_unlock_bh(&in6_dev->lock);
-			return -EINVAL;
-		}
-
-		ifa = list_entry(addr_list, struct inet6_ifaddr, if_list);
-		if (ifa->flags & IFA_F_DADFAILED)
-			continue;
-		scope = ipv6_addr_src_scope(&ifa->addr);
-		switch (scope) {
-		case IPV6_ADDR_SCOPE_GLOBAL:
-		case IPV6_ADDR_SCOPE_LINKLOCAL:
-			memcpy(&addr[count], &ifa->addr.s6_addr,
-			       sizeof(ifa->addr.s6_addr));
-			addr_type.s6_addr[count] = IPV6_ADDR_UNICAST;
-			count += 1;
-			break;
-		}
-	}
-
-	/* Anycast Addresses */
-	for (ifaca = in6_dev->ac_list; ifaca; ifaca = ifaca->aca_next) {
-		if (count >= TARGET_NUM_STATIONS) {
-			read_unlock_bh(&in6_dev->lock);
-			return -EINVAL;
-		}
-
-		scope = ipv6_addr_src_scope(&ifaca->aca_addr);
-		switch (scope) {
-		case IPV6_ADDR_SCOPE_GLOBAL:
-		case IPV6_ADDR_SCOPE_LINKLOCAL:
-			memcpy(&addr[count], &ifaca->aca_addr,
-			       sizeof(ifaca->aca_addr));
-			addr_type.s6_addr[count] = IPV6_ADDR_ANY;
-			count += 1;
-			break;
-		}
-	}
-	read_unlock_bh(&in6_dev->lock);
-
-	/* Filling up the request structure
-	 * Filling the self_addr with solicited address
-	 * A Solicited-Node multicast address is created by
-	 * taking the last 24 bits of a unicast or anycast
-	 * address and appending them to the prefix
-	 *
-	 * FF02:0000:0000:0000:0000:0001:FFXX:XXXX
-	 *
-	 * here XX is the unicast/anycast bits
-	 */
-	for (i = 0; i < count; i++) {
-		ns->info.self_addr[i].s6_addr[0] = 0xFF;
-		ns->info.self_addr[i].s6_addr[1] = 0x02;
-		ns->info.self_addr[i].s6_addr[11] = 0x01;
-		ns->info.self_addr[i].s6_addr[12] = 0xFF;
-		ns->info.self_addr[i].s6_addr[13] = addr[i].s6_addr[13];
-		ns->info.self_addr[i].s6_addr[14] = addr[i].s6_addr[14];
-		ns->info.self_addr[i].s6_addr[15] = addr[i].s6_addr[15];
-		ns->info.slot_idx = i;
-		memcpy(&ns->info.target_addr[i], &addr[i],
-		       sizeof(struct in6_addr));
-		ns->info.target_addr_valid.s6_addr[i] = 1;
-		ns->info.target_ipv6_ac.s6_addr[i] = addr_type.s6_addr[i];
-		memcpy(&ns->params.ipv6_addr, &ns->info.target_addr[i],
-		       sizeof(struct in6_addr));
-	}
-
-	ns->offload_type = __cpu_to_le16(WMI_NS_ARP_OFFLOAD);
-	ns->enable_offload = __cpu_to_le16(WMI_ARP_NS_OFFLOAD_ENABLE);
-	ns->num_ns_offload_count = __cpu_to_le16(count);
-
-	return 0;
-}
-
-static int
-ath10k_wow_fill_vdev_arp_offload_struct(struct ath10k_vif *arvif,
-					bool enable_offload)
-{
-	struct in_device *in_dev;
-	struct in_ifaddr *ifa;
-	bool offload_params_found = false;
-	struct wireless_dev *wdev = ieee80211_vif_to_wdev(arvif->vif);
-	struct wmi_ns_arp_offload_req *arp = &arvif->arp_offload;
-
-	if (!enable_offload) {
-		arp->offload_type = __cpu_to_le16(WMI_IPV4_ARP_REPLY_OFFLOAD);
-		arp->enable_offload = __cpu_to_le16(WMI_ARP_NS_OFFLOAD_DISABLE);
-		return 0;
-	}
-
-	if (!wdev)
-		return -ENODEV;
-	if (!wdev->netdev)
-		return -ENODEV;
-	in_dev = __in_dev_get_rtnl(wdev->netdev);
-	if (!in_dev)
-		return -ENODEV;
-
-	arp->offload_type = __cpu_to_le16(WMI_IPV4_ARP_REPLY_OFFLOAD);
-	arp->enable_offload = __cpu_to_le16(WMI_ARP_NS_OFFLOAD_ENABLE);
-	for (ifa = in_dev->ifa_list; ifa; ifa = ifa->ifa_next) {
-		if (!memcmp(ifa->ifa_label, wdev->netdev->name, IFNAMSIZ)) {
-			offload_params_found = true;
-			break;
-		}
-	}
-
-	if (!offload_params_found)
-		return -ENODEV;
-	memcpy(&arp->params.ipv4_addr, &ifa->ifa_local,
-	       sizeof(arp->params.ipv4_addr));
-
-	return 0;
-}
-
-static int ath10k_wow_enable_ns_arp_offload(struct ath10k *ar, bool offload)
-{
-	struct ath10k_vif *arvif;
-	int ret;
-
-	list_for_each_entry(arvif, &ar->arvifs, list) {
-		if (arvif->vdev_type != WMI_VDEV_TYPE_STA)
-			continue;
-
-		if (!arvif->is_up)
-			continue;
-
-		ret = ath10k_wow_fill_vdev_arp_offload_struct(arvif, offload);
-		if (ret) {
-			ath10k_err(ar, "ARP-offload config failed, vdev: %d\n",
-				   arvif->vdev_id);
-			return ret;
-		}
-
-		ret = ath10k_wow_fill_vdev_ns_offload_struct(arvif, offload);
-		if (ret) {
-			ath10k_err(ar, "NS-offload config failed, vdev: %d\n",
-				   arvif->vdev_id);
-			return ret;
-		}
-
-		ret = ath10k_wmi_set_arp_ns_offload(ar, arvif);
-		if (ret) {
-			ath10k_err(ar, "failed to send offload cmd, vdev: %d\n",
-				   arvif->vdev_id);
-			return ret;
-		}
-	}
-
-	return 0;
-}
-
-static int ath10k_config_wow_listen_interval(struct ath10k *ar)
-{
-	int ret;
-	u32 param = ar->wmi.vdev_param->listen_interval;
-	u8 listen_interval = ar->hw_values->default_listen_interval;
-	struct ath10k_vif *arvif;
-
-	if (!listen_interval)
-		return 0;
-
-	list_for_each_entry(arvif, &ar->arvifs, list) {
-		if (arvif->vdev_type != WMI_VDEV_TYPE_STA)
-			continue;
-		ret = ath10k_wmi_vdev_set_param(ar, arvif->vdev_id,
-						param, listen_interval);
-		if (ret) {
-			ath10k_err(ar, "failed to config LI for vdev_id: %d\n",
-				   arvif->vdev_id);
-			return ret;
-		}
-	}
-
-	return 0;
-}
-
-static int ath10k_wow_config_gtk_offload(struct ath10k *ar, bool gtk_offload)
-{
-	struct ath10k_vif *arvif;
-	struct ieee80211_bss_conf *bss;
-	struct wmi_gtk_rekey_data *rekey_data;
-	int ret;
-
-	list_for_each_entry(arvif, &ar->arvifs, list) {
-		if (arvif->vdev_type != WMI_VDEV_TYPE_STA)
-			continue;
-
-		bss = &arvif->vif->bss_conf;
-		if (!arvif->is_up || !bss->assoc)
-			continue;
-
-		rekey_data = &arvif->gtk_rekey_data;
-		if (!rekey_data->valid)
-			continue;
-
-		if (gtk_offload)
-			rekey_data->enable_offload = WMI_GTK_OFFLOAD_ENABLE;
-		else
-			rekey_data->enable_offload = WMI_GTK_OFFLOAD_DISABLE;
-		ret = ath10k_wmi_gtk_offload(ar, arvif);
-		if (ret) {
-			ath10k_err(ar, "GTK offload failed for vdev_id: %d\n",
-				   arvif->vdev_id);
-			return ret;
-		}
-	}
-
-	return 0;
-}
-
 int ath10k_wow_op_suspend(struct ieee80211_hw *hw,
 			  struct cfg80211_wowlan *wowlan)
 {
@@ -500,31 +515,14 @@ int ath10k_wow_op_suspend(struct ieee80211_hw *hw,
 		goto exit;
 	}
 
-	ret = ath10k_wow_config_gtk_offload(ar, true);
-	if (ret) {
-		ath10k_warn(ar, "failed to enable GTK offload: %d\n", ret);
-		goto exit;
-	}
-
-	ret = ath10k_wow_enable_ns_arp_offload(ar, true);
-	if (ret) {
-		ath10k_warn(ar, "failed to enable ARP-NS offload: %d\n", ret);
-		goto disable_gtk_offload;
-	}
-
 	ret = ath10k_wow_set_wakeups(ar, wowlan);
 	if (ret) {
 		ath10k_warn(ar, "failed to set wow wakeup events: %d\n",
 			    ret);
-		goto disable_ns_arp_offload;
-	}
-
-	ret = ath10k_config_wow_listen_interval(ar);
-	if (ret) {
-		ath10k_warn(ar, "failed to config wow listen interval: %d\n",
-			    ret);
 		goto cleanup;
 	}
+
+	ath10k_mac_wait_tx_complete(ar);
 
 	ret = ath10k_wow_enable(ar);
 	if (ret) {
@@ -546,11 +544,6 @@ wakeup:
 cleanup:
 	ath10k_wow_cleanup(ar);
 
-disable_ns_arp_offload:
-	ath10k_wow_enable_ns_arp_offload(ar, false);
-
-disable_gtk_offload:
-	ath10k_wow_config_gtk_offload(ar, false);
 exit:
 	mutex_unlock(&ar->conf_mutex);
 	return ret ? 1 : 0;
@@ -566,46 +559,6 @@ void ath10k_wow_op_set_wakeup(struct ieee80211_hw *hw, bool enabled)
 		device_set_wakeup_enable(ar->dev, enabled);
 	}
 	mutex_unlock(&ar->conf_mutex);
-}
-
-static void ath10k_wow_op_report_wakeup_reason(struct ath10k *ar)
-{
-	struct cfg80211_wowlan_wakeup *wakeup = &ar->wow.wakeup;
-	struct ath10k_vif *arvif;
-
-	memset(wakeup, 0, sizeof(struct cfg80211_wowlan_wakeup));
-	switch (ar->wow.wakeup_reason) {
-	case WOW_REASON_UNSPECIFIED:
-		wakeup = NULL;
-		break;
-	case WOW_REASON_RECV_MAGIC_PATTERN:
-		wakeup->magic_pkt = true;
-		break;
-	case WOW_REASON_DEAUTH_RECVD:
-	case WOW_REASON_DISASSOC_RECVD:
-	case WOW_REASON_AP_ASSOC_LOST:
-	case WOW_REASON_CSA_EVENT:
-		wakeup->disconnect = true;
-		break;
-	case WOW_REASON_GTK_HS_ERR:
-		wakeup->gtk_rekey_failure = true;
-		break;
-	}
-	ar->wow.wakeup_reason = WOW_REASON_UNSPECIFIED;
-
-	if (wakeup) {
-		wakeup->pattern_idx = -1;
-		list_for_each_entry(arvif, &ar->arvifs, list) {
-			ieee80211_report_wowlan_wakeup(arvif->vif,
-						       wakeup, GFP_KERNEL);
-			if (wakeup->disconnect)
-				ieee80211_resume_disconnect(arvif->vif);
-		}
-	} else {
-		list_for_each_entry(arvif, &ar->arvifs, list)
-			ieee80211_report_wowlan_wakeup(arvif->vif,
-						       NULL, GFP_KERNEL);
-	}
 }
 
 int ath10k_wow_op_resume(struct ieee80211_hw *hw)
@@ -628,20 +581,12 @@ int ath10k_wow_op_resume(struct ieee80211_hw *hw)
 	}
 
 	ret = ath10k_wow_wakeup(ar);
-	if (ret) {
-		ath10k_warn(ar, "failed to wakeup from wow: %d\n", ret);
-		goto exit;
-	}
-
-	ret = ath10k_wow_enable_ns_arp_offload(ar, false);
-	if (ret) {
-		ath10k_warn(ar, "failed to disable ARP-NS offload: %d\n", ret);
-		goto exit;
-	}
-
-	ret = ath10k_wow_config_gtk_offload(ar, false);
 	if (ret)
-		ath10k_warn(ar, "failed to disable GTK offload: %d\n", ret);
+		ath10k_warn(ar, "failed to wakeup from wow: %d\n", ret);
+
+	ret = ath10k_wow_nlo_cleanup(ar);
+	if (ret)
+		ath10k_warn(ar, "failed to cleanup nlo: %d\n", ret);
 
 exit:
 	if (ret) {
@@ -662,7 +607,6 @@ exit:
 		}
 	}
 
-	ath10k_wow_op_report_wakeup_reason(ar);
 	mutex_unlock(&ar->conf_mutex);
 	return ret;
 }
@@ -677,17 +621,21 @@ int ath10k_wow_init(struct ath10k *ar)
 		return -EINVAL;
 
 	ar->wow.wowlan_support = ath10k_wowlan_support;
+
+	if (ar->wmi.rx_decap_mode == ATH10K_HW_TXRX_NATIVE_WIFI) {
+		ar->wow.wowlan_support.pattern_max_len -= WOW_MAX_REDUCE;
+		ar->wow.wowlan_support.max_pkt_offset -= WOW_MAX_REDUCE;
+	}
+
+	if (test_bit(WMI_SERVICE_NLO, ar->wmi.svc_map)) {
+		ar->wow.wowlan_support.flags |= WIPHY_WOWLAN_NET_DETECT;
+		ar->wow.wowlan_support.max_nd_match_sets = WMI_PNO_MAX_SUPP_NETWORKS;
+	}
+
 	ar->wow.wowlan_support.n_patterns = ar->wow.max_num_patterns;
 	ar->hw->wiphy->wowlan = &ar->wow.wowlan_support;
-	device_init_wakeup(ar->dev, true);
+
+	device_set_wakeup_capable(ar->dev, true);
 
 	return 0;
-}
-
-void ath10k_wow_deinit(struct ath10k *ar)
-{
-	if (test_bit(ATH10K_FW_FEATURE_WOWLAN_SUPPORT,
-		     ar->running_fw->fw_file.fw_features) &&
-		test_bit(WMI_SERVICE_WOW, ar->wmi.svc_map))
-		device_init_wakeup(ar->dev, false);
 }

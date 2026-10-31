@@ -1,15 +1,6 @@
-/*
- * Copyright (c) 2013-2014, The Linux Foundation. All rights reserved.
- *
- * This program is free software; you can redistribute it and/or modify
- * it under the terms of the GNU General Public License version 2 and
- * only version 2 as published by the Free Software Foundation.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
- */
+// SPDX-License-Identifier: GPL-2.0
+// Copyright (c) 2018, The Linux Foundation. All rights reserved.
+
 #include <linux/kernel.h>
 #include <linux/export.h>
 #include <linux/regmap.h>
@@ -121,7 +112,7 @@ static void __clk_hfpll_disable(struct clk_hfpll *h)
 	 * and assert the reset.
 	 */
 	regmap_update_bits(regmap, hd->mode_reg,
-			PLL_BYPASSNL | PLL_RESET_N | PLL_OUTCTRL, 0);
+			   PLL_BYPASSNL | PLL_RESET_N | PLL_OUTCTRL, 0);
 }
 
 static void clk_hfpll_disable(struct clk_hw *hw)
@@ -205,7 +196,7 @@ static unsigned long clk_hfpll_recalc_rate(struct clk_hw *hw,
 	return l_val * parent_rate;
 }
 
-static void clk_hfpll_init(struct clk_hw *hw)
+static int clk_hfpll_init(struct clk_hw *hw)
 {
 	struct clk_hfpll *h = to_clk_hfpll(hw);
 	struct hfpll_data const *hd = h->d;
@@ -215,18 +206,20 @@ static void clk_hfpll_init(struct clk_hw *hw)
 	regmap_read(regmap, hd->mode_reg, &mode);
 	if (mode != (PLL_BYPASSNL | PLL_RESET_N | PLL_OUTCTRL)) {
 		__clk_hfpll_init_once(hw);
-		return;
+		return 0;
 	}
 
 	if (hd->status_reg) {
 		regmap_read(regmap, hd->status_reg, &status);
 		if (!(status & BIT(hd->lock_bit))) {
 			WARN(1, "HFPLL %s is ON, but not locked!\n",
-					__clk_get_name(hw->clk));
+			     __clk_get_name(hw->clk));
 			clk_hfpll_disable(hw);
 			__clk_hfpll_init_once(hw);
 		}
 	}
+
+	return 0;
 }
 
 static int hfpll_is_enabled(struct clk_hw *hw)

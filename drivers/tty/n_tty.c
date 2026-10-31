@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-1.0+
 /*
  * n_tty.c --- implements the N_TTY line discipline.
  *
@@ -14,9 +15,6 @@
  *
  * This file also contains code originally written by Linus Torvalds,
  * Copyright 1991, 1992, 1993, and by Julian Cowley, Copyright 1994.
- *
- * This file may be redistributed under the terms of the GNU General Public
- * License.
  *
  * Reduced memory usage for older ARM systems  - Russell King.
  *
@@ -51,9 +49,12 @@
 #include <linux/module.h>
 #include <linux/ratelimit.h>
 #include <linux/vmalloc.h>
+#include "tty.h"
 
-
-/* number of characters left in xmit buffer before select has we have room */
+/*
+ * Until this number of characters is queued in the xmit buffer, select will
+ * return "we have room for writes".
+ */
 #define WAKEUP_CHARS 256
 
 /*
@@ -84,7 +85,7 @@
 #ifdef N_TTY_TRACE
 # define n_tty_trace(f, args...)	trace_printk(f, ##args)
 #else
-# define n_tty_trace(f, args...)
+# define n_tty_trace(f, args...)	no_printk(f, ##args)
 #endif
 
 struct n_tty_data {
@@ -112,8 +113,6 @@ struct n_tty_data {
 	char read_buf[N_TTY_BUF_SIZE];
 	DECLARE_BITMAP(read_flags, N_TTY_BUF_SIZE);
 	unsigned char echo_buf[N_TTY_BUF_SIZE];
-
-	int minimum_to_wake;
 
 	/* consumer-published */
 	size_t read_tail;
@@ -156,17 +155,8 @@ static inline unsigned char *echo_buf_addr(struct n_tty_data *ldata, size_t i)
 	return &ldata->echo_buf[i & (N_TTY_BUF_SIZE - 1)];
 }
 
-static inline int tty_put_user(struct tty_struct *tty, unsigned char x,
-			       unsigned char __user *ptr)
-{
-	struct n_tty_data *ldata = tty->disc_data;
-
-	tty_audit_add_data(tty, &x, 1, ldata->icanon);
-	return put_user(x, ptr);
-}
-
 /* If we are not echoing the data, perhaps this is a secret so erase it */
-static inline void zero_buffer(struct tty_struct *tty, u8 *buffer, int size)
+static void zero_buffer(struct tty_struct *tty, u8 *buffer, int size)
 {
 	bool icanon = !!L_ICANON(tty);
 	bool no_echo = !L_ECHO(tty);
@@ -175,19 +165,24 @@ static inline void zero_buffer(struct tty_struct *tty, u8 *buffer, int size)
 		memset(buffer, 0x00, size);
 }
 
-static inline int tty_copy_to_user(struct tty_struct *tty,
-					void __user *to,
-					void *from,
-					unsigned long n)
+static void tty_copy(struct tty_struct *tty, void *to, size_t tail, size_t n)
 {
 	struct n_tty_data *ldata = tty->disc_data;
-	int retval;
+	size_t size = N_TTY_BUF_SIZE - tail;
+	void *from = read_buf_addr(ldata, tail);
 
-	tty_audit_add_data(tty, from, n, ldata->icanon);
-	retval = copy_to_user(to, from, n);
-	if (!retval)
-		zero_buffer(tty, from, n);
-	return retval;
+	if (n > size) {
+		tty_audit_add_data(tty, from, size);
+		memcpy(to, from, size);
+		zero_buffer(tty, from, size);
+		to += size;
+		n -= size;
+		from = ldata->read_buf;
+	}
+
+	tty_audit_add_data(tty, from, n);
+	memcpy(to, from, n);
+	zero_buffer(tty, from, n);
 }
 
 /**
@@ -207,8 +202,8 @@ static void n_tty_kick_worker(struct tty_struct *tty)
 	struct n_tty_data *ldata = tty->disc_data;
 
 	/* Did the input worker stop? Restart it */
-	if (unlikely(ldata->no_room)) {
-		ldata->no_room = 0;
+	if (unlikely(READ_ONCE(ldata->no_room))) {
+		WRITE_ONCE(ldata->no_room, 0);
 
 		WARN_RATELIMIT(tty->port->itty == NULL,
 				"scheduling with invalid itty\n");
@@ -245,8 +240,8 @@ static ssize_t chars_in_buffer(struct tty_struct *tty)
 
 static void n_tty_write_wakeup(struct tty_struct *tty)
 {
-	if (tty->fasync && test_and_clear_bit(TTY_DO_WRITE_WAKEUP, &tty->flags))
-		kill_fasync(&tty->fasync, SIGIO, POLL_OUT);
+	clear_bit(TTY_DO_WRITE_WAKEUP, &tty->flags);
+	kill_fasync(&tty->fasync, SIGIO, POLL_OUT);
 }
 
 static void n_tty_check_throttle(struct tty_struct *tty)
@@ -278,8 +273,6 @@ static void n_tty_check_unthrottle(struct tty_struct *tty)
 	if (tty->driver->type == TTY_DRIVER_TYPE_PTY) {
 		if (chars_in_buffer(tty) > TTY_THRESHOLD_UNTHROTTLE)
 			return;
-		if (!tty->count)
-			return;
 		n_tty_kick_worker(tty);
 		tty_wakeup(tty->link);
 		return;
@@ -297,8 +290,6 @@ static void n_tty_check_unthrottle(struct tty_struct *tty)
 		int unthrottled;
 		tty_set_flow_change(tty, TTY_UNTHROTTLE_SAFE);
 		if (chars_in_buffer(tty) > TTY_THRESHOLD_UNTHROTTLE)
-			break;
-		if (!tty->count)
 			break;
 		n_tty_kick_worker(tty);
 		unthrottled = tty_unthrottle_safe(tty);
@@ -327,7 +318,7 @@ static inline void put_tty_queue(unsigned char c, struct n_tty_data *ldata)
 
 /**
  *	reset_buffer_flags	-	reset buffer state
- *	@tty: terminal to reset
+ *	@ldata: line disc data to reset
  *
  *	Reset the read buffer counters and clear the flags.
  *	Called from n_tty_open() and n_tty_flush_buffer().
@@ -351,10 +342,10 @@ static void n_tty_packet_mode_flush(struct tty_struct *tty)
 {
 	unsigned long flags;
 
-	if (tty->link->packet) {
-		spin_lock_irqsave(&tty->ctrl_lock, flags);
-		tty->ctrl_status |= TIOCPKT_FLUSHREAD;
-		spin_unlock_irqrestore(&tty->ctrl_lock, flags);
+	if (tty->link->ctrl.packet) {
+		spin_lock_irqsave(&tty->ctrl.lock, flags);
+		tty->ctrl.pktstatus |= TIOCPKT_FLUSHREAD;
+		spin_unlock_irqrestore(&tty->ctrl.lock, flags);
 		wake_up_interruptible(&tty->link->read_wait);
 	}
 }
@@ -370,7 +361,7 @@ static void n_tty_packet_mode_flush(struct tty_struct *tty)
  *	Holds termios_rwsem to exclude producer/consumer while
  *	buffer indices are reset.
  *
- *	Locking: ctrl_lock, exclusive termios_rwsem
+ *	Locking: ctrl.lock, exclusive termios_rwsem
  */
 
 static void n_tty_flush_buffer(struct tty_struct *tty)
@@ -382,28 +373,6 @@ static void n_tty_flush_buffer(struct tty_struct *tty)
 	if (tty->link)
 		n_tty_packet_mode_flush(tty);
 	up_write(&tty->termios_rwsem);
-}
-
-/**
- *	n_tty_chars_in_buffer	-	report available bytes
- *	@tty: tty device
- *
- *	Report the number of characters buffered to be delivered to user
- *	at this instant in time.
- *
- *	Locking: exclusive termios_rwsem
- */
-
-static ssize_t n_tty_chars_in_buffer(struct tty_struct *tty)
-{
-	ssize_t n;
-
-	WARN_ONCE(1, "%s is deprecated and scheduled for removal.", __func__);
-
-	down_write(&tty->termios_rwsem);
-	n = chars_in_buffer(tty);
-	up_write(&tty->termios_rwsem);
-	return n;
 }
 
 /**
@@ -423,6 +392,7 @@ static inline int is_utf8_continuation(unsigned char c)
 /**
  *	is_continuation		-	multibyte check
  *	@c: byte to check
+ *	@tty: terminal device
  *
  *	Returns true if the utf8 character 'c' is a multibyte continuation
  *	character and the terminal is in unicode mode.
@@ -577,9 +547,9 @@ static ssize_t process_output_block(struct tty_struct *tty,
 	mutex_lock(&ldata->output_lock);
 
 	space = tty_write_room(tty);
-	if (!space) {
+	if (space <= 0) {
 		mutex_unlock(&ldata->output_lock);
-		return 0;
+		return space;
 	}
 	if (nr > space)
 		nr = space;
@@ -681,9 +651,9 @@ static size_t __process_echoes(struct tty_struct *tty)
 			op = echo_buf(ldata, tail + 1);
 
 			switch (op) {
+			case ECHO_OP_ERASE_TAB: {
 				unsigned int num_chars, num_bs;
 
-			case ECHO_OP_ERASE_TAB:
 				if (MASK(ldata->echo_commit) == MASK(tail + 2))
 					goto not_yet_stored;
 				num_chars = echo_buf(ldata, tail + 2);
@@ -714,7 +684,7 @@ static size_t __process_echoes(struct tty_struct *tty)
 				}
 				tail += 3;
 				break;
-
+			}
 			case ECHO_OP_SET_CANON_COL:
 				ldata->canon_column = ldata->column;
 				tail += 2;
@@ -933,7 +903,7 @@ static void echo_erase_tab(unsigned int num_chars, int after_tab,
 /**
  *	echo_char_raw	-	echo a character raw
  *	@c: unicode byte to echo
- *	@tty: terminal device
+ *	@ldata: line disc data
  *
  *	Echo user input back onto the screen. This must be called only when
  *	L_ECHO(tty) is true. Called from the driver receive_buf path.
@@ -1133,7 +1103,7 @@ static void eraser(unsigned char c, struct tty_struct *tty)
  *	buffer is 'output'. The signal is processed first to alert any current
  *	readers or writers to discontinue and exit their i/o loops.
  *
- *	Locking: ctrl_lock
+ *	Locking: ctrl.lock
  */
 
 static void __isig(int sig, struct tty_struct *tty)
@@ -1230,9 +1200,7 @@ static void n_tty_receive_overrun(struct tty_struct *tty)
 	ldata->num_overrun++;
 	if (time_after(jiffies, ldata->overrun_time + HZ) ||
 			time_after(ldata->overrun_time, jiffies)) {
-		printk(KERN_WARNING "%s: %d input overrun(s)\n",
-			tty_name(tty),
-			ldata->num_overrun);
+		tty_warn(tty, "%d input overrun(s)\n", ldata->num_overrun);
 		ldata->overrun_time = jiffies;
 		ldata->num_overrun = 0;
 	}
@@ -1277,7 +1245,6 @@ n_tty_receive_signal_char(struct tty_struct *tty, int signal, unsigned char c)
 		commit_echoes(tty);
 	} else
 		process_echoes(tty);
-	return;
 }
 
 /**
@@ -1292,12 +1259,8 @@ n_tty_receive_signal_char(struct tty_struct *tty, int signal, unsigned char c)
  *	n_tty_receive_buf()/producer path:
  *		caller holds non-exclusive termios_rwsem
  *		publishes canon_head if canonical mode is active
- *
- *	Returns 1 if LNEXT was received, else returns 0
  */
-
-static int
-n_tty_receive_char_special(struct tty_struct *tty, unsigned char c)
+static void n_tty_receive_char_special(struct tty_struct *tty, unsigned char c)
 {
 	struct n_tty_data *ldata = tty->disc_data;
 
@@ -1305,35 +1268,35 @@ n_tty_receive_char_special(struct tty_struct *tty, unsigned char c)
 		if (c == START_CHAR(tty)) {
 			start_tty(tty);
 			process_echoes(tty);
-			return 0;
+			return;
 		}
 		if (c == STOP_CHAR(tty)) {
 			stop_tty(tty);
-			return 0;
+			return;
 		}
 	}
 
 	if (L_ISIG(tty)) {
 		if (c == INTR_CHAR(tty)) {
 			n_tty_receive_signal_char(tty, SIGINT, c);
-			return 0;
+			return;
 		} else if (c == QUIT_CHAR(tty)) {
 			n_tty_receive_signal_char(tty, SIGQUIT, c);
-			return 0;
+			return;
 		} else if (c == SUSP_CHAR(tty)) {
 			n_tty_receive_signal_char(tty, SIGTSTP, c);
-			return 0;
+			return;
 		}
 	}
 
-	if (tty->stopped && !tty->flow_stopped && I_IXON(tty) && I_IXANY(tty)) {
+	if (tty->flow.stopped && !tty->flow.tco_stopped && I_IXON(tty) && I_IXANY(tty)) {
 		start_tty(tty);
 		process_echoes(tty);
 	}
 
 	if (c == '\r') {
 		if (I_IGNCR(tty))
-			return 0;
+			return;
 		if (I_ICRNL(tty))
 			c = '\n';
 	} else if (c == '\n' && I_INLCR(tty))
@@ -1344,7 +1307,7 @@ n_tty_receive_char_special(struct tty_struct *tty, unsigned char c)
 		    (c == WERASE_CHAR(tty) && L_IEXTEN(tty))) {
 			eraser(c, tty);
 			commit_echoes(tty);
-			return 0;
+			return;
 		}
 		if (c == LNEXT_CHAR(tty) && L_IEXTEN(tty)) {
 			ldata->lnext = 1;
@@ -1356,7 +1319,7 @@ n_tty_receive_char_special(struct tty_struct *tty, unsigned char c)
 					commit_echoes(tty);
 				}
 			}
-			return 1;
+			return;
 		}
 		if (c == REPRINT_CHAR(tty) && L_ECHO(tty) && L_IEXTEN(tty)) {
 			size_t tail = ldata->canon_head;
@@ -1369,7 +1332,7 @@ n_tty_receive_char_special(struct tty_struct *tty, unsigned char c)
 				tail++;
 			}
 			commit_echoes(tty);
-			return 0;
+			return;
 		}
 		if (c == '\n') {
 			if (L_ECHO(tty) || L_ECHONL(tty)) {
@@ -1406,8 +1369,8 @@ handle_newline:
 			put_tty_queue(c, ldata);
 			smp_store_release(&ldata->canon_head, ldata->read_head);
 			kill_fasync(&tty->fasync, SIGIO, POLL_IN);
-			wake_up_interruptible_poll(&tty->read_wait, POLLIN);
-			return 0;
+			wake_up_interruptible_poll(&tty->read_wait, EPOLLIN | EPOLLRDNORM);
+			return;
 		}
 	}
 
@@ -1429,15 +1392,13 @@ handle_newline:
 		put_tty_queue(c, ldata);
 
 	put_tty_queue(c, ldata);
-	return 0;
 }
 
-static inline void
-n_tty_receive_char_inline(struct tty_struct *tty, unsigned char c)
+static void n_tty_receive_char(struct tty_struct *tty, unsigned char c)
 {
 	struct n_tty_data *ldata = tty->disc_data;
 
-	if (tty->stopped && !tty->flow_stopped && I_IXON(tty) && I_IXANY(tty)) {
+	if (tty->flow.stopped && !tty->flow.tco_stopped && I_IXON(tty) && I_IXANY(tty)) {
 		start_tty(tty);
 		process_echoes(tty);
 	}
@@ -1455,31 +1416,6 @@ n_tty_receive_char_inline(struct tty_struct *tty, unsigned char c)
 	put_tty_queue(c, ldata);
 }
 
-static void n_tty_receive_char(struct tty_struct *tty, unsigned char c)
-{
-	n_tty_receive_char_inline(tty, c);
-}
-
-static inline void
-n_tty_receive_char_fast(struct tty_struct *tty, unsigned char c)
-{
-	struct n_tty_data *ldata = tty->disc_data;
-
-	if (tty->stopped && !tty->flow_stopped && I_IXON(tty) && I_IXANY(tty)) {
-		start_tty(tty);
-		process_echoes(tty);
-	}
-	if (L_ECHO(tty)) {
-		finish_erasing(ldata);
-		/* Record the column of first canon char. */
-		if (ldata->canon_head == ldata->read_head)
-			echo_set_canon_col(ldata);
-		echo_char(c, tty);
-		commit_echoes(tty);
-	}
-	put_tty_queue(c, ldata);
-}
-
 static void n_tty_receive_char_closing(struct tty_struct *tty, unsigned char c)
 {
 	if (I_ISTRIP(tty))
@@ -1491,7 +1427,7 @@ static void n_tty_receive_char_closing(struct tty_struct *tty, unsigned char c)
 		if (c == STOP_CHAR(tty))
 			stop_tty(tty);
 		else if (c == START_CHAR(tty) ||
-			 (tty->stopped && !tty->flow_stopped && I_IXANY(tty) &&
+			 (tty->flow.stopped && !tty->flow.tco_stopped && I_IXANY(tty) &&
 			  c != INTR_CHAR(tty) && c != QUIT_CHAR(tty) &&
 			  c != SUSP_CHAR(tty))) {
 			start_tty(tty);
@@ -1515,8 +1451,7 @@ n_tty_receive_char_flagged(struct tty_struct *tty, unsigned char c, char flag)
 		n_tty_receive_overrun(tty);
 		break;
 	default:
-		printk(KERN_ERR "%s: unknown flag %d\n",
-		       tty_name(tty), flag);
+		tty_err(tty, "unknown flag %d\n", flag);
 		break;
 	}
 }
@@ -1539,7 +1474,7 @@ n_tty_receive_char_lnext(struct tty_struct *tty, unsigned char c, char flag)
 
 static void
 n_tty_receive_buf_real_raw(struct tty_struct *tty, const unsigned char *cp,
-			   char *fp, int count)
+			   const char *fp, int count)
 {
 	struct n_tty_data *ldata = tty->disc_data;
 	size_t n, head;
@@ -1559,7 +1494,7 @@ n_tty_receive_buf_real_raw(struct tty_struct *tty, const unsigned char *cp,
 
 static void
 n_tty_receive_buf_raw(struct tty_struct *tty, const unsigned char *cp,
-		      char *fp, int count)
+		      const char *fp, int count)
 {
 	struct n_tty_data *ldata = tty->disc_data;
 	char flag = TTY_NORMAL;
@@ -1576,7 +1511,7 @@ n_tty_receive_buf_raw(struct tty_struct *tty, const unsigned char *cp,
 
 static void
 n_tty_receive_buf_closing(struct tty_struct *tty, const unsigned char *cp,
-			  char *fp, int count)
+			  const char *fp, int count)
 {
 	char flag = TTY_NORMAL;
 
@@ -1585,73 +1520,49 @@ n_tty_receive_buf_closing(struct tty_struct *tty, const unsigned char *cp,
 			flag = *fp++;
 		if (likely(flag == TTY_NORMAL))
 			n_tty_receive_char_closing(tty, *cp++);
+	}
+}
+
+static void n_tty_receive_buf_standard(struct tty_struct *tty,
+		const unsigned char *cp, const char *fp, int count)
+{
+	struct n_tty_data *ldata = tty->disc_data;
+	char flag = TTY_NORMAL;
+
+	while (count--) {
+		unsigned char c = *cp++;
+
+		if (fp)
+			flag = *fp++;
+
+		if (ldata->lnext) {
+			n_tty_receive_char_lnext(tty, c, flag);
+			continue;
+		}
+
+		if (unlikely(flag != TTY_NORMAL)) {
+			n_tty_receive_char_flagged(tty, c, flag);
+			continue;
+		}
+
+		if (I_ISTRIP(tty))
+			c &= 0x7f;
+		if (I_IUCLC(tty) && L_IEXTEN(tty))
+			c = tolower(c);
+		if (L_EXTPROC(tty)) {
+			put_tty_queue(c, ldata);
+			continue;
+		}
+
+		if (test_bit(c, ldata->char_map))
+			n_tty_receive_char_special(tty, c);
 		else
-			n_tty_receive_char_flagged(tty, *cp++, flag);
-	}
-}
-
-static void
-n_tty_receive_buf_standard(struct tty_struct *tty, const unsigned char *cp,
-			  char *fp, int count)
-{
-	struct n_tty_data *ldata = tty->disc_data;
-	char flag = TTY_NORMAL;
-
-	while (count--) {
-		if (fp)
-			flag = *fp++;
-		if (likely(flag == TTY_NORMAL)) {
-			unsigned char c = *cp++;
-
-			if (I_ISTRIP(tty))
-				c &= 0x7f;
-			if (I_IUCLC(tty) && L_IEXTEN(tty))
-				c = tolower(c);
-			if (L_EXTPROC(tty)) {
-				put_tty_queue(c, ldata);
-				continue;
-			}
-			if (!test_bit(c, ldata->char_map))
-				n_tty_receive_char_inline(tty, c);
-			else if (n_tty_receive_char_special(tty, c) && count) {
-				if (fp)
-					flag = *fp++;
-				n_tty_receive_char_lnext(tty, *cp++, flag);
-				count--;
-			}
-		} else
-			n_tty_receive_char_flagged(tty, *cp++, flag);
-	}
-}
-
-static void
-n_tty_receive_buf_fast(struct tty_struct *tty, const unsigned char *cp,
-		       char *fp, int count)
-{
-	struct n_tty_data *ldata = tty->disc_data;
-	char flag = TTY_NORMAL;
-
-	while (count--) {
-		if (fp)
-			flag = *fp++;
-		if (likely(flag == TTY_NORMAL)) {
-			unsigned char c = *cp++;
-
-			if (!test_bit(c, ldata->char_map))
-				n_tty_receive_char_fast(tty, c);
-			else if (n_tty_receive_char_special(tty, c) && count) {
-				if (fp)
-					flag = *fp++;
-				n_tty_receive_char_lnext(tty, *cp++, flag);
-				count--;
-			}
-		} else
-			n_tty_receive_char_flagged(tty, *cp++, flag);
+			n_tty_receive_char(tty, c);
 	}
 }
 
 static void __receive_buf(struct tty_struct *tty, const unsigned char *cp,
-			  char *fp, int count)
+			  const char *fp, int count)
 {
 	struct n_tty_data *ldata = tty->disc_data;
 	bool preops = I_ISTRIP(tty) || (I_IUCLC(tty) && L_IEXTEN(tty));
@@ -1663,19 +1574,7 @@ static void __receive_buf(struct tty_struct *tty, const unsigned char *cp,
 	else if (tty->closing && !L_EXTPROC(tty))
 		n_tty_receive_buf_closing(tty, cp, fp, count);
 	else {
-		if (ldata->lnext) {
-			char flag = TTY_NORMAL;
-
-			if (fp)
-				flag = *fp++;
-			n_tty_receive_char_lnext(tty, *cp++, flag);
-			count--;
-		}
-
-		if (!preops && !I_PARMRK(tty))
-			n_tty_receive_buf_fast(tty, cp, fp, count);
-		else
-			n_tty_receive_buf_standard(tty, cp, fp, count);
+		n_tty_receive_buf_standard(tty, cp, fp, count);
 
 		flush_echoes(tty);
 		if (tty->ops->flush_chars)
@@ -1688,9 +1587,9 @@ static void __receive_buf(struct tty_struct *tty, const unsigned char *cp,
 	/* publish read_head to consumer */
 	smp_store_release(&ldata->commit_head, ldata->read_head);
 
-	if ((read_cnt(ldata) >= ldata->minimum_to_wake) || L_EXTPROC(tty)) {
+	if (read_cnt(ldata)) {
 		kill_fasync(&tty->fasync, SIGIO, POLL_IN);
-		wake_up_interruptible_poll(&tty->read_wait, POLLIN);
+		wake_up_interruptible_poll(&tty->read_wait, EPOLLIN | EPOLLRDNORM);
 	}
 }
 
@@ -1700,6 +1599,7 @@ static void __receive_buf(struct tty_struct *tty, const unsigned char *cp,
  *	@cp: input chars
  *	@fp: flags for each char (if NULL, all chars are TTY_NORMAL)
  *	@count: number of input chars in @cp
+ *	@flow: enable flow control
  *
  *	Called by the terminal driver when a block of characters has
  *	been received. This function must be called from soft contexts
@@ -1729,14 +1629,14 @@ static void __receive_buf(struct tty_struct *tty, const unsigned char *cp,
  */
 static int
 n_tty_receive_buf_common(struct tty_struct *tty, const unsigned char *cp,
-			 char *fp, int count, int flow)
+			 const char *fp, int count, int flow)
 {
 	struct n_tty_data *ldata = tty->disc_data;
 	int room, n, rcvd = 0, overflow;
 
 	down_read(&tty->termios_rwsem);
 
-	while (1) {
+	do {
 		/*
 		 * When PARMRK is set, each input char may take up to 3 chars
 		 * in the read buf; reduce the buffer space avail by 3x
@@ -1761,7 +1661,7 @@ n_tty_receive_buf_common(struct tty_struct *tty, const unsigned char *cp,
 			if (overflow && room < 0)
 				ldata->read_head--;
 			room = overflow;
-			ldata->no_room = flow && !room;
+			WRITE_ONCE(ldata->no_room, flow && !room);
 		} else
 			overflow = 0;
 
@@ -1778,7 +1678,7 @@ n_tty_receive_buf_common(struct tty_struct *tty, const unsigned char *cp,
 			fp += n;
 		count -= n;
 		rcvd += n;
-	}
+	} while (!test_bit(TTY_LDISC_CHANGING, &tty->flags));
 
 	tty->receive_room = room;
 
@@ -1792,27 +1692,32 @@ n_tty_receive_buf_common(struct tty_struct *tty, const unsigned char *cp,
 	} else
 		n_tty_check_throttle(tty);
 
+	if (unlikely(ldata->no_room)) {
+		/*
+		 * Barrier here is to ensure to read the latest read_tail in
+		 * chars_in_buffer() and to make sure that read_tail is not loaded
+		 * before ldata->no_room is set.
+		 */
+		smp_mb();
+		if (!chars_in_buffer(tty))
+			n_tty_kick_worker(tty);
+	}
+
 	up_read(&tty->termios_rwsem);
 
 	return rcvd;
 }
 
 static void n_tty_receive_buf(struct tty_struct *tty, const unsigned char *cp,
-			      char *fp, int count)
+			      const char *fp, int count)
 {
 	n_tty_receive_buf_common(tty, cp, fp, count, 0);
 }
 
 static int n_tty_receive_buf2(struct tty_struct *tty, const unsigned char *cp,
-			      char *fp, int count)
+			      const char *fp, int count)
 {
 	return n_tty_receive_buf_common(tty, cp, fp, count, 1);
-}
-
-int is_ignored(int sig)
-{
-	return (sigismember(&current->blocked, sig) ||
-		current->sighand->action[sig-1].sa.sa_handler == SIG_IGN);
 }
 
 /**
@@ -1903,7 +1808,7 @@ static void n_tty_set_termios(struct tty_struct *tty, struct ktermios *old)
 	 * Fix tty hang when I_IXON(tty) is cleared, but the tty
 	 * been stopped by STOP_CHAR(tty) before it.
 	 */
-	if (!I_IXON(tty) && old && (old->c_iflag & IXON) && !tty->flow_stopped) {
+	if (!I_IXON(tty) && old && (old->c_iflag & IXON) && !tty->flow.tco_stopped) {
 		start_tty(tty);
 		process_echoes(tty);
 	}
@@ -1930,8 +1835,10 @@ static void n_tty_close(struct tty_struct *tty)
 	if (tty->link)
 		n_tty_packet_mode_flush(tty);
 
+	down_write(&tty->termios_rwsem);
 	vfree(ldata);
 	tty->disc_data = NULL;
+	up_write(&tty->termios_rwsem);
 }
 
 /**
@@ -1958,7 +1865,6 @@ static int n_tty_open(struct tty_struct *tty)
 	mutex_init(&ldata->output_lock);
 
 	tty->disc_data = ldata;
-	ldata->minimum_to_wake = 1;
 	tty->closing = 0;
 	/* indicate buffer work may resume */
 	clear_bit(TTY_LDISC_HALTED, &tty->flags);
@@ -1981,65 +1887,64 @@ static inline int input_available_p(struct tty_struct *tty, int poll)
 /**
  *	copy_from_read_buf	-	copy read data directly
  *	@tty: terminal device
- *	@b: user data
+ *	@kbp: data
  *	@nr: size of data
  *
  *	Helper function to speed up n_tty_read.  It is only called when
- *	ICANON is off; it copies characters straight from the tty queue to
- *	user space directly.  It can be profitably called twice; once to
- *	drain the space from the tail pointer to the (physical) end of the
- *	buffer, and once to drain the space from the (physical) beginning of
- *	the buffer to head pointer.
+ *	ICANON is off; it copies characters straight from the tty queue.
  *
  *	Called under the ldata->atomic_read_lock sem
+ *
+ *	Returns true if it successfully copied data, but there is still
+ *	more data to be had.
  *
  *	n_tty_read()/consumer path:
  *		caller holds non-exclusive termios_rwsem
  *		read_tail published
  */
 
-static int copy_from_read_buf(struct tty_struct *tty,
-				      unsigned char __user **b,
+static bool copy_from_read_buf(struct tty_struct *tty,
+				      unsigned char **kbp,
 				      size_t *nr)
 
 {
 	struct n_tty_data *ldata = tty->disc_data;
-	int retval;
 	size_t n;
 	bool is_eof;
 	size_t head = smp_load_acquire(&ldata->commit_head);
 	size_t tail = ldata->read_tail & (N_TTY_BUF_SIZE - 1);
 
-	retval = 0;
 	n = min(head - ldata->read_tail, N_TTY_BUF_SIZE - tail);
 	n = min(*nr, n);
 	if (n) {
-		retval = copy_to_user(*b, read_buf_addr(ldata, tail), n);
-		n -= retval;
-		is_eof = n == 1 && read_buf(ldata, tail) == EOF_CHAR(tty);
-		tty_audit_add_data(tty, read_buf_addr(ldata, tail), n,
-				ldata->icanon);
-		zero_buffer(tty, read_buf_addr(ldata, tail), n);
+		unsigned char *from = read_buf_addr(ldata, tail);
+		memcpy(*kbp, from, n);
+		is_eof = n == 1 && *from == EOF_CHAR(tty);
+		tty_audit_add_data(tty, from, n);
+		zero_buffer(tty, from, n);
 		smp_store_release(&ldata->read_tail, ldata->read_tail + n);
 		/* Turn single EOF into zero-length read */
 		if (L_EXTPROC(tty) && ldata->icanon && is_eof &&
 		    (head == ldata->read_tail))
-			n = 0;
-		*b += n;
+			return false;
+		*kbp += n;
 		*nr -= n;
+
+		/* If we have more to copy, let the caller know */
+		return head != ldata->read_tail;
 	}
-	return retval;
+	return false;
 }
 
 /**
  *	canon_copy_from_read_buf	-	copy read data in canonical mode
  *	@tty: terminal device
- *	@b: user data
+ *	@kbp: data
  *	@nr: size of data
  *
  *	Helper function for n_tty_read.  It is only called when ICANON is on;
  *	it copies one line of input up to and including the line-delimiting
- *	character into the user-space buffer.
+ *	character into the result buffer.
  *
  *	NB: When termios is changed from non-canonical to canonical mode and
  *	the read buffer contains data, n_tty_set_termios() simulates an EOF
@@ -2054,21 +1959,22 @@ static int copy_from_read_buf(struct tty_struct *tty,
  *		read_tail published
  */
 
-static int canon_copy_from_read_buf(struct tty_struct *tty,
-				    unsigned char __user **b,
-				    size_t *nr)
+static bool canon_copy_from_read_buf(struct tty_struct *tty,
+				     unsigned char **kbp,
+				     size_t *nr)
 {
 	struct n_tty_data *ldata = tty->disc_data;
 	size_t n, size, more, c;
 	size_t eol;
-	size_t tail;
-	int ret, found = 0;
+	size_t tail, canon_head;
+	int found = 0;
 
 	/* N.B. avoid overrun if nr == 0 */
 	if (!*nr)
-		return 0;
+		return false;
 
-	n = min(*nr + 1, smp_load_acquire(&ldata->canon_head) - ldata->read_tail);
+	canon_head = smp_load_acquire(&ldata->canon_head);
+	n = min(*nr, canon_head - ldata->read_tail);
 
 	tail = ldata->read_tail & (N_TTY_BUF_SIZE - 1);
 	size = min_t(size_t, tail + n, N_TTY_BUF_SIZE);
@@ -2081,36 +1987,23 @@ static int canon_copy_from_read_buf(struct tty_struct *tty,
 	if (eol == N_TTY_BUF_SIZE && more) {
 		/* scan wrapped without finding set bit */
 		eol = find_next_bit(ldata->read_flags, more, 0);
-		if (eol != more)
-			found = 1;
-	} else if (eol != size)
-		found = 1;
+		found = eol != more;
+	} else
+		found = eol != size;
 
-	size = N_TTY_BUF_SIZE - tail;
 	n = eol - tail;
 	if (n > N_TTY_BUF_SIZE)
 		n += N_TTY_BUF_SIZE;
 	c = n + found;
 
-	if (!found || read_buf(ldata, eol) != __DISABLED_CHAR) {
-		c = min(*nr, c);
+	if (!found || read_buf(ldata, eol) != __DISABLED_CHAR)
 		n = c;
-	}
 
-	n_tty_trace("%s: eol:%zu found:%d n:%zu c:%zu size:%zu more:%zu\n",
-		    __func__, eol, found, n, c, size, more);
+	n_tty_trace("%s: eol:%zu found:%d n:%zu c:%zu tail:%zu more:%zu\n",
+		    __func__, eol, found, n, c, tail, more);
 
-	if (n > size) {
-		ret = tty_copy_to_user(tty, *b, read_buf_addr(ldata, tail), size);
-		if (ret)
-			return -EFAULT;
-		ret = tty_copy_to_user(tty, *b + size, ldata->read_buf, n - size);
-	} else
-		ret = tty_copy_to_user(tty, *b, read_buf_addr(ldata, tail), n);
-
-	if (ret)
-		return -EFAULT;
-	*b += n;
+	tty_copy(tty, *kbp, tail, n);
+	*kbp += n;
 	*nr -= n;
 
 	if (found)
@@ -2122,13 +2015,42 @@ static int canon_copy_from_read_buf(struct tty_struct *tty,
 			ldata->line_start = ldata->read_tail;
 		else
 			ldata->push = 0;
-		tty_audit_push(tty);
+		tty_audit_push();
+		return false;
 	}
-	return 0;
+
+	/* No EOL found - do a continuation retry if there is more data */
+	return ldata->read_tail != canon_head;
 }
 
-extern ssize_t redirected_tty_write(struct file *, const char __user *,
-							size_t, loff_t *);
+/*
+ * If we finished a read at the exact location of an
+ * EOF (special EOL character that's a __DISABLED_CHAR)
+ * in the stream, silently eat the EOF.
+ */
+static void canon_skip_eof(struct tty_struct *tty)
+{
+	struct n_tty_data *ldata = tty->disc_data;
+	size_t tail, canon_head;
+
+	canon_head = smp_load_acquire(&ldata->canon_head);
+	tail = ldata->read_tail;
+
+	// No data?
+	if (tail == canon_head)
+		return;
+
+	// See if the tail position is EOF in the circular buffer
+	tail &= (N_TTY_BUF_SIZE - 1);
+	if (!test_bit(tail, ldata->read_flags))
+		return;
+	if (read_buf(ldata, tail) != __DISABLED_CHAR)
+		return;
+
+	// Clear the EOL bit, skip the EOF char.
+	clear_bit(tail, ldata->read_flags);
+	smp_store_release(&ldata->read_tail, ldata->read_tail + 1);
+}
 
 /**
  *	job_control		-	check job control
@@ -2141,7 +2063,7 @@ extern ssize_t redirected_tty_write(struct file *, const char __user *,
  *
  *	Locking: redirected write test is safe
  *		 current->signal->tty check is safe
- *		 ctrl_lock to safely reference tty->pgrp
+ *		 ctrl.lock to safely reference tty->ctrl.pgrp
  */
 
 static int job_control(struct tty_struct *tty, struct file *file)
@@ -2151,7 +2073,7 @@ static int job_control(struct tty_struct *tty, struct file *file)
 	/* NOTE: not yet done after every sleep pending a thorough
 	   check of the logic of this change. -- jlc */
 	/* don't stop on /dev/console */
-	if (file->f_op->write == redirected_tty_write)
+	if (file->f_op->write_iter == redirected_tty_write)
 		return 0;
 
 	return __tty_check_change(tty, SIGTTIN);
@@ -2178,17 +2100,49 @@ static int job_control(struct tty_struct *tty, struct file *file)
  */
 
 static ssize_t n_tty_read(struct tty_struct *tty, struct file *file,
-			 unsigned char __user *buf, size_t nr)
+			  unsigned char *kbuf, size_t nr,
+			  void **cookie, unsigned long offset)
 {
 	struct n_tty_data *ldata = tty->disc_data;
-	unsigned char __user *b = buf;
+	unsigned char *kb = kbuf;
 	DEFINE_WAIT_FUNC(wait, woken_wake_function);
 	int c;
 	int minimum, time;
 	ssize_t retval = 0;
 	long timeout;
-	int packet;
-	size_t tail;
+	bool packet;
+	size_t old_tail;
+
+	/*
+	 * Is this a continuation of a read started earler?
+	 *
+	 * If so, we still hold the atomic_read_lock and the
+	 * termios_rwsem, and can just continue to copy data.
+	 */
+	if (*cookie) {
+		if (ldata->icanon && !L_EXTPROC(tty)) {
+			/*
+			 * If we have filled the user buffer, see
+			 * if we should skip an EOF character before
+			 * releasing the lock and returning done.
+			 */
+			if (!nr)
+				canon_skip_eof(tty);
+			else if (canon_copy_from_read_buf(tty, &kb, &nr))
+				return kb - kbuf;
+		} else {
+			if (copy_from_read_buf(tty, &kb, &nr))
+				return kb - kbuf;
+		}
+
+		/* No more data - release locks and stop retries */
+		n_tty_kick_worker(tty);
+		n_tty_check_unthrottle(tty);
+		up_read(&tty->termios_rwsem);
+		mutex_unlock(&ldata->atomic_read_lock);
+		*cookie = NULL;
+		return kb - kbuf;
+	}
 
 	c = job_control(tty, file);
 	if (c < 0)
@@ -2213,43 +2167,30 @@ static ssize_t n_tty_read(struct tty_struct *tty, struct file *file,
 		minimum = MIN_CHAR(tty);
 		if (minimum) {
 			time = (HZ / 10) * TIME_CHAR(tty);
-			if (time)
-				ldata->minimum_to_wake = 1;
-			else if (!waitqueue_active(&tty->read_wait) ||
-				 (ldata->minimum_to_wake > minimum))
-				ldata->minimum_to_wake = minimum;
 		} else {
 			timeout = (HZ / 10) * TIME_CHAR(tty);
-			ldata->minimum_to_wake = minimum = 1;
+			minimum = 1;
 		}
 	}
 
-	packet = tty->packet;
-	tail = ldata->read_tail;
+	packet = tty->ctrl.packet;
+	old_tail = ldata->read_tail;
 
 	add_wait_queue(&tty->read_wait, &wait);
 	while (nr) {
 		/* First test for status change. */
-		if (packet && tty->link->ctrl_status) {
+		if (packet && tty->link->ctrl.pktstatus) {
 			unsigned char cs;
-			if (b != buf)
+			if (kb != kbuf)
 				break;
-			spin_lock_irq(&tty->link->ctrl_lock);
-			cs = tty->link->ctrl_status;
-			tty->link->ctrl_status = 0;
-			spin_unlock_irq(&tty->link->ctrl_lock);
-			if (tty_put_user(tty, cs, b++)) {
-				retval = -EFAULT;
-				b--;
-				break;
-			}
+			spin_lock_irq(&tty->link->ctrl.lock);
+			cs = tty->link->ctrl.pktstatus;
+			tty->link->ctrl.pktstatus = 0;
+			spin_unlock_irq(&tty->link->ctrl.lock);
+			*kb++ = cs;
 			nr--;
 			break;
 		}
-
-		if (((minimum - (b - buf)) < ldata->minimum_to_wake) &&
-		    ((minimum - (b - buf)) >= 1))
-			ldata->minimum_to_wake = (minimum - (b - buf));
 
 		if (!input_available_p(tty, 0)) {
 			up_read(&tty->termios_rwsem);
@@ -2270,7 +2211,7 @@ static ssize_t n_tty_read(struct tty_struct *tty, struct file *file,
 					break;
 				if (!timeout)
 					break;
-				if (file->f_flags & O_NONBLOCK) {
+				if (tty_io_nonblock(tty, file)) {
 					retval = -EAGAIN;
 					break;
 				}
@@ -2289,49 +2230,54 @@ static ssize_t n_tty_read(struct tty_struct *tty, struct file *file,
 		}
 
 		if (ldata->icanon && !L_EXTPROC(tty)) {
-			retval = canon_copy_from_read_buf(tty, &b, &nr);
-			if (retval)
-				break;
+			if (canon_copy_from_read_buf(tty, &kb, &nr))
+				goto more_to_be_read;
 		} else {
-			int uncopied;
-
 			/* Deal with packet mode. */
-			if (packet && b == buf) {
-				if (tty_put_user(tty, TIOCPKT_DATA, b++)) {
-					retval = -EFAULT;
-					b--;
-					break;
-				}
+			if (packet && kb == kbuf) {
+				*kb++ = TIOCPKT_DATA;
 				nr--;
 			}
 
-			uncopied = copy_from_read_buf(tty, &b, &nr);
-			uncopied += copy_from_read_buf(tty, &b, &nr);
-			if (uncopied) {
-				retval = -EFAULT;
-				break;
+			/*
+			 * Copy data, and if there is more to be had
+			 * and we have nothing more to wait for, then
+			 * let's mark us for retries.
+			 *
+			 * NOTE! We return here with both the termios_sem
+			 * and atomic_read_lock still held, the retries
+			 * will release them when done.
+			 */
+			if (copy_from_read_buf(tty, &kb, &nr) && kb - kbuf >= minimum) {
+more_to_be_read:
+				remove_wait_queue(&tty->read_wait, &wait);
+				*cookie = cookie;
+				return kb - kbuf;
 			}
 		}
 
 		n_tty_check_unthrottle(tty);
 
-		if (b - buf >= minimum)
+		if (kb - kbuf >= minimum)
 			break;
 		if (time)
 			timeout = time;
 	}
-	if (tail != ldata->read_tail)
+	if (old_tail != ldata->read_tail) {
+		/*
+		 * Make sure no_room is not read in n_tty_kick_worker()
+		 * before setting ldata->read_tail in copy_from_read_buf().
+		 */
+		smp_mb();
 		n_tty_kick_worker(tty);
+	}
 	up_read(&tty->termios_rwsem);
 
 	remove_wait_queue(&tty->read_wait, &wait);
-	if (!waitqueue_active(&tty->read_wait))
-		ldata->minimum_to_wake = minimum;
-
 	mutex_unlock(&ldata->atomic_read_lock);
 
-	if (b - buf)
-		retval = b - buf;
+	if (kb - kbuf)
+		retval = kb - kbuf;
 
 	return retval;
 }
@@ -2367,7 +2313,7 @@ static ssize_t n_tty_write(struct tty_struct *tty, struct file *file,
 	ssize_t retval = 0;
 
 	/* Job control check -- must be done at start (POSIX.1 7.1.1.4). */
-	if (L_TOSTOP(tty) && file->f_op->write != redirected_tty_write) {
+	if (L_TOSTOP(tty) && file->f_op->write_iter != redirected_tty_write) {
 		retval = tty_check_change(tty);
 		if (retval)
 			return retval;
@@ -2427,7 +2373,7 @@ static ssize_t n_tty_write(struct tty_struct *tty, struct file *file,
 		}
 		if (!nr)
 			break;
-		if (file->f_flags & O_NONBLOCK) {
+		if (tty_io_nonblock(tty, file)) {
 			retval = -EAGAIN;
 			break;
 		}
@@ -2439,7 +2385,7 @@ static ssize_t n_tty_write(struct tty_struct *tty, struct file *file,
 	}
 break_out:
 	remove_wait_queue(&tty->write_wait, &wait);
-	if (b - buf != nr && tty->fasync)
+	if (nr && tty->fasync)
 		set_bit(TTY_DO_WRITE_WAKEUP, &tty->flags);
 	up_read(&tty->termios_rwsem);
 	return (b - buf) ? b - buf : retval;
@@ -2459,37 +2405,30 @@ break_out:
  *	Called without the kernel lock held - fine
  */
 
-static unsigned int n_tty_poll(struct tty_struct *tty, struct file *file,
+static __poll_t n_tty_poll(struct tty_struct *tty, struct file *file,
 							poll_table *wait)
 {
-	struct n_tty_data *ldata = tty->disc_data;
-	unsigned int mask = 0;
+	__poll_t mask = 0;
 
 	poll_wait(file, &tty->read_wait, wait);
 	poll_wait(file, &tty->write_wait, wait);
 	if (input_available_p(tty, 1))
-		mask |= POLLIN | POLLRDNORM;
+		mask |= EPOLLIN | EPOLLRDNORM;
 	else {
 		tty_buffer_flush_work(tty->port);
 		if (input_available_p(tty, 1))
-			mask |= POLLIN | POLLRDNORM;
+			mask |= EPOLLIN | EPOLLRDNORM;
 	}
-	if (tty->packet && tty->link->ctrl_status)
-		mask |= POLLPRI | POLLIN | POLLRDNORM;
+	if (tty->ctrl.packet && tty->link->ctrl.pktstatus)
+		mask |= EPOLLPRI | EPOLLIN | EPOLLRDNORM;
 	if (test_bit(TTY_OTHER_CLOSED, &tty->flags))
-		mask |= POLLHUP;
+		mask |= EPOLLHUP;
 	if (tty_hung_up_p(file))
-		mask |= POLLHUP;
-	if (!(mask & (POLLHUP | POLLIN | POLLRDNORM))) {
-		if (MIN_CHAR(tty) && !TIME_CHAR(tty))
-			ldata->minimum_to_wake = MIN_CHAR(tty);
-		else
-			ldata->minimum_to_wake = 1;
-	}
+		mask |= EPOLLHUP;
 	if (tty->ops->write && !tty_is_writelocked(tty) &&
 			tty_chars_in_buffer(tty) < WAKEUP_CHARS &&
 			tty_write_room(tty) > 0)
-		mask |= POLLOUT | POLLWRNORM;
+		mask |= EPOLLOUT | EPOLLWRNORM;
 	return mask;
 }
 
@@ -2534,25 +2473,13 @@ static int n_tty_ioctl(struct tty_struct *tty, struct file *file,
 	}
 }
 
-static void n_tty_fasync(struct tty_struct *tty, int on)
-{
-	struct n_tty_data *ldata = tty->disc_data;
-
-	if (!waitqueue_active(&tty->read_wait)) {
-		if (on)
-			ldata->minimum_to_wake = 1;
-		else if (!tty->fasync)
-			ldata->minimum_to_wake = N_TTY_BUF_SIZE;
-	}
-}
-
-struct tty_ldisc_ops tty_ldisc_N_TTY = {
-	.magic           = TTY_LDISC_MAGIC,
+static struct tty_ldisc_ops n_tty_ops = {
+	.owner		 = THIS_MODULE,
+	.num		 = N_TTY,
 	.name            = "n_tty",
 	.open            = n_tty_open,
 	.close           = n_tty_close,
 	.flush_buffer    = n_tty_flush_buffer,
-	.chars_in_buffer = n_tty_chars_in_buffer,
 	.read            = n_tty_read,
 	.write           = n_tty_write,
 	.ioctl           = n_tty_ioctl,
@@ -2560,7 +2487,6 @@ struct tty_ldisc_ops tty_ldisc_N_TTY = {
 	.poll            = n_tty_poll,
 	.receive_buf     = n_tty_receive_buf,
 	.write_wakeup    = n_tty_write_wakeup,
-	.fasync		 = n_tty_fasync,
 	.receive_buf2	 = n_tty_receive_buf2,
 };
 
@@ -2568,14 +2494,18 @@ struct tty_ldisc_ops tty_ldisc_N_TTY = {
  *	n_tty_inherit_ops	-	inherit N_TTY methods
  *	@ops: struct tty_ldisc_ops where to save N_TTY methods
  *
- *	Enables a 'subclass' line discipline to 'inherit' N_TTY
- *	methods.
+ *	Enables a 'subclass' line discipline to 'inherit' N_TTY methods.
  */
 
 void n_tty_inherit_ops(struct tty_ldisc_ops *ops)
 {
-	*ops = tty_ldisc_N_TTY;
+	*ops = n_tty_ops;
 	ops->owner = NULL;
-	ops->refcount = ops->flags = 0;
+	ops->flags = 0;
 }
 EXPORT_SYMBOL_GPL(n_tty_inherit_ops);
+
+void __init n_tty_init(void)
+{
+	tty_register_ldisc(&n_tty_ops);
+}

@@ -1,9 +1,8 @@
+// SPDX-License-Identifier: GPL-2.0-only
 /*
  * digi00x.c - a part of driver for Digidesign Digi 002/003 family
  *
  * Copyright (c) 2014-2015 Takashi Sakamoto
- *
- * Licensed under the terms of the GNU General Public License, version 2.
  */
 
 #include "digi00x.h"
@@ -49,29 +48,25 @@ static void dg00x_card_free(struct snd_card *card)
 	snd_dg00x_stream_destroy_duplex(dg00x);
 	snd_dg00x_transaction_unregister(dg00x);
 
-	fw_unit_put(dg00x->unit);
-
 	mutex_destroy(&dg00x->mutex);
+	fw_unit_put(dg00x->unit);
 }
 
-static int snd_dg00x_probe(struct fw_unit *unit,
-			   const struct ieee1394_device_id *entry)
+static int snd_dg00x_probe(struct fw_unit *unit, const struct ieee1394_device_id *entry)
 {
 	struct snd_card *card;
 	struct snd_dg00x *dg00x;
 	int err;
 
-	/* create card */
-	err = snd_card_new(&unit->device, -1, NULL, THIS_MODULE,
-			   sizeof(struct snd_dg00x), &card);
+	err = snd_card_new(&unit->device, -1, NULL, THIS_MODULE, sizeof(*dg00x), &card);
 	if (err < 0)
 		return err;
 	card->private_free = dg00x_card_free;
 
-	/* initialize myself */
 	dg00x = card->private_data;
-	dg00x->card = card;
 	dg00x->unit = fw_unit_get(unit);
+	dev_set_drvdata(&unit->device, dg00x);
+	dg00x->card = card;
 
 	mutex_init(&dg00x->mutex);
 	spin_lock_init(&dg00x->lock);
@@ -109,9 +104,7 @@ static int snd_dg00x_probe(struct fw_unit *unit,
 	if (err < 0)
 		goto error;
 
-	dev_set_drvdata(&unit->device, dg00x);
-
-	return err;
+	return 0;
 error:
 	snd_card_free(card);
 	return err;
@@ -132,8 +125,8 @@ static void snd_dg00x_remove(struct fw_unit *unit)
 {
 	struct snd_dg00x *dg00x = dev_get_drvdata(&unit->device);
 
-	/* No need to wait for releasing card object in this context. */
-	snd_card_free_when_closed(dg00x->card);
+	// Block till all of ALSA character devices are released.
+	snd_card_free(dg00x->card);
 }
 
 static const struct ieee1394_device_id snd_dg00x_id_table[] = {
@@ -161,7 +154,7 @@ MODULE_DEVICE_TABLE(ieee1394, snd_dg00x_id_table);
 static struct fw_driver dg00x_driver = {
 	.driver = {
 		.owner = THIS_MODULE,
-		.name = "snd-firewire-digi00x",
+		.name = KBUILD_MODNAME,
 		.bus = &fw_bus_type,
 	},
 	.probe    = snd_dg00x_probe,

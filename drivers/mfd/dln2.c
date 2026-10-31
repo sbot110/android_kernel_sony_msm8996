@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-2.0-only
 /*
  * Driver for the Diolan DLN-2 USB adapter
  *
@@ -6,10 +7,6 @@
  * Derived from:
  *  i2c-diolan-u2c.c
  *  Copyright (c) 2010-2011 Ericsson AB
- *
- * This program is free software; you can redistribute it and/or
- * modify it under the terms of the GNU General Public License as
- * published by the Free Software Foundation, version 2.
  */
 
 #include <linux/kernel.h>
@@ -53,6 +50,7 @@ enum dln2_handle {
 	DLN2_HANDLE_GPIO,
 	DLN2_HANDLE_I2C,
 	DLN2_HANDLE_SPI,
+	DLN2_HANDLE_ADC,
 	DLN2_HANDLES
 };
 
@@ -199,6 +197,7 @@ static bool dln2_transfer_complete(struct dln2_dev *dln2, struct urb *urb,
 	struct device *dev = &dln2->interface->dev;
 	struct dln2_mod_rx_slots *rxs = &dln2->mod_rx_slots[handle];
 	struct dln2_rx_context *rxc;
+	unsigned long flags;
 	bool valid_slot = false;
 
 	if (rx_slot >= DLN2_MAX_RX_SLOTS)
@@ -206,18 +205,13 @@ static bool dln2_transfer_complete(struct dln2_dev *dln2, struct urb *urb,
 
 	rxc = &rxs->slots[rx_slot];
 
-	/*
-	 * No need to disable interrupts as this lock is not taken in interrupt
-	 * context elsewhere in this driver. This function (or its callers) are
-	 * also not exported to other modules.
-	 */
-	spin_lock(&rxs->lock);
+	spin_lock_irqsave(&rxs->lock, flags);
 	if (rxc->in_use && !rxc->urb) {
 		rxc->urb = urb;
 		complete(&rxc->done);
 		valid_slot = true;
 	}
-	spin_unlock(&rxs->lock);
+	spin_unlock_irqrestore(&rxs->lock, flags);
 
 out:
 	if (!valid_slot)
@@ -656,8 +650,19 @@ static int dln2_start_rx_urbs(struct dln2_dev *dln2, gfp_t gfp)
 	return 0;
 }
 
+enum {
+	DLN2_ACPI_MATCH_GPIO	= 0,
+	DLN2_ACPI_MATCH_I2C	= 1,
+	DLN2_ACPI_MATCH_SPI	= 2,
+	DLN2_ACPI_MATCH_ADC	= 3,
+};
+
 static struct dln2_platform_data dln2_pdata_gpio = {
 	.handle = DLN2_HANDLE_GPIO,
+};
+
+static struct mfd_cell_acpi_match dln2_acpi_match_gpio = {
+	.adr = DLN2_ACPI_MATCH_GPIO,
 };
 
 /* Only one I2C port seems to be supported on current hardware */
@@ -666,26 +671,53 @@ static struct dln2_platform_data dln2_pdata_i2c = {
 	.port = 0,
 };
 
+static struct mfd_cell_acpi_match dln2_acpi_match_i2c = {
+	.adr = DLN2_ACPI_MATCH_I2C,
+};
+
 /* Only one SPI port supported */
 static struct dln2_platform_data dln2_pdata_spi = {
 	.handle = DLN2_HANDLE_SPI,
 	.port = 0,
 };
 
+static struct mfd_cell_acpi_match dln2_acpi_match_spi = {
+	.adr = DLN2_ACPI_MATCH_SPI,
+};
+
+/* Only one ADC port supported */
+static struct dln2_platform_data dln2_pdata_adc = {
+	.handle = DLN2_HANDLE_ADC,
+	.port = 0,
+};
+
+static struct mfd_cell_acpi_match dln2_acpi_match_adc = {
+	.adr = DLN2_ACPI_MATCH_ADC,
+};
+
 static const struct mfd_cell dln2_devs[] = {
 	{
 		.name = "dln2-gpio",
+		.acpi_match = &dln2_acpi_match_gpio,
 		.platform_data = &dln2_pdata_gpio,
 		.pdata_size = sizeof(struct dln2_platform_data),
 	},
 	{
 		.name = "dln2-i2c",
+		.acpi_match = &dln2_acpi_match_i2c,
 		.platform_data = &dln2_pdata_i2c,
 		.pdata_size = sizeof(struct dln2_platform_data),
 	},
 	{
 		.name = "dln2-spi",
+		.acpi_match = &dln2_acpi_match_spi,
 		.platform_data = &dln2_pdata_spi,
+		.pdata_size = sizeof(struct dln2_platform_data),
+	},
+	{
+		.name = "dln2-adc",
+		.acpi_match = &dln2_acpi_match_adc,
+		.platform_data = &dln2_pdata_adc,
 		.pdata_size = sizeof(struct dln2_platform_data),
 	},
 };

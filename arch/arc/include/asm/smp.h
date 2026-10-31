@@ -1,9 +1,6 @@
+/* SPDX-License-Identifier: GPL-2.0-only */
 /*
  * Copyright (C) 2004, 2007-2010, 2011-2012 Synopsys, Inc. (www.synopsys.com)
- *
- * This program is free software; you can redistribute it and/or modify
- * it under the terms of the GNU General Public License version 2 as
- * published by the Free Software Foundation.
  */
 
 #ifndef __ASM_ARC_SMP_H
@@ -37,9 +34,9 @@ extern const char *arc_platform_smp_cpuinfo(void);
  * API expected BY platform smp code (FROM arch smp code)
  *
  * smp_ipi_irq_setup:
- *	Takes @cpu and @irq to which the arch-common ISR is hooked up
+ *	Takes @cpu and @hwirq to which the arch-common ISR is hooked up
  */
-extern int smp_ipi_irq_setup(int cpu, int irq);
+extern int smp_ipi_irq_setup(int cpu, irq_hw_number_t hwirq);
 
 /*
  * struct plat_smp_ops	- SMP callbacks provided by platform to ARC SMP
@@ -86,7 +83,7 @@ static inline const char *arc_platform_smp_cpuinfo(void)
  * (1) These insn were introduced only in 4.10 release. So for older released
  *	support needed.
  *
- * (2) In a SMP setup, the LLOCK/SCOND atomiticity across CPUs needs to be
+ * (2) In a SMP setup, the LLOCK/SCOND atomicity across CPUs needs to be
  *	gaurantted by the platform (not something which core handles).
  *	Assuming a platform won't, SMP Linux needs to use spinlocks + local IRQ
  *	disabling for atomicity.
@@ -108,7 +105,6 @@ static inline const char *arc_platform_smp_cpuinfo(void)
 #include <asm/spinlock.h>
 
 extern arch_spinlock_t smp_atomic_ops_lock;
-extern arch_spinlock_t smp_bitops_lock;
 
 #define atomic_ops_lock(flags)	do {		\
 	local_irq_save(flags);			\
@@ -120,23 +116,10 @@ extern arch_spinlock_t smp_bitops_lock;
 	local_irq_restore(flags);		\
 } while (0)
 
-#define bitops_lock(flags)	do {		\
-	local_irq_save(flags);			\
-	arch_spin_lock(&smp_bitops_lock);	\
-} while (0)
-
-#define bitops_unlock(flags) do {		\
-	arch_spin_unlock(&smp_bitops_lock);	\
-	local_irq_restore(flags);		\
-} while (0)
-
 #else /* !CONFIG_SMP */
 
 #define atomic_ops_lock(flags)		local_irq_save(flags)
 #define atomic_ops_unlock(flags)	local_irq_restore(flags)
-
-#define bitops_lock(flags)		local_irq_save(flags)
-#define bitops_unlock(flags)		local_irq_restore(flags)
 
 #endif /* !CONFIG_SMP */
 

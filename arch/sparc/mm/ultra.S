@@ -1,11 +1,12 @@
+/* SPDX-License-Identifier: GPL-2.0 */
 /*
  * ultra.S: Don't expand these all over the place...
  *
  * Copyright (C) 1997, 2000, 2008 David S. Miller (davem@davemloft.net)
  */
 
+#include <linux/pgtable.h>
 #include <asm/asi.h>
-#include <asm/pgtable.h>
 #include <asm/page.h>
 #include <asm/spitfire.h>
 #include <asm/mmu_context.h>

@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-2.0-only
 /*
  * FireDTV driver -- firewire I/O backend
  */
@@ -21,7 +22,7 @@
 
 #include <asm/page.h>
 
-#include <dvb_demux.h>
+#include <media/dvb_demux.h>
 
 #include "firedtv.h"
 
@@ -429,4 +430,3 @@ MODULE_AUTHOR("Andreas Monitzer <andy@monitzer.com>");
 MODULE_AUTHOR("Ben Backx <ben@bbackx.com>");
 MODULE_DESCRIPTION("FireDTV DVB Driver");
 MODULE_LICENSE("GPL");
-MODULE_SUPPORTED_DEVICE("FireDTV DVB");

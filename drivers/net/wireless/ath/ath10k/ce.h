@@ -1,18 +1,8 @@
+/* SPDX-License-Identifier: ISC */
 /*
  * Copyright (c) 2005-2011 Atheros Communications Inc.
- * Copyright (c) 2011-2013 Qualcomm Atheros, Inc.
- *
- * Permission to use, copy, modify, and/or distribute this software for any
- * purpose with or without fee is hereby granted, provided that the above
- * copyright notice and this permission notice appear in all copies.
- *
- * THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES
- * WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF
- * MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR
- * ANY SPECIAL, DIRECT, INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES
- * WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN AN
- * ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF
- * OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
+ * Copyright (c) 2011-2017 Qualcomm Atheros, Inc.
+ * Copyright (c) 2018 The Linux Foundation. All rights reserved.
  */
 
 #ifndef _CE_H_
@@ -20,8 +10,6 @@
 
 #include "hif.h"
 
-/* Maximum number of Copy Engine's supported */
-#define CE_COUNT_MAX 12
 #define CE_HTT_H2T_MSG_SRC_NENTRIES 8192
 
 /* Descriptor rings must be aligned to this boundary */
@@ -40,10 +28,8 @@ struct ath10k_ce_pipe;
 #define CE_DESC_FLAGS_BYTE_SWAP      (1 << 1)
 #define CE_WCN3990_DESC_FLAGS_GATHER BIT(31)
 
-#define CE_DESC_FLAGS_GET_MASK		0x1F
-#define CE_DESC_37BIT_ADDR_MASK		0x1FFFFFFFFF
-#define CE_DDR_RRI_MASK			0xFFFF
-#define CE_DDR_RRI_SHIFT		16
+#define CE_DESC_ADDR_MASK		GENMASK_ULL(34, 0)
+#define CE_DESC_ADDR_HI_MASK		GENMASK(4, 0)
 
 /* Following desc flags are used in QCA99X0 */
 #define CE_DESC_FLAGS_HOST_INT_DIS	(1 << 2)
@@ -52,20 +38,24 @@ struct ath10k_ce_pipe;
 #define CE_DESC_FLAGS_META_DATA_MASK ar->hw_values->ce_desc_meta_data_mask
 #define CE_DESC_FLAGS_META_DATA_LSB  ar->hw_values->ce_desc_meta_data_lsb
 
-#ifndef CONFIG_ATH10K_SNOC
+#define CE_DDR_RRI_MASK			GENMASK(15, 0)
+#define CE_DDR_DRRI_SHIFT		16
+
 struct ce_desc {
 	__le32 addr;
 	__le16 nbytes;
 	__le16 flags; /* %CE_DESC_FLAGS_ */
 };
-#else
-struct ce_desc {
+
+struct ce_desc_64 {
 	__le64 addr;
-	u16 nbytes; /* length in register map */
-	u16 flags; /* fw_metadata_high */
-	u32 toeplitz_hash_result;
+	__le16 nbytes; /* length in register map */
+	__le16 flags; /* fw_metadata_high */
+	__le32 toeplitz_hash_result;
 };
-#endif
+
+#define CE_DESC_SIZE sizeof(struct ce_desc)
+#define CE_DESC_SIZE_64 sizeof(struct ce_desc_64)
 
 struct ath10k_ce_ring {
 	/* Number of entries in this ring; must be power of 2 */
@@ -103,7 +93,7 @@ struct ath10k_ce_ring {
 	/* Host address space */
 	void *base_addr_owner_space_unaligned;
 	/* CE address space */
-	u32 base_addr_ce_space_unaligned;
+	dma_addr_t base_addr_ce_space_unaligned;
 
 	/*
 	 * Actual start of descriptors.
@@ -114,13 +104,13 @@ struct ath10k_ce_ring {
 	void *base_addr_owner_space;
 
 	/* CE address space */
-	u32 base_addr_ce_space;
+	dma_addr_t base_addr_ce_space;
 
 	char *shadow_base_unaligned;
-	struct ce_desc *shadow_base;
+	struct ce_desc_64 *shadow_base;
 
 	/* keep last */
-	void *per_transfer_context[0];
+	void *per_transfer_context[];
 };
 
 struct ath10k_ce_pipe {
@@ -137,65 +127,11 @@ struct ath10k_ce_pipe {
 	unsigned int src_sz_max;
 	struct ath10k_ce_ring *src_ring;
 	struct ath10k_ce_ring *dest_ring;
+	const struct ath10k_ce_ops *ops;
 };
 
 /* Copy Engine settable attributes */
 struct ce_attr;
-
-#define SHADOW_VALUE0       (ar->shadow_reg_value->shadow_reg_value_0)
-#define SHADOW_VALUE1       (ar->shadow_reg_value->shadow_reg_value_1)
-#define SHADOW_VALUE2       (ar->shadow_reg_value->shadow_reg_value_2)
-#define SHADOW_VALUE3       (ar->shadow_reg_value->shadow_reg_value_3)
-#define SHADOW_VALUE4       (ar->shadow_reg_value->shadow_reg_value_4)
-#define SHADOW_VALUE5       (ar->shadow_reg_value->shadow_reg_value_5)
-#define SHADOW_VALUE6       (ar->shadow_reg_value->shadow_reg_value_6)
-#define SHADOW_VALUE7       (ar->shadow_reg_value->shadow_reg_value_7)
-#define SHADOW_VALUE8       (ar->shadow_reg_value->shadow_reg_value_8)
-#define SHADOW_VALUE9       (ar->shadow_reg_value->shadow_reg_value_9)
-#define SHADOW_VALUE10      (ar->shadow_reg_value->shadow_reg_value_10)
-#define SHADOW_VALUE11      (ar->shadow_reg_value->shadow_reg_value_11)
-#define SHADOW_VALUE12      (ar->shadow_reg_value->shadow_reg_value_12)
-#define SHADOW_VALUE13      (ar->shadow_reg_value->shadow_reg_value_13)
-#define SHADOW_VALUE14      (ar->shadow_reg_value->shadow_reg_value_14)
-#define SHADOW_VALUE15      (ar->shadow_reg_value->shadow_reg_value_15)
-#define SHADOW_VALUE16      (ar->shadow_reg_value->shadow_reg_value_16)
-#define SHADOW_VALUE17      (ar->shadow_reg_value->shadow_reg_value_17)
-#define SHADOW_VALUE18      (ar->shadow_reg_value->shadow_reg_value_18)
-#define SHADOW_VALUE19      (ar->shadow_reg_value->shadow_reg_value_19)
-#define SHADOW_VALUE20      (ar->shadow_reg_value->shadow_reg_value_20)
-#define SHADOW_VALUE21      (ar->shadow_reg_value->shadow_reg_value_21)
-#define SHADOW_VALUE22      (ar->shadow_reg_value->shadow_reg_value_22)
-#define SHADOW_VALUE23      (ar->shadow_reg_value->shadow_reg_value_23)
-#define SHADOW_ADDRESS0     (ar->shadow_reg_address->shadow_reg_address_0)
-#define SHADOW_ADDRESS1     (ar->shadow_reg_address->shadow_reg_address_1)
-#define SHADOW_ADDRESS2     (ar->shadow_reg_address->shadow_reg_address_2)
-#define SHADOW_ADDRESS3     (ar->shadow_reg_address->shadow_reg_address_3)
-#define SHADOW_ADDRESS4     (ar->shadow_reg_address->shadow_reg_address_4)
-#define SHADOW_ADDRESS5     (ar->shadow_reg_address->shadow_reg_address_5)
-#define SHADOW_ADDRESS6     (ar->shadow_reg_address->shadow_reg_address_6)
-#define SHADOW_ADDRESS7     (ar->shadow_reg_address->shadow_reg_address_7)
-#define SHADOW_ADDRESS8     (ar->shadow_reg_address->shadow_reg_address_8)
-#define SHADOW_ADDRESS9     (ar->shadow_reg_address->shadow_reg_address_9)
-#define SHADOW_ADDRESS10    (ar->shadow_reg_address->shadow_reg_address_10)
-#define SHADOW_ADDRESS11    (ar->shadow_reg_address->shadow_reg_address_11)
-#define SHADOW_ADDRESS12    (ar->shadow_reg_address->shadow_reg_address_12)
-#define SHADOW_ADDRESS13    (ar->shadow_reg_address->shadow_reg_address_13)
-#define SHADOW_ADDRESS14    (ar->shadow_reg_address->shadow_reg_address_14)
-#define SHADOW_ADDRESS15    (ar->shadow_reg_address->shadow_reg_address_15)
-#define SHADOW_ADDRESS16    (ar->shadow_reg_address->shadow_reg_address_16)
-#define SHADOW_ADDRESS17    (ar->shadow_reg_address->shadow_reg_address_17)
-#define SHADOW_ADDRESS18    (ar->shadow_reg_address->shadow_reg_address_18)
-#define SHADOW_ADDRESS19    (ar->shadow_reg_address->shadow_reg_address_19)
-#define SHADOW_ADDRESS20    (ar->shadow_reg_address->shadow_reg_address_20)
-#define SHADOW_ADDRESS21    (ar->shadow_reg_address->shadow_reg_address_21)
-#define SHADOW_ADDRESS22    (ar->shadow_reg_address->shadow_reg_address_22)
-#define SHADOW_ADDRESS23    (ar->shadow_reg_address->shadow_reg_address_23)
-
-#define SHADOW_ADDRESS(i) (SHADOW_ADDRESS0 + \
-			   i * (SHADOW_ADDRESS1 - SHADOW_ADDRESS0))
-
-u32 shadow_sr_wr_ind_addr(struct ath10k *ar, u32 ctrl_addr);
-u32 shadow_dst_wr_ind_addr(struct ath10k *ar, u32 ctrl_addr);
 
 struct ath10k_bus_ops {
 	u32 (*read32)(struct ath10k *ar, u32 offset);
@@ -203,18 +139,18 @@ struct ath10k_bus_ops {
 	int (*get_num_banks)(struct ath10k *ar);
 };
 
-static inline struct bus_opaque *ath10k_bus_priv(struct ath10k *ar)
+static inline struct ath10k_ce *ath10k_ce_priv(struct ath10k *ar)
 {
-	return (struct bus_opaque *)ar->drv_priv;
+	return (struct ath10k_ce *)ar->ce_priv;
 }
 
-struct bus_opaque {
+struct ath10k_ce {
 	/* protects CE info */
 	spinlock_t ce_lock;
 	const struct ath10k_bus_ops *bus_ops;
 	struct ath10k_ce_pipe ce_states[CE_COUNT_MAX];
-	u32 *vaddr_rri_on_ddr;
-	dma_addr_t paddr_rri_on_ddr;
+	u32 *vaddr_rri;
+	dma_addr_t paddr_rri;
 };
 
 /*==================Send====================*/
@@ -257,8 +193,6 @@ int ath10k_ce_num_free_src_entries(struct ath10k_ce_pipe *pipe);
 /*==================Recv=======================*/
 
 int __ath10k_ce_rx_num_free_bufs(struct ath10k_ce_pipe *pipe);
-int __ath10k_ce_rx_post_buf(struct ath10k_ce_pipe *pipe, void *ctx,
-			    dma_addr_t paddr);
 int ath10k_ce_rx_post_buf(struct ath10k_ce_pipe *pipe, void *ctx,
 			  dma_addr_t paddr);
 void ath10k_ce_rx_update_write_idx(struct ath10k_ce_pipe *pipe, u32 nentries);
@@ -292,8 +226,6 @@ void ath10k_ce_deinit_pipe(struct ath10k *ar, unsigned int ce_id);
 int ath10k_ce_alloc_pipe(struct ath10k *ar, int ce_id,
 			 const struct ce_attr *attr);
 void ath10k_ce_free_pipe(struct ath10k *ar, int ce_id);
-void ce_config_rri_on_ddr(struct ath10k *ar);
-void ce_remove_rri_on_ddr(struct ath10k *ar);
 
 /*==================CE Engine Shutdown=======================*/
 /*
@@ -303,7 +235,7 @@ void ce_remove_rri_on_ddr(struct ath10k *ar);
  */
 int ath10k_ce_revoke_recv_next(struct ath10k_ce_pipe *ce_state,
 			       void **per_transfer_contextp,
-			       u32 *bufferp);
+			       dma_addr_t *bufferp);
 
 int ath10k_ce_completed_recv_next_nolock(struct ath10k_ce_pipe *ce_state,
 					 void **per_transfer_contextp,
@@ -316,30 +248,38 @@ int ath10k_ce_completed_recv_next_nolock(struct ath10k_ce_pipe *ce_state,
  */
 int ath10k_ce_cancel_send_next(struct ath10k_ce_pipe *ce_state,
 			       void **per_transfer_contextp,
-			       u32 *bufferp,
+			       dma_addr_t *bufferp,
 			       unsigned int *nbytesp,
 			       unsigned int *transfer_idp);
 
 /*==================CE Interrupt Handlers====================*/
 void ath10k_ce_per_engine_service_any(struct ath10k *ar);
 void ath10k_ce_per_engine_service(struct ath10k *ar, unsigned int ce_id);
-int ath10k_ce_disable_interrupts(struct ath10k *ar);
+void ath10k_ce_disable_interrupt(struct ath10k *ar, int ce_id);
+void ath10k_ce_disable_interrupts(struct ath10k *ar);
+void ath10k_ce_enable_interrupt(struct ath10k *ar, int ce_id);
 void ath10k_ce_enable_interrupts(struct ath10k *ar);
-void ath10k_ce_disable_per_ce_interrupts(struct ath10k *ar, unsigned int ce_id);
-void ath10k_ce_enable_per_ce_interrupts(struct ath10k *ar, unsigned int ce_id);
+void ath10k_ce_dump_registers(struct ath10k *ar,
+			      struct ath10k_fw_crash_data *crash_data);
+
+void ath10k_ce_alloc_rri(struct ath10k *ar);
+void ath10k_ce_free_rri(struct ath10k *ar);
 
 /* ce_attr.flags values */
 /* Use NonSnooping PCIe accesses? */
-#define CE_ATTR_NO_SNOOP		1
+#define CE_ATTR_NO_SNOOP		BIT(0)
 
 /* Byte swap data words */
-#define CE_ATTR_BYTE_SWAP_DATA		2
+#define CE_ATTR_BYTE_SWAP_DATA		BIT(1)
 
 /* Swizzle descriptors? */
-#define CE_ATTR_SWIZZLE_DESCRIPTORS	4
+#define CE_ATTR_SWIZZLE_DESCRIPTORS	BIT(2)
 
 /* no interrupt on copy completion */
-#define CE_ATTR_DIS_INTR		8
+#define CE_ATTR_DIS_INTR		BIT(3)
+
+/* no interrupt, only polling */
+#define CE_ATTR_POLL			BIT(4)
 
 /* Attributes of an instance of a Copy Engine */
 struct ce_attr {
@@ -362,19 +302,59 @@ struct ce_attr {
 	void (*recv_cb)(struct ath10k_ce_pipe *);
 };
 
-#define COPY_ENGINE_ID(COPY_ENGINE_BASE_ADDRESS) ((COPY_ENGINE_BASE_ADDRESS \
-		- CE0_BASE_ADDRESS) / (CE1_BASE_ADDRESS - CE0_BASE_ADDRESS))
+struct ath10k_ce_ops {
+	struct ath10k_ce_ring *(*ce_alloc_src_ring)(struct ath10k *ar,
+						    u32 ce_id,
+						    const struct ce_attr *attr);
+	struct ath10k_ce_ring *(*ce_alloc_dst_ring)(struct ath10k *ar,
+						    u32 ce_id,
+						    const struct ce_attr *attr);
+	int (*ce_rx_post_buf)(struct ath10k_ce_pipe *pipe, void *ctx,
+			      dma_addr_t paddr);
+	int (*ce_completed_recv_next_nolock)(struct ath10k_ce_pipe *ce_state,
+					     void **per_transfer_contextp,
+					     u32 *nbytesp);
+	int (*ce_revoke_recv_next)(struct ath10k_ce_pipe *ce_state,
+				   void **per_transfer_contextp,
+				   dma_addr_t *nbytesp);
+	void (*ce_extract_desc_data)(struct ath10k *ar,
+				     struct ath10k_ce_ring *src_ring,
+				     u32 sw_index, dma_addr_t *bufferp,
+				     u32 *nbytesp, u32 *transfer_idp);
+	void (*ce_free_pipe)(struct ath10k *ar, int ce_id);
+	int (*ce_send_nolock)(struct ath10k_ce_pipe *pipe,
+			      void *per_transfer_context,
+			      dma_addr_t buffer, u32 nbytes,
+			      u32 transfer_id, u32 flags);
+	void (*ce_set_src_ring_base_addr_hi)(struct ath10k *ar,
+					     u32 ce_ctrl_addr,
+					     u64 addr);
+	void (*ce_set_dest_ring_base_addr_hi)(struct ath10k *ar,
+					      u32 ce_ctrl_addr,
+					      u64 addr);
+	int (*ce_completed_send_next_nolock)(struct ath10k_ce_pipe *ce_state,
+					     void **per_transfer_contextp);
+};
 
 static inline u32 ath10k_ce_base_address(struct ath10k *ar, unsigned int ce_id)
 {
 	return CE0_BASE_ADDRESS + (CE1_BASE_ADDRESS - CE0_BASE_ADDRESS) * ce_id;
 }
 
+#define COPY_ENGINE_ID(COPY_ENGINE_BASE_ADDRESS) (((COPY_ENGINE_BASE_ADDRESS) \
+		- CE0_BASE_ADDRESS) / (CE1_BASE_ADDRESS - CE0_BASE_ADDRESS))
+
 #define CE_SRC_RING_TO_DESC(baddr, idx) \
 	(&(((struct ce_desc *)baddr)[idx]))
 
 #define CE_DEST_RING_TO_DESC(baddr, idx) \
 	(&(((struct ce_desc *)baddr)[idx]))
+
+#define CE_SRC_RING_TO_DESC_64(baddr, idx) \
+	(&(((struct ce_desc_64 *)baddr)[idx]))
+
+#define CE_DEST_RING_TO_DESC_64(baddr, idx) \
+	(&(((struct ce_desc_64 *)baddr)[idx]))
 
 /* Ring arithmetic (modulus number of entries in ring, which is a pwr of 2). */
 #define CE_RING_DELTA(nentries_mask, fromidx, toidx) \
@@ -393,9 +373,55 @@ static inline u32 ath10k_ce_base_address(struct ath10k *ar, unsigned int ce_id)
 		CE_WRAPPER_INTERRUPT_SUMMARY_HOST_MSI_LSB)
 #define CE_WRAPPER_INTERRUPT_SUMMARY_ADDRESS			0x0000
 
-#define CE_INTERRUPT_SUMMARY(ar, ar_opaque) \
-	CE_WRAPPER_INTERRUPT_SUMMARY_HOST_MSI_GET( \
-		ar_opaque->bus_ops->read32((ar), CE_WRAPPER_BASE_ADDRESS + \
-		CE_WRAPPER_INTERRUPT_SUMMARY_ADDRESS))
+static inline u32 ath10k_ce_interrupt_summary(struct ath10k *ar)
+{
+	struct ath10k_ce *ce = ath10k_ce_priv(ar);
+
+	return CE_WRAPPER_INTERRUPT_SUMMARY_HOST_MSI_GET(
+		ce->bus_ops->read32((ar), CE_WRAPPER_BASE_ADDRESS +
+		CE_WRAPPER_INTERRUPT_SUMMARY_ADDRESS));
+}
+
+/* Host software's Copy Engine configuration. */
+#define CE_ATTR_FLAGS 0
+
+/*
+ * Configuration information for a Copy Engine pipe.
+ * Passed from Host to Target during startup (one per CE).
+ *
+ * NOTE: Structure is shared between Host software and Target firmware!
+ */
+struct ce_pipe_config {
+	__le32 pipenum;
+	__le32 pipedir;
+	__le32 nentries;
+	__le32 nbytes_max;
+	__le32 flags;
+	__le32 reserved;
+};
+
+/*
+ * Directions for interconnect pipe configuration.
+ * These definitions may be used during configuration and are shared
+ * between Host and Target.
+ *
+ * Pipe Directions are relative to the Host, so PIPEDIR_IN means
+ * "coming IN over air through Target to Host" as with a WiFi Rx operation.
+ * Conversely, PIPEDIR_OUT means "going OUT from Host through Target over air"
+ * as with a WiFi Tx operation. This is somewhat awkward for the "middle-man"
+ * Target since things that are "PIPEDIR_OUT" are coming IN to the Target
+ * over the interconnect.
+ */
+#define PIPEDIR_NONE    0
+#define PIPEDIR_IN      1  /* Target-->Host, WiFi Rx direction */
+#define PIPEDIR_OUT     2  /* Host->Target, WiFi Tx direction */
+#define PIPEDIR_INOUT   3  /* bidirectional */
+
+/* Establish a mapping between a service/direction and a pipe. */
+struct ce_service_to_pipe {
+	__le32 service_id;
+	__le32 pipedir;
+	__le32 pipenum;
+};
 
 #endif /* _CE_H_ */

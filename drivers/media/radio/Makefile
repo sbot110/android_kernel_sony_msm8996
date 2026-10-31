@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-2.0
 #
 # Makefile for the kernel character device drivers.
 #
@@ -33,7 +34,5 @@ obj-$(CONFIG_RADIO_WL1273) += radio-wl1273.o
 obj-$(CONFIG_RADIO_WL128X) += wl128x/
 obj-$(CONFIG_RADIO_TEA575X) += tea575x.o
 obj-$(CONFIG_USB_RAREMONO) += radio-raremono.o
-obj-$(CONFIG_RADIO_SILABS) += silabs/
-shark2-objs := radio-shark2.o radio-tea5777.o
 
-ccflags-y += -Isound
+shark2-objs := radio-shark2.o radio-tea5777.o

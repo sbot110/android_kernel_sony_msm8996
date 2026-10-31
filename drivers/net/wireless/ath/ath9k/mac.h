@@ -16,6 +16,7 @@
 
 #ifndef MAC_H
 #define MAC_H
+#include <net/cfg80211.h>
 
 #define set11nTries(_series, _index) \
 	(SM((_series)[_index].Tries, AR_XmitDataTries##_index))
@@ -65,10 +66,6 @@
 #define INIT_SSH_RETRY  32
 #define INIT_SLG_RETRY  32
 
-#define ATH9K_SLOT_TIME_6 6
-#define ATH9K_SLOT_TIME_9 9
-#define ATH9K_SLOT_TIME_20 20
-
 #define ATH9K_TXERR_XRETRY         0x01
 #define ATH9K_TXERR_FILT           0x02
 #define ATH9K_TXERR_FIFO           0x04
@@ -116,8 +113,10 @@ struct ath_tx_status {
 	u8 qid;
 	u16 desc_id;
 	u8 tid;
-	u32 ba_low;
-	u32 ba_high;
+	struct_group(ba,
+		u32 ba_low;
+		u32 ba_high;
+	);
 	u32 evm0;
 	u32 evm1;
 	u32 evm2;
@@ -147,7 +146,8 @@ struct ath_rx_status {
 	u32 evm2;
 	u32 evm3;
 	u32 evm4;
-	u32 flag; /* see enum mac80211_rx_flags */
+	u16 enc_flags;
+	enum rate_info_bw bw;
 };
 
 struct ath_htc_rx_status {

@@ -85,7 +85,7 @@ static struct fb_var_screeninfo vga16fb_defined = {
 };
 
 /* name should not depend on EGA/VGA */
-static struct fb_fix_screeninfo vga16fb_fix = {
+static const struct fb_fix_screeninfo vga16fb_fix = {
 	.id		= "VGA16 VGA",
 	.smem_start	= VGA_FB_PHYS,
 	.smem_len	= VGA_FB_PHYS_LEN,
@@ -182,6 +182,25 @@ static inline int getindex(void)
 static inline void setindex(int index)
 {
 	vga_io_w(VGA_GFX_I, index);
+}
+
+/* Check if the video mode is supported by the driver */
+static inline int check_mode_supported(void)
+{
+	/* non-x86 architectures treat orig_video_isVGA as a boolean flag */
+#if defined(CONFIG_X86)
+	/* only EGA and VGA in 16 color graphic mode are supported */
+	if (screen_info.orig_video_isVGA != VIDEO_TYPE_EGAC &&
+	    screen_info.orig_video_isVGA != VIDEO_TYPE_VGAC)
+		return -ENODEV;
+
+	if (screen_info.orig_video_mode != 0x0D &&	/* 320x200/4 (EGA) */
+	    screen_info.orig_video_mode != 0x0E &&	/* 640x200/4 (EGA) */
+	    screen_info.orig_video_mode != 0x10 &&	/* 640x350/4 (EGA) */
+	    screen_info.orig_video_mode != 0x12)	/* 640x480/4 (VGA) */
+		return -ENODEV;
+#endif
+	return 0;
 }
 
 static void vga16fb_pan_var(struct fb_info *info, 
@@ -1055,7 +1074,6 @@ static void vga16fb_copyarea(struct fb_info *info, const struct fb_copyarea *are
 	case FB_TYPE_VGA_PLANES:
 		if (info->fix.type_aux == FB_AUX_VGA_PLANES_VGA4) {
 			width = width/8;
-			height = height;
 			line_ofs = info->fix.line_length - width;
 
 			setmode(1);
@@ -1271,7 +1289,7 @@ static void vga16fb_destroy(struct fb_info *info)
 	framebuffer_release(info);
 }
 
-static struct fb_ops vga16fb_ops = {
+static const struct fb_ops vga16fb_ops = {
 	.owner		= THIS_MODULE,
 	.fb_open        = vga16fb_open,
 	.fb_release     = vga16fb_release,
@@ -1423,6 +1441,11 @@ static int __init vga16fb_init(void)
 
 	vga16fb_setup(option);
 #endif
+
+	ret = check_mode_supported();
+	if (ret)
+		return ret;
+
 	ret = platform_driver_register(&vga16fb_driver);
 
 	if (!ret) {
@@ -1452,13 +1475,3 @@ MODULE_DESCRIPTION("Legacy VGA framebuffer device driver");
 MODULE_LICENSE("GPL");
 module_init(vga16fb_init);
 module_exit(vga16fb_exit);
-
-
-/*
- * Overrides for Emacs so that we follow Linus's tabbing style.
- * ---------------------------------------------------------------------------
- * Local variables:
- * c-basic-offset: 8
- * End:
- */
-

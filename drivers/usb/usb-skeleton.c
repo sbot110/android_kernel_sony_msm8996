@@ -1,15 +1,11 @@
+// SPDX-License-Identifier: GPL-2.0
 /*
  * USB Skeleton driver - 2.2
  *
  * Copyright (C) 2001-2004 Greg Kroah-Hartman (greg@kroah.com)
  *
- *	This program is free software; you can redistribute it and/or
- *	modify it under the terms of the GNU General Public License as
- *	published by the Free Software Foundation, version 2.
- *
  * This driver is based on the 2.6.3 version of drivers/usb/usb-skeleton.c
  * but has been rewritten to be easier to read and use.
- *
  */
 
 #include <linux/kernel.h>
@@ -39,9 +35,11 @@ MODULE_DEVICE_TABLE(usb, skel_table);
 
 /* our private defines. if this grows any larger, use your own .h file */
 #define MAX_TRANSFER		(PAGE_SIZE - 512)
-/* MAX_TRANSFER is chosen so that the VM is not stressed by
-   allocations > PAGE_SIZE and the number of packets in a page
-   is an integer 512 is the largest possible packet on EHCI */
+/*
+ * MAX_TRANSFER is chosen so that the VM is not stressed by
+ * allocations > PAGE_SIZE and the number of packets in a page
+ * is an integer 512 is the largest possible packet on EHCI
+ */
 #define WRITES_IN_FLIGHT	8
 /* arbitrarily chosen */
 
@@ -162,10 +160,11 @@ static int skel_flush(struct file *file, fl_owner_t id)
 static void skel_read_bulk_callback(struct urb *urb)
 {
 	struct usb_skel *dev;
+	unsigned long flags;
 
 	dev = urb->context;
 
-	spin_lock(&dev->err_lock);
+	spin_lock_irqsave(&dev->err_lock, flags);
 	/* sync/async unlink faults aren't errors */
 	if (urb->status) {
 		if (!(urb->status == -ENOENT ||
@@ -180,7 +179,7 @@ static void skel_read_bulk_callback(struct urb *urb)
 		dev->bulk_in_filled = urb->actual_length;
 	}
 	dev->ongoing_read = 0;
-	spin_unlock(&dev->err_lock);
+	spin_unlock_irqrestore(&dev->err_lock, flags);
 
 	wake_up_interruptible(&dev->bulk_in_wait);
 }
@@ -231,8 +230,7 @@ static ssize_t skel_read(struct file *file, char *buffer, size_t count,
 
 	dev = file->private_data;
 
-	/* if we cannot read at all, return EOF */
-	if (!dev->bulk_in_urb || !count)
+	if (!count)
 		return 0;
 
 	/* no concurrent readers */
@@ -334,6 +332,7 @@ exit:
 static void skel_write_bulk_callback(struct urb *urb)
 {
 	struct usb_skel *dev;
+	unsigned long flags;
 
 	dev = urb->context;
 
@@ -346,9 +345,9 @@ static void skel_write_bulk_callback(struct urb *urb)
 				"%s - nonzero write bulk status received: %d\n",
 				__func__, urb->status);
 
-		spin_lock(&dev->err_lock);
+		spin_lock_irqsave(&dev->err_lock, flags);
 		dev->errors = urb->status;
-		spin_unlock(&dev->err_lock);
+		spin_unlock_irqrestore(&dev->err_lock, flags);
 	}
 
 	/* free up our allocated buffer */
@@ -490,18 +489,14 @@ static int skel_probe(struct usb_interface *interface,
 		      const struct usb_device_id *id)
 {
 	struct usb_skel *dev;
-	struct usb_host_interface *iface_desc;
-	struct usb_endpoint_descriptor *endpoint;
-	size_t buffer_size;
-	int i;
-	int retval = -ENOMEM;
+	struct usb_endpoint_descriptor *bulk_in, *bulk_out;
+	int retval;
 
 	/* allocate memory for our device state and initialize it */
 	dev = kzalloc(sizeof(*dev), GFP_KERNEL);
-	if (!dev) {
-		dev_err(&interface->dev, "Out of memory\n");
-		goto error;
-	}
+	if (!dev)
+		return -ENOMEM;
+
 	kref_init(&dev->kref);
 	sema_init(&dev->limit_sem, WRITES_IN_FLIGHT);
 	mutex_init(&dev->io_mutex);
@@ -514,41 +509,28 @@ static int skel_probe(struct usb_interface *interface,
 
 	/* set up the endpoint information */
 	/* use only the first bulk-in and bulk-out endpoints */
-	iface_desc = interface->cur_altsetting;
-	for (i = 0; i < iface_desc->desc.bNumEndpoints; ++i) {
-		endpoint = &iface_desc->endpoint[i].desc;
-
-		if (!dev->bulk_in_endpointAddr &&
-		    usb_endpoint_is_bulk_in(endpoint)) {
-			/* we found a bulk in endpoint */
-			buffer_size = usb_endpoint_maxp(endpoint);
-			dev->bulk_in_size = buffer_size;
-			dev->bulk_in_endpointAddr = endpoint->bEndpointAddress;
-			dev->bulk_in_buffer = kmalloc(buffer_size, GFP_KERNEL);
-			if (!dev->bulk_in_buffer) {
-				dev_err(&interface->dev,
-					"Could not allocate bulk_in_buffer\n");
-				goto error;
-			}
-			dev->bulk_in_urb = usb_alloc_urb(0, GFP_KERNEL);
-			if (!dev->bulk_in_urb) {
-				dev_err(&interface->dev,
-					"Could not allocate bulk_in_urb\n");
-				goto error;
-			}
-		}
-
-		if (!dev->bulk_out_endpointAddr &&
-		    usb_endpoint_is_bulk_out(endpoint)) {
-			/* we found a bulk out endpoint */
-			dev->bulk_out_endpointAddr = endpoint->bEndpointAddress;
-		}
-	}
-	if (!(dev->bulk_in_endpointAddr && dev->bulk_out_endpointAddr)) {
+	retval = usb_find_common_endpoints(interface->cur_altsetting,
+			&bulk_in, &bulk_out, NULL, NULL);
+	if (retval) {
 		dev_err(&interface->dev,
 			"Could not find both bulk-in and bulk-out endpoints\n");
 		goto error;
 	}
+
+	dev->bulk_in_size = usb_endpoint_maxp(bulk_in);
+	dev->bulk_in_endpointAddr = bulk_in->bEndpointAddress;
+	dev->bulk_in_buffer = kmalloc(dev->bulk_in_size, GFP_KERNEL);
+	if (!dev->bulk_in_buffer) {
+		retval = -ENOMEM;
+		goto error;
+	}
+	dev->bulk_in_urb = usb_alloc_urb(0, GFP_KERNEL);
+	if (!dev->bulk_in_urb) {
+		retval = -ENOMEM;
+		goto error;
+	}
+
+	dev->bulk_out_endpointAddr = bulk_out->bEndpointAddress;
 
 	/* save our data pointer in this interface device */
 	usb_set_intfdata(interface, dev);
@@ -570,9 +552,9 @@ static int skel_probe(struct usb_interface *interface,
 	return 0;
 
 error:
-	if (dev)
-		/* this frees allocated memory */
-		kref_put(&dev->kref, skel_delete);
+	/* this frees allocated memory */
+	kref_put(&dev->kref, skel_delete);
+
 	return retval;
 }
 
@@ -592,6 +574,7 @@ static void skel_disconnect(struct usb_interface *interface)
 	dev->disconnected = 1;
 	mutex_unlock(&dev->io_mutex);
 
+	usb_kill_urb(dev->bulk_in_urb);
 	usb_kill_anchored_urbs(&dev->submitted);
 
 	/* decrement our usage count */
@@ -660,4 +643,4 @@ static struct usb_driver skel_driver = {
 
 module_usb_driver(skel_driver);
 
-MODULE_LICENSE("GPL");
+MODULE_LICENSE("GPL v2");

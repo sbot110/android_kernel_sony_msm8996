@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-2.0
 /*
  *  Copyright (C) 1991, 1992, 1995  Linus Torvalds
  *
@@ -28,8 +29,6 @@
 #include <asm/time.h>
 
 #include <platforms/chrp/chrp.h>
-
-extern spinlock_t rtc_lock;
 
 #define NVRAM_AS0  0x74
 #define NVRAM_AS1  0x75

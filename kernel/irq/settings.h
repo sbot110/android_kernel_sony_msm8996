@@ -1,3 +1,4 @@
+/* SPDX-License-Identifier: GPL-2.0 */
 /*
  * Internal header to deal with irq_desc->status which will be renamed
  * to irq_desc->settings.
@@ -16,8 +17,10 @@ enum {
 	_IRQ_PER_CPU_DEVID	= IRQ_PER_CPU_DEVID,
 	_IRQ_IS_POLLED		= IRQ_IS_POLLED,
 	_IRQ_DISABLE_UNLAZY	= IRQ_DISABLE_UNLAZY,
+	_IRQ_HIDDEN		= IRQ_HIDDEN,
+	_IRQ_NO_DEBUG		= IRQ_NO_DEBUG,
+	_IRQ_RAW		= IRQ_RAW,
 	_IRQF_MODIFY_MASK	= IRQF_MODIFY_MASK,
-	_IRQ_AFFINITY_MANAGED	= IRQ_AFFINITY_MANAGED,
 };
 
 #define IRQ_PER_CPU		GOT_YOU_MORON
@@ -31,9 +34,11 @@ enum {
 #define IRQ_PER_CPU_DEVID	GOT_YOU_MORON
 #define IRQ_IS_POLLED		GOT_YOU_MORON
 #define IRQ_DISABLE_UNLAZY	GOT_YOU_MORON
+#define IRQ_HIDDEN		GOT_YOU_MORON
+#define IRQ_NO_DEBUG		GOT_YOU_MORON
+#define IRQ_RAW			GOT_YOU_MORON
 #undef IRQF_MODIFY_MASK
 #define IRQF_MODIFY_MASK	GOT_YOU_MORON
-#define IRQ_AFFINITY_MANAGED	GOT_YOU_MORON
 
 static inline void
 irq_settings_clr_and_set(struct irq_desc *desc, u32 clr, u32 set)
@@ -65,16 +70,6 @@ static inline void irq_settings_set_no_balancing(struct irq_desc *desc)
 static inline bool irq_settings_has_no_balance_set(struct irq_desc *desc)
 {
 	return desc->status_use_accessors & _IRQ_NO_BALANCING;
-}
-
-static inline void irq_settings_set_affinity_managed(struct irq_desc *desc)
-{
-	desc->status_use_accessors |= _IRQ_AFFINITY_MANAGED;
-}
-
-static inline bool irq_settings_has_affinity_managed_set(struct irq_desc *desc)
-{
-	return desc->status_use_accessors & _IRQ_AFFINITY_MANAGED;
 }
 
 static inline u32 irq_settings_get_trigger_mask(struct irq_desc *desc)
@@ -177,4 +172,32 @@ static inline bool irq_settings_disable_unlazy(struct irq_desc *desc)
 static inline void irq_settings_clr_disable_unlazy(struct irq_desc *desc)
 {
 	desc->status_use_accessors &= ~_IRQ_DISABLE_UNLAZY;
+}
+
+static inline bool irq_settings_is_hidden(struct irq_desc *desc)
+{
+	return desc->status_use_accessors & _IRQ_HIDDEN;
+}
+
+static inline void irq_settings_set_no_debug(struct irq_desc *desc)
+{
+	desc->status_use_accessors |= _IRQ_NO_DEBUG;
+}
+
+static inline bool irq_settings_no_debug(struct irq_desc *desc)
+{
+	return desc->status_use_accessors & _IRQ_NO_DEBUG;
+}
+
+static inline bool irq_settings_is_raw(struct irq_desc *desc)
+{
+	if (IS_ENABLED(CONFIG_ARCH_WANTS_IRQ_RAW))
+		return desc->status_use_accessors & _IRQ_RAW;
+
+	/*
+	 * Using IRQ_RAW on architectures that don't expect it is
+	 * likely to be wrong.
+	 */
+	WARN_ON_ONCE(1);
+	return false;
 }

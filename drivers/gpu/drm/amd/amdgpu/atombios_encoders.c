@@ -23,18 +23,21 @@
  * Authors: Dave Airlie
  *          Alex Deucher
  */
-#include <drm/drmP.h>
+
+#include <linux/pci.h>
+
 #include <drm/drm_crtc_helper.h>
 #include <drm/amdgpu_drm.h>
 #include "amdgpu.h"
 #include "amdgpu_connectors.h"
+#include "amdgpu_display.h"
 #include "atom.h"
 #include "atombios_encoders.h"
 #include "atombios_dp.h"
 #include <linux/backlight.h>
 #include "bif/bif_4_1_d.h"
 
-static u8
+u8
 amdgpu_atombios_encoder_get_backlight_level_from_reg(struct amdgpu_device *adev)
 {
 	u8 backlight_level;
@@ -48,7 +51,7 @@ amdgpu_atombios_encoder_get_backlight_level_from_reg(struct amdgpu_device *adev)
 	return backlight_level;
 }
 
-static void
+void
 amdgpu_atombios_encoder_set_backlight_level_to_reg(struct amdgpu_device *adev,
 					    u8 backlight_level)
 {
@@ -67,7 +70,7 @@ u8
 amdgpu_atombios_encoder_get_backlight_level(struct amdgpu_encoder *amdgpu_encoder)
 {
 	struct drm_device *dev = amdgpu_encoder->base.dev;
-	struct amdgpu_device *adev = dev->dev_private;
+	struct amdgpu_device *adev = drm_to_adev(dev);
 
 	if (!(adev->mode_info.firmware_flags & ATOM_BIOS_INFO_BL_CONTROLLED_BY_GPU))
 		return 0;
@@ -81,7 +84,7 @@ amdgpu_atombios_encoder_set_backlight_level(struct amdgpu_encoder *amdgpu_encode
 {
 	struct drm_encoder *encoder = &amdgpu_encoder->base;
 	struct drm_device *dev = amdgpu_encoder->base.dev;
-	struct amdgpu_device *adev = dev->dev_private;
+	struct amdgpu_device *adev = drm_to_adev(dev);
 	struct amdgpu_encoder_atom_dig *dig;
 
 	if (!(adev->mode_info.firmware_flags & ATOM_BIOS_INFO_BL_CONTROLLED_BY_GPU))
@@ -149,7 +152,7 @@ amdgpu_atombios_encoder_get_backlight_brightness(struct backlight_device *bd)
 	struct amdgpu_backlight_privdata *pdata = bl_get_data(bd);
 	struct amdgpu_encoder *amdgpu_encoder = pdata->encoder;
 	struct drm_device *dev = amdgpu_encoder->base.dev;
-	struct amdgpu_device *adev = dev->dev_private;
+	struct amdgpu_device *adev = drm_to_adev(dev);
 
 	return amdgpu_atombios_encoder_get_backlight_level_from_reg(adev);
 }
@@ -163,12 +166,11 @@ void amdgpu_atombios_encoder_init_backlight(struct amdgpu_encoder *amdgpu_encode
 				     struct drm_connector *drm_connector)
 {
 	struct drm_device *dev = amdgpu_encoder->base.dev;
-	struct amdgpu_device *adev = dev->dev_private;
+	struct amdgpu_device *adev = drm_to_adev(dev);
 	struct backlight_device *bd;
 	struct backlight_properties props;
 	struct amdgpu_backlight_privdata *pdata;
 	struct amdgpu_encoder_atom_dig *dig;
-	u8 backlight_level;
 	char bl_name[16];
 
 	/* Mac laptops with multiple GPUs use the gmux driver for backlight
@@ -179,9 +181,6 @@ void amdgpu_atombios_encoder_init_backlight(struct amdgpu_encoder *amdgpu_encode
 		return;
 
 	if (!amdgpu_encoder->enc_priv)
-		return;
-
-	if (!adev->is_atom_bios)
 		return;
 
 	if (!(adev->mode_info.firmware_flags & ATOM_BIOS_INFO_BL_CONTROLLED_BY_GPU))
@@ -207,8 +206,6 @@ void amdgpu_atombios_encoder_init_backlight(struct amdgpu_encoder *amdgpu_encode
 
 	pdata->encoder = amdgpu_encoder;
 
-	backlight_level = amdgpu_atombios_encoder_get_backlight_level_from_reg(adev);
-
 	dig = amdgpu_encoder->enc_priv;
 	dig->bl_dev = bd;
 
@@ -229,14 +226,11 @@ void
 amdgpu_atombios_encoder_fini_backlight(struct amdgpu_encoder *amdgpu_encoder)
 {
 	struct drm_device *dev = amdgpu_encoder->base.dev;
-	struct amdgpu_device *adev = dev->dev_private;
+	struct amdgpu_device *adev = drm_to_adev(dev);
 	struct backlight_device *bd = NULL;
 	struct amdgpu_encoder_atom_dig *dig;
 
 	if (!amdgpu_encoder->enc_priv)
-		return;
-
-	if (!adev->is_atom_bios)
 		return;
 
 	if (!(adev->mode_info.firmware_flags & ATOM_BIOS_INFO_BL_CONTROLLED_BY_GPU))
@@ -322,7 +316,7 @@ static void
 amdgpu_atombios_encoder_setup_dac(struct drm_encoder *encoder, int action)
 {
 	struct drm_device *dev = encoder->dev;
-	struct amdgpu_device *adev = dev->dev_private;
+	struct amdgpu_device *adev = drm_to_adev(dev);
 	struct amdgpu_encoder *amdgpu_encoder = to_amdgpu_encoder(encoder);
 	DAC_ENCODER_CONTROL_PS_ALLOCATION args;
 	int index = 0;
@@ -385,7 +379,7 @@ static void
 amdgpu_atombios_encoder_setup_dvo(struct drm_encoder *encoder, int action)
 {
 	struct drm_device *dev = encoder->dev;
-	struct amdgpu_device *adev = dev->dev_private;
+	struct amdgpu_device *adev = drm_to_adev(dev);
 	struct amdgpu_encoder *amdgpu_encoder = to_amdgpu_encoder(encoder);
 	union dvo_encoder_control args;
 	int index = GetIndexIntoMasterTable(COMMAND, DVOEncoderControl);
@@ -502,10 +496,8 @@ int amdgpu_atombios_encoder_get_encoder_mode(struct drm_encoder *encoder)
 		} else {
 			return ATOM_ENCODER_MODE_DVI;
 		}
-		break;
 	case DRM_MODE_CONNECTOR_LVDS:
 		return ATOM_ENCODER_MODE_LVDS;
-		break;
 	case DRM_MODE_CONNECTOR_DisplayPort:
 		dig_connector = amdgpu_connector->con_priv;
 		if ((dig_connector->dp_sink_type == CONNECTOR_OBJECT_ID_DISPLAYPORT) ||
@@ -522,20 +514,16 @@ int amdgpu_atombios_encoder_get_encoder_mode(struct drm_encoder *encoder)
 		} else {
 			return ATOM_ENCODER_MODE_DVI;
 		}
-		break;
 	case DRM_MODE_CONNECTOR_eDP:
 		return ATOM_ENCODER_MODE_DP;
 	case DRM_MODE_CONNECTOR_DVIA:
 	case DRM_MODE_CONNECTOR_VGA:
 		return ATOM_ENCODER_MODE_CRT;
-		break;
 	case DRM_MODE_CONNECTOR_Composite:
 	case DRM_MODE_CONNECTOR_SVIDEO:
 	case DRM_MODE_CONNECTOR_9PinDIN:
 		/* fix me */
 		return ATOM_ENCODER_MODE_TV;
-		/*return ATOM_ENCODER_MODE_CV;*/
-		break;
 	}
 }
 
@@ -568,6 +556,7 @@ union dig_encoder_control {
 	DIG_ENCODER_CONTROL_PARAMETERS_V2 v2;
 	DIG_ENCODER_CONTROL_PARAMETERS_V3 v3;
 	DIG_ENCODER_CONTROL_PARAMETERS_V4 v4;
+	DIG_ENCODER_CONTROL_PARAMETERS_V5 v5;
 };
 
 void
@@ -575,7 +564,7 @@ amdgpu_atombios_encoder_setup_dig_encoder(struct drm_encoder *encoder,
 				   int action, int panel_mode)
 {
 	struct drm_device *dev = encoder->dev;
-	struct amdgpu_device *adev = dev->dev_private;
+	struct amdgpu_device *adev = drm_to_adev(dev);
 	struct amdgpu_encoder *amdgpu_encoder = to_amdgpu_encoder(encoder);
 	struct amdgpu_encoder_atom_dig *dig = amdgpu_encoder->enc_priv;
 	struct drm_connector *connector = amdgpu_get_connector_for_encoder(encoder);
@@ -695,6 +684,47 @@ amdgpu_atombios_encoder_setup_dig_encoder(struct drm_encoder *encoder,
 			else
 				args.v4.ucHPD_ID = hpd_id + 1;
 			break;
+		case 5:
+			switch (action) {
+			case ATOM_ENCODER_CMD_SETUP_PANEL_MODE:
+				args.v5.asDPPanelModeParam.ucAction = action;
+				args.v5.asDPPanelModeParam.ucPanelMode = panel_mode;
+				args.v5.asDPPanelModeParam.ucDigId = dig->dig_encoder;
+				break;
+			case ATOM_ENCODER_CMD_STREAM_SETUP:
+				args.v5.asStreamParam.ucAction = action;
+				args.v5.asStreamParam.ucDigId = dig->dig_encoder;
+				args.v5.asStreamParam.ucDigMode =
+					amdgpu_atombios_encoder_get_encoder_mode(encoder);
+				if (ENCODER_MODE_IS_DP(args.v5.asStreamParam.ucDigMode))
+					args.v5.asStreamParam.ucLaneNum = dp_lane_count;
+				else if (amdgpu_dig_monitor_is_duallink(encoder,
+									amdgpu_encoder->pixel_clock))
+					args.v5.asStreamParam.ucLaneNum = 8;
+				else
+					args.v5.asStreamParam.ucLaneNum = 4;
+				args.v5.asStreamParam.ulPixelClock =
+					cpu_to_le32(amdgpu_encoder->pixel_clock / 10);
+				args.v5.asStreamParam.ucBitPerColor =
+					amdgpu_atombios_encoder_get_bpc(encoder);
+				args.v5.asStreamParam.ucLinkRateIn270Mhz = dp_clock / 27000;
+				break;
+			case ATOM_ENCODER_CMD_DP_LINK_TRAINING_START:
+			case ATOM_ENCODER_CMD_DP_LINK_TRAINING_PATTERN1:
+			case ATOM_ENCODER_CMD_DP_LINK_TRAINING_PATTERN2:
+			case ATOM_ENCODER_CMD_DP_LINK_TRAINING_PATTERN3:
+			case ATOM_ENCODER_CMD_DP_LINK_TRAINING_PATTERN4:
+			case ATOM_ENCODER_CMD_DP_LINK_TRAINING_COMPLETE:
+			case ATOM_ENCODER_CMD_DP_VIDEO_OFF:
+			case ATOM_ENCODER_CMD_DP_VIDEO_ON:
+				args.v5.asCmdParam.ucAction = action;
+				args.v5.asCmdParam.ucDigId = dig->dig_encoder;
+				break;
+			default:
+				DRM_ERROR("Unsupported action 0x%x\n", action);
+				break;
+			}
+			break;
 		default:
 			DRM_ERROR("Unknown table version %d, %d\n", frev, crev);
 			break;
@@ -715,14 +745,15 @@ union dig_transmitter_control {
 	DIG_TRANSMITTER_CONTROL_PARAMETERS_V3 v3;
 	DIG_TRANSMITTER_CONTROL_PARAMETERS_V4 v4;
 	DIG_TRANSMITTER_CONTROL_PARAMETERS_V1_5 v5;
+	DIG_TRANSMITTER_CONTROL_PARAMETERS_V1_6 v6;
 };
 
 void
 amdgpu_atombios_encoder_setup_dig_transmitter(struct drm_encoder *encoder, int action,
-				       uint8_t lane_num, uint8_t lane_set)
+					      uint8_t lane_num, uint8_t lane_set)
 {
 	struct drm_device *dev = encoder->dev;
-	struct amdgpu_device *adev = dev->dev_private;
+	struct amdgpu_device *adev = drm_to_adev(dev);
 	struct amdgpu_encoder *amdgpu_encoder = to_amdgpu_encoder(encoder);
 	struct amdgpu_encoder_atom_dig *dig = amdgpu_encoder->enc_priv;
 	struct drm_connector *connector;
@@ -1071,6 +1102,54 @@ amdgpu_atombios_encoder_setup_dig_transmitter(struct drm_encoder *encoder, int a
 			args.v5.ucDigEncoderSel = 1 << dig_encoder;
 			args.v5.ucDPLaneSet = lane_set;
 			break;
+		case 6:
+			args.v6.ucAction = action;
+			if (is_dp)
+				args.v6.ulSymClock = cpu_to_le32(dp_clock / 10);
+			else
+				args.v6.ulSymClock = cpu_to_le32(amdgpu_encoder->pixel_clock / 10);
+
+			switch (amdgpu_encoder->encoder_id) {
+			case ENCODER_OBJECT_ID_INTERNAL_UNIPHY:
+				if (dig->linkb)
+					args.v6.ucPhyId = ATOM_PHY_ID_UNIPHYB;
+				else
+					args.v6.ucPhyId = ATOM_PHY_ID_UNIPHYA;
+				break;
+			case ENCODER_OBJECT_ID_INTERNAL_UNIPHY1:
+				if (dig->linkb)
+					args.v6.ucPhyId = ATOM_PHY_ID_UNIPHYD;
+				else
+					args.v6.ucPhyId = ATOM_PHY_ID_UNIPHYC;
+				break;
+			case ENCODER_OBJECT_ID_INTERNAL_UNIPHY2:
+				if (dig->linkb)
+					args.v6.ucPhyId = ATOM_PHY_ID_UNIPHYF;
+				else
+					args.v6.ucPhyId = ATOM_PHY_ID_UNIPHYE;
+				break;
+			case ENCODER_OBJECT_ID_INTERNAL_UNIPHY3:
+				args.v6.ucPhyId = ATOM_PHY_ID_UNIPHYG;
+				break;
+			}
+			if (is_dp)
+				args.v6.ucLaneNum = dp_lane_count;
+			else if (amdgpu_dig_monitor_is_duallink(encoder, amdgpu_encoder->pixel_clock))
+				args.v6.ucLaneNum = 8;
+			else
+				args.v6.ucLaneNum = 4;
+			args.v6.ucConnObjId = connector_object_id;
+			if (action == ATOM_TRANSMITTER_ACTION_SETUP_VSEMPH)
+				args.v6.ucDPLaneSet = lane_set;
+			else
+				args.v6.ucDigMode = amdgpu_atombios_encoder_get_encoder_mode(encoder);
+
+			if (hpd_id == AMDGPU_HPD_NONE)
+				args.v6.ucHPDSel = 0;
+			else
+				args.v6.ucHPDSel = hpd_id + 1;
+			args.v6.ucDigEncoderSel = 1 << dig_encoder;
+			break;
 		default:
 			DRM_ERROR("Unknown table version %d, %d\n", frev, crev);
 			break;
@@ -1090,7 +1169,7 @@ amdgpu_atombios_encoder_set_edp_panel_power(struct drm_connector *connector,
 {
 	struct amdgpu_connector *amdgpu_connector = to_amdgpu_connector(connector);
 	struct drm_device *dev = amdgpu_connector->base.dev;
-	struct amdgpu_device *adev = dev->dev_private;
+	struct amdgpu_device *adev = drm_to_adev(dev);
 	union dig_transmitter_control args;
 	int index = GetIndexIntoMasterTable(COMMAND, UNIPHYTransmitterControl);
 	uint8_t frev, crev;
@@ -1137,7 +1216,7 @@ amdgpu_atombios_encoder_setup_external_encoder(struct drm_encoder *encoder,
 					int action)
 {
 	struct drm_device *dev = encoder->dev;
-	struct amdgpu_device *adev = dev->dev_private;
+	struct amdgpu_device *adev = drm_to_adev(dev);
 	struct amdgpu_encoder *amdgpu_encoder = to_amdgpu_encoder(encoder);
 	struct amdgpu_encoder *ext_amdgpu_encoder = to_amdgpu_encoder(ext_encoder);
 	union external_encoder_control args;
@@ -1378,7 +1457,7 @@ void
 amdgpu_atombios_encoder_set_crtc_source(struct drm_encoder *encoder)
 {
 	struct drm_device *dev = encoder->dev;
-	struct amdgpu_device *adev = dev->dev_private;
+	struct amdgpu_device *adev = drm_to_adev(dev);
 	struct amdgpu_encoder *amdgpu_encoder = to_amdgpu_encoder(encoder);
 	struct amdgpu_crtc *amdgpu_crtc = to_amdgpu_crtc(encoder->crtc);
 	union crtc_source_param args;
@@ -1585,7 +1664,7 @@ amdgpu_atombios_encoder_set_crtc_source(struct drm_encoder *encoder)
 void
 amdgpu_atombios_encoder_init_dig(struct amdgpu_device *adev)
 {
-	struct drm_device *dev = adev->ddev;
+	struct drm_device *dev = adev_to_drm(adev);
 	struct drm_encoder *encoder;
 
 	list_for_each_entry(encoder, &dev->mode_config.encoder_list, head) {
@@ -1613,7 +1692,7 @@ amdgpu_atombios_encoder_dac_load_detect(struct drm_encoder *encoder,
 				 struct drm_connector *connector)
 {
 	struct drm_device *dev = encoder->dev;
-	struct amdgpu_device *adev = dev->dev_private;
+	struct amdgpu_device *adev = drm_to_adev(dev);
 	struct amdgpu_encoder *amdgpu_encoder = to_amdgpu_encoder(encoder);
 	struct amdgpu_connector *amdgpu_connector = to_amdgpu_connector(connector);
 
@@ -1663,7 +1742,7 @@ amdgpu_atombios_encoder_dac_detect(struct drm_encoder *encoder,
 			    struct drm_connector *connector)
 {
 	struct drm_device *dev = encoder->dev;
-	struct amdgpu_device *adev = dev->dev_private;
+	struct amdgpu_device *adev = drm_to_adev(dev);
 	struct amdgpu_encoder *amdgpu_encoder = to_amdgpu_encoder(encoder);
 	struct amdgpu_connector *amdgpu_connector = to_amdgpu_connector(connector);
 	uint32_t bios_0_scratch;
@@ -1702,7 +1781,7 @@ amdgpu_atombios_encoder_dig_detect(struct drm_encoder *encoder,
 			    struct drm_connector *connector)
 {
 	struct drm_device *dev = encoder->dev;
-	struct amdgpu_device *adev = dev->dev_private;
+	struct amdgpu_device *adev = drm_to_adev(dev);
 	struct amdgpu_encoder *amdgpu_encoder = to_amdgpu_encoder(encoder);
 	struct amdgpu_connector *amdgpu_connector = to_amdgpu_connector(connector);
 	struct drm_encoder *ext_encoder = amdgpu_get_external_encoder(encoder);
@@ -1760,7 +1839,7 @@ amdgpu_atombios_encoder_set_bios_scratch_regs(struct drm_connector *connector,
 				       bool connected)
 {
 	struct drm_device *dev = connector->dev;
-	struct amdgpu_device *adev = dev->dev_private;
+	struct amdgpu_device *adev = drm_to_adev(dev);
 	struct amdgpu_connector *amdgpu_connector =
 	    to_amdgpu_connector(connector);
 	struct amdgpu_encoder *amdgpu_encoder = to_amdgpu_encoder(encoder);
@@ -1911,7 +1990,7 @@ struct amdgpu_encoder_atom_dig *
 amdgpu_atombios_encoder_get_lcd_info(struct amdgpu_encoder *encoder)
 {
 	struct drm_device *dev = encoder->base.dev;
-	struct amdgpu_device *adev = dev->dev_private;
+	struct amdgpu_device *adev = drm_to_adev(dev);
 	struct amdgpu_mode_info *mode_info = &adev->mode_info;
 	int index = GetIndexIntoMasterTable(DATA, LVDS_Info);
 	uint16_t data_offset, misc;
@@ -2010,23 +2089,29 @@ amdgpu_atombios_encoder_get_lcd_info(struct amdgpu_encoder *encoder)
 					fake_edid_record = (ATOM_FAKE_EDID_PATCH_RECORD *)record;
 					if (fake_edid_record->ucFakeEDIDLength) {
 						struct edid *edid;
-						int edid_size =
-							max((int)EDID_LENGTH, (int)fake_edid_record->ucFakeEDIDLength);
-						edid = kmalloc(edid_size, GFP_KERNEL);
-						if (edid) {
-							memcpy((u8 *)edid, (u8 *)&fake_edid_record->ucFakeEDIDString[0],
-							       fake_edid_record->ucFakeEDIDLength);
+						int edid_size;
 
+						if (fake_edid_record->ucFakeEDIDLength == 128)
+							edid_size = fake_edid_record->ucFakeEDIDLength;
+						else
+							edid_size = fake_edid_record->ucFakeEDIDLength * 128;
+						edid = kmemdup(&fake_edid_record->ucFakeEDIDString[0],
+							       edid_size, GFP_KERNEL);
+						if (edid) {
 							if (drm_edid_is_valid(edid)) {
 								adev->mode_info.bios_hardcoded_edid = edid;
 								adev->mode_info.bios_hardcoded_edid_size = edid_size;
-							} else
+							} else {
 								kfree(edid);
+							}
 						}
+						record += struct_size(fake_edid_record,
+								      ucFakeEDIDString,
+								      edid_size);
+					} else {
+						/* empty fake edid record must be 3 bytes long */
+						record += sizeof(ATOM_FAKE_EDID_PATCH_RECORD) + 1;
 					}
-					record += fake_edid_record->ucFakeEDIDLength ?
-						fake_edid_record->ucFakeEDIDLength + 2 :
-						sizeof(ATOM_FAKE_EDID_PATCH_RECORD);
 					break;
 				case LCD_PANEL_RESOLUTION_RECORD_TYPE:
 					panel_res_record = (ATOM_PANEL_RESOLUTION_PATCH_RECORD *)record;

@@ -1,14 +1,9 @@
+// SPDX-License-Identifier: GPL-2.0-or-later
 /*
  *	6LoWPAN next header compression
  *
- *
  *	Authors:
  *	Alexander Aring		<aar@pengutronix.de>
- *
- *	This program is free software; you can redistribute it and/or
- *	modify it under the terms of the GNU General Public License
- *	as published by the Free Software Foundation; either version
- *	2 of the License, or (at your option) any later version.
  */
 
 #include <linux/netdevice.h>
@@ -27,8 +22,8 @@ static int lowpan_nhc_insert(struct lowpan_nhc *nhc)
 
 	/* Figure out where to put new node */
 	while (*new) {
-		struct lowpan_nhc *this = container_of(*new, struct lowpan_nhc,
-						       node);
+		struct lowpan_nhc *this = rb_entry(*new, struct lowpan_nhc,
+						   node);
 		int result, len_dif, len;
 
 		len_dif = nhc->idlen - this->idlen;
@@ -69,8 +64,8 @@ static struct lowpan_nhc *lowpan_nhc_by_nhcid(const struct sk_buff *skb)
 	const u8 *nhcid_skb_ptr = skb->data;
 
 	while (node) {
-		struct lowpan_nhc *nhc = container_of(node, struct lowpan_nhc,
-						      node);
+		struct lowpan_nhc *nhc = rb_entry(node, struct lowpan_nhc,
+						  node);
 		u8 nhcid_skb_ptr_masked[LOWPAN_NHC_MAX_ID_LEN];
 		int result, i;
 
@@ -173,9 +168,9 @@ int lowpan_nhc_do_uncompression(struct sk_buff *skb,
 				return ret;
 			}
 		} else {
-			spin_unlock_bh(&lowpan_nhc_lock);
 			netdev_warn(dev, "received nhc id for %s which is not implemented.\n",
 				    nhc->name);
+			spin_unlock_bh(&lowpan_nhc_lock);
 			return -ENOTSUPP;
 		}
 	} else {

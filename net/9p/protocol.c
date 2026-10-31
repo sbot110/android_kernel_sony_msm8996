@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-2.0-only
 /*
  * net/9p/protocol.c
  *
@@ -7,22 +8,6 @@
  *
  *  Base on code from Anthony Liguori <aliguori@us.ibm.com>
  *  Copyright (C) 2008 by IBM, Corp.
- *
- *  This program is free software; you can redistribute it and/or modify
- *  it under the terms of the GNU General Public License version 2
- *  as published by the Free Software Foundation.
- *
- *  This program is distributed in the hope that it will be useful,
- *  but WITHOUT ANY WARRANTY; without even the implied warranty of
- *  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- *  GNU General Public License for more details.
- *
- *  You should have received a copy of the GNU General Public License
- *  along with this program; if not, write to:
- *  Free Software Foundation
- *  51 Franklin Street, Fifth Floor
- *  Boston, MA  02111-1301  USA
- *
  */
 
 #include <linux/module.h>
@@ -61,6 +46,7 @@ EXPORT_SYMBOL(p9stat_free);
 size_t pdu_read(struct p9_fcall *pdu, void *data, size_t size)
 {
 	size_t len = min(pdu->size - pdu->offset, size);
+
 	memcpy(data, &pdu->sdata[pdu->offset], len);
 	pdu->offset += len;
 	return size - len;
@@ -69,6 +55,7 @@ size_t pdu_read(struct p9_fcall *pdu, void *data, size_t size)
 static size_t pdu_write(struct p9_fcall *pdu, const void *data, size_t size)
 {
 	size_t len = min(pdu->capacity - pdu->size, size);
+
 	memcpy(&pdu->sdata[pdu->size], data, len);
 	pdu->size += len;
 	return size - len;
@@ -79,33 +66,33 @@ pdu_write_u(struct p9_fcall *pdu, struct iov_iter *from, size_t size)
 {
 	size_t len = min(pdu->capacity - pdu->size, size);
 	struct iov_iter i = *from;
-	if (copy_from_iter(&pdu->sdata[pdu->size], len, &i) != len)
+
+	if (!copy_from_iter_full(&pdu->sdata[pdu->size], len, &i))
 		len = 0;
 
 	pdu->size += len;
 	return size - len;
 }
 
-/*
-	b - int8_t
-	w - int16_t
-	d - int32_t
-	q - int64_t
-	s - string
-	u - numeric uid
-	g - numeric gid
-	S - stat
-	Q - qid
-	D - data blob (int32_t size followed by void *, results are not freed)
-	T - array of strings (int16_t count, followed by strings)
-	R - array of qids (int16_t count, followed by qids)
-	A - stat for 9p2000.L (p9_stat_dotl)
-	? - if optional = 1, continue parsing
-*/
+/*	b - int8_t
+ *	w - int16_t
+ *	d - int32_t
+ *	q - int64_t
+ *	s - string
+ *	u - numeric uid
+ *	g - numeric gid
+ *	S - stat
+ *	Q - qid
+ *	D - data blob (int32_t size followed by void *, results are not freed)
+ *	T - array of strings (int16_t count, followed by strings)
+ *	R - array of qids (int16_t count, followed by qids)
+ *	A - stat for 9p2000.L (p9_stat_dotl)
+ *	? - if optional = 1, continue parsing
+ */
 
 static int
 p9pdu_vreadf(struct p9_fcall *pdu, int proto_version, const char *fmt,
-	va_list ap)
+	     va_list ap)
 {
 	const char *ptr;
 	int errcode = 0;
@@ -161,7 +148,7 @@ p9pdu_vreadf(struct p9_fcall *pdu, int proto_version, const char *fmt,
 
 				*sptr = kmalloc(len + 1, GFP_NOFS);
 				if (*sptr == NULL) {
-					errcode = -EFAULT;
+					errcode = -ENOMEM;
 					break;
 				}
 				if (pdu_read(pdu, *sptr, len)) {
@@ -243,14 +230,19 @@ p9pdu_vreadf(struct p9_fcall *pdu, int proto_version, const char *fmt,
 				uint16_t *nwname = va_arg(ap, uint16_t *);
 				char ***wnames = va_arg(ap, char ***);
 
+				*wnames = NULL;
+
 				errcode = p9pdu_readf(pdu, proto_version,
 								"w", nwname);
 				if (!errcode) {
 					*wnames =
-					    kmalloc(sizeof(char *) * *nwname,
-						    GFP_NOFS);
+					    kmalloc_array(*nwname,
+							  sizeof(char *),
+							  GFP_NOFS);
 					if (!*wnames)
 						errcode = -ENOMEM;
+					else
+						(*wnames)[0] = NULL;
 				}
 
 				if (!errcode) {
@@ -262,8 +254,10 @@ p9pdu_vreadf(struct p9_fcall *pdu, int proto_version, const char *fmt,
 								proto_version,
 								"s",
 								&(*wnames)[i]);
-						if (errcode)
+						if (errcode) {
+							(*wnames)[i] = NULL;
 							break;
+						}
 					}
 				}
 
@@ -271,11 +265,14 @@ p9pdu_vreadf(struct p9_fcall *pdu, int proto_version, const char *fmt,
 					if (*wnames) {
 						int i;
 
-						for (i = 0; i < *nwname; i++)
+						for (i = 0; i < *nwname; i++) {
+							if (!(*wnames)[i])
+								break;
 							kfree((*wnames)[i]);
+						}
+						kfree(*wnames);
+						*wnames = NULL;
 					}
-					kfree(*wnames);
-					*wnames = NULL;
 				}
 			}
 			break;
@@ -290,9 +287,9 @@ p9pdu_vreadf(struct p9_fcall *pdu, int proto_version, const char *fmt,
 				    p9pdu_readf(pdu, proto_version, "w", nwqid);
 				if (!errcode) {
 					*wqids =
-					    kmalloc(*nwqid *
-						    sizeof(struct p9_qid),
-						    GFP_NOFS);
+					    kmalloc_array(*nwqid,
+							  sizeof(struct p9_qid),
+							  GFP_NOFS);
 					if (*wqids == NULL)
 						errcode = -ENOMEM;
 				}

@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-2.0
 /*
  * linux/fs/hfsplus/xattr.c
  *
@@ -7,10 +8,8 @@
  */
 
 #include "hfsplus_fs.h"
-#include <linux/posix_acl_xattr.h>
 #include <linux/nls.h>
 #include "xattr.h"
-#include "acl.h"
 
 static int hfsplus_removexattr(struct inode *inode, const char *name);
 
@@ -18,10 +17,6 @@ const struct xattr_handler *hfsplus_xattr_handlers[] = {
 	&hfsplus_xattr_osx_handler,
 	&hfsplus_xattr_user_handler,
 	&hfsplus_xattr_trusted_handler,
-#ifdef CONFIG_HFSPLUS_FS_POSIX_ACL
-	&posix_acl_access_xattr_handler,
-	&posix_acl_default_xattr_handler,
-#endif
 	&hfsplus_xattr_security_handler,
 	NULL
 };
@@ -177,7 +172,11 @@ check_attr_tree_state_again:
 		return PTR_ERR(attr_file);
 	}
 
-	BUG_ON(i_size_read(attr_file) != 0);
+	if (i_size_read(attr_file) != 0) {
+		err = -EIO;
+		pr_err("detected inconsistent attributes file, running fsck.hfsplus is recommended.\n");
+		goto end_attr_file_creation;
+	}
 
 	hip = HFSPLUS_I(attr_file);
 
@@ -209,7 +208,6 @@ check_attr_tree_state_again:
 
 	buf = kzalloc(node_size, GFP_NOFS);
 	if (!buf) {
-		pr_err("failed to allocate memory for header node\n");
 		err = -ENOMEM;
 		goto end_attr_file_creation;
 	}
@@ -220,7 +218,7 @@ check_attr_tree_state_again:
 
 	index = 0;
 	written = 0;
-	for (; written < node_size; index++, written += PAGE_CACHE_SIZE) {
+	for (; written < node_size; index++, written += PAGE_SIZE) {
 		void *kaddr;
 
 		page = read_mapping_page(mapping, index, NULL);
@@ -231,11 +229,11 @@ check_attr_tree_state_again:
 
 		kaddr = kmap_atomic(page);
 		memcpy(kaddr, buf + written,
-			min_t(size_t, PAGE_CACHE_SIZE, node_size - written));
+			min_t(size_t, PAGE_SIZE, node_size - written));
 		kunmap_atomic(kaddr);
 
 		set_page_dirty(page);
-		page_cache_release(page);
+		put_page(page);
 	}
 
 	hfsplus_mark_inode_dirty(attr_file, HFSPLUS_I_ATTR_DIRTY);
@@ -412,7 +410,7 @@ static int copy_name(char *buffer, const char *xattr_name, int name_len)
 	int offset = 0;
 
 	if (!is_known_namespace(xattr_name)) {
-		strncpy(buffer, XATTR_MAC_OSX_PREFIX, XATTR_MAC_OSX_PREFIX_LEN);
+		memcpy(buffer, XATTR_MAC_OSX_PREFIX, XATTR_MAC_OSX_PREFIX_LEN);
 		offset += XATTR_MAC_OSX_PREFIX_LEN;
 		len += XATTR_MAC_OSX_PREFIX_LEN;
 	}
@@ -424,15 +422,12 @@ static int copy_name(char *buffer, const char *xattr_name, int name_len)
 	return len;
 }
 
-int hfsplus_setxattr(struct dentry *dentry, const char *name,
+int hfsplus_setxattr(struct inode *inode, const char *name,
 		     const void *value, size_t size, int flags,
 		     const char *prefix, size_t prefixlen)
 {
 	char *xattr_name;
 	int res;
-
-	if (!strcmp(name, ""))
-		return -EINVAL;
 
 	xattr_name = kmalloc(NLS_MAX_CHARSET_SIZE * HFSPLUS_ATTR_MAX_STRLEN + 1,
 		GFP_KERNEL);
@@ -440,8 +435,7 @@ int hfsplus_setxattr(struct dentry *dentry, const char *name,
 		return -ENOMEM;
 	strcpy(xattr_name, prefix);
 	strcpy(xattr_name + prefixlen, name);
-	res = __hfsplus_setxattr(d_inode(dentry), xattr_name, value, size,
-				 flags);
+	res = __hfsplus_setxattr(inode, xattr_name, value, size, flags);
 	kfree(xattr_name);
 	return res;
 }
@@ -582,15 +576,12 @@ failed_getxattr_init:
 	return res;
 }
 
-ssize_t hfsplus_getxattr(struct dentry *dentry, const char *name,
+ssize_t hfsplus_getxattr(struct inode *inode, const char *name,
 			 void *value, size_t size,
 			 const char *prefix, size_t prefixlen)
 {
 	int res;
 	char *xattr_name;
-
-	if (!strcmp(name, ""))
-		return -EINVAL;
 
 	xattr_name = kmalloc(NLS_MAX_CHARSET_SIZE * HFSPLUS_ATTR_MAX_STRLEN + 1,
 			     GFP_KERNEL);
@@ -600,7 +591,7 @@ ssize_t hfsplus_getxattr(struct dentry *dentry, const char *name,
 	strcpy(xattr_name, prefix);
 	strcpy(xattr_name + prefixlen, name);
 
-	res = __hfsplus_getxattr(d_inode(dentry), xattr_name, value, size);
+	res = __hfsplus_getxattr(inode, xattr_name, value, size);
 	kfree(xattr_name);
 	return res;
 
@@ -712,7 +703,7 @@ ssize_t hfsplus_listxattr(struct dentry *dentry, char *buffer, size_t size)
 		return err;
 	}
 
-	strbuf = kmalloc(NLS_MAX_CHARSET_SIZE * HFSPLUS_ATTR_MAX_STRLEN +
+	strbuf = kzalloc(NLS_MAX_CHARSET_SIZE * HFSPLUS_ATTR_MAX_STRLEN +
 			XATTR_MAC_OSX_PREFIX_LEN + 1, GFP_KERNEL);
 	if (!strbuf) {
 		res = -ENOMEM;
@@ -746,9 +737,9 @@ ssize_t hfsplus_listxattr(struct dentry *dentry, char *buffer, size_t size)
 			goto end_listxattr;
 
 		xattr_name_len = NLS_MAX_CHARSET_SIZE * HFSPLUS_ATTR_MAX_STRLEN;
-		if (hfsplus_uni2asc(inode->i_sb,
-			(const struct hfsplus_unistr *)&fd.key->attr.key_name,
-					strbuf, &xattr_name_len)) {
+		if (hfsplus_uni2asc_xattr_str(inode->i_sb,
+					      &fd.key->attr.key_name, strbuf,
+					      &xattr_name_len)) {
 			pr_err("unicode conversion failed\n");
 			res = -EIO;
 			goto end_listxattr;
@@ -850,12 +841,9 @@ end_removexattr:
 }
 
 static int hfsplus_osx_getxattr(const struct xattr_handler *handler,
-				struct dentry *dentry, const char *name,
-				void *buffer, size_t size)
+				struct dentry *unused, struct inode *inode,
+				const char *name, void *buffer, size_t size)
 {
-	if (!strcmp(name, ""))
-		return -EINVAL;
-
 	/*
 	 * Don't allow retrieving properly prefixed attributes
 	 * by prepending them with "osx."
@@ -869,16 +857,15 @@ static int hfsplus_osx_getxattr(const struct xattr_handler *handler,
 	 * creates), so we pass the name through unmodified (after
 	 * ensuring it doesn't conflict with another namespace).
 	 */
-	return __hfsplus_getxattr(d_inode(dentry), name, buffer, size);
+	return __hfsplus_getxattr(inode, name, buffer, size);
 }
 
 static int hfsplus_osx_setxattr(const struct xattr_handler *handler,
-				struct dentry *dentry, const char *name,
-				const void *buffer, size_t size, int flags)
+				struct user_namespace *mnt_userns,
+				struct dentry *unused, struct inode *inode,
+				const char *name, const void *buffer,
+				size_t size, int flags)
 {
-	if (!strcmp(name, ""))
-		return -EINVAL;
-
 	/*
 	 * Don't allow setting properly prefixed attributes
 	 * by prepending them with "osx."
@@ -892,7 +879,7 @@ static int hfsplus_osx_setxattr(const struct xattr_handler *handler,
 	 * creates), so we pass the name through unmodified (after
 	 * ensuring it doesn't conflict with another namespace).
 	 */
-	return __hfsplus_setxattr(d_inode(dentry), name, buffer, size, flags);
+	return __hfsplus_setxattr(inode, name, buffer, size, flags);
 }
 
 const struct xattr_handler hfsplus_xattr_osx_handler = {

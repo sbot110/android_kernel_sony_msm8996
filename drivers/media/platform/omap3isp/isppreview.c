@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-2.0-only
 /*
  * isppreview.c
  *
@@ -8,10 +9,6 @@
  *
  * Contacts: Laurent Pinchart <laurent.pinchart@ideasonboard.com>
  *	     Sakari Ailus <sakari.ailus@iki.fi>
- *
- * This program is free software; you can redistribute it and/or modify
- * it under the terms of the GNU General Public License version 2 as
- * published by the Free Software Foundation.
  */
 
 #include <linux/device.h>
@@ -25,7 +22,7 @@
 #include "isppreview.h"
 
 /* Default values in Office Fluorescent Light for RGBtoRGB Blending */
-static struct omap3isp_prev_rgbtorgb flr_rgb2rgb = {
+static const struct omap3isp_prev_rgbtorgb flr_rgb2rgb = {
 	{	/* RGB-RGB Matrix */
 		{0x01E2, 0x0F30, 0x0FEE},
 		{0x0F9B, 0x01AC, 0x0FB9},
@@ -35,7 +32,7 @@ static struct omap3isp_prev_rgbtorgb flr_rgb2rgb = {
 };
 
 /* Default values in Office Fluorescent Light for RGB to YUV Conversion*/
-static struct omap3isp_prev_csc flr_prev_csc = {
+static const struct omap3isp_prev_csc flr_prev_csc = {
 	{	/* CSC Coef Matrix */
 		{66, 129, 25},
 		{-38, -75, 112},
@@ -756,7 +753,7 @@ static const struct preview_update update_attrs[] = {
 		preview_config_luma_enhancement,
 		preview_enable_luma_enhancement,
 		offsetof(struct prev_params, luma),
-		FIELD_SIZEOF(struct prev_params, luma),
+		sizeof_field(struct prev_params, luma),
 		offsetof(struct omap3isp_prev_update_config, luma),
 	}, /* OMAP3ISP_PREV_INVALAW */ {
 		NULL,
@@ -765,55 +762,55 @@ static const struct preview_update update_attrs[] = {
 		preview_config_hmed,
 		preview_enable_hmed,
 		offsetof(struct prev_params, hmed),
-		FIELD_SIZEOF(struct prev_params, hmed),
+		sizeof_field(struct prev_params, hmed),
 		offsetof(struct omap3isp_prev_update_config, hmed),
 	}, /* OMAP3ISP_PREV_CFA */ {
 		preview_config_cfa,
 		NULL,
 		offsetof(struct prev_params, cfa),
-		FIELD_SIZEOF(struct prev_params, cfa),
+		sizeof_field(struct prev_params, cfa),
 		offsetof(struct omap3isp_prev_update_config, cfa),
 	}, /* OMAP3ISP_PREV_CHROMA_SUPP */ {
 		preview_config_chroma_suppression,
 		preview_enable_chroma_suppression,
 		offsetof(struct prev_params, csup),
-		FIELD_SIZEOF(struct prev_params, csup),
+		sizeof_field(struct prev_params, csup),
 		offsetof(struct omap3isp_prev_update_config, csup),
 	}, /* OMAP3ISP_PREV_WB */ {
 		preview_config_whitebalance,
 		NULL,
 		offsetof(struct prev_params, wbal),
-		FIELD_SIZEOF(struct prev_params, wbal),
+		sizeof_field(struct prev_params, wbal),
 		offsetof(struct omap3isp_prev_update_config, wbal),
 	}, /* OMAP3ISP_PREV_BLKADJ */ {
 		preview_config_blkadj,
 		NULL,
 		offsetof(struct prev_params, blkadj),
-		FIELD_SIZEOF(struct prev_params, blkadj),
+		sizeof_field(struct prev_params, blkadj),
 		offsetof(struct omap3isp_prev_update_config, blkadj),
 	}, /* OMAP3ISP_PREV_RGB2RGB */ {
 		preview_config_rgb_blending,
 		NULL,
 		offsetof(struct prev_params, rgb2rgb),
-		FIELD_SIZEOF(struct prev_params, rgb2rgb),
+		sizeof_field(struct prev_params, rgb2rgb),
 		offsetof(struct omap3isp_prev_update_config, rgb2rgb),
 	}, /* OMAP3ISP_PREV_COLOR_CONV */ {
 		preview_config_csc,
 		NULL,
 		offsetof(struct prev_params, csc),
-		FIELD_SIZEOF(struct prev_params, csc),
+		sizeof_field(struct prev_params, csc),
 		offsetof(struct omap3isp_prev_update_config, csc),
 	}, /* OMAP3ISP_PREV_YC_LIMIT */ {
 		preview_config_yc_range,
 		NULL,
 		offsetof(struct prev_params, yclimit),
-		FIELD_SIZEOF(struct prev_params, yclimit),
+		sizeof_field(struct prev_params, yclimit),
 		offsetof(struct omap3isp_prev_update_config, yclimit),
 	}, /* OMAP3ISP_PREV_DEFECT_COR */ {
 		preview_config_dcor,
 		preview_enable_dcor,
 		offsetof(struct prev_params, dcor),
-		FIELD_SIZEOF(struct prev_params, dcor),
+		sizeof_field(struct prev_params, dcor),
 		offsetof(struct omap3isp_prev_update_config, dcor),
 	}, /* Previously OMAP3ISP_PREV_GAMMABYPASS, not used anymore */ {
 		NULL,
@@ -831,13 +828,13 @@ static const struct preview_update update_attrs[] = {
 		preview_config_noisefilter,
 		preview_enable_noisefilter,
 		offsetof(struct prev_params, nf),
-		FIELD_SIZEOF(struct prev_params, nf),
+		sizeof_field(struct prev_params, nf),
 		offsetof(struct omap3isp_prev_update_config, nf),
 	}, /* OMAP3ISP_PREV_GAMMA */ {
 		preview_config_gammacorrn,
 		preview_enable_gammacorrn,
 		offsetof(struct prev_params, gamma),
-		FIELD_SIZEOF(struct prev_params, gamma),
+		sizeof_field(struct prev_params, gamma),
 		offsetof(struct omap3isp_prev_update_config, gamma),
 	}, /* OMAP3ISP_PREV_CONTRAST */ {
 		preview_config_contrast,
@@ -890,7 +887,7 @@ static int preview_config(struct isp_prev_device *prev,
 		params = &prev->params.params[!!(active & bit)];
 
 		if (cfg->flag & bit) {
-			void __user *from = *(void * __user *)
+			void __user *from = *(void __user **)
 				((void *)cfg + attr->config_offset);
 			void *to = (void *)params + attr->param_offset;
 			size_t size = attr->param_size;
@@ -1480,13 +1477,6 @@ static void preview_isr_buffer(struct isp_prev_device *prev)
 	struct isp_buffer *buffer;
 	int restart = 0;
 
-	if (prev->input == PREVIEW_INPUT_MEMORY) {
-		buffer = omap3isp_video_buffer_next(&prev->video_in);
-		if (buffer != NULL)
-			preview_set_inaddr(prev, buffer->dma);
-		pipe->state |= ISP_PIPELINE_IDLE_INPUT;
-	}
-
 	if (prev->output & PREVIEW_OUTPUT_MEMORY) {
 		buffer = omap3isp_video_buffer_next(&prev->video_out);
 		if (buffer != NULL) {
@@ -1494,6 +1484,13 @@ static void preview_isr_buffer(struct isp_prev_device *prev)
 			restart = 1;
 		}
 		pipe->state |= ISP_PIPELINE_IDLE_OUTPUT;
+	}
+
+	if (prev->input == PREVIEW_INPUT_MEMORY) {
+		buffer = omap3isp_video_buffer_next(&prev->video_in);
+		if (buffer != NULL)
+			preview_set_inaddr(prev, buffer->dma);
+		pipe->state |= ISP_PIPELINE_IDLE_INPUT;
 	}
 
 	switch (prev->state) {
@@ -1682,21 +1679,25 @@ static int preview_set_stream(struct v4l2_subdev *sd, int enable)
 }
 
 static struct v4l2_mbus_framefmt *
-__preview_get_format(struct isp_prev_device *prev, struct v4l2_subdev_pad_config *cfg,
+__preview_get_format(struct isp_prev_device *prev,
+		     struct v4l2_subdev_state *sd_state,
 		     unsigned int pad, enum v4l2_subdev_format_whence which)
 {
 	if (which == V4L2_SUBDEV_FORMAT_TRY)
-		return v4l2_subdev_get_try_format(&prev->subdev, cfg, pad);
+		return v4l2_subdev_get_try_format(&prev->subdev, sd_state,
+						  pad);
 	else
 		return &prev->formats[pad];
 }
 
 static struct v4l2_rect *
-__preview_get_crop(struct isp_prev_device *prev, struct v4l2_subdev_pad_config *cfg,
+__preview_get_crop(struct isp_prev_device *prev,
+		   struct v4l2_subdev_state *sd_state,
 		   enum v4l2_subdev_format_whence which)
 {
 	if (which == V4L2_SUBDEV_FORMAT_TRY)
-		return v4l2_subdev_get_try_crop(&prev->subdev, cfg, PREV_PAD_SINK);
+		return v4l2_subdev_get_try_crop(&prev->subdev, sd_state,
+						PREV_PAD_SINK);
 	else
 		return &prev->crop;
 }
@@ -1732,7 +1733,8 @@ static const unsigned int preview_output_fmts[] = {
  * engine limits and the format and crop rectangles on other pads.
  */
 static void preview_try_format(struct isp_prev_device *prev,
-			       struct v4l2_subdev_pad_config *cfg, unsigned int pad,
+			       struct v4l2_subdev_state *sd_state,
+			       unsigned int pad,
 			       struct v4l2_mbus_framefmt *fmt,
 			       enum v4l2_subdev_format_whence which)
 {
@@ -1742,22 +1744,17 @@ static void preview_try_format(struct isp_prev_device *prev,
 
 	switch (pad) {
 	case PREV_PAD_SINK:
-		/* When reading data from the CCDC, the input size has already
-		 * been mangled by the CCDC output pad so it can be accepted
-		 * as-is.
-		 *
-		 * When reading data from memory, clamp the requested width and
-		 * height. The TRM doesn't specify a minimum input height, make
+		/*
+		 * Clamp the requested width and height.
+		 * The TRM doesn't specify a minimum input height, make
 		 * sure we got enough lines to enable the noise filter and color
 		 * filter array interpolation.
 		 */
-		if (prev->input == PREVIEW_INPUT_MEMORY) {
-			fmt->width = clamp_t(u32, fmt->width, PREV_MIN_IN_WIDTH,
-					     preview_max_out_width(prev));
-			fmt->height = clamp_t(u32, fmt->height,
-					      PREV_MIN_IN_HEIGHT,
-					      PREV_MAX_IN_HEIGHT);
-		}
+		fmt->width = clamp_t(u32, fmt->width, PREV_MIN_IN_WIDTH,
+				     preview_max_out_width(prev));
+		fmt->height = clamp_t(u32, fmt->height,
+				      PREV_MIN_IN_HEIGHT,
+				      PREV_MAX_IN_HEIGHT);
 
 		fmt->colorspace = V4L2_COLORSPACE_SRGB;
 
@@ -1773,7 +1770,8 @@ static void preview_try_format(struct isp_prev_device *prev,
 
 	case PREV_PAD_SOURCE:
 		pixelcode = fmt->code;
-		*fmt = *__preview_get_format(prev, cfg, PREV_PAD_SINK, which);
+		*fmt = *__preview_get_format(prev, sd_state, PREV_PAD_SINK,
+					     which);
 
 		switch (pixelcode) {
 		case MEDIA_BUS_FMT_YUYV8_1X16:
@@ -1791,7 +1789,7 @@ static void preview_try_format(struct isp_prev_device *prev,
 		 * is not supported yet, hardcode the output size to the crop
 		 * rectangle size.
 		 */
-		crop = __preview_get_crop(prev, cfg, which);
+		crop = __preview_get_crop(prev, sd_state, which);
 		fmt->width = crop->width;
 		fmt->height = crop->height;
 
@@ -1865,7 +1863,7 @@ static void preview_try_crop(struct isp_prev_device *prev,
  * return -EINVAL or zero on success
  */
 static int preview_enum_mbus_code(struct v4l2_subdev *sd,
-				  struct v4l2_subdev_pad_config *cfg,
+				  struct v4l2_subdev_state *sd_state,
 				  struct v4l2_subdev_mbus_code_enum *code)
 {
 	switch (code->pad) {
@@ -1889,7 +1887,7 @@ static int preview_enum_mbus_code(struct v4l2_subdev *sd,
 }
 
 static int preview_enum_frame_size(struct v4l2_subdev *sd,
-				   struct v4l2_subdev_pad_config *cfg,
+				   struct v4l2_subdev_state *sd_state,
 				   struct v4l2_subdev_frame_size_enum *fse)
 {
 	struct isp_prev_device *prev = v4l2_get_subdevdata(sd);
@@ -1901,7 +1899,7 @@ static int preview_enum_frame_size(struct v4l2_subdev *sd,
 	format.code = fse->code;
 	format.width = 1;
 	format.height = 1;
-	preview_try_format(prev, cfg, fse->pad, &format, fse->which);
+	preview_try_format(prev, sd_state, fse->pad, &format, fse->which);
 	fse->min_width = format.width;
 	fse->min_height = format.height;
 
@@ -1911,7 +1909,7 @@ static int preview_enum_frame_size(struct v4l2_subdev *sd,
 	format.code = fse->code;
 	format.width = -1;
 	format.height = -1;
-	preview_try_format(prev, cfg, fse->pad, &format, fse->which);
+	preview_try_format(prev, sd_state, fse->pad, &format, fse->which);
 	fse->max_width = format.width;
 	fse->max_height = format.height;
 
@@ -1929,7 +1927,7 @@ static int preview_enum_frame_size(struct v4l2_subdev *sd,
  * Return 0 on success or a negative error code otherwise.
  */
 static int preview_get_selection(struct v4l2_subdev *sd,
-				 struct v4l2_subdev_pad_config *cfg,
+				 struct v4l2_subdev_state *sd_state,
 				 struct v4l2_subdev_selection *sel)
 {
 	struct isp_prev_device *prev = v4l2_get_subdevdata(sd);
@@ -1945,13 +1943,13 @@ static int preview_get_selection(struct v4l2_subdev *sd,
 		sel->r.width = INT_MAX;
 		sel->r.height = INT_MAX;
 
-		format = __preview_get_format(prev, cfg, PREV_PAD_SINK,
+		format = __preview_get_format(prev, sd_state, PREV_PAD_SINK,
 					      sel->which);
 		preview_try_crop(prev, format, &sel->r);
 		break;
 
 	case V4L2_SEL_TGT_CROP:
-		sel->r = *__preview_get_crop(prev, cfg, sel->which);
+		sel->r = *__preview_get_crop(prev, sd_state, sel->which);
 		break;
 
 	default:
@@ -1972,7 +1970,7 @@ static int preview_get_selection(struct v4l2_subdev *sd,
  * Return 0 on success or a negative error code otherwise.
  */
 static int preview_set_selection(struct v4l2_subdev *sd,
-				 struct v4l2_subdev_pad_config *cfg,
+				 struct v4l2_subdev_state *sd_state,
 				 struct v4l2_subdev_selection *sel)
 {
 	struct isp_prev_device *prev = v4l2_get_subdevdata(sd);
@@ -1991,17 +1989,20 @@ static int preview_set_selection(struct v4l2_subdev *sd,
 	 * rectangle.
 	 */
 	if (sel->flags & V4L2_SEL_FLAG_KEEP_CONFIG) {
-		sel->r = *__preview_get_crop(prev, cfg, sel->which);
+		sel->r = *__preview_get_crop(prev, sd_state, sel->which);
 		return 0;
 	}
 
-	format = __preview_get_format(prev, cfg, PREV_PAD_SINK, sel->which);
+	format = __preview_get_format(prev, sd_state, PREV_PAD_SINK,
+				      sel->which);
 	preview_try_crop(prev, format, &sel->r);
-	*__preview_get_crop(prev, cfg, sel->which) = sel->r;
+	*__preview_get_crop(prev, sd_state, sel->which) = sel->r;
 
 	/* Update the source format. */
-	format = __preview_get_format(prev, cfg, PREV_PAD_SOURCE, sel->which);
-	preview_try_format(prev, cfg, PREV_PAD_SOURCE, format, sel->which);
+	format = __preview_get_format(prev, sd_state, PREV_PAD_SOURCE,
+				      sel->which);
+	preview_try_format(prev, sd_state, PREV_PAD_SOURCE, format,
+			   sel->which);
 
 	return 0;
 }
@@ -2013,13 +2014,14 @@ static int preview_set_selection(struct v4l2_subdev *sd,
  * @fmt: pointer to v4l2 subdev format structure
  * return -EINVAL or zero on success
  */
-static int preview_get_format(struct v4l2_subdev *sd, struct v4l2_subdev_pad_config *cfg,
+static int preview_get_format(struct v4l2_subdev *sd,
+			      struct v4l2_subdev_state *sd_state,
 			      struct v4l2_subdev_format *fmt)
 {
 	struct isp_prev_device *prev = v4l2_get_subdevdata(sd);
 	struct v4l2_mbus_framefmt *format;
 
-	format = __preview_get_format(prev, cfg, fmt->pad, fmt->which);
+	format = __preview_get_format(prev, sd_state, fmt->pad, fmt->which);
 	if (format == NULL)
 		return -EINVAL;
 
@@ -2034,24 +2036,25 @@ static int preview_get_format(struct v4l2_subdev *sd, struct v4l2_subdev_pad_con
  * @fmt: pointer to v4l2 subdev format structure
  * return -EINVAL or zero on success
  */
-static int preview_set_format(struct v4l2_subdev *sd, struct v4l2_subdev_pad_config *cfg,
+static int preview_set_format(struct v4l2_subdev *sd,
+			      struct v4l2_subdev_state *sd_state,
 			      struct v4l2_subdev_format *fmt)
 {
 	struct isp_prev_device *prev = v4l2_get_subdevdata(sd);
 	struct v4l2_mbus_framefmt *format;
 	struct v4l2_rect *crop;
 
-	format = __preview_get_format(prev, cfg, fmt->pad, fmt->which);
+	format = __preview_get_format(prev, sd_state, fmt->pad, fmt->which);
 	if (format == NULL)
 		return -EINVAL;
 
-	preview_try_format(prev, cfg, fmt->pad, &fmt->format, fmt->which);
+	preview_try_format(prev, sd_state, fmt->pad, &fmt->format, fmt->which);
 	*format = fmt->format;
 
 	/* Propagate the format from sink to source */
 	if (fmt->pad == PREV_PAD_SINK) {
 		/* Reset the crop rectangle. */
-		crop = __preview_get_crop(prev, cfg, fmt->which);
+		crop = __preview_get_crop(prev, sd_state, fmt->which);
 		crop->left = 0;
 		crop->top = 0;
 		crop->width = fmt->format.width;
@@ -2060,9 +2063,9 @@ static int preview_set_format(struct v4l2_subdev *sd, struct v4l2_subdev_pad_con
 		preview_try_crop(prev, &fmt->format, crop);
 
 		/* Update the source format. */
-		format = __preview_get_format(prev, cfg, PREV_PAD_SOURCE,
+		format = __preview_get_format(prev, sd_state, PREV_PAD_SOURCE,
 					      fmt->which);
-		preview_try_format(prev, cfg, PREV_PAD_SOURCE, format,
+		preview_try_format(prev, sd_state, PREV_PAD_SOURCE, format,
 				   fmt->which);
 	}
 
@@ -2089,7 +2092,7 @@ static int preview_init_formats(struct v4l2_subdev *sd,
 	format.format.code = MEDIA_BUS_FMT_SGRBG10_1X10;
 	format.format.width = 4096;
 	format.format.height = 4096;
-	preview_set_format(sd, fh ? fh->pad : NULL, &format);
+	preview_set_format(sd, fh ? fh->state : NULL, &format);
 
 	return 0;
 }
@@ -2144,9 +2147,14 @@ static int preview_link_setup(struct media_entity *entity,
 {
 	struct v4l2_subdev *sd = media_entity_to_v4l2_subdev(entity);
 	struct isp_prev_device *prev = v4l2_get_subdevdata(sd);
+	unsigned int index = local->index;
 
-	switch (local->index | media_entity_type(remote->entity)) {
-	case PREV_PAD_SINK | MEDIA_ENT_T_DEVNODE:
+	/* FIXME: this is actually a hack! */
+	if (is_media_entity_v4l2_subdev(remote->entity))
+		index |= 2 << 16;
+
+	switch (index) {
+	case PREV_PAD_SINK:
 		/* read from memory */
 		if (flags & MEDIA_LNK_FL_ENABLED) {
 			if (prev->input == PREVIEW_INPUT_CCDC)
@@ -2158,7 +2166,7 @@ static int preview_link_setup(struct media_entity *entity,
 		}
 		break;
 
-	case PREV_PAD_SINK | MEDIA_ENT_T_V4L2_SUBDEV:
+	case PREV_PAD_SINK | 2 << 16:
 		/* read from ccdc */
 		if (flags & MEDIA_LNK_FL_ENABLED) {
 			if (prev->input == PREVIEW_INPUT_MEMORY)
@@ -2175,7 +2183,7 @@ static int preview_link_setup(struct media_entity *entity,
 	 * Revisit this when it will be implemented, and return -EBUSY for now.
 	 */
 
-	case PREV_PAD_SOURCE | MEDIA_ENT_T_DEVNODE:
+	case PREV_PAD_SOURCE:
 		/* write to memory */
 		if (flags & MEDIA_LNK_FL_ENABLED) {
 			if (prev->output & ~PREVIEW_OUTPUT_MEMORY)
@@ -2186,7 +2194,7 @@ static int preview_link_setup(struct media_entity *entity,
 		}
 		break;
 
-	case PREV_PAD_SOURCE | MEDIA_ENT_T_V4L2_SUBDEV:
+	case PREV_PAD_SOURCE | 2 << 16:
 		/* write to resizer */
 		if (flags & MEDIA_LNK_FL_ENABLED) {
 			if (prev->output & ~PREVIEW_OUTPUT_RESIZER)
@@ -2263,7 +2271,7 @@ static int preview_init_entities(struct isp_prev_device *prev)
 
 	v4l2_subdev_init(sd, &preview_v4l2_ops);
 	sd->internal_ops = &preview_v4l2_internal_ops;
-	strlcpy(sd->name, "OMAP3 ISP preview", sizeof(sd->name));
+	strscpy(sd->name, "OMAP3 ISP preview", sizeof(sd->name));
 	sd->grp_id = 1 << 16;	/* group ID for isp subdevs */
 	v4l2_set_subdevdata(sd, prev);
 	sd->flags |= V4L2_SUBDEV_FL_HAS_DEVNODE;
@@ -2283,7 +2291,7 @@ static int preview_init_entities(struct isp_prev_device *prev)
 	pads[PREV_PAD_SOURCE].flags = MEDIA_PAD_FL_SOURCE;
 
 	me->ops = &preview_media_ops;
-	ret = media_entity_init(me, PREV_PADS_NUM, pads, 0);
+	ret = media_entity_pads_init(me, PREV_PADS_NUM, pads);
 	if (ret < 0)
 		goto error_handler_free;
 
@@ -2312,21 +2320,8 @@ static int preview_init_entities(struct isp_prev_device *prev)
 	if (ret < 0)
 		goto error_video_out;
 
-	/* Connect the video nodes to the previewer subdev. */
-	ret = media_entity_create_link(&prev->video_in.video.entity, 0,
-			&prev->subdev.entity, PREV_PAD_SINK, 0);
-	if (ret < 0)
-		goto error_link;
-
-	ret = media_entity_create_link(&prev->subdev.entity, PREV_PAD_SOURCE,
-			&prev->video_out.video.entity, 0, 0);
-	if (ret < 0)
-		goto error_link;
-
 	return 0;
 
-error_link:
-	omap3isp_video_cleanup(&prev->video_out);
 error_video_out:
 	omap3isp_video_cleanup(&prev->video_in);
 error_video_in:

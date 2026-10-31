@@ -10,6 +10,7 @@
 
 #include <linux/clk-provider.h>
 #include <linux/delay.h>
+#include <linux/io.h>
 #include <linux/kernel.h>
 #include <linux/of.h>
 #include <linux/of_address.h>
@@ -352,9 +353,9 @@ static unsigned long lpc18xx_pll0_recalc_rate(struct clk_hw *hw,
 	struct lpc18xx_pll *pll = to_lpc_pll(hw);
 	u32 ctrl, mdiv, msel, npdiv;
 
-	ctrl = clk_readl(pll->reg + LPC18XX_CGU_PLL0USB_CTRL);
-	mdiv = clk_readl(pll->reg + LPC18XX_CGU_PLL0USB_MDIV);
-	npdiv = clk_readl(pll->reg + LPC18XX_CGU_PLL0USB_NP_DIV);
+	ctrl = readl(pll->reg + LPC18XX_CGU_PLL0USB_CTRL);
+	mdiv = readl(pll->reg + LPC18XX_CGU_PLL0USB_MDIV);
+	npdiv = readl(pll->reg + LPC18XX_CGU_PLL0USB_NP_DIV);
 
 	if (ctrl & LPC18XX_PLL0_CTRL_BYPASS)
 		return parent_rate;
@@ -373,23 +374,25 @@ static unsigned long lpc18xx_pll0_recalc_rate(struct clk_hw *hw,
 	return 0;
 }
 
-static long lpc18xx_pll0_round_rate(struct clk_hw *hw, unsigned long rate,
-				    unsigned long *prate)
+static int lpc18xx_pll0_determine_rate(struct clk_hw *hw,
+				       struct clk_rate_request *req)
 {
 	unsigned long m;
 
-	if (*prate < rate) {
+	if (req->best_parent_rate < req->rate) {
 		pr_warn("%s: pll dividers not supported\n", __func__);
 		return -EINVAL;
 	}
 
-	m = DIV_ROUND_UP_ULL(*prate, rate * 2);
-	if (m <= 0 && m > LPC18XX_PLL0_MSEL_MAX) {
-		pr_warn("%s: unable to support rate %lu\n", __func__, rate);
+	m = DIV_ROUND_UP_ULL(req->best_parent_rate, req->rate * 2);
+	if (m == 0 || m > LPC18XX_PLL0_MSEL_MAX) {
+		pr_warn("%s: unable to support rate %lu\n", __func__, req->rate);
 		return -EINVAL;
 	}
 
-	return 2 * *prate * m;
+	req->rate = 2 * req->best_parent_rate * m;
+
+	return 0;
 }
 
 static int lpc18xx_pll0_set_rate(struct clk_hw *hw, unsigned long rate,
@@ -405,7 +408,7 @@ static int lpc18xx_pll0_set_rate(struct clk_hw *hw, unsigned long rate,
 	}
 
 	m = DIV_ROUND_UP_ULL(parent_rate, rate * 2);
-	if (m <= 0 && m > LPC18XX_PLL0_MSEL_MAX) {
+	if (m == 0 || m > LPC18XX_PLL0_MSEL_MAX) {
 		pr_warn("%s: unable to support rate %lu\n", __func__, rate);
 		return -EINVAL;
 	}
@@ -415,25 +418,25 @@ static int lpc18xx_pll0_set_rate(struct clk_hw *hw, unsigned long rate,
 	m |= lpc18xx_pll0_msel2seli(m) << LPC18XX_PLL0_MDIV_SELI_SHIFT;
 
 	/* Power down PLL, disable clk output and dividers */
-	ctrl = clk_readl(pll->reg + LPC18XX_CGU_PLL0USB_CTRL);
+	ctrl = readl(pll->reg + LPC18XX_CGU_PLL0USB_CTRL);
 	ctrl |= LPC18XX_PLL0_CTRL_PD;
 	ctrl &= ~(LPC18XX_PLL0_CTRL_BYPASS | LPC18XX_PLL0_CTRL_DIRECTI |
 		  LPC18XX_PLL0_CTRL_DIRECTO | LPC18XX_PLL0_CTRL_CLKEN);
-	clk_writel(ctrl, pll->reg + LPC18XX_CGU_PLL0USB_CTRL);
+	writel(ctrl, pll->reg + LPC18XX_CGU_PLL0USB_CTRL);
 
 	/* Configure new PLL settings */
-	clk_writel(m, pll->reg + LPC18XX_CGU_PLL0USB_MDIV);
-	clk_writel(LPC18XX_PLL0_NP_DIVS_1, pll->reg + LPC18XX_CGU_PLL0USB_NP_DIV);
+	writel(m, pll->reg + LPC18XX_CGU_PLL0USB_MDIV);
+	writel(LPC18XX_PLL0_NP_DIVS_1, pll->reg + LPC18XX_CGU_PLL0USB_NP_DIV);
 
 	/* Power up PLL and wait for lock */
 	ctrl &= ~LPC18XX_PLL0_CTRL_PD;
-	clk_writel(ctrl, pll->reg + LPC18XX_CGU_PLL0USB_CTRL);
+	writel(ctrl, pll->reg + LPC18XX_CGU_PLL0USB_CTRL);
 	do {
 		udelay(10);
-		stat = clk_readl(pll->reg + LPC18XX_CGU_PLL0USB_STAT);
+		stat = readl(pll->reg + LPC18XX_CGU_PLL0USB_STAT);
 		if (stat & LPC18XX_PLL0_STAT_LOCK) {
 			ctrl |= LPC18XX_PLL0_CTRL_CLKEN;
-			clk_writel(ctrl, pll->reg + LPC18XX_CGU_PLL0USB_CTRL);
+			writel(ctrl, pll->reg + LPC18XX_CGU_PLL0USB_CTRL);
 
 			return 0;
 		}
@@ -446,7 +449,7 @@ static int lpc18xx_pll0_set_rate(struct clk_hw *hw, unsigned long rate,
 
 static const struct clk_ops lpc18xx_pll0_ops = {
 	.recalc_rate	= lpc18xx_pll0_recalc_rate,
-	.round_rate	= lpc18xx_pll0_round_rate,
+	.determine_rate = lpc18xx_pll0_determine_rate,
 	.set_rate	= lpc18xx_pll0_set_rate,
 };
 
@@ -458,8 +461,8 @@ static unsigned long lpc18xx_pll1_recalc_rate(struct clk_hw *hw,
 	bool direct, fbsel;
 	u32 stat, ctrl;
 
-	stat = clk_readl(pll->reg + LPC18XX_CGU_PLL1_STAT);
-	ctrl = clk_readl(pll->reg + LPC18XX_CGU_PLL1_CTRL);
+	stat = readl(pll->reg + LPC18XX_CGU_PLL1_STAT);
+	ctrl = readl(pll->reg + LPC18XX_CGU_PLL1_CTRL);
 
 	direct = (ctrl & LPC18XX_PLL1_CTRL_DIRECT) ? true : false;
 	fbsel = (ctrl & LPC18XX_PLL1_CTRL_FBSEL) ? true : false;
@@ -605,7 +608,7 @@ static void __init lpc18xx_cgu_register_source_clks(struct device_node *np,
 
 	/* Register the internal 12 MHz RC oscillator (IRC) */
 	clk = clk_register_fixed_rate(NULL, clk_src_names[CLK_SRC_IRC],
-				      NULL, CLK_IS_ROOT, 12000000);
+				      NULL, 0, 12000000);
 	if (IS_ERR(clk))
 		pr_warn("%s: failed to register irc clk\n", __func__);
 

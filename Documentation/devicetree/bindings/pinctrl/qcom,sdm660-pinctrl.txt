@@ -6,12 +6,20 @@ SDM660 platform.
 - compatible:
 	Usage: required
 	Value type: <string>
-	Definition: must be "qcom,sdm660-pinctrl"
+	Definition: must be "qcom,sdm660-pinctrl" or
+		    "qcom,sdm630-pinctrl".
 
 - reg:
 	Usage: required
 	Value type: <prop-encoded-array>
-	Definition: the base address and size of the TLMM register space.
+	Definition: the base address and size of the north, center and south
+		    TLMM tiles.
+
+- reg-names:
+       Usage: required
+       Value type: <stringlist>
+       Definition: names for the cells of reg, must contain "north", "center"
+                   and "south".
 
 - interrupts:
 	Usage: required
@@ -33,6 +41,12 @@ SDM660 platform.
 	Usage: required
 	Value type: <none>
 	Definition: identifies this node as a gpio controller
+
+- gpio-ranges:
+	Usage: required
+	Value type: <prop-encoded-array>
+	Definition: Specifies the mapping between gpio controller and
+		    pin-controller pins.
 
 - #gpio-cells:
 	Usage: required
@@ -74,14 +88,10 @@ to specify in a pin configuration subnode:
 	Value type: <string-array>
 	Definition: List of gpio pins affected by the properties specified in
 		    this subnode.  Valid pins are:
-		    gpio0-gpio149,
-		    sdc1_clk,
-		    sdc1_cmd,
-		    sdc1_data
-		    sdc2_clk,
-		    sdc2_cmd,
-		    sdc2_data
-		    sdc1_rclk,
+		    gpio0-gpio113,
+		        Supports mux, bias and drive-strength
+		    sdc1_clk, sdc1_cmd, sdc1_data sdc2_clk, sdc2_cmd, sdc2_data sdc1_rclk,
+		        Supports bias and drive-strength
 
 - function:
 	Usage: required
@@ -89,69 +99,60 @@ to specify in a pin configuration subnode:
 	Definition: Specify the alternative function to be configured for the
 		    specified pins. Functions are only valid for gpio pins.
 		    Valid values are:
-
-		    blsp_uart1, blsp_spi1, blsp_i2c1, blsp_uim1, atest_tsens,
-		    bimc_dte1, dac_calib0, blsp_spi8, blsp_uart8, blsp_uim8,
-		    qdss_cti_trig_out_b, bimc_dte0, dac_calib1, qdss_cti_trig_in_b,
-		    dac_calib2, atest_tsens2, atest_usb1, blsp_spi10, blsp_uart10,
-		    blsp_uim10, atest_bbrx1, atest_usb13, atest_bbrx0, atest_usb12,
-		    mdp_vsync, edp_lcd, blsp_i2c10, atest_gpsadc1, atest_usb11,
-		    atest_gpsadc0, edp_hot, atest_usb10, m_voc, dac_gpio, atest_char,
-		    cam_mclk, pll_bypassnl, qdss_stm7, blsp_i2c8, qdss_tracedata_b,
-		    pll_reset, qdss_stm6, qdss_stm5, qdss_stm4, atest_usb2, cci_i2c,
-		    qdss_stm3, dac_calib3, atest_usb23, atest_char3, dac_calib4,
-		    qdss_stm2, atest_usb22, atest_char2, qdss_stm1, dac_calib5,
-		    atest_usb21, atest_char1, dbg_out, qdss_stm0, dac_calib6,
-		    atest_usb20, atest_char0, dac_calib10, qdss_stm10,
-		    qdss_cti_trig_in_a, cci_timer4, blsp_spi6, blsp_uart6, blsp_uim6,
-		    blsp2_spi, qdss_stm9, qdss_cti_trig_out_a, dac_calib11,
-		    qdss_stm8, cci_timer0, qdss_stm13, dac_calib7, cci_timer1,
-		    qdss_stm12, dac_calib8, cci_timer2, blsp1_spi, qdss_stm11,
-		    dac_calib9, cci_timer3, cci_async, dac_calib12, blsp_i2c6,
-		    qdss_tracectl_a, dac_calib13, qdss_traceclk_a, dac_calib14,
-		    dac_calib15, hdmi_rcv, dac_calib16, hdmi_cec, pwr_modem,
-		    dac_calib17, hdmi_ddc, pwr_nav, dac_calib18, pwr_crypto,
-		    dac_calib19, hdmi_hot, dac_calib20, dac_calib21, pci_e0,
-		    dac_calib22, dac_calib23, dac_calib24, tsif1_sync, dac_calib25,
-		    sd_write, tsif1_error, blsp_spi2, blsp_uart2, blsp_uim2,
-		    qdss_cti, blsp_i2c2, blsp_spi3, blsp_uart3, blsp_uim3, blsp_i2c3,
-		    uim3, blsp_spi9, blsp_uart9, blsp_uim9, blsp10_spi, blsp_i2c9,
-		    blsp_spi7, blsp_uart7, blsp_uim7, qdss_tracedata_a, blsp_i2c7,
-		    qua_mi2s, gcc_gp1_clk_a, ssc_irq, uim4, blsp_spi11, blsp_uart11,
-		    blsp_uim11, gcc_gp2_clk_a, gcc_gp3_clk_a, blsp_i2c11, cri_trng0,
-		    cri_trng1, cri_trng, qdss_stm18, pri_mi2s, qdss_stm17, blsp_spi4,
-		    blsp_uart4, blsp_uim4, qdss_stm16, qdss_stm15, blsp_i2c4,
-		    qdss_stm14, dac_calib26, spkr_i2s, audio_ref, lpass_slimbus,
-		    isense_dbg, tsense_pwm1, tsense_pwm2, btfm_slimbus, ter_mi2s,
-		    qdss_stm22, qdss_stm21, qdss_stm20, qdss_stm19, gcc_gp1_clk_b,
-		    sec_mi2s, blsp_spi5, blsp_uart5, blsp_uim5, gcc_gp2_clk_b,
-		    gcc_gp3_clk_b, blsp_i2c5, blsp_spi12, blsp_uart12, blsp_uim12,
-		    qdss_stm25, qdss_stm31, blsp_i2c12, qdss_stm30, qdss_stm29,
-		    tsif1_clk, qdss_stm28, tsif1_en, tsif1_data, sdc4_cmd, qdss_stm27,
-		    qdss_traceclk_b, tsif2_error, sdc43, vfr_1, qdss_stm26, tsif2_clk,
-		    sdc4_clk, qdss_stm24, tsif2_en, sdc42, qdss_stm23, qdss_tracectl_b,
-		    sd_card, tsif2_data, sdc41, tsif2_sync, sdc40, mdp_vsync_p_b,
-		    ldo_en, mdp_vsync_s_b, ldo_update, blsp11_uart_tx_b, blsp11_uart_rx_b,
-		    blsp11_i2c_sda_b, prng_rosc, blsp11_i2c_scl_b, uim2, uim1, uim_batt,
-		    pci_e2, pa_indicator, adsp_ext, ddr_bist, qdss_tracedata_11,
-		    qdss_tracedata_12, modem_tsync, nav_dr, nav_pps, pci_e1, gsm_tx,
-		    qspi_cs, ssbi2, ssbi1, mss_lte, qspi_clk, qspi0, qspi1, qspi2, qspi3,
-		    gpio
+		    adsp_ext, agera_pll, atest_char, atest_char0, atest_char1,
+		    atest_char2, atest_char3, atest_gpsadc0, atest_gpsadc1,
+		    atest_tsens, atest_tsens2, atest_usb1, atest_usb10,
+		    atest_usb11, atest_usb12, atest_usb13, atest_usb2,
+		    atest_usb20, atest_usb21, atest_usb22, atest_usb23,
+		    audio_ref, bimc_dte0, bimc_dte1, blsp_i2c1, blsp_i2c2,
+		    blsp_i2c3, blsp_i2c4, blsp_i2c5, blsp_i2c6, blsp_i2c7,
+		    blsp_i2c8_a, blsp_i2c8_b, blsp_spi1, blsp_spi2, blsp_spi3,
+		    blsp_spi3_cs1, blsp_spi3_cs2, blsp_spi4, blsp_spi5,
+		    blsp_spi6, blsp_spi7, blsp_spi8_a, blsp_spi8_b,
+		    blsp_spi8_cs1, blsp_spi8_cs2, blsp_uart1, blsp_uart2,
+		    blsp_uart5, blsp_uart6_a, blsp_uart6_b, blsp_uim1,
+		    blsp_uim2, blsp_uim5, blsp_uim6, cam_mclk, cci_async,
+		    cci_i2c, cri_trng, cri_trng0, cri_trng1, dbg_out, ddr_bist,
+		    gcc_gp1, gcc_gp2, gcc_gp3, gpio, gps_tx_a, gps_tx_b, gps_tx_c,
+		    isense_dbg, jitter_bist, ldo_en, ldo_update, m_voc, mdp_vsync,
+		    mdss_vsync0, mdss_vsync1, mdss_vsync2, mdss_vsync3, mss_lte,
+		    nav_pps_a, nav_pps_b, nav_pps_c, pa_indicator, phase_flag0,
+		    phase_flag1, phase_flag10, phase_flag11, phase_flag12,
+		    phase_flag13, phase_flag14, phase_flag15, phase_flag16,
+		    phase_flag17, phase_flag18, phase_flag19, phase_flag2,
+		    phase_flag20, phase_flag21, phase_flag22, phase_flag23,
+		    phase_flag24, phase_flag25, phase_flag26, phase_flag27,
+		    phase_flag28, phase_flag29, phase_flag3, phase_flag30,
+		    phase_flag31, phase_flag4, phase_flag5, phase_flag6,
+		    phase_flag7, phase_flag8, phase_flag9, pll_bypassnl,
+		    pll_reset, pri_mi2s, pri_mi2s_ws, prng_rosc, pwr_crypto,
+		    pwr_modem, pwr_nav, qdss_cti0_a, qdss_cti0_b, qdss_cti1_a,
+		    qdss_cti1_b, qdss_gpio, qdss_gpio0, qdss_gpio1, qdss_gpio10,
+		    qdss_gpio11, qdss_gpio12, qdss_gpio13, qdss_gpio14, qdss_gpio15,
+		    qdss_gpio2, qdss_gpio3, qdss_gpio4, qdss_gpio5, qdss_gpio6,
+		    qdss_gpio7, qdss_gpio8, qdss_gpio9, qlink_enable, qlink_request,
+		    qspi_clk, qspi_cs, qspi_data0, qspi_data1, qspi_data2,
+		    qspi_data3, qspi_resetn, sec_mi2s, sndwire_clk, sndwire_data,
+		    sp_cmu, ssc_irq, tgu_ch0, tgu_ch1, tsense_pwm1, tsense_pwm2,
+		    uim1_clk, uim1_data, uim1_present, uim1_reset, uim2_clk,
+		    uim2_data, uim2_present, uim2_reset, uim_batt, vfr_1,
+		    vsense_clkout, vsense_data0, vsense_data1, vsense_mode,
+		    wlan1_adc0, wlan1_adc1, wlan2_adc0, wlan2_adc1
 
 - bias-disable:
 	Usage: optional
 	Value type: <none>
-	Definition: The specified pins should be configued as no pull.
+	Definition: The specified pins should be configured as no pull.
 
 - bias-pull-down:
 	Usage: optional
 	Value type: <none>
-	Definition: The specified pins should be configued as pull down.
+	Definition: The specified pins should be configured as pull down.
 
 - bias-pull-up:
 	Usage: optional
 	Value type: <none>
-	Definition: The specified pins should be configued as pull up.
+	Definition: The specified pins should be configured as pull up.
 
 - output-high:
 	Usage: optional
@@ -175,25 +176,16 @@ to specify in a pin configuration subnode:
 
 Example:
 
-	tlmm: pinctrl@01010000 {
+	tlmm: pinctrl@3100000 {
 		compatible = "qcom,sdm660-pinctrl";
-		reg = <0x01010000 0x300000>;
-		interrupts = <0 208 0>;
+		reg = <0x3100000 0x200000>,
+		      <0x3500000 0x200000>,
+		      <0x3900000 0x200000>;
+		reg-names = "south", "center", "north";
+		interrupts = <GIC_SPI 208 IRQ_TYPE_LEVEL_HIGH>;
 		gpio-controller;
+		gpio-ranges = <&tlmm 0 0 114>;
 		#gpio-cells = <2>;
 		interrupt-controller;
 		#interrupt-cells = <2>;
-
-		uart_console_active: uart_console_active {
-			mux {
-				pins = "gpio4", "gpio5";
-				function = "blsp_uart8";
-			};
-
-			config {
-				pins = "gpio4", "gpio5";
-				drive-strength = <2>;
-				bias-disable;
-			};
-		};
 	};

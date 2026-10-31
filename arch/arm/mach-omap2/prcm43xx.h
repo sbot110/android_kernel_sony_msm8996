@@ -1,11 +1,8 @@
+/* SPDX-License-Identifier: GPL-2.0-only */
 /*
  * AM43x PRCM defines
  *
- * Copyright (C) 2013 Texas Instruments Incorporated - http://www.ti.com/
- *
- * This file is licensed under the terms of the GNU General Public License
- * version 2.  This program is licensed "as is" without any warranty of any
- * kind, whether express or implied.
+ * Copyright (C) 2013 Texas Instruments Incorporated - https://www.ti.com/
  */
 
 #ifndef __ARCH_ARM_MACH_OMAP2_PRCM_43XX_H
@@ -68,6 +65,7 @@
 #define AM43XX_CM_PER_ICSS_CDOFFS			0x0300
 #define AM43XX_CM_PER_L4LS_CDOFFS			0x0400
 #define AM43XX_CM_PER_EMIF_CDOFFS			0x0700
+#define AM43XX_CM_PER_LCDC_CDOFFS			0x0800
 #define AM43XX_CM_PER_DSS_CDOFFS			0x0a00
 #define AM43XX_CM_PER_CPSW_CDOFFS			0x0b00
 #define AM43XX_CM_PER_OCPWP_L3_CDOFFS			0x0c00
@@ -92,6 +90,7 @@
 #define AM43XX_CM_PER_MAILBOX0_CLKCTRL_OFFSET		0x04b8
 #define AM43XX_CM_PER_MMC0_CLKCTRL_OFFSET		0x04c0
 #define AM43XX_CM_PER_MMC1_CLKCTRL_OFFSET		0x04c8
+#define AM43XX_CM_PER_RNG_CLKCTRL_OFFSET		0x04e0
 #define AM43XX_CM_PER_SPI0_CLKCTRL_OFFSET		0x0500
 #define AM43XX_CM_PER_SPI1_CLKCTRL_OFFSET		0x0508
 #define AM43XX_CM_PER_SPINLOCK_CLKCTRL_OFFSET		0x0528
@@ -133,6 +132,7 @@
 #define AM43XX_CM_PER_OCMCRAM_CLKCTRL_OFFSET		0x0050
 #define AM43XX_CM_PER_SHA0_CLKCTRL_OFFSET		0x0058
 #define AM43XX_CM_PER_AES0_CLKCTRL_OFFSET		0x0028
+#define AM43XX_CM_PER_DES_CLKCTRL_OFFSET		0x0030
 #define AM43XX_CM_PER_TIMER8_CLKCTRL_OFFSET		0x0560
 #define AM43XX_CM_PER_TIMER9_CLKCTRL_OFFSET		0x0568
 #define AM43XX_CM_PER_TIMER10_CLKCTRL_OFFSET		0x0570

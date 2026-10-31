@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-2.0
 /*
  * PCI Backend Operations - respond to PCI requests from Frontend
  *
@@ -5,16 +6,14 @@
  */
 
 #define pr_fmt(fmt) KBUILD_MODNAME ": " fmt
+#define dev_fmt pr_fmt
 
-#include <linux/module.h>
+#include <linux/moduleparam.h>
 #include <linux/wait.h>
 #include <linux/bitops.h>
 #include <xen/events.h>
 #include <linux/sched.h>
 #include "pciback.h"
-
-int verbose_request;
-module_param(verbose_request, int, 0644);
 
 static irqreturn_t xen_pcibk_guest_interrupt(int irq, void *dev_id);
 
@@ -146,9 +145,6 @@ int xen_pcibk_enable_msi(struct xen_pcibk_device *pdev,
 	struct xen_pcibk_dev_data *dev_data;
 	int status;
 
-	if (unlikely(verbose_request))
-		printk(KERN_DEBUG DRV_NAME ": %s: enable MSI\n", pci_name(dev));
-
 	if (dev->msi_enabled)
 		status = -EALREADY;
 	else if (dev->msix_enabled)
@@ -157,9 +153,8 @@ int xen_pcibk_enable_msi(struct xen_pcibk_device *pdev,
 		status = pci_enable_msi(dev);
 
 	if (status) {
-		pr_warn_ratelimited("%s: error enabling MSI for guest %u: err %d\n",
-				    pci_name(dev), pdev->xdev->otherend_id,
-				    status);
+		dev_warn_ratelimited(&dev->dev, "error enabling MSI for guest %u: err %d\n",
+				     pdev->xdev->otherend_id, status);
 		op->value = 0;
 		return XEN_PCI_ERR_op_failed;
 	}
@@ -168,9 +163,8 @@ int xen_pcibk_enable_msi(struct xen_pcibk_device *pdev,
 	 * the local domain's IRQ number. */
 
 	op->value = dev->irq ? xen_pirq_from_irq(dev->irq) : 0;
-	if (unlikely(verbose_request))
-		printk(KERN_DEBUG DRV_NAME ": %s: MSI: %d\n", pci_name(dev),
-			op->value);
+
+	dev_dbg(&dev->dev, "MSI: %d\n", op->value);
 
 	dev_data = pci_get_drvdata(dev);
 	if (dev_data)
@@ -183,10 +177,6 @@ static
 int xen_pcibk_disable_msi(struct xen_pcibk_device *pdev,
 			  struct pci_dev *dev, struct xen_pci_op *op)
 {
-	if (unlikely(verbose_request))
-		printk(KERN_DEBUG DRV_NAME ": %s: disable MSI\n",
-		       pci_name(dev));
-
 	if (dev->msi_enabled) {
 		struct xen_pcibk_dev_data *dev_data;
 
@@ -197,9 +187,9 @@ int xen_pcibk_disable_msi(struct xen_pcibk_device *pdev,
 			dev_data->ack_intr = 1;
 	}
 	op->value = dev->irq ? xen_pirq_from_irq(dev->irq) : 0;
-	if (unlikely(verbose_request))
-		printk(KERN_DEBUG DRV_NAME ": %s: MSI: %d\n", pci_name(dev),
-			op->value);
+
+	dev_dbg(&dev->dev, "MSI: %d\n", op->value);
+
 	return 0;
 }
 
@@ -212,9 +202,7 @@ int xen_pcibk_enable_msix(struct xen_pcibk_device *pdev,
 	struct msix_entry *entries;
 	u16 cmd;
 
-	if (unlikely(verbose_request))
-		printk(KERN_DEBUG DRV_NAME ": %s: enable MSI-X\n",
-		       pci_name(dev));
+	dev_dbg(&dev->dev, "enable MSI-X\n");
 
 	if (op->value > SH_INFO_MAX_VEC)
 		return -EINVAL;
@@ -231,7 +219,7 @@ int xen_pcibk_enable_msix(struct xen_pcibk_device *pdev,
 	if (dev->msi_enabled || !(cmd & PCI_COMMAND_MEMORY))
 		return -ENXIO;
 
-	entries = kmalloc(op->value * sizeof(*entries), GFP_KERNEL);
+	entries = kmalloc_array(op->value, sizeof(*entries), GFP_KERNEL);
 	if (entries == NULL)
 		return -ENOMEM;
 
@@ -247,17 +235,13 @@ int xen_pcibk_enable_msix(struct xen_pcibk_device *pdev,
 			if (entries[i].vector) {
 				op->msix_entries[i].vector =
 					xen_pirq_from_irq(entries[i].vector);
-				if (unlikely(verbose_request))
-					printk(KERN_DEBUG DRV_NAME ": %s: " \
-						"MSI-X[%d]: %d\n",
-						pci_name(dev), i,
-						op->msix_entries[i].vector);
+				dev_dbg(&dev->dev, "MSI-X[%d]: %d\n", i,
+					op->msix_entries[i].vector);
 			}
 		}
 	} else
-		pr_warn_ratelimited("%s: error enabling MSI-X for guest %u: err %d!\n",
-				    pci_name(dev), pdev->xdev->otherend_id,
-				    result);
+		dev_warn_ratelimited(&dev->dev, "error enabling MSI-X for guest %u: err %d!\n",
+				     pdev->xdev->otherend_id, result);
 	kfree(entries);
 
 	op->value = result;
@@ -272,10 +256,6 @@ static
 int xen_pcibk_disable_msix(struct xen_pcibk_device *pdev,
 			   struct pci_dev *dev, struct xen_pci_op *op)
 {
-	if (unlikely(verbose_request))
-		printk(KERN_DEBUG DRV_NAME ": %s: disable MSI-X\n",
-			pci_name(dev));
-
 	if (dev->msix_enabled) {
 		struct xen_pcibk_dev_data *dev_data;
 
@@ -290,9 +270,9 @@ int xen_pcibk_disable_msix(struct xen_pcibk_device *pdev,
 	 * an undefined IRQ value of zero.
 	 */
 	op->value = dev->irq ? xen_pirq_from_irq(dev->irq) : 0;
-	if (unlikely(verbose_request))
-		printk(KERN_DEBUG DRV_NAME ": %s: MSI-X: %d\n",
-		       pci_name(dev), op->value);
+
+	dev_dbg(&dev->dev, "MSI-X: %d\n", op->value);
+
 	return 0;
 }
 #endif
@@ -317,7 +297,7 @@ static void xen_pcibk_test_and_schedule_op(struct xen_pcibk_device *pdev)
 	/* Check that frontend is requesting an operation and that we are not
 	 * already processing a request */
 	if (xen_pcibk_test_op_pending(pdev)) {
-		queue_work(xen_pcibk_wq, &pdev->op_work);
+		schedule_work(&pdev->op_work);
 		eoi = false;
 	}
 	/*_XEN_PCIB_active should have been cleared by pcifront. And also make
@@ -451,7 +431,7 @@ static irqreturn_t xen_pcibk_guest_interrupt(int irq, void *dev_id)
 		dev_data->handled++;
 		if ((dev_data->handled % 1000) == 0) {
 			if (xen_test_irq_shared(irq)) {
-				pr_info("%s IRQ line is not shared "
+				dev_info(&dev->dev, "%s IRQ line is not shared "
 					"with other domains. Turning ISR off\n",
 					 dev_data->irq_name);
 				dev_data->ack_intr = 0;

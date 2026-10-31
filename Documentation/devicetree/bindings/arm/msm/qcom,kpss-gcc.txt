@@ -5,13 +5,27 @@ PROPERTIES
 - compatible:
 	Usage: required
 	Value type: <string>
-	Definition: should be one of:
-			"qcom,kpss-gcc"
+	Definition: should be one of the following. The generic compatible
+			"qcom,kpss-gcc" should also be included.
+			"qcom,kpss-gcc-ipq8064", "qcom,kpss-gcc"
+			"qcom,kpss-gcc-apq8064", "qcom,kpss-gcc"
+			"qcom,kpss-gcc-msm8974", "qcom,kpss-gcc"
+			"qcom,kpss-gcc-msm8960", "qcom,kpss-gcc"
 
 - reg:
 	Usage: required
 	Value type: <prop-encoded-array>
 	Definition: base address and size of the register region
+
+- clocks:
+	Usage: required
+	Value type: <prop-encoded-array>
+	Definition: reference to the pll parents.
+
+- clock-names:
+	Usage: required
+	Value type: <stringlist>
+	Definition: must be "pll8_vote", "pxo".
 
 - clock-output-names:
 	Usage: required
@@ -22,7 +36,9 @@ PROPERTIES
 Example:
 
 	l2cc: clock-controller@2011000 {
-		compatible = "qcom,kpss-gcc";
+		compatible = "qcom,kpss-gcc-ipq8064", "qcom,kpss-gcc";
 		reg = <0x2011000 0x1000>;
+		clocks = <&gcc PLL8_VOTE>, <&gcc PXO_SRC>;
+		clock-names = "pll8_vote", "pxo";
 		clock-output-names = "acpu_l2_aux";
 	};

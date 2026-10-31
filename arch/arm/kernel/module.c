@@ -1,12 +1,9 @@
+// SPDX-License-Identifier: GPL-2.0-only
 /*
  *  linux/arch/arm/kernel/module.c
  *
  *  Copyright (C) 2002 Russell King.
  *  Modified for nommu by Hyok S. Choi
- *
- * This program is free software; you can redistribute it and/or modify
- * it under the terms of the GNU General Public License version 2 as
- * published by the Free Software Foundation.
  *
  * Module allocation method suggested by Andi Kleen.
  */
@@ -20,7 +17,6 @@
 #include <linux/string.h>
 #include <linux/gfp.h>
 
-#include <asm/pgtable.h>
 #include <asm/sections.h>
 #include <asm/smp_plat.h>
 #include <asm/unwind.h>
@@ -34,7 +30,7 @@
  * recompiling the whole kernel when CONFIG_XIP_KERNEL is turned on/off.
  */
 #undef MODULES_VADDR
-#define MODULES_VADDR	(((unsigned long)_etext + ~PMD_MASK) & PMD_MASK)
+#define MODULES_VADDR	(((unsigned long)_exiprom + ~PMD_MASK) & PMD_MASK)
 #endif
 
 #ifdef CONFIG_MMU
@@ -57,6 +53,20 @@ void *module_alloc(unsigned long size)
 				__builtin_return_address(0));
 }
 #endif
+
+bool module_init_section(const char *name)
+{
+	return strstarts(name, ".init") ||
+		strstarts(name, ".ARM.extab.init") ||
+		strstarts(name, ".ARM.exidx.init");
+}
+
+bool module_exit_section(const char *name)
+{
+	return strstarts(name, ".exit") ||
+		strstarts(name, ".ARM.extab.exit") ||
+		strstarts(name, ".ARM.exidx.exit");
+}
 
 int
 apply_relocate(Elf32_Shdr *sechdrs, const char *strtab, unsigned int symindex,
@@ -162,18 +172,37 @@ apply_relocate(Elf32_Shdr *sechdrs, const char *strtab, unsigned int symindex,
 		       break;
 
 		case R_ARM_PREL31:
-			offset = *(u32 *)loc + sym->st_value - loc;
-			*(u32 *)loc = offset & 0x7fffffff;
+			offset = (*(s32 *)loc << 1) >> 1; /* sign extend */
+			offset += sym->st_value - loc;
+			if (offset >= 0x40000000 || offset < -0x40000000) {
+				pr_err("%s: section %u reloc %u sym '%s': relocation %u out of range (%#lx -> %#x)\n",
+				       module->name, relindex, i, symname,
+				       ELF32_R_TYPE(rel->r_info), loc,
+				       sym->st_value);
+				return -ENOEXEC;
+			}
+			*(u32 *)loc &= 0x80000000;
+			*(u32 *)loc |= offset & 0x7fffffff;
+			break;
+
+		case R_ARM_REL32:
+			*(u32 *)loc += sym->st_value - loc;
 			break;
 
 		case R_ARM_MOVW_ABS_NC:
 		case R_ARM_MOVT_ABS:
+		case R_ARM_MOVW_PREL_NC:
+		case R_ARM_MOVT_PREL:
 			offset = tmp = __mem_to_opcode_arm(*(u32 *)loc);
 			offset = ((offset & 0xf0000) >> 4) | (offset & 0xfff);
 			offset = (offset ^ 0x8000) - 0x8000;
 
 			offset += sym->st_value;
-			if (ELF32_R_TYPE(rel->r_info) == R_ARM_MOVT_ABS)
+			if (ELF32_R_TYPE(rel->r_info) == R_ARM_MOVT_PREL ||
+			    ELF32_R_TYPE(rel->r_info) == R_ARM_MOVW_PREL_NC)
+				offset -= loc;
+			if (ELF32_R_TYPE(rel->r_info) == R_ARM_MOVT_ABS ||
+			    ELF32_R_TYPE(rel->r_info) == R_ARM_MOVT_PREL)
 				offset >>= 16;
 
 			tmp &= 0xfff0f000;
@@ -264,6 +293,8 @@ apply_relocate(Elf32_Shdr *sechdrs, const char *strtab, unsigned int symindex,
 
 		case R_ARM_THM_MOVW_ABS_NC:
 		case R_ARM_THM_MOVT_ABS:
+		case R_ARM_THM_MOVW_PREL_NC:
+		case R_ARM_THM_MOVT_PREL:
 			upper = __mem_to_opcode_thumb16(*(u16 *)loc);
 			lower = __mem_to_opcode_thumb16(*(u16 *)(loc + 2));
 
@@ -283,7 +314,11 @@ apply_relocate(Elf32_Shdr *sechdrs, const char *strtab, unsigned int symindex,
 			offset = (offset ^ 0x8000) - 0x8000;
 			offset += sym->st_value;
 
-			if (ELF32_R_TYPE(rel->r_info) == R_ARM_THM_MOVT_ABS)
+			if (ELF32_R_TYPE(rel->r_info) == R_ARM_THM_MOVT_PREL ||
+			    ELF32_R_TYPE(rel->r_info) == R_ARM_THM_MOVW_PREL_NC)
+				offset -= loc;
+			if (ELF32_R_TYPE(rel->r_info) == R_ARM_THM_MOVT_ABS ||
+			    ELF32_R_TYPE(rel->r_info) == R_ARM_THM_MOVT_PREL)
 				offset >>= 16;
 
 			upper = (u16)((upper & 0xfbf0) |
@@ -396,8 +431,17 @@ module_arch_cleanup(struct module *mod)
 #ifdef CONFIG_ARM_UNWIND
 	int i;
 
-	for (i = 0; i < ARM_SEC_MAX; i++)
-		if (mod->arch.unwind[i])
-			unwind_table_del(mod->arch.unwind[i]);
+	for (i = 0; i < ARM_SEC_MAX; i++) {
+		unwind_table_del(mod->arch.unwind[i]);
+		mod->arch.unwind[i] = NULL;
+	}
+#endif
+}
+
+void __weak module_arch_freeing_init(struct module *mod)
+{
+#ifdef CONFIG_ARM_UNWIND
+	unwind_table_del(mod->arch.unwind[ARM_SEC_INIT]);
+	mod->arch.unwind[ARM_SEC_INIT] = NULL;
 #endif
 }

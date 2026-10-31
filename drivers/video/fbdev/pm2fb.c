@@ -54,7 +54,7 @@
 #define DPRINTK(a, b...)	\
 	printk(KERN_DEBUG "pm2fb: %s: " a, __func__ , ## b)
 #else
-#define DPRINTK(a, b...)
+#define DPRINTK(a, b...)	no_printk(a, ##b)
 #endif
 
 #define PM2_PIXMAP_SIZE	(1600 * 4)
@@ -113,7 +113,7 @@ static struct fb_fix_screeninfo pm2fb_fix = {
 /*
  * Default video mode. In case the modedb doesn't work.
  */
-static struct fb_var_screeninfo pm2fb_var = {
+static const struct fb_var_screeninfo pm2fb_var = {
 	/* "640x480, 8 bpp @ 60 Hz */
 	.xres =			640,
 	.yres =			480,
@@ -233,10 +233,13 @@ static u32 to3264(u32 timing, int bpp, int is64)
 	switch (bpp) {
 	case 24:
 		timing *= 3;
+		fallthrough;
 	case 8:
 		timing >>= 1;
+		fallthrough;
 	case 16:
 		timing >>= 1;
+		fallthrough;
 	case 32:
 		break;
 	}
@@ -611,6 +614,11 @@ static int pm2fb_check_var(struct fb_var_screeninfo *var, struct fb_info *info)
 	if (lpitch * var->yres_virtual > info->fix.smem_len) {
 		DPRINTK("no memory for screen (%ux%ux%u)\n",
 			var->xres, var->yres_virtual, var->bits_per_pixel);
+		return -EINVAL;
+	}
+
+	if (!var->pixclock) {
+		DPRINTK("pixclock is zero\n");
 		return -EINVAL;
 	}
 
@@ -1481,7 +1489,7 @@ static int pm2fb_cursor(struct fb_info *info, struct fb_cursor *cursor)
  *  Frame buffer operations
  */
 
-static struct fb_ops pm2fb_ops = {
+static const struct fb_ops pm2fb_ops = {
 	.owner		= THIS_MODULE,
 	.fb_check_var	= pm2fb_check_var,
 	.fb_set_par	= pm2fb_set_par,
@@ -1505,8 +1513,8 @@ static struct fb_ops pm2fb_ops = {
  *
  * Initialise and allocate resource for PCI device.
  *
- * @param	pdev	PCI device.
- * @param	id	PCI device ID.
+ * @pdev:	PCI device.
+ * @id:		PCI device ID.
  */
 static int pm2fb_probe(struct pci_dev *pdev, const struct pci_device_id *id)
 {
@@ -1522,8 +1530,10 @@ static int pm2fb_probe(struct pci_dev *pdev, const struct pci_device_id *id)
 	}
 
 	info = framebuffer_alloc(sizeof(struct pm2fb_par), &pdev->dev);
-	if (!info)
-		return -ENOMEM;
+	if (!info) {
+		err = -ENOMEM;
+		goto err_exit_disable;
+	}
 	default_par = info->par;
 
 	switch (pdev->device) {
@@ -1561,7 +1571,7 @@ static int pm2fb_probe(struct pci_dev *pdev, const struct pci_device_id *id)
 		goto err_exit_neither;
 	}
 	default_par->v_regs =
-		ioremap_nocache(pm2fb_fix.mmio_start, pm2fb_fix.mmio_len);
+		ioremap(pm2fb_fix.mmio_start, pm2fb_fix.mmio_len);
 	if (!default_par->v_regs) {
 		printk(KERN_WARNING "pm2fb: Can't remap %s register area.\n",
 		       pm2fb_fix.id);
@@ -1704,6 +1714,8 @@ static int pm2fb_probe(struct pci_dev *pdev, const struct pci_device_id *id)
 	release_mem_region(pm2fb_fix.mmio_start, pm2fb_fix.mmio_len);
  err_exit_neither:
 	framebuffer_release(info);
+ err_exit_disable:
+	pci_disable_device(pdev);
 	return retval;
 }
 
@@ -1712,7 +1724,7 @@ static int pm2fb_probe(struct pci_dev *pdev, const struct pci_device_id *id)
  *
  * Release all device resources.
  *
- * @param	pdev	PCI device to clean up.
+ * @pdev:	PCI device to clean up.
  */
 static void pm2fb_remove(struct pci_dev *pdev)
 {
@@ -1730,9 +1742,10 @@ static void pm2fb_remove(struct pci_dev *pdev)
 	fb_dealloc_cmap(&info->cmap);
 	kfree(info->pixmap.addr);
 	framebuffer_release(info);
+	pci_disable_device(pdev);
 }
 
-static struct pci_device_id pm2fb_id_table[] = {
+static const struct pci_device_id pm2fb_id_table[] = {
 	{ PCI_VENDOR_ID_TI, PCI_DEVICE_ID_TI_TVP4020,
 	  PCI_ANY_ID, PCI_ANY_ID, 0, 0, 0 },
 	{ PCI_VENDOR_ID_3DLABS, PCI_DEVICE_ID_3DLABS_PERMEDIA2,
@@ -1753,7 +1766,7 @@ MODULE_DEVICE_TABLE(pci, pm2fb_id_table);
 
 
 #ifndef MODULE
-/**
+/*
  * Parse user specified options.
  *
  * This is, comma-separated options following `video=pm2fb:'.

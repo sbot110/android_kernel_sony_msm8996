@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-2.0
 config HAVE_ACPI_APEI
 	bool
 
@@ -22,6 +23,7 @@ config ACPI_APEI_GHES
 	select ACPI_HED
 	select IRQ_WORK
 	select GENERIC_ALLOCATOR
+	select ARM_SDE_INTERFACE if ARM64
 	help
 	  Generic Hardware Error Source provides a way to report
 	  platform hardware errors (such as that from chipset). It
@@ -38,6 +40,11 @@ config ACPI_APEI_PCIEAER
 	help
 	  PCIe AER errors may be reported via APEI firmware first mode.
 	  Turn on this option to enable the corresponding support.
+
+config ACPI_APEI_SEA
+	bool
+	depends on ARM64 && ACPI_APEI_GHES
+	default y
 
 config ACPI_APEI_MEMORY_FAILURE
 	bool "APEI memory error recovering support"

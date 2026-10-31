@@ -1,16 +1,7 @@
+// SPDX-License-Identifier: GPL-2.0-only
 /*
  * NFC Digital Protocol stack
  * Copyright (c) 2013, Intel Corporation.
- *
- * This program is free software; you can redistribute it and/or modify it
- * under the terms and conditions of the GNU General Public License,
- * version 2, as published by the Free Software Foundation.
- *
- * This program is distributed in the hope it will be useful, but WITHOUT
- * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
- * FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License for
- * more details.
- *
  */
 
 #define pr_fmt(fmt) "digital: %s: " fmt, __func__
@@ -27,6 +18,7 @@
 
 #define DIGITAL_SDD_RES_CT  0x88
 #define DIGITAL_SDD_RES_LEN 5
+#define DIGITAL_SEL_RES_LEN 1
 
 #define DIGITAL_SEL_RES_NFCID1_COMPLETE(sel_res) (!((sel_res) & 0x04))
 #define DIGITAL_SEL_RES_IS_T2T(sel_res) (!((sel_res) & 0x60))
@@ -266,8 +258,8 @@ static int digital_in_send_rats(struct nfc_digital_dev *ddev,
 	if (!skb)
 		return -ENOMEM;
 
-	*skb_put(skb, 1) = DIGITAL_RATS_BYTE1;
-	*skb_put(skb, 1) = DIGITAL_RATS_PARAM;
+	skb_put_u8(skb, DIGITAL_RATS_BYTE1);
+	skb_put_u8(skb, DIGITAL_RATS_PARAM);
 
 	rc = digital_in_send_cmd(ddev, skb, 30, digital_in_recv_ats,
 				 target);
@@ -299,7 +291,7 @@ static void digital_in_recv_sel_res(struct nfc_digital_dev *ddev, void *arg,
 		}
 	}
 
-	if (!resp->len) {
+	if (resp->len != DIGITAL_SEL_RES_LEN) {
 		rc = -EIO;
 		goto exit;
 	}
@@ -432,6 +424,12 @@ static void digital_in_recv_sdd_res(struct nfc_digital_dev *ddev, void *arg,
 		size = 4;
 	}
 
+	if (target->nfcid1_len + size > NFC_NFCID1_MAXSIZE) {
+		PROTOCOL_ERR("4.7.2.1");
+		rc = -EPROTO;
+		goto exit;
+	}
+
 	memcpy(target->nfcid1 + target->nfcid1_len, sdd_res->nfcid1 + offset,
 	       size);
 	target->nfcid1_len += size;
@@ -470,8 +468,8 @@ static int digital_in_send_sdd_req(struct nfc_digital_dev *ddev,
 	else
 		sel_cmd = DIGITAL_CMD_SEL_REQ_CL3;
 
-	*skb_put(skb, sizeof(u8)) = sel_cmd;
-	*skb_put(skb, sizeof(u8)) = DIGITAL_SDD_REQ_SEL_PAR;
+	skb_put_u8(skb, sel_cmd);
+	skb_put_u8(skb, DIGITAL_SDD_REQ_SEL_PAR);
 
 	rc = digital_in_send_cmd(ddev, skb, 30, digital_in_recv_sdd_res,
 				 target);
@@ -545,7 +543,7 @@ int digital_in_send_sens_req(struct nfc_digital_dev *ddev, u8 rf_tech)
 	if (!skb)
 		return -ENOMEM;
 
-	*skb_put(skb, sizeof(u8)) = DIGITAL_CMD_SENS_REQ;
+	skb_put_u8(skb, DIGITAL_CMD_SENS_REQ);
 
 	rc = digital_in_send_cmd(ddev, skb, 30, digital_in_recv_sens_res, NULL);
 	if (rc)
@@ -629,8 +627,7 @@ static int digital_in_send_attrib_req(struct nfc_digital_dev *ddev,
 	if (!skb)
 		return -ENOMEM;
 
-	attrib_req = (struct digital_attrib_req *)skb_put(skb,
-							  sizeof(*attrib_req));
+	attrib_req = skb_put(skb, sizeof(*attrib_req));
 
 	attrib_req->cmd = DIGITAL_CMD_ATTRIB_REQ;
 	memcpy(attrib_req->nfcid0, sensb_res->nfcid0,
@@ -734,8 +731,7 @@ int digital_in_send_sensb_req(struct nfc_digital_dev *ddev, u8 rf_tech)
 	if (!skb)
 		return -ENOMEM;
 
-	sensb_req = (struct digital_sensb_req *)skb_put(skb,
-							sizeof(*sensb_req));
+	sensb_req = skb_put(skb, sizeof(*sensb_req));
 
 	sensb_req->cmd = DIGITAL_CMD_SENSB_REQ;
 	sensb_req->afi = 0x00; /* All families and sub-families */
@@ -781,6 +777,8 @@ static void digital_in_recv_sensf_res(struct nfc_digital_dev *ddev, void *arg,
 	memset(&target, 0, sizeof(struct nfc_target));
 
 	sensf_res = (struct digital_sensf_res *)resp->data;
+
+	resp->len = min_t(unsigned int, resp->len, NFC_SENSF_RES_MAXSIZE);
 
 	memcpy(target.sensf_res, sensf_res, resp->len);
 	target.sensf_res_len = resp->len;
@@ -834,7 +832,7 @@ int digital_in_send_sensf_req(struct nfc_digital_dev *ddev, u8 rf_tech)
 	sensf_req->rc = 0;
 	sensf_req->tsn = 0;
 
-	*skb_push(skb, 1) = size + 1;
+	*(u8 *)skb_push(skb, 1) = size + 1;
 
 	if (!DIGITAL_DRV_CAPS_IN_CRC(ddev))
 		digital_skb_add_crc_f(skb);
@@ -943,7 +941,7 @@ static int digital_tg_send_sel_res(struct nfc_digital_dev *ddev)
 	if (!skb)
 		return -ENOMEM;
 
-	*skb_put(skb, 1) = DIGITAL_SEL_RES_NFC_DEP;
+	skb_put_u8(skb, DIGITAL_SEL_RES_NFC_DEP);
 
 	if (!DIGITAL_DRV_CAPS_TG_CRC(ddev))
 		digital_skb_add_crc_a(skb);
@@ -1167,7 +1165,7 @@ static int digital_tg_send_sensf_res(struct nfc_digital_dev *ddev,
 		break;
 	}
 
-	*skb_push(skb, sizeof(u8)) = size + 1;
+	*(u8 *)skb_push(skb, sizeof(u8)) = size + 1;
 
 	if (!DIGITAL_DRV_CAPS_TG_CRC(ddev))
 		digital_skb_add_crc_f(skb);
@@ -1261,21 +1259,12 @@ static int digital_tg_config_nfcf(struct nfc_digital_dev *ddev, u8 rf_tech)
 int digital_tg_listen_nfcf(struct nfc_digital_dev *ddev, u8 rf_tech)
 {
 	int rc;
-	u8 *nfcid2;
 
 	rc = digital_tg_config_nfcf(ddev, rf_tech);
 	if (rc)
 		return rc;
 
-	nfcid2 = kzalloc(NFC_NFCID2_MAXSIZE, GFP_KERNEL);
-	if (!nfcid2)
-		return -ENOMEM;
-
-	nfcid2[0] = DIGITAL_SENSF_NFCID2_NFC_DEP_B1;
-	nfcid2[1] = DIGITAL_SENSF_NFCID2_NFC_DEP_B2;
-	get_random_bytes(nfcid2 + 2, NFC_NFCID2_MAXSIZE - 2);
-
-	return digital_tg_listen(ddev, 300, digital_tg_recv_sensf_req, nfcid2);
+	return digital_tg_listen(ddev, 300, digital_tg_recv_sensf_req, NULL);
 }
 
 void digital_tg_recv_md_req(struct nfc_digital_dev *ddev, void *arg,

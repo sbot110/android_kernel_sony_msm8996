@@ -1,14 +1,10 @@
+// SPDX-License-Identifier: GPL-2.0-or-later
 /*
  * NET		Generic infrastructure for Network protocols.
  *
  * Authors:	Arnaldo Carvalho de Melo <acme@conectiva.com.br>
  *
  * 		From code originally in include/net/tcp.h
- *
- *		This program is free software; you can redistribute it and/or
- *		modify it under the terms of the GNU General Public License
- *		as published by the Free Software Foundation; either version
- *		2 of the License, or (at your option) any later version.
  */
 
 #include <linux/module.h>
@@ -34,14 +30,9 @@
  * and it will increase in proportion to the memory of machine.
  * Note : Dont forget somaxconn that may limit backlog too.
  */
-int sysctl_max_syn_backlog = 256;
-EXPORT_SYMBOL(sysctl_max_syn_backlog);
 
 void reqsk_queue_alloc(struct request_sock_queue *queue)
 {
-	spin_lock_init(&queue->rskq_lock);
-
-	spin_lock_init(&queue->fastopenq.lock);
 	queue->fastopenq.rskq_rst_head = NULL;
 	queue->fastopenq.rskq_rst_tail = NULL;
 	queue->fastopenq.qlen = 0;
@@ -102,7 +93,7 @@ void reqsk_fastopen_remove(struct sock *sk, struct request_sock *req,
 
 	fastopenq = &inet_csk(lsk)->icsk_accept_queue.fastopenq;
 
-	tcp_sk(sk)->fastopen_rsk = NULL;
+	RCU_INIT_POINTER(tcp_sk(sk)->fastopen_rsk, NULL);
 	spin_lock_bh(&fastopenq->lock);
 	fastopenq->qlen--;
 	tcp_rsk(req)->tfo_listener = false;

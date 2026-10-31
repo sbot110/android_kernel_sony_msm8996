@@ -1,3 +1,4 @@
+/* SPDX-License-Identifier: GPL-2.0 */
 #ifndef _ASM_POWERPC_SETUP_H
 #define _ASM_POWERPC_SETUP_H
 
@@ -9,7 +10,6 @@ extern void ppc_printk_progress(char *s, unsigned short hex);
 extern unsigned int rtas_data;
 extern unsigned long long memory_limit;
 extern bool init_mem_is_free;
-extern unsigned long klimit;
 extern void *zalloc_maybe_bootmem(size_t size, gfp_t mask);
 
 struct device_node;
@@ -23,9 +23,22 @@ extern void reloc_got2(unsigned long);
 #define PTRRELOC(x)	((typeof(x)) add_reloc_offset((unsigned long)(x)))
 
 void check_for_initrd(void);
+void mem_topology_setup(void);
 void initmem_init(void);
 void setup_panic(void);
 #define ARCH_PANIC_TIMEOUT 180
+
+#ifdef CONFIG_PPC_PSERIES
+extern bool pseries_enable_reloc_on_exc(void);
+extern void pseries_disable_reloc_on_exc(void);
+extern void pseries_big_endian_exceptions(void);
+extern void pseries_little_endian_exceptions(void);
+#else
+static inline bool pseries_enable_reloc_on_exc(void) { return false; }
+static inline void pseries_disable_reloc_on_exc(void) {}
+static inline void pseries_big_endian_exceptions(void) {}
+static inline void pseries_little_endian_exceptions(void) {}
+#endif /* CONFIG_PPC_PSERIES */
 
 void rfi_flush_enable(bool enable);
 
@@ -44,7 +57,7 @@ void do_rfi_flush_fixups(enum l1d_flush_type types);
 #ifdef CONFIG_PPC_BARRIER_NOSPEC
 void setup_barrier_nospec(void);
 #else
-static inline void setup_barrier_nospec(void) { };
+static inline void setup_barrier_nospec(void) { }
 #endif
 void do_uaccess_flush_fixups(enum l1d_flush_type types);
 void do_entry_flush_fixups(enum l1d_flush_type types);
@@ -54,13 +67,13 @@ extern bool barrier_nospec_enabled;
 #ifdef CONFIG_PPC_BARRIER_NOSPEC
 void do_barrier_nospec_fixups_range(bool enable, void *start, void *end);
 #else
-static inline void do_barrier_nospec_fixups_range(bool enable, void *start, void *end) { };
+static inline void do_barrier_nospec_fixups_range(bool enable, void *start, void *end) { }
 #endif
 
 #ifdef CONFIG_PPC_FSL_BOOK3E
 void setup_spectre_v2(void);
 #else
-static inline void setup_spectre_v2(void) {};
+static inline void setup_spectre_v2(void) {}
 #endif
 void do_btb_flush_fixups(void);
 

@@ -1,44 +1,14 @@
-/* Copyright (c) 2014-2017, The Linux Foundation. All rights reserved.
- *
- * This program is free software; you can redistribute it and/or modify
- * it under the terms of the GNU General Public License version 2 and
- * only version 2 as published by the Free Software Foundation.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
- */
-/*
- * NOTE: This file has been modified by Sony Mobile Communications Inc.
- * Modifications are Copyright (c) 2015 Sony Mobile Communications Inc,
- * and licensed under the license of the file.
- */
+/* SPDX-License-Identifier: GPL-2.0 */
+
 #ifndef __WCD_MBHC_V2_H__
 #define __WCD_MBHC_V2_H__
 
-#include <linux/wait.h>
-#include <linux/stringify.h>
-#include <linux/power_supply.h>
-#include "wcdcal-hwdep.h"
+#include <sound/jack.h>
 
-#define TOMBAK_MBHC_NC	0
-#define TOMBAK_MBHC_NO	1
-#define WCD_MBHC_DEF_BUTTONS 8
-#define WCD_MBHC_KEYCODE_NUM 8
-#define WCD_MBHC_USLEEP_RANGE_MARGIN_US 100
-#define WCD_MBHC_THR_HS_MICB_MV  2750
-/* z value defined in Ohms */
-#define WCD_MONO_HS_MIN_THR	2
-#define WCD_MBHC_STRINGIFY(s)  __stringify(s)
+#define WCD_MBHC_FIELD(id, rreg, rmask) \
+	[id] = { .reg = rreg, .mask = rmask }
 
-enum {
-	WCD_MBHC_ELEC_HS_INS,
-	WCD_MBHC_ELEC_HS_REM,
-};
-
-struct wcd_mbhc;
-enum wcd_mbhc_register_function {
+enum wcd_mbhc_field_function {
 	WCD_MBHC_L_DET_EN,
 	WCD_MBHC_GND_DET_EN,
 	WCD_MBHC_MECH_DETECTION_TYPE,
@@ -55,6 +25,7 @@ enum wcd_mbhc_register_function {
 	WCD_MBHC_BTN_DBNC,
 	WCD_MBHC_HS_VREF,
 	WCD_MBHC_HS_COMP_RESULT,
+	WCD_MBHC_IN2P_CLAMP_STATE,
 	WCD_MBHC_MIC_SCHMT_RESULT,
 	WCD_MBHC_HPHL_SCHMT_RESULT,
 	WCD_MBHC_HPHR_SCHMT_RESULT,
@@ -72,11 +43,45 @@ enum wcd_mbhc_register_function {
 	WCD_MBHC_ANC_DET_EN,
 	WCD_MBHC_FSM_STATUS,
 	WCD_MBHC_MUX_CTL,
+	WCD_MBHC_MOISTURE_STATUS,
+	WCD_MBHC_HPHR_GND,
+	WCD_MBHC_HPHL_GND,
 	WCD_MBHC_HPHL_OCP_DET_EN,
 	WCD_MBHC_HPHR_OCP_DET_EN,
 	WCD_MBHC_HPHL_OCP_STATUS,
 	WCD_MBHC_HPHR_OCP_STATUS,
+	WCD_MBHC_ADC_EN,
+	WCD_MBHC_ADC_COMPLETE,
+	WCD_MBHC_ADC_TIMEOUT,
+	WCD_MBHC_ADC_RESULT,
+	WCD_MBHC_MICB2_VOUT,
+	WCD_MBHC_ADC_MODE,
+	WCD_MBHC_DETECTION_DONE,
+	WCD_MBHC_ELECT_ISRC_EN,
 	WCD_MBHC_REG_FUNC_MAX,
+};
+
+#define WCD_MBHC_DEF_BUTTONS 8
+#define WCD_MBHC_KEYCODE_NUM 8
+#define WCD_MBHC_USLEEP_RANGE_MARGIN_US 100
+#define WCD_MBHC_THR_HS_MICB_MV  2700
+#define WCD_MONO_HS_MIN_THR	2
+
+enum wcd_mbhc_detect_logic {
+	WCD_DETECTION_LEGACY,
+	WCD_DETECTION_ADC,
+};
+
+enum wcd_mbhc_cs_mb_en_flag {
+	WCD_MBHC_EN_CS = 0,
+	WCD_MBHC_EN_MB,
+	WCD_MBHC_EN_PULLUP,
+	WCD_MBHC_EN_NONE,
+};
+
+enum {
+	WCD_MBHC_ELEC_HS_INS,
+	WCD_MBHC_ELEC_HS_REM,
 };
 
 enum wcd_mbhc_plug_type {
@@ -86,18 +91,11 @@ enum wcd_mbhc_plug_type {
 	MBHC_PLUG_TYPE_HEADPHONE,
 	MBHC_PLUG_TYPE_HIGH_HPH,
 	MBHC_PLUG_TYPE_GND_MIC_SWAP,
-	MBHC_PLUG_TYPE_ANC_HEADPHONE,
-	MBHC_PLUG_TYPE_STEREO_MICROPHONE,
 };
 
 enum pa_dac_ack_flags {
 	WCD_MBHC_HPHL_PA_OFF_ACK = 0,
 	WCD_MBHC_HPHR_PA_OFF_ACK,
-};
-
-enum anc_ack_flags {
-	WCD_MBHC_ANC0_OFF_ACK = 0,
-	WCD_MBHC_ANC1_OFF_ACK,
 };
 
 enum wcd_mbhc_btn_det_mem {
@@ -117,12 +115,6 @@ enum {
 	MICB_PULLUP_DISABLE,
 	MICB_ENABLE,
 	MICB_DISABLE,
-};
-
-enum {
-	MBHC_COMMON_MICB_PRECHARGE,
-	MBHC_COMMON_MICB_SET_VAL,
-	MBHC_COMMON_MICB_TAIL_CURR,
 };
 
 enum wcd_notify_event {
@@ -152,82 +144,6 @@ enum wcd_mbhc_event_state {
 	WCD_MBHC_EVENT_PA_HPHL,
 	WCD_MBHC_EVENT_PA_HPHR,
 };
-struct wcd_mbhc_general_cfg {
-	u8 t_ldoh;
-	u8 t_bg_fast_settle;
-	u8 t_shutdown_plug_rem;
-	u8 mbhc_nsa;
-	u8 mbhc_navg;
-	u8 v_micbias_l;
-	u8 v_micbias;
-	u8 mbhc_reserved;
-	u16 settle_wait;
-	u16 t_micbias_rampup;
-	u16 t_micbias_rampdown;
-	u16 t_supply_bringup;
-} __packed;
-
-struct wcd_mbhc_plug_detect_cfg {
-	u32 mic_current;
-	u32 hph_current;
-	u16 t_mic_pid;
-	u16 t_ins_complete;
-	u16 t_ins_retry;
-	u16 v_removal_delta;
-	u8 micbias_slow_ramp;
-	u8 reserved0;
-	u8 reserved1;
-	u8 reserved2;
-} __packed;
-
-struct wcd_mbhc_plug_type_cfg {
-	u8 av_detect;
-	u8 mono_detect;
-	u8 num_ins_tries;
-	u8 reserved0;
-	s16 v_no_mic;
-	s16 v_av_min;
-	s16 v_av_max;
-	s16 v_hs_min;
-	s16 v_hs_max;
-	u16 reserved1;
-} __packed;
-
-struct wcd_mbhc_btn_detect_cfg {
-	s8 c[8];
-	u8 nc;
-	u8 n_meas;
-	u8 mbhc_nsc;
-	u8 n_btn_meas;
-	u8 n_btn_con;
-	u8 num_btn;
-	u8 reserved0;
-	u8 reserved1;
-	u16 t_poll;
-	u16 t_bounce_wait;
-	u16 t_rel_timeout;
-	s16 v_btn_press_delta_sta;
-	s16 v_btn_press_delta_cic;
-	u16 t_btn0_timeout;
-	s16 _v_btn_low[0]; /* v_btn_low[num_btn] */
-	s16 _v_btn_high[0]; /* v_btn_high[num_btn] */
-	u8 _n_ready[2];
-	u8 _n_cic[2];
-	u8 _gain[2];
-} __packed;
-
-struct wcd_mbhc_imped_detect_cfg {
-	u8 _hs_imped_detect;
-	u8 _n_rload;
-	u8 _hph_keep_on;
-	u8 _repeat_rload_calc;
-	u16 _t_dac_ramp_time;
-	u16 _rhph_high;
-	u16 _rhph_low;
-	u16 _rload[0]; /* rload[n_rload] */
-	u16 _alpha[0]; /* alpha[n_rload] */
-	u16 _beta[3];
-} __packed;
 
 enum wcd_mbhc_hph_type {
 	WCD_MBHC_HPH_NONE = 0,
@@ -239,12 +155,6 @@ enum wcd_mbhc_hph_type {
  * These enum definitions are directly mapped to the register
  * definitions
  */
-enum mbhc_moisture_vref {
-	V_OFF,
-	V_45_MV,
-	V_100_MV,
-	V_225_MV,
-};
 
 enum mbhc_hs_pullup_iref {
 	I_DEFAULT = -1,
@@ -254,6 +164,22 @@ enum mbhc_hs_pullup_iref {
 	I_3P0_UA,
 };
 
+enum mbhc_hs_pullup_iref_v2 {
+	HS_PULLUP_I_DEFAULT = -1,
+	HS_PULLUP_I_3P0_UA = 0,
+	HS_PULLUP_I_2P25_UA,
+	HS_PULLUP_I_1P5_UA,
+	HS_PULLUP_I_0P75_UA,
+	HS_PULLUP_I_1P125_UA = 0x05,
+	HS_PULLUP_I_0P375_UA = 0x07,
+	HS_PULLUP_I_2P0_UA,
+	HS_PULLUP_I_1P0_UA = 0x0A,
+	HS_PULLUP_I_0P5_UA,
+	HS_PULLUP_I_0P25_UA = 0x0F,
+	HS_PULLUP_I_0P125_UA = 0x17,
+	HS_PULLUP_I_OFF,
+};
+
 enum mbhc_moisture_rref {
 	R_OFF,
 	R_24_KOHM,
@@ -261,31 +187,28 @@ enum mbhc_moisture_rref {
 	R_184_KOHM,
 };
 
-struct usbc_ana_audio_config {
-	int usbc_en1_gpio;
-	int usbc_en2n_gpio;
-	int usbc_force_gpio;
-	struct device_node *usbc_en1_gpio_p; /* used by pinctrl API */
-	struct device_node *usbc_en2n_gpio_p; /* used by pinctrl API */
-	struct device_node *usbc_force_gpio_p; /* used by pinctrl API */
-};
-
 struct wcd_mbhc_config {
-	bool read_fw_bin;
-	void *calibration;
-	bool detect_extn_cable;
+	int btn_high[WCD_MBHC_DEF_BUTTONS];
+	int btn_low[WCD_MBHC_DEF_BUTTONS];
+	int v_hs_max;
+	int num_btn;
 	bool mono_stero_detection;
-	bool (*swap_gnd_mic)(struct snd_soc_codec *codec);
+	bool (*swap_gnd_mic)(struct snd_soc_component *component, bool active);
 	bool hs_ext_micbias;
 	bool gnd_det_en;
-	int key_code[WCD_MBHC_KEYCODE_NUM];
 	uint32_t linein_th;
 	bool moisture_en;
 	int mbhc_micbias;
 	int anc_micbias;
-	bool enable_anc_mic_detect;
-	u32 enable_usbc_analog;
-	struct usbc_ana_audio_config usbc_analog_cfg;
+	bool moisture_duty_cycle_en;
+	bool hphl_swh; /*track HPHL switch NC / NO */
+	bool gnd_swh; /*track GND switch NC / NO */
+	u32 hs_thr;
+	u32 hph_thr;
+	u32 micb_mv;
+	u32 moist_vref;
+	u32 moist_iref;
+	u32 moist_rref;
 };
 
 struct wcd_mbhc_intr {
@@ -298,270 +221,109 @@ struct wcd_mbhc_intr {
 	int hph_right_ocp;
 };
 
-struct wcd_mbhc_register {
-	const char *id;
+struct wcd_mbhc_field {
 	u16 reg;
 	u8 mask;
-	u8 offset;
-	u8 invert;
 };
 
-#define WCD_MBHC_REGISTER(rid, rreg, rmask, rshift, rinvert) \
-{ .id = rid, .reg = rreg, .mask = rmask, .offset = rshift, .invert = rinvert }
-
-#define WCD_MBHC_RSC_LOCK(mbhc)			\
-{							\
-	pr_debug("%s: Acquiring BCL\n", __func__);	\
-	mutex_lock(&mbhc->codec_resource_lock);		\
-	pr_debug("%s: Acquiring BCL done\n", __func__);	\
-}
-
-#define WCD_MBHC_RSC_UNLOCK(mbhc)			\
-{							\
-	pr_debug("%s: Release BCL\n", __func__);	\
-	mutex_unlock(&mbhc->codec_resource_lock);	\
-}
-
-#define WCD_MBHC_RSC_ASSERT_LOCKED(mbhc)		\
-{							\
-	WARN_ONCE(!mutex_is_locked(&mbhc->codec_resource_lock), \
-		  "%s: BCL should have acquired\n", __func__); \
-}
-
-/*
- * Macros to update and read mbhc register bits. Check for
- * "0" before updating or reading the register, because it
- * is possible that one codec wants to write to that bit and
- * other codec does not.
- */
-#define WCD_MBHC_REG_UPDATE_BITS(function, val)         \
-do {                                                    \
-	if (mbhc->wcd_mbhc_regs[function].reg) {        \
-		snd_soc_update_bits(mbhc->codec,	\
-		mbhc->wcd_mbhc_regs[function].reg,	\
-		mbhc->wcd_mbhc_regs[function].mask,	\
-		val << (mbhc->wcd_mbhc_regs[function].offset)); \
-	}                                               \
-} while (0)
-
-#define WCD_MBHC_REG_READ(function, val)	        \
-do {                                                    \
-	if (mbhc->wcd_mbhc_regs[function].reg) {        \
-		val = (((snd_soc_read(mbhc->codec,	\
-		mbhc->wcd_mbhc_regs[function].reg)) &	\
-		(mbhc->wcd_mbhc_regs[function].mask)) >> \
-		(mbhc->wcd_mbhc_regs[function].offset)); \
-	} else {                                         \
-		val = -EINVAL;                           \
-	}                                                \
-} while (0)
+struct wcd_mbhc;
 
 struct wcd_mbhc_cb {
-	int (*enable_mb_source)(struct wcd_mbhc *, bool);
-	void (*trim_btn_reg)(struct snd_soc_codec *);
-	void (*compute_impedance)(struct wcd_mbhc *, uint32_t *, uint32_t *);
-	void (*set_micbias_value)(struct snd_soc_codec *);
-	void (*set_auto_zeroing)(struct snd_soc_codec *, bool);
-	struct firmware_cal * (*get_hwdep_fw_cal)(struct wcd_mbhc *,
-			enum wcd_cal_type);
-	void (*set_cap_mode)(struct snd_soc_codec *, bool, bool);
-	int (*register_notifier)(struct wcd_mbhc *,
-				 struct notifier_block *nblock,
-				 bool enable);
-	int (*request_irq)(struct snd_soc_codec *,
-			int, irq_handler_t, const char *, void *);
-	void (*irq_control)(struct snd_soc_codec *,
-			int irq, bool enable);
-	int (*free_irq)(struct snd_soc_codec *,
-			int irq, void *);
-	void (*clk_setup)(struct snd_soc_codec *, bool);
-	int (*map_btn_code_to_num)(struct snd_soc_codec *);
-	bool (*lock_sleep)(struct wcd_mbhc *, bool);
-	bool (*micbias_enable_status)(struct wcd_mbhc *, int);
-	void (*mbhc_bias)(struct snd_soc_codec *, bool);
-	void (*mbhc_common_micb_ctrl)(struct snd_soc_codec *,
-				      int event, bool);
-	void (*micb_internal)(struct snd_soc_codec *,
-			int micb_num, bool);
-	bool (*hph_pa_on_status)(struct snd_soc_codec *);
-	void (*set_btn_thr)(struct snd_soc_codec *, s16 *, s16 *,
-			    int num_btn, bool);
-	void (*hph_pull_up_control)(struct snd_soc_codec *,
+	void (*update_cross_conn_thr)(struct snd_soc_component *component);
+	void (*get_micbias_val)(struct snd_soc_component *component, int *mb);
+	void (*bcs_enable)(struct snd_soc_component *component, bool bcs_enable);
+	void (*compute_impedance)(struct snd_soc_component *component,
+				  uint32_t *zl, uint32_t *zr);
+	void (*set_micbias_value)(struct snd_soc_component *component);
+	void (*set_auto_zeroing)(struct snd_soc_component *component,
+			bool enable);
+	void (*clk_setup)(struct snd_soc_component *component, bool enable);
+	bool (*micbias_enable_status)(struct snd_soc_component *component, int micb_num);
+	void (*mbhc_bias)(struct snd_soc_component *component, bool enable);
+	void (*set_btn_thr)(struct snd_soc_component *component,
+			    int *btn_low, int *btn_high,
+			    int num_btn, bool is_micbias);
+	void (*hph_pull_up_control)(struct snd_soc_component *component,
 				    enum mbhc_hs_pullup_iref);
-	int (*mbhc_micbias_control)(struct snd_soc_codec *, int, int req);
-	void (*mbhc_micb_ramp_control)(struct snd_soc_codec *, bool);
-	void (*skip_imped_detect)(struct snd_soc_codec *);
-	bool (*extn_use_mb)(struct snd_soc_codec *);
-	int (*mbhc_micb_ctrl_thr_mic)(struct snd_soc_codec *, int, bool);
-	void (*mbhc_gnd_det_ctrl)(struct snd_soc_codec *, bool);
-	void (*hph_pull_down_ctrl)(struct snd_soc_codec *, bool);
-	void (*mbhc_moisture_config)(struct wcd_mbhc *);
-	bool (*hph_register_recovery)(struct wcd_mbhc *);
-	void (*update_anc_state)(struct snd_soc_codec *codec,
-				 bool enable, int anc_num);
-	bool (*is_anc_on)(struct wcd_mbhc *mbhc);
+	int (*mbhc_micbias_control)(struct snd_soc_component *component,
+			int micb_num, int req);
+	void (*mbhc_micb_ramp_control)(struct snd_soc_component *component,
+			bool enable);
+	bool (*extn_use_mb)(struct snd_soc_component *component);
+	int (*mbhc_micb_ctrl_thr_mic)(struct snd_soc_component *component,
+			int micb_num, bool req_en);
+	void (*mbhc_gnd_det_ctrl)(struct snd_soc_component *component,
+			bool enable);
+	void (*hph_pull_down_ctrl)(struct snd_soc_component *component,
+			bool enable);
+	void (*mbhc_moisture_config)(struct snd_soc_component *component);
+	void (*update_anc_state)(struct snd_soc_component *component,
+			bool enable, int anc_num);
+	void (*hph_pull_up_control_v2)(struct snd_soc_component *component,
+			int pull_up_cur);
+	bool (*mbhc_get_moisture_status)(struct snd_soc_component *component);
+	void (*mbhc_moisture_polling_ctrl)(struct snd_soc_component *component, bool enable);
+	void (*mbhc_moisture_detect_en)(struct snd_soc_component *component, bool enable);
 };
 
-struct wcd_mbhc {
-	/* Delayed work to report long button press */
-	struct delayed_work mbhc_btn_dwork;
-	int buttons_pressed;
-	struct wcd_mbhc_config *mbhc_cfg;
-	const struct wcd_mbhc_cb *mbhc_cb;
-
-	u32 hph_status; /* track headhpone status */
-	u8 hphlocp_cnt; /* headphone left ocp retry */
-	u8 hphrocp_cnt; /* headphone right ocp retry */
-
-	wait_queue_head_t wait_btn_press;
-	bool is_btn_press;
-	u8 current_plug;
-	bool in_swch_irq_handler;
-	bool hphl_swh; /*track HPHL switch NC / NO */
-	bool gnd_swh; /*track GND switch NC / NO */
-	u32 moist_vref;
-	u32 moist_iref;
-	u32 moist_rref;
-	u8 micbias1_cap_mode; /* track ext cap setting */
-	u8 micbias2_cap_mode; /* track ext cap setting */
-	bool hs_detect_work_stop;
-	bool micbias_enable;
-	bool btn_press_intr;
-	bool is_hs_recording;
-	bool is_extn_cable;
-	bool extn_cable_inserted;
-	bool skip_imped_detection;
-	bool is_btn_already_regd;
-
-	struct snd_soc_codec *codec;
-	/* Work to perform MBHC Firmware Read */
-	struct delayed_work mbhc_firmware_dwork;
-	const struct firmware *mbhc_fw;
-	struct firmware_cal *mbhc_cal;
-
-	/* track PA/DAC state to sync with userspace */
-	unsigned long hph_pa_dac_state;
-	unsigned long hph_anc_state;
-	unsigned long event_state;
-	unsigned long jiffies_atreport;
-
-	/* impedance of hphl and hphr */
-	uint32_t zl, zr;
-	bool impedance_detect;
-
-	/* Holds type of Headset - Mono/Stereo */
-	enum wcd_mbhc_hph_type hph_type;
-
-	struct snd_soc_jack headset_jack;
-	struct snd_soc_jack button_jack;
-	struct mutex codec_resource_lock;
-
-	/* Holds codec specific interrupt mapping */
-	const struct wcd_mbhc_intr *intr_ids;
-
-	/* Work to correct accessory type */
-	struct work_struct correct_plug_swch;
-	struct notifier_block nblock;
-
-	struct wcd_mbhc_register *wcd_mbhc_regs;
-
-	struct completion btn_press_compl;
-	struct mutex hphl_pa_lock;
-	struct mutex hphr_pa_lock;
-
-	unsigned long intr_status;
-	bool is_hph_ocp_pending;
-
-	bool usbc_force_pr_mode;
-	int usbc_mode;
-	struct notifier_block psy_nb;
-	struct power_supply *usb_psy;
-	struct work_struct usbc_analog_work;
-};
-#define WCD_MBHC_CAL_SIZE(buttons, rload) ( \
-	sizeof(struct wcd_mbhc_general_cfg) + \
-	sizeof(struct wcd_mbhc_plug_detect_cfg) + \
-	((sizeof(s16) + sizeof(s16)) * buttons) + \
-	    sizeof(struct wcd_mbhc_plug_type_cfg) + \
-	sizeof(struct wcd_mbhc_btn_detect_cfg) + \
-	sizeof(struct wcd_mbhc_imped_detect_cfg) + \
-		((sizeof(u16) + sizeof(u16)) * rload) \
-	)
-
-
-#define WCD_MBHC_CAL_GENERAL_PTR(cali) ( \
-	(struct wcd_mbhc_general_cfg *) cali)
-#define WCD_MBHC_CAL_PLUG_DET_PTR(cali) ( \
-	(struct wcd_mbhc_plug_detect_cfg *) \
-	&(WCD_MBHC_CAL_GENERAL_PTR(cali)[1]))
-#define WCD_MBHC_CAL_PLUG_TYPE_PTR(cali) ( \
-	(struct wcd_mbhc_plug_type_cfg *) \
-	&(WCD_MBHC_CAL_PLUG_DET_PTR(cali)[1]))
-#define WCD_MBHC_CAL_BTN_DET_PTR(cali) ( \
-	    (struct wcd_mbhc_btn_detect_cfg *) \
-	&(WCD_MBHC_CAL_PLUG_TYPE_PTR(cali)[1]))
-#define WCD_MBHC_CAL_IMPED_DET_PTR(cali) ( \
-	(struct wcd_mbhc_imped_detect_cfg *) \
-	(((void *)&WCD_MBHC_CAL_BTN_DET_PTR(cali)[1]) + \
-	(WCD_MBHC_CAL_BTN_DET_PTR(cali)->num_btn * \
-	(sizeof(WCD_MBHC_CAL_BTN_DET_PTR(cali)->_v_btn_low[0]) + \
-	sizeof(WCD_MBHC_CAL_BTN_DET_PTR(cali)->_v_btn_high[0])))) \
-	)
-
-#define WCD_MBHC_CAL_MIN_SIZE ( \
-	sizeof(struct wcd_mbhc_general_cfg) + \
-	sizeof(struct wcd_mbhc_plug_detect_cfg) + \
-	sizeof(struct wcd_mbhc_plug_type_cfg) + \
-	sizeof(struct wcd_mbhc_btn_detect_cfg) + \
-	sizeof(struct wcd_mbhc_imped_detect_cfg) + \
-	(sizeof(u16)*2)  \
-	)
-
-#define WCD_MBHC_CAL_BTN_SZ(cfg_ptr) ( \
-	sizeof(struct wcd_mbhc_btn_detect_cfg) + \
-	(cfg_ptr->num_btn * (sizeof(cfg_ptr->_v_btn_low[0]) + \
-			sizeof(cfg_ptr->_v_btn_high[0]))))
-
-#define WCD_MBHC_CAL_IMPED_MIN_SZ ( \
-	sizeof(struct wcd_mbhc_imped_detect_cfg) + sizeof(u16) * 2)
-
-#define WCD_MBHC_CAL_IMPED_SZ(cfg_ptr) ( \
-	sizeof(struct wcd_mbhc_imped_detect_cfg) + \
-	(cfg_ptr->_n_rload * \
-	(sizeof(cfg_ptr->_rload[0]) + sizeof(cfg_ptr->_alpha[0]))))
-
-#ifdef CONFIG_SND_SOC_WCD_MBHC
-int wcd_mbhc_set_keycode(struct wcd_mbhc *mbhc);
-int wcd_mbhc_start(struct wcd_mbhc *mbhc,
-		       struct wcd_mbhc_config *mbhc_cfg);
+#if IS_ENABLED(CONFIG_SND_SOC_WCD_MBHC)
+int wcd_dt_parse_mbhc_data(struct device *dev, struct wcd_mbhc_config *cfg);
+int wcd_mbhc_start(struct wcd_mbhc *mbhc, struct wcd_mbhc_config *mbhc_cfg,
+		   struct snd_soc_jack *jack);
 void wcd_mbhc_stop(struct wcd_mbhc *mbhc);
-int wcd_mbhc_init(struct wcd_mbhc *mbhc, struct snd_soc_codec *codec,
+void wcd_mbhc_set_hph_type(struct wcd_mbhc *mbhc, int hph_type);
+int wcd_mbhc_get_hph_type(struct wcd_mbhc *mbhc);
+struct wcd_mbhc *wcd_mbhc_init(struct snd_soc_component *component,
 		      const struct wcd_mbhc_cb *mbhc_cb,
 		      const struct wcd_mbhc_intr *mbhc_cdc_intr_ids,
-		      struct wcd_mbhc_register *mbhc_reg,
+		      struct wcd_mbhc_field *fields,
 		      bool impedance_det_en);
 int wcd_mbhc_get_impedance(struct wcd_mbhc *mbhc, uint32_t *zl,
 			   uint32_t *zr);
 void wcd_mbhc_deinit(struct wcd_mbhc *mbhc);
+int wcd_mbhc_event_notify(struct wcd_mbhc *mbhc, unsigned long event);
+
 #else
+static inline int wcd_dt_parse_mbhc_data(struct device *dev,
+					 struct wcd_mbhc_config *cfg)
+{
+	return -ENOTSUPP;
+}
+
 static inline void wcd_mbhc_stop(struct wcd_mbhc *mbhc)
 {
-	return;
 }
-static inline int wcd_mbhc_init(struct wcd_mbhc *mbhc,
-				struct snd_soc_codec *codec,
-				const struct wcd_mbhc_cb *mbhc_cb,
-				const struct wcd_mbhc_intr *mbhc_cdc_intr_ids,
-				struct wcd_mbhc_register *mbhc_reg,
-				bool impedance_det_en)
+
+static inline struct wcd_mbhc *wcd_mbhc_init(struct snd_soc_component *component,
+		      const struct wcd_mbhc_cb *mbhc_cb,
+		      const struct wcd_mbhc_intr *mbhc_cdc_intr_ids,
+		      struct wcd_mbhc_field *fields,
+		      bool impedance_det_en)
 {
-	return 0;
+	return ERR_PTR(-ENOTSUPP);
 }
+
+static inline void wcd_mbhc_set_hph_type(struct wcd_mbhc *mbhc, int hph_type)
+{
+}
+
+static inline int wcd_mbhc_get_hph_type(struct wcd_mbhc *mbhc)
+{
+	return -ENOTSUPP;
+}
+
+static inline int wcd_mbhc_event_notify(struct wcd_mbhc *mbhc, unsigned long event)
+{
+	return -ENOTSUPP;
+}
+
 static inline int wcd_mbhc_start(struct wcd_mbhc *mbhc,
-				 struct wcd_mbhc_config *mbhc_cfg)
+				 struct wcd_mbhc_config *mbhc_cfg,
+				 struct snd_soc_jack *jack)
 {
 	return 0;
 }
+
 static inline int wcd_mbhc_get_impedance(struct wcd_mbhc *mbhc,
 					 uint32_t *zl,
 					 uint32_t *zr)

@@ -11,6 +11,7 @@
 #include <linux/time.h>
 #include <linux/string.h>
 #include <linux/pagemap.h>
+#include <linux/bio.h>
 #include "reiserfs.h"
 #include <linux/buffer_head.h>
 #include <linux/quotaops.h>
@@ -578,7 +579,7 @@ static int search_by_key_reada(struct super_block *s,
 		if (!buffer_uptodate(bh[j])) {
 			if (depth == -1)
 				depth = reiserfs_write_unlock_nested(s);
-			ll_rw_block(READA, 1, bh + j);
+			ll_rw_block(REQ_OP_READ, REQ_RAHEAD, 1, bh + j);
 		}
 		brelse(bh[j]);
 	}
@@ -619,7 +620,6 @@ int search_by_key(struct super_block *sb, const struct cpu_key *key,
 	struct buffer_head *bh;
 	struct path_element *last_element;
 	int node_level, retval;
-	int right_neighbor_of_leaf_node;
 	int fs_gen;
 	struct buffer_head *reada_bh[SEARCH_BY_KEY_READA];
 	b_blocknr_t reada_blocks[SEARCH_BY_KEY_READA];
@@ -639,8 +639,6 @@ int search_by_key(struct super_block *sb, const struct cpu_key *key,
 	 */
 
 	pathrelse(search_path);
-
-	right_neighbor_of_leaf_node = 0;
 
 	/*
 	 * With each iteration of this loop we search through the items in the
@@ -687,7 +685,7 @@ int search_by_key(struct super_block *sb, const struct cpu_key *key,
 			if (!buffer_uptodate(bh) && depth == -1)
 				depth = reiserfs_write_unlock_nested(sb);
 
-			ll_rw_block(READ, 1, &bh);
+			ll_rw_block(REQ_OP_READ, 0, 1, &bh);
 			wait_on_buffer(bh);
 
 			if (depth != -1)
@@ -727,7 +725,6 @@ io_error:
 			 */
 			block_number = SB_ROOT_BLOCK(sb);
 			expected_level = -1;
-			right_neighbor_of_leaf_node = 0;
 
 			/* repeat search from the root */
 			continue;
@@ -947,12 +944,6 @@ int comp_items(const struct item_head *stored_ih, const struct treepath *path)
 	ih = tp_item_head(path);
 	return memcmp(stored_ih, ih, IH_SIZE);
 }
-
-/* unformatted nodes are not logged anymore, ever.  This is safe now */
-#define held_by_others(bh) (atomic_read(&(bh)->b_count) > 1)
-
-/* block can not be forgotten as it is in I/O or held by someone */
-#define block_in_use(bh) (buffer_locked(bh) || (held_by_others(bh)))
 
 /* prepare for delete or cut of direct item */
 static inline int prepare_for_direct_item(struct treepath *path,
@@ -1369,7 +1360,7 @@ int reiserfs_delete_item(struct reiserfs_transaction_handle *th,
 		 */
 
 		data = kmap_atomic(un_bh->b_page);
-		off = ((le_ih_k_offset(&s_ih) - 1) & (PAGE_CACHE_SIZE - 1));
+		off = ((le_ih_k_offset(&s_ih) - 1) & (PAGE_SIZE - 1));
 		memcpy(data + off,
 		       ih_item_body(PATH_PLAST_BUFFER(path), &s_ih),
 		       ret_value);
@@ -1538,7 +1529,7 @@ static void unmap_buffers(struct page *page, loff_t pos)
 
 	if (page) {
 		if (page_has_buffers(page)) {
-			tail_index = pos & (PAGE_CACHE_SIZE - 1);
+			tail_index = pos & (PAGE_SIZE - 1);
 			cur_index = 0;
 			head = page_buffers(page);
 			bh = head;
@@ -2014,8 +2005,8 @@ int reiserfs_do_truncate(struct reiserfs_transaction_handle *th,
 			pathrelse(&s_search_path);
 
 			if (update_timestamps) {
-				inode->i_mtime = CURRENT_TIME_SEC;
-				inode->i_ctime = CURRENT_TIME_SEC;
+				inode->i_mtime = current_time(inode);
+				inode->i_ctime = current_time(inode);
 			}
 			reiserfs_update_sd(th, inode);
 
@@ -2039,8 +2030,8 @@ int reiserfs_do_truncate(struct reiserfs_transaction_handle *th,
 update_and_out:
 	if (update_timestamps) {
 		/* this is truncate, not file closing */
-		inode->i_mtime = CURRENT_TIME_SEC;
-		inode->i_ctime = CURRENT_TIME_SEC;
+		inode->i_mtime = current_time(inode);
+		inode->i_ctime = current_time(inode);
 	}
 	reiserfs_update_sd(th, inode);
 

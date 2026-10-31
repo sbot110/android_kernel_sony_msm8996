@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-2.0
 /*
  * Hypervisor filesystem for Linux on s390 - debugfs interface
  *
@@ -5,6 +6,7 @@
  * Author(s): Michael Holzheu <holzheu@linux.vnet.ibm.com>
  */
 
+#include <linux/security.h>
 #include <linux/slab.h>
 #include "hypfs.h"
 
@@ -63,28 +65,29 @@ static long dbfs_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 	long rc;
 
 	mutex_lock(&df->lock);
-	if (df->unlocked_ioctl)
-		rc = df->unlocked_ioctl(file, cmd, arg);
-	else
-		rc = -ENOTTY;
+	rc = df->unlocked_ioctl(file, cmd, arg);
 	mutex_unlock(&df->lock);
 	return rc;
 }
 
-static const struct file_operations dbfs_ops = {
+static const struct file_operations dbfs_ops_ioctl = {
 	.read		= dbfs_read,
 	.llseek		= no_llseek,
 	.unlocked_ioctl = dbfs_ioctl,
 };
 
-int hypfs_dbfs_create_file(struct hypfs_dbfs_file *df)
+static const struct file_operations dbfs_ops = {
+	.read		= dbfs_read,
+};
+
+void hypfs_dbfs_create_file(struct hypfs_dbfs_file *df)
 {
-	df->dentry = debugfs_create_file(df->name, 0400, dbfs_dir, df,
-					 &dbfs_ops);
-	if (IS_ERR(df->dentry))
-		return PTR_ERR(df->dentry);
+	const struct file_operations *fops = &dbfs_ops;
+
+	if (df->unlocked_ioctl && !security_locked_down(LOCKDOWN_DEBUGFS))
+		fops = &dbfs_ops_ioctl;
+	df->dentry = debugfs_create_file(df->name, 0400, dbfs_dir, df, fops);
 	mutex_init(&df->lock);
-	return 0;
 }
 
 void hypfs_dbfs_remove_file(struct hypfs_dbfs_file *df)
@@ -92,10 +95,9 @@ void hypfs_dbfs_remove_file(struct hypfs_dbfs_file *df)
 	debugfs_remove(df->dentry);
 }
 
-int hypfs_dbfs_init(void)
+void hypfs_dbfs_init(void)
 {
 	dbfs_dir = debugfs_create_dir("s390_hypfs", NULL);
-	return PTR_ERR_OR_ZERO(dbfs_dir);
 }
 
 void hypfs_dbfs_exit(void)

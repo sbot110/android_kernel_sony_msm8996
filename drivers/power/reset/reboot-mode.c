@@ -1,10 +1,6 @@
+// SPDX-License-Identifier: GPL-2.0-or-later
 /*
  * Copyright (c) 2016, Fuzhou Rockchip Electronics Co., Ltd
- *
- * This program is free software; you can redistribute it and/or modify
- * it under the terms of the GNU General Public License as published by
- * the Free Software Foundation; either version 2 of the License, or
- * (at your option) any later version.
  */
 
 #include <linux/device.h>
@@ -13,7 +9,7 @@
 #include <linux/module.h>
 #include <linux/of.h>
 #include <linux/reboot.h>
-#include "reboot-mode.h"
+#include <linux/reboot-mode.h>
 
 #define PREFIX "mode-"
 
@@ -135,6 +131,65 @@ int reboot_mode_unregister(struct reboot_mode_driver *reboot)
 }
 EXPORT_SYMBOL_GPL(reboot_mode_unregister);
 
-MODULE_AUTHOR("Andy Yan <andy.yan@rock-chips.com");
+static void devm_reboot_mode_release(struct device *dev, void *res)
+{
+	reboot_mode_unregister(*(struct reboot_mode_driver **)res);
+}
+
+/**
+ * devm_reboot_mode_register() - resource managed reboot_mode_register()
+ * @dev: device to associate this resource with
+ * @reboot: reboot mode driver
+ *
+ * Returns: 0 on success or a negative error code on failure.
+ */
+int devm_reboot_mode_register(struct device *dev,
+			      struct reboot_mode_driver *reboot)
+{
+	struct reboot_mode_driver **dr;
+	int rc;
+
+	dr = devres_alloc(devm_reboot_mode_release, sizeof(*dr), GFP_KERNEL);
+	if (!dr)
+		return -ENOMEM;
+
+	rc = reboot_mode_register(reboot);
+	if (rc) {
+		devres_free(dr);
+		return rc;
+	}
+
+	*dr = reboot;
+	devres_add(dev, dr);
+
+	return 0;
+}
+EXPORT_SYMBOL_GPL(devm_reboot_mode_register);
+
+static int devm_reboot_mode_match(struct device *dev, void *res, void *data)
+{
+	struct reboot_mode_driver **p = res;
+
+	if (WARN_ON(!p || !*p))
+		return 0;
+
+	return *p == data;
+}
+
+/**
+ * devm_reboot_mode_unregister() - resource managed reboot_mode_unregister()
+ * @dev: device to associate this resource with
+ * @reboot: reboot mode driver
+ */
+void devm_reboot_mode_unregister(struct device *dev,
+				 struct reboot_mode_driver *reboot)
+{
+	WARN_ON(devres_release(dev,
+			       devm_reboot_mode_release,
+			       devm_reboot_mode_match, reboot));
+}
+EXPORT_SYMBOL_GPL(devm_reboot_mode_unregister);
+
+MODULE_AUTHOR("Andy Yan <andy.yan@rock-chips.com>");
 MODULE_DESCRIPTION("System reboot mode core library");
 MODULE_LICENSE("GPL v2");

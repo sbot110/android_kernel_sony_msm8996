@@ -1,3 +1,4 @@
+/* SPDX-License-Identifier: GPL-2.0-or-later */
 /**
  * eCryptfs: Linux filesystem encryption layer
  * Kernel declarations.
@@ -7,29 +8,16 @@
  * Copyright (C) 2004-2008 International Business Machines Corp.
  *   Author(s): Michael A. Halcrow <mahalcro@us.ibm.com>
  *              Trevor S. Highland <trevor.highland@gmail.com>
- *              Tyler Hicks <tyhicks@ou.edu>
- *
- * This program is free software; you can redistribute it and/or
- * modify it under the terms of the GNU General Public License as
- * published by the Free Software Foundation; either version 2 of the
- * License, or (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful, but
- * WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
- * General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with this program; if not, write to the Free Software
- * Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
- * 02111-1307, USA.
+ *              Tyler Hicks <code@tyhicks.com>
  */
 
 #ifndef ECRYPTFS_KERNEL_H
 #define ECRYPTFS_KERNEL_H
 
+#include <crypto/skcipher.h>
 #include <keys/user-type.h>
 #include <keys/encrypted-type.h>
+#include <linux/kernel.h>
 #include <linux/fs.h>
 #include <linux/fs_stack.h>
 #include <linux/namei.h>
@@ -38,7 +26,6 @@
 #include <linux/nsproxy.h>
 #include <linux/backing-dev.h>
 #include <linux/ecryptfs.h>
-#include <linux/crypto.h>
 
 #define ECRYPTFS_DEFAULT_IV_BYTES 16
 #define ECRYPTFS_DEFAULT_EXTENT_SIZE 4096
@@ -51,7 +38,13 @@
 #define ECRYPTFS_XATTR_NAME "user.ecryptfs"
 
 void ecryptfs_dump_auth_tok(struct ecryptfs_auth_tok *auth_tok);
-extern void ecryptfs_to_hex(char *dst, char *src, size_t src_size);
+static inline void
+ecryptfs_to_hex(char *dst, char *src, size_t src_size)
+{
+	char *end = bin2hex(dst, src, src_size);
+	*end = '\0';
+}
+
 extern void ecryptfs_from_hex(char *dst, char *src, int dst_size);
 
 struct ecryptfs_key_record {
@@ -119,13 +112,13 @@ static inline struct ecryptfs_auth_tok *
 ecryptfs_get_key_payload_data(struct key *key)
 {
 	struct ecryptfs_auth_tok *auth_tok;
-	const struct user_key_payload *ukp;
+	struct user_key_payload *ukp;
 
 	auth_tok = ecryptfs_get_encrypted_key_payload_data(key);
 	if (auth_tok)
 		return auth_tok;
 
-	ukp = user_key_payload(key);
+	ukp = user_key_payload_locked(key);
 	if (!ukp)
 		return ERR_PTR(-EKEYREVOKED);
 
@@ -243,18 +236,16 @@ struct ecryptfs_crypt_stat {
 	size_t extent_shift;
 	unsigned int extent_mask;
 	struct ecryptfs_mount_crypt_stat *mount_crypt_stat;
-	struct crypto_ablkcipher *tfm;
-	struct crypto_hash *hash_tfm; /* Crypto context for generating
-				       * the initialization vectors */
+	struct crypto_skcipher *tfm;
+	struct crypto_shash *hash_tfm; /* Crypto context for generating
+					* the initialization vectors */
 	unsigned char cipher[ECRYPTFS_MAX_CIPHER_NAME_SIZE + 1];
 	unsigned char key[ECRYPTFS_MAX_KEY_BYTES];
 	unsigned char root_iv[ECRYPTFS_MAX_IV_BYTES];
 	struct list_head keysig_list;
 	struct mutex keysig_list_mutex;
 	struct mutex cs_tfm_mutex;
-	struct mutex cs_hash_tfm_mutex;
 	struct mutex cs_mutex;
-	unsigned char cipher_mode[ECRYPTFS_MAX_CIPHER_NAME_SIZE + 1];
 };
 
 /* inode private data. */
@@ -271,10 +262,7 @@ struct ecryptfs_inode_info {
  * vfsmount too. */
 struct ecryptfs_dentry_info {
 	struct path lower_path;
-	union {
-		struct ecryptfs_crypt_stat *crypt_stat;
-		struct rcu_head rcu;
-	};
+	struct rcu_head rcu;
 };
 
 /**
@@ -320,7 +308,7 @@ struct ecryptfs_global_auth_tok {
  * keeps a list of crypto API contexts around to use when needed.
  */
 struct ecryptfs_key_tfm {
-	struct crypto_blkcipher *key_tfm;
+	struct crypto_skcipher *key_tfm;
 	size_t key_size;
 	struct mutex key_tfm_mutex;
 	struct list_head key_tfm_list;
@@ -355,15 +343,12 @@ struct ecryptfs_mount_crypt_stat {
 	unsigned char global_default_fn_cipher_name[
 		ECRYPTFS_MAX_CIPHER_NAME_SIZE + 1];
 	char global_default_fnek_sig[ECRYPTFS_SIG_SIZE_HEX + 1];
-	unsigned char global_default_cipher_mode[ECRYPTFS_MAX_CIPHER_NAME_SIZE
-							 + 1];
 };
 
 /* superblock private data. */
 struct ecryptfs_sb_info {
 	struct super_block *wsi_sb;
 	struct ecryptfs_mount_crypt_stat mount_crypt_stat;
-	struct backing_dev_info bdi;
 };
 
 /* file private data. */
@@ -508,12 +493,6 @@ ecryptfs_set_superblock_lower(struct super_block *sb,
 	((struct ecryptfs_sb_info *)sb->s_fs_info)->wsi_sb = lower_sb;
 }
 
-static inline struct ecryptfs_dentry_info *
-ecryptfs_dentry_to_private(struct dentry *dentry)
-{
-	return (struct ecryptfs_dentry_info *)dentry->d_fsdata;
-}
-
 static inline void
 ecryptfs_set_dentry_private(struct dentry *dentry,
 			    struct ecryptfs_dentry_info *dentry_info)
@@ -527,67 +506,14 @@ ecryptfs_dentry_to_lower(struct dentry *dentry)
 	return ((struct ecryptfs_dentry_info *)dentry->d_fsdata)->lower_path.dentry;
 }
 
-static inline struct vfsmount *
-ecryptfs_dentry_to_lower_mnt(struct dentry *dentry)
-{
-	return ((struct ecryptfs_dentry_info *)dentry->d_fsdata)->lower_path.mnt;
-}
-
 static inline struct path *
 ecryptfs_dentry_to_lower_path(struct dentry *dentry)
 {
 	return &((struct ecryptfs_dentry_info *)dentry->d_fsdata)->lower_path;
 }
 
-/**
- * Given a cipher and mode strings, the function
- * concatenates them to create a new string of
- * <cipher>_<mode> format.
- */
-static inline unsigned char *ecryptfs_get_full_cipher(
-	unsigned char *cipher, unsigned char *mode,
-	unsigned char *final, size_t final_size)
-{
-	memset(final, 0, final_size);
-
-	if (strlen(mode) > 0) {
-		snprintf(final, final_size, "%s_%s", cipher, mode);
-		return final;
-	}
-
-	return cipher;
-}
-
-/**
- * Given a <cipher>[_<mode>] formatted string, the function
- * extracts cipher string and/or mode string.
- * Note: the passed cipher and/or mode strings will be null-terminated.
- */
-static inline void ecryptfs_parse_full_cipher(
-	char *s, char *cipher, char *mode)
-{
-	char input[2*ECRYPTFS_MAX_CIPHER_NAME_SIZE+1+1];
-			/* +1 for '_'; +1 for '\0' */
-	char *p;
-	char *input_p = input;
-
-	if (s == NULL || cipher == NULL)
-		return;
-
-	memset(input, 0, sizeof(input));
-	strlcpy(input, s, sizeof(input));
-
-	p = strsep(&input_p, "_");
-	strlcpy(cipher, p, ECRYPTFS_MAX_CIPHER_NAME_SIZE + 1);
-
-
-	/* check if mode is specified */
-	if (input_p != NULL && mode != NULL)
-		strlcpy(mode, input_p, ECRYPTFS_MAX_CIPHER_NAME_SIZE + 1);
-}
-
 #define ecryptfs_printk(type, fmt, arg...) \
-        __ecryptfs_printk(type "%s: " fmt, __func__, ## arg);
+        __ecryptfs_printk(type "%s: " fmt, __func__, ## arg)
 __printf(1, 2)
 void __ecryptfs_printk(const char *fmt, ...);
 
@@ -629,20 +555,15 @@ int ecryptfs_fill_zeros(struct file *file, loff_t new_length);
 int ecryptfs_encrypt_and_encode_filename(
 	char **encoded_name,
 	size_t *encoded_name_size,
-	struct ecryptfs_crypt_stat *crypt_stat,
 	struct ecryptfs_mount_crypt_stat *mount_crypt_stat,
 	const char *name, size_t name_size);
 struct dentry *ecryptfs_lower_dentry(struct dentry *this_dentry);
 void ecryptfs_dump_hex(char *data, int bytes);
-void ecryptfs_dump_salt_hex(char *data, int key_size,
-		const struct ecryptfs_crypt_stat *crypt_stat);
-extern void ecryptfs_dump_cipher(struct ecryptfs_crypt_stat *stat);
-
 int virt_to_scatterlist(const void *addr, int size, struct scatterlist *sg,
 			int sg_size);
 int ecryptfs_compute_root_iv(struct ecryptfs_crypt_stat *crypt_stat);
 void ecryptfs_rotate_iv(unsigned char *iv);
-void ecryptfs_init_crypt_stat(struct ecryptfs_crypt_stat *crypt_stat);
+int ecryptfs_init_crypt_stat(struct ecryptfs_crypt_stat *crypt_stat);
 void ecryptfs_destroy_crypt_stat(struct ecryptfs_crypt_stat *crypt_stat);
 void ecryptfs_destroy_mount_crypt_stat(
 	struct ecryptfs_mount_crypt_stat *mount_crypt_stat);
@@ -669,14 +590,15 @@ int ecryptfs_generate_key_packet_set(char *dest_base,
 				     size_t *len, size_t max);
 int
 ecryptfs_parse_packet_set(struct ecryptfs_crypt_stat *crypt_stat,
-			  unsigned char *src, struct dentry *ecryptfs_dentry);
+			  unsigned char *src, size_t src_size,
+			  struct dentry *ecryptfs_dentry);
 int ecryptfs_truncate(struct dentry *dentry, loff_t new_length);
 ssize_t
-ecryptfs_getxattr_lower(struct dentry *lower_dentry, const char *name,
-			void *value, size_t size);
+ecryptfs_getxattr_lower(struct dentry *lower_dentry, struct inode *lower_inode,
+			const char *name, void *value, size_t size);
 int
-ecryptfs_setxattr(struct dentry *dentry, const char *name, const void *value,
-		  size_t size, int flags);
+ecryptfs_setxattr(struct dentry *dentry, struct inode *inode, const char *name,
+		  const void *value, size_t size, int flags);
 int ecryptfs_read_xattr_region(char *page_virt, struct inode *ecryptfs_inode);
 #ifdef CONFIG_ECRYPT_FS_MESSAGING
 int ecryptfs_process_response(struct ecryptfs_daemon *daemon,
@@ -723,7 +645,7 @@ ecryptfs_add_new_key_tfm(struct ecryptfs_key_tfm **key_tfm, char *cipher_name,
 int ecryptfs_init_crypto(void);
 int ecryptfs_destroy_crypto(void);
 int ecryptfs_tfm_exists(char *cipher_name, struct ecryptfs_key_tfm **key_tfm);
-int ecryptfs_get_tfm_and_mutex_for_cipher_name(struct crypto_blkcipher **tfm,
+int ecryptfs_get_tfm_and_mutex_for_cipher_name(struct crypto_skcipher **tfm,
 					       struct mutex **tfm_mutex,
 					       char *cipher_name);
 int ecryptfs_keyring_auth_tok_for_sig(struct key **auth_tok_key,
@@ -781,33 +703,6 @@ int ecryptfs_set_f_namelen(long *namelen, long lower_namelen,
 int ecryptfs_derive_iv(char *iv, struct ecryptfs_crypt_stat *crypt_stat,
 		       loff_t offset);
 
-void clean_inode_pages(struct address_space *mapping,
-		pgoff_t start, pgoff_t end);
-
-void ecryptfs_drop_pagecache_sb(struct super_block *sb, void *unused);
-
-void ecryptfs_free_events(void);
-
-void ecryptfs_freepage(struct page *page);
-
-struct ecryptfs_events *get_events(void);
-
-size_t ecryptfs_get_salt_size_for_cipher(
-		const struct ecryptfs_crypt_stat *crypt_stat);
-
-size_t ecryptfs_get_salt_size_for_cipher_mount(
-		const struct ecryptfs_mount_crypt_stat *mount_crypt_stat);
-
-size_t ecryptfs_get_key_size_to_enc_data(
-		const struct ecryptfs_crypt_stat *crypt_stat);
-
-size_t ecryptfs_get_key_size_to_store_key(
-		const struct ecryptfs_crypt_stat *crypt_stat);
-
-size_t ecryptfs_get_key_size_to_restore_key(size_t stored_key_size,
-		const struct ecryptfs_crypt_stat *crypt_stat);
-
-bool ecryptfs_check_space_for_salt(const size_t key_size,
-		const size_t salt_size);
+extern const struct xattr_handler *ecryptfs_xattr_handlers[];
 
 #endif /* #ifndef ECRYPTFS_KERNEL_H */

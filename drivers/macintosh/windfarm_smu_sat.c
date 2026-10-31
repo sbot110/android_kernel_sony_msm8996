@@ -1,9 +1,8 @@
+// SPDX-License-Identifier: GPL-2.0-only
 /*
  * Windfarm PowerMac thermal control.  SMU "satellite" controller sensors.
  *
  * Copyright (C) 2005 Paul Mackerras, IBM Corp. <paulus@samba.org>
- *
- * Released under the terms of the GNU GPL v2.
  */
 
 #include <linux/types.h>
@@ -172,6 +171,7 @@ static void wf_sat_release(struct kref *ref)
 
 	if (sat->nr >= 0)
 		sats[sat->nr] = NULL;
+	of_node_put(sat->node);
 	kfree(sat);
 }
 
@@ -184,7 +184,7 @@ static void wf_sat_sensor_release(struct wf_sensor *sr)
 	kref_put(&sat->ref, wf_sat_release);
 }
 
-static struct wf_sensor_ops wf_sat_ops = {
+static const struct wf_sensor_ops wf_sat_ops = {
 	.get_value	= wf_sat_sensor_get,
 	.release	= wf_sat_sensor_release,
 	.owner		= THIS_MODULE,
@@ -197,7 +197,7 @@ static int wf_sat_probe(struct i2c_client *client,
 	struct wf_sat *sat;
 	struct wf_sat_sensor *sens;
 	const u32 *reg;
-	const char *loc, *type;
+	const char *loc;
 	u8 chip, core;
 	struct device_node *child;
 	int shift, cpu, index;
@@ -217,10 +217,8 @@ static int wf_sat_probe(struct i2c_client *client,
 
 	vsens[0] = vsens[1] = -1;
 	isens[0] = isens[1] = -1;
-	child = NULL;
-	while ((child = of_get_next_child(dev, child)) != NULL) {
+	for_each_child_of_node(dev, child) {
 		reg = of_get_property(child, "reg", NULL);
-		type = of_get_property(child, "device_type", NULL);
 		loc = of_get_property(child, "location", NULL);
 		if (reg == NULL || loc == NULL)
 			continue;
@@ -237,7 +235,7 @@ static int wf_sat_probe(struct i2c_client *client,
 		core = loc[5] - '0';
 		if (chip > 1 || core > 1) {
 			printk(KERN_ERR "wf_sat_create: don't understand "
-			       "location %s for %s\n", loc, child->full_name);
+			       "location %s for %pOF\n", loc, child);
 			continue;
 		}
 		cpu = 2 * chip + core;
@@ -249,15 +247,15 @@ static int wf_sat_probe(struct i2c_client *client,
 			continue;
 		}
 
-		if (strcmp(type, "voltage-sensor") == 0) {
+		if (of_node_is_type(child, "voltage-sensor")) {
 			name = "cpu-voltage";
 			shift = 4;
 			vsens[core] = index;
-		} else if (strcmp(type, "current-sensor") == 0) {
+		} else if (of_node_is_type(child, "current-sensor")) {
 			name = "cpu-current";
 			shift = 8;
 			isens[core] = index;
-		} else if (strcmp(type, "temp-sensor") == 0) {
+		} else if (of_node_is_type(child, "temp-sensor")) {
 			name = "cpu-temp";
 			shift = 10;
 		} else
@@ -343,9 +341,16 @@ static const struct i2c_device_id wf_sat_id[] = {
 };
 MODULE_DEVICE_TABLE(i2c, wf_sat_id);
 
+static const struct of_device_id wf_sat_of_id[] = {
+	{ .compatible = "smu-sat", },
+	{ }
+};
+MODULE_DEVICE_TABLE(of, wf_sat_of_id);
+
 static struct i2c_driver wf_sat_driver = {
 	.driver = {
 		.name		= "wf_smu_sat",
+		.of_match_table = wf_sat_of_id,
 	},
 	.probe		= wf_sat_probe,
 	.remove		= wf_sat_remove,

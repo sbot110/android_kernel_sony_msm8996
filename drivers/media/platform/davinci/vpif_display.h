@@ -1,7 +1,7 @@
 /*
  * VPIF display header file
  *
- * Copyright (C) 2009 Texas Instruments Incorporated - http://www.ti.com/
+ * Copyright (C) 2009 Texas Instruments Incorporated - https://www.ti.com/
  *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License as
@@ -74,8 +74,6 @@ struct common_obj {
 	struct v4l2_format fmt;			/* Used to store the format */
 	struct vb2_queue buffer_queue;		/* Buffer queue used in
 						 * video-buf */
-	/* allocator-specific contexts for each plane */
-	struct vb2_alloc_ctx *alloc_ctx;
 
 	struct list_head dma_queue;		/* Queue of filled frames */
 	spinlock_t irqlock;			/* Used in video-buf */
@@ -120,7 +118,6 @@ struct vpif_device {
 	struct v4l2_device v4l2_dev;
 	struct channel_obj *dev[VPIF_DISPLAY_NUM_CHANNELS];
 	struct v4l2_subdev **sd;
-	struct v4l2_async_notifier notifier;
 	struct vpif_display_config *config;
 };
 

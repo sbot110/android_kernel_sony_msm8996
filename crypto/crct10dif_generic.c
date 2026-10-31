@@ -35,7 +35,7 @@ struct chksum_desc_ctx {
 };
 
 /*
- * Steps through buffer one byte at at time, calculates reflected
+ * Steps through buffer one byte at a time, calculates reflected
  * crc using table.
  */
 
@@ -104,10 +104,7 @@ static struct shash_alg alg = {
 
 static int __init crct10dif_mod_init(void)
 {
-	int ret;
-
-	ret = crypto_register_shash(&alg);
-	return ret;
+	return crypto_register_shash(&alg);
 }
 
 static void __exit crct10dif_mod_fini(void)
@@ -115,7 +112,7 @@ static void __exit crct10dif_mod_fini(void)
 	crypto_unregister_shash(&alg);
 }
 
-module_init(crct10dif_mod_init);
+subsys_initcall(crct10dif_mod_init);
 module_exit(crct10dif_mod_fini);
 
 MODULE_AUTHOR("Tim Chen <tim.c.chen@linux.intel.com>");

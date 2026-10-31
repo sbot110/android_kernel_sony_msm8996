@@ -1,3 +1,4 @@
+/* SPDX-License-Identifier: GPL-2.0 WITH Linux-syscall-note */
 #ifndef _UAPI_LINUX_MSDOS_FS_H
 #define _UAPI_LINUX_MSDOS_FS_H
 
@@ -57,9 +58,6 @@
 #define MSDOS_DOT	".          "	/* ".", padded to MSDOS_NAME chars */
 #define MSDOS_DOTDOT	"..         "	/* "..", padded to MSDOS_NAME chars */
 
-#define FAT_FIRST_ENT(s, x)	((MSDOS_SB(s)->fat_bits == 32 ? 0x0FFFFF00 : \
-	MSDOS_SB(s)->fat_bits == 16 ? 0xFF00 : 0xF00) | (x))
-
 /* start of data cluster's entry (number of reserved clusters) */
 #define FAT_START_ENT	2
 
@@ -67,8 +65,6 @@
 #define MAX_FAT12	0xFF4
 #define MAX_FAT16	0xFFF4
 #define MAX_FAT32	0x0FFFFFF6
-#define MAX_FAT(s)	(MSDOS_SB(s)->fat_bits == 32 ? MAX_FAT32 : \
-	MSDOS_SB(s)->fat_bits == 16 ? MAX_FAT16 : MAX_FAT12)
 
 /* bad cluster mark */
 #define BAD_FAT12	0xFF7
@@ -134,7 +130,7 @@ struct fat_boot_sector {
 						   for mount state. */
 			__u8	signature;  /* extended boot signature */
 			__u8	vol_id[4];	/* volume ID */
-			__u8	vol_label[11];	/* volume label */
+			__u8	vol_label[MSDOS_NAME];	/* volume label */
 			__u8	fs_type[8];		/* file system type */
 			/* other fields are not added here */
 		} fat16;
@@ -157,7 +153,7 @@ struct fat_boot_sector {
 						   for mount state. */
 			__u8	signature;  /* extended boot signature */
 			__u8	vol_id[4];	/* volume ID */
-			__u8	vol_label[11];	/* volume label */
+			__u8	vol_label[MSDOS_NAME];	/* volume label */
 			__u8	fs_type[8];		/* file system type */
 			/* other fields are not added here */
 		} fat32;

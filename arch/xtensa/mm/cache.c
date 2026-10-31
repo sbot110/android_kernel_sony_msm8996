@@ -21,20 +21,16 @@
 #include <linux/string.h>
 #include <linux/types.h>
 #include <linux/ptrace.h>
-#include <linux/bootmem.h>
+#include <linux/memblock.h>
 #include <linux/swap.h>
 #include <linux/pagemap.h>
+#include <linux/pgtable.h>
 
 #include <asm/bootparam.h>
 #include <asm/mmu_context.h>
 #include <asm/tlb.h>
 #include <asm/tlbflush.h>
 #include <asm/page.h>
-#include <asm/pgalloc.h>
-#include <asm/pgtable.h>
-
-//#define printd(x...) printk(x)
-#define printd(x...) do { } while(0)
 
 /* 
  * Note:
@@ -85,13 +81,8 @@ static inline void kmap_invalidate_coherent(struct page *page,
 static inline void *coherent_kvaddr(struct page *page, unsigned long base,
 				    unsigned long vaddr, unsigned long *paddr)
 {
-	if (PageHighMem(page) || !DCACHE_ALIAS_EQ(page_to_phys(page), vaddr)) {
-		*paddr = page_to_phys(page);
-		return (void *)(base + (vaddr & DCACHE_ALIAS_MASK));
-	} else {
-		*paddr = 0;
-		return page_to_virt(page);
-	}
+	*paddr = page_to_phys(page);
+	return (void *)(base + (vaddr & DCACHE_ALIAS_MASK));
 }
 
 void clear_user_highpage(struct page *page, unsigned long vaddr)
@@ -105,6 +96,7 @@ void clear_user_highpage(struct page *page, unsigned long vaddr)
 	clear_page_alias(kvaddr, paddr);
 	preempt_enable();
 }
+EXPORT_SYMBOL(clear_user_highpage);
 
 void copy_user_highpage(struct page *dst, struct page *src,
 			unsigned long vaddr, struct vm_area_struct *vma)
@@ -121,10 +113,7 @@ void copy_user_highpage(struct page *dst, struct page *src,
 	copy_page_alias(dst_vaddr, src_vaddr, dst_paddr, src_paddr);
 	preempt_enable();
 }
-
-#endif /* DCACHE_WAY_SIZE > PAGE_SIZE */
-
-#if (DCACHE_WAY_SIZE > PAGE_SIZE) && XCHAL_DCACHE_IS_WRITEBACK
+EXPORT_SYMBOL(copy_user_highpage);
 
 /*
  * Any time the kernel writes to a user page cache page, or it is about to
@@ -134,7 +123,7 @@ void copy_user_highpage(struct page *dst, struct page *src,
 
 void flush_dcache_page(struct page *page)
 {
-	struct address_space *mapping = page_mapping(page);
+	struct address_space *mapping = page_mapping_file(page);
 
 	/*
 	 * If we have a mapping but the page is not mapped to user-space
@@ -180,7 +169,7 @@ void flush_dcache_page(struct page *page)
 
 	/* There shouldn't be an entry in the cache for this page anymore. */
 }
-
+EXPORT_SYMBOL(flush_dcache_page);
 
 /*
  * For now, flush the whole cache. FIXME??
@@ -192,6 +181,7 @@ void local_flush_cache_range(struct vm_area_struct *vma,
 	__flush_invalidate_dcache_all();
 	__invalidate_icache_all();
 }
+EXPORT_SYMBOL(local_flush_cache_range);
 
 /* 
  * Remove any entry in the cache for this page. 
@@ -213,8 +203,9 @@ void local_flush_cache_page(struct vm_area_struct *vma, unsigned long address,
 	__invalidate_icache_page_alias(virt, phys);
 	preempt_enable();
 }
+EXPORT_SYMBOL(local_flush_cache_page);
 
-#endif
+#endif /* DCACHE_WAY_SIZE > PAGE_SIZE */
 
 void
 update_mmu_cache(struct vm_area_struct * vma, unsigned long addr, pte_t *ptep)
@@ -231,7 +222,7 @@ update_mmu_cache(struct vm_area_struct * vma, unsigned long addr, pte_t *ptep)
 
 	flush_tlb_page(vma, addr);
 
-#if (DCACHE_WAY_SIZE > PAGE_SIZE) && XCHAL_DCACHE_IS_WRITEBACK
+#if (DCACHE_WAY_SIZE > PAGE_SIZE)
 
 	if (!PageReserved(page) && test_bit(PG_arch_1, &page->flags)) {
 		unsigned long phys = page_to_phys(page);
@@ -264,7 +255,7 @@ update_mmu_cache(struct vm_area_struct * vma, unsigned long addr, pte_t *ptep)
  * flush_dcache_page() on the page.
  */
 
-#if (DCACHE_WAY_SIZE > PAGE_SIZE) && XCHAL_DCACHE_IS_WRITEBACK
+#if (DCACHE_WAY_SIZE > PAGE_SIZE)
 
 void copy_to_user_page(struct vm_area_struct *vma, struct page *page,
 		unsigned long vaddr, void *dst, const void *src,

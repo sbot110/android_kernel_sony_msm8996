@@ -1,14 +1,5 @@
+/* SPDX-License-Identifier: GPL-2.0-only */
 /* Copyright (c) 2016-2017 The Linux Foundation. All rights reserved.
- *
- * This program is free software; you can redistribute it and/or modify
- * it under the terms of the GNU General Public License version 2 and
- * only version 2 as published by the Free Software Foundation.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
- *
  */
 #ifndef __A5XX_GPU_H__
 #define __A5XX_GPU_H__
@@ -21,16 +12,8 @@
 
 #include "a5xx.xml.h"
 
-enum {
-	A5XX_ZAP_SHADER_LOADED = 1,
-	A5XX_HWCG_ENABLED = 2,
-};
-
 struct a5xx_gpu {
-	unsigned long flags;
-
 	struct adreno_gpu base;
-	struct platform_device *pdev;
 
 	struct drm_gem_object *pm4_bo;
 	uint64_t pm4_iova;
@@ -48,20 +31,28 @@ struct a5xx_gpu {
 	struct msm_ringbuffer *next_ring;
 
 	struct drm_gem_object *preempt_bo[MSM_GPU_MAX_RINGS];
+	struct drm_gem_object *preempt_counters_bo[MSM_GPU_MAX_RINGS];
 	struct a5xx_preempt_record *preempt[MSM_GPU_MAX_RINGS];
 	uint64_t preempt_iova[MSM_GPU_MAX_RINGS];
+	uint32_t last_seqno[MSM_GPU_MAX_RINGS];
 
 	atomic_t preempt_state;
+	spinlock_t preempt_start_lock;
 	struct timer_list preempt_timer;
 
-	struct a5xx_smmu_info *smmu_info;
-	struct drm_gem_object *smmu_info_bo;
-	uint64_t smmu_info_iova;
+	struct drm_gem_object *shadow_bo;
+	uint64_t shadow_iova;
+	uint32_t *shadow;
 
-	int timestamp_counter;
+	/* True if the microcode supports the WHERE_AM_I opcode */
+	bool has_whereami;
 };
 
 #define to_a5xx_gpu(x) container_of(x, struct a5xx_gpu, base)
+
+#ifdef CONFIG_DEBUG_FS
+void a5xx_debugfs_init(struct msm_gpu *gpu, struct drm_minor *minor);
+#endif
 
 /*
  * In order to do lockless preemption we use a simple state machine to progress
@@ -138,24 +129,10 @@ struct a5xx_preempt_record {
 /*
  * The preemption counter block is a storage area for the value of the
  * preemption counters that are saved immediately before context switch. We
- * append it on to the end of the allocadtion for the preemption record.
+ * append it on to the end of the allocation for the preemption record.
  */
 #define A5XX_PREEMPT_COUNTER_SIZE (16 * 4)
 
-/*
- * This is a global structure that the preemption code uses to switch in the
- * pagetable for the preempted process - the code switches in whatever we
- * after preempting in a new ring.
- */
-struct a5xx_smmu_info {
-	uint32_t  magic;
-	uint32_t  _pad4;
-	uint64_t  ttbr0;
-	uint32_t  asid;
-	uint32_t  contextidr;
-};
-
-#define A5XX_SMMU_INFO_MAGIC 0x3618CDA3UL
 
 int a5xx_power_init(struct msm_gpu *gpu);
 void a5xx_gpmu_ucode_init(struct msm_gpu *gpu);
@@ -173,8 +150,11 @@ static inline int spin_usecs(struct msm_gpu *gpu, uint32_t usecs,
 	return -ETIMEDOUT;
 }
 
-void a5xx_set_hwcg(struct msm_gpu *gpu, bool state);
+#define shadowptr(a5xx_gpu, ring) ((a5xx_gpu)->shadow_iova + \
+		((ring)->id * sizeof(uint32_t)))
+
 bool a5xx_idle(struct msm_gpu *gpu, struct msm_ringbuffer *ring);
+void a5xx_set_hwcg(struct msm_gpu *gpu, bool state);
 
 void a5xx_preempt_init(struct msm_gpu *gpu);
 void a5xx_preempt_hw_init(struct msm_gpu *gpu);
@@ -182,7 +162,7 @@ void a5xx_preempt_trigger(struct msm_gpu *gpu);
 void a5xx_preempt_irq(struct msm_gpu *gpu);
 void a5xx_preempt_fini(struct msm_gpu *gpu);
 
-int a5xx_snapshot(struct msm_gpu *gpu, struct msm_snapshot *snapshot);
+void a5xx_flush(struct msm_gpu *gpu, struct msm_ringbuffer *ring, bool sync);
 
 /* Return true if we are in a preempt state */
 static inline bool a5xx_in_preempt(struct a5xx_gpu *a5xx_gpu)
@@ -192,9 +172,5 @@ static inline bool a5xx_in_preempt(struct a5xx_gpu *a5xx_gpu)
 	return !(preempt_state == PREEMPT_NONE ||
 			preempt_state == PREEMPT_ABORT);
 }
-
-int a5xx_counters_init(struct adreno_gpu *adreno_gpu);
-void a5xx_counters_save(struct msm_gpu *gpu);
-void a5xx_counters_restore(struct msm_gpu *gpu);
 
 #endif /* __A5XX_GPU_H__ */

@@ -1,89 +1,22 @@
+// SPDX-License-Identifier: GPL-2.0-only
 /* Copyright (c) 2016 Facebook
- *
- * This program is free software; you can redistribute it and/or
- * modify it under the terms of version 2 of the GNU General Public
- * License as published by the Free Software Foundation.
  */
 #include <stdio.h>
 #include <unistd.h>
 #include <stdlib.h>
 #include <signal.h>
-#include <linux/bpf.h>
-#include <string.h>
 #include <linux/perf_event.h>
 #include <errno.h>
-#include <assert.h>
 #include <stdbool.h>
 #include <sys/resource.h>
-#include "libbpf.h"
-#include "bpf_load.h"
+#include <bpf/libbpf.h>
+#include <bpf/bpf.h>
+#include "trace_helpers.h"
 
-#define MAX_SYMS 300000
 #define PRINT_RAW_ADDR 0
 
-static struct ksym {
-	long addr;
-	char *name;
-} syms[MAX_SYMS];
-static int sym_cnt;
-
-static int ksym_cmp(const void *p1, const void *p2)
-{
-	return ((struct ksym *)p1)->addr - ((struct ksym *)p2)->addr;
-}
-
-static int load_kallsyms(void)
-{
-	FILE *f = fopen("/proc/kallsyms", "r");
-	char func[256], buf[256];
-	char symbol;
-	void *addr;
-	int i = 0;
-
-	if (!f)
-		return -ENOENT;
-
-	while (!feof(f)) {
-		if (!fgets(buf, sizeof(buf), f))
-			break;
-		if (sscanf(buf, "%p %c %s", &addr, &symbol, func) != 3)
-			break;
-		if (!addr)
-			continue;
-		syms[i].addr = (long) addr;
-		syms[i].name = strdup(func);
-		i++;
-	}
-	sym_cnt = i;
-	qsort(syms, sym_cnt, sizeof(struct ksym), ksym_cmp);
-	return 0;
-}
-
-static void *search(long key)
-{
-	int start = 0, end = sym_cnt;
-	int result;
-
-	while (start < end) {
-		size_t mid = start + (end - start) / 2;
-
-		result = key - syms[mid].addr;
-		if (result < 0)
-			end = mid;
-		else if (result > 0)
-			start = mid + 1;
-		else
-			return &syms[mid];
-	}
-
-	if (start >= 1 && syms[start - 1].addr < key &&
-	    key < syms[start].addr)
-		/* valid ksym */
-		return &syms[start - 1];
-
-	/* out of range. return _stext */
-	return &syms[0];
-}
+/* counts, stackmap */
+static int map_fd[2];
 
 static void print_ksym(__u64 addr)
 {
@@ -91,7 +24,12 @@ static void print_ksym(__u64 addr)
 
 	if (!addr)
 		return;
-	sym = search(addr);
+	sym = ksym_search(addr);
+	if (!sym) {
+		printf("ksym not found. Is kallsyms loaded?\n");
+		return;
+	}
+
 	if (PRINT_RAW_ADDR)
 		printf("%s/%llx;", sym->name, addr);
 	else
@@ -114,14 +52,14 @@ static void print_stack(struct key_t *key, __u64 count)
 	int i;
 
 	printf("%s;", key->target);
-	if (bpf_lookup_elem(map_fd[3], &key->tret, ip) != 0) {
+	if (bpf_map_lookup_elem(map_fd[1], &key->tret, ip) != 0) {
 		printf("---;");
 	} else {
 		for (i = PERF_MAX_STACK_DEPTH - 1; i >= 0; i--)
 			print_ksym(ip[i]);
 	}
 	printf("-;");
-	if (bpf_lookup_elem(map_fd[3], &key->wret, ip) != 0) {
+	if (bpf_map_lookup_elem(map_fd[1], &key->wret, ip) != 0) {
 		printf("---;");
 	} else {
 		for (i = 0; i < PERF_MAX_STACK_DEPTH; i++)
@@ -142,8 +80,8 @@ static void print_stacks(int fd)
 	struct key_t key = {}, next_key;
 	__u64 value;
 
-	while (bpf_get_next_key(fd, &key, &next_key) == 0) {
-		bpf_lookup_elem(fd, &next_key, &value);
+	while (bpf_map_get_next_key(fd, &key, &next_key) == 0) {
+		bpf_map_lookup_elem(fd, &next_key, &value);
 		print_stack(&next_key, value);
 		key = next_key;
 	}
@@ -157,23 +95,49 @@ static void int_exit(int sig)
 
 int main(int argc, char **argv)
 {
-	struct rlimit r = {RLIM_INFINITY, RLIM_INFINITY};
+	struct bpf_object *obj = NULL;
+	struct bpf_link *links[2];
+	struct bpf_program *prog;
+	int delay = 1, i = 0;
 	char filename[256];
-	int delay = 1;
-
-	snprintf(filename, sizeof(filename), "%s_kern.o", argv[0]);
-	setrlimit(RLIMIT_MEMLOCK, &r);
-
-	signal(SIGINT, int_exit);
 
 	if (load_kallsyms()) {
 		printf("failed to process /proc/kallsyms\n");
 		return 2;
 	}
 
-	if (load_bpf_file(filename)) {
-		printf("%s", bpf_log_buf);
-		return 1;
+	snprintf(filename, sizeof(filename), "%s_kern.o", argv[0]);
+	obj = bpf_object__open_file(filename, NULL);
+	if (libbpf_get_error(obj)) {
+		fprintf(stderr, "ERROR: opening BPF object file failed\n");
+		obj = NULL;
+		goto cleanup;
+	}
+
+	/* load BPF program */
+	if (bpf_object__load(obj)) {
+		fprintf(stderr, "ERROR: loading BPF object file failed\n");
+		goto cleanup;
+	}
+
+	map_fd[0] = bpf_object__find_map_fd_by_name(obj, "counts");
+	map_fd[1] = bpf_object__find_map_fd_by_name(obj, "stackmap");
+	if (map_fd[0] < 0 || map_fd[1] < 0) {
+		fprintf(stderr, "ERROR: finding a map in obj file failed\n");
+		goto cleanup;
+	}
+
+	signal(SIGINT, int_exit);
+	signal(SIGTERM, int_exit);
+
+	bpf_object__for_each_program(prog, obj) {
+		links[i] = bpf_program__attach(prog);
+		if (libbpf_get_error(links[i])) {
+			fprintf(stderr, "ERROR: bpf_program__attach failed\n");
+			links[i] = NULL;
+			goto cleanup;
+		}
+		i++;
 	}
 
 	if (argc > 1)
@@ -181,5 +145,10 @@ int main(int argc, char **argv)
 	sleep(delay);
 	print_stacks(map_fd[0]);
 
+cleanup:
+	for (i--; i >= 0; i--)
+		bpf_link__destroy(links[i]);
+
+	bpf_object__close(obj);
 	return 0;
 }

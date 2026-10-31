@@ -1,7 +1,7 @@
+// SPDX-License-Identifier: GPL-2.0
 #include <linux/percpu.h>
 #include <linux/sched.h>
 #include <linux/osq_lock.h>
-#include <linux/sched/rt.h>
 
 /*
  * An MCS like lock especially tailored for optimistic spinning for sleeping
@@ -20,6 +20,11 @@ static DEFINE_PER_CPU_SHARED_ALIGNED(struct optimistic_spin_node, osq_node);
 static inline int encode_cpu(int cpu_nr)
 {
 	return cpu_nr + 1;
+}
+
+static inline int node_cpu(struct optimistic_spin_node *node)
+{
+	return node->cpu - 1;
 }
 
 static inline struct optimistic_spin_node *decode_cpu(int encoded_cpu_val)
@@ -76,7 +81,7 @@ osq_wait_next(struct optimistic_spin_queue *lock,
 				break;
 		}
 
-		cpu_relax_lowlatency();
+		cpu_relax();
 	}
 
 	return next;
@@ -86,7 +91,6 @@ bool osq_lock(struct optimistic_spin_queue *lock)
 {
 	struct optimistic_spin_node *node = this_cpu_ptr(&osq_node);
 	struct optimistic_spin_node *prev, *next;
-	struct task_struct *task = current;
 	int curr = encode_cpu(smp_processor_id());
 	int old;
 
@@ -130,23 +134,17 @@ bool osq_lock(struct optimistic_spin_queue *lock)
 	 * cmpxchg in an attempt to undo our queueing.
 	 */
 
-	while (!READ_ONCE(node->locked)) {
-		/*
-		 * If we need to reschedule bail... so we can block.
-		 * If a task spins on owner on a CPU after acquiring
-		 * osq_lock while a RT task spins on another CPU  to
-		 * acquire osq_lock, it will starve the owner from
-		 * completing if owner is to be scheduled on the same CPU.
-		 * It will be a live lock.
-		 */
-		if (need_resched() || rt_task(task))
-			goto unqueue;
+	/*
+	 * Wait to acquire the lock or cancellation. Note that need_resched()
+	 * will come with an IPI, which will wake smp_cond_load_relaxed() if it
+	 * is implemented with a monitor-wait. vcpu_is_preempted() relies on
+	 * polling, be careful.
+	 */
+	if (smp_cond_load_relaxed(&node->locked, VAL || need_resched() ||
+				  vcpu_is_preempted(node_cpu(node->prev))))
+		return true;
 
-		cpu_relax_lowlatency();
-	}
-	return true;
-
-unqueue:
+	/* unqueue */
 	/*
 	 * Step - A  -- stabilize @prev
 	 *
@@ -156,19 +154,23 @@ unqueue:
 	 */
 
 	for (;;) {
-		if (prev->next == node &&
+		/*
+		 * cpu_relax() below implies a compiler barrier which would
+		 * prevent this comparison being optimized away.
+		 */
+		if (data_race(prev->next) == node &&
 		    cmpxchg(&prev->next, node, NULL) == node)
 			break;
 
 		/*
 		 * We can only fail the cmpxchg() racing against an unlock(),
-		 * in which case we should observe @node->locked becomming
+		 * in which case we should observe @node->locked becoming
 		 * true.
 		 */
 		if (smp_load_acquire(&node->locked))
 			return true;
 
-		cpu_relax_lowlatency();
+		cpu_relax();
 
 		/*
 		 * Or we race against a concurrent unqueue()'s step-B, in which

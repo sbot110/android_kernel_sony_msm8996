@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-2.0
 /*
  *  linux/fs/hfsplus/brec.c
  *
@@ -59,7 +60,7 @@ u16 hfs_brec_keylen(struct hfs_bnode *node, u16 rec)
 	return retval;
 }
 
-int hfs_brec_insert(struct hfs_find_data *fd, void *entry, int entry_len)
+int hfs_brec_insert(struct hfs_find_data *fd, void *entry, u32 entry_len)
 {
 	struct hfs_btree *tree;
 	struct hfs_bnode *node, *new_node;
@@ -72,9 +73,10 @@ int hfs_brec_insert(struct hfs_find_data *fd, void *entry, int entry_len)
 	if (!fd->bnode) {
 		if (!tree->root)
 			hfs_btree_inc_height(tree);
-		fd->bnode = hfs_bnode_find(tree, tree->leaf_head);
-		if (IS_ERR(fd->bnode))
-			return PTR_ERR(fd->bnode);
+		node = hfs_bnode_find(tree, tree->leaf_head);
+		if (IS_ERR(node))
+			return PTR_ERR(node);
+		fd->bnode = node;
 		fd->record = -1;
 	}
 	new_node = NULL;

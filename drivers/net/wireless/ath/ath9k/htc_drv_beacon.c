@@ -45,7 +45,7 @@ void ath9k_htc_beaconq_config(struct ath9k_htc_priv *priv)
 		 * Long slot time  : 2x cwmin
 		 * Short slot time : 4x cwmin
 		 */
-		if (ah->slottime == ATH9K_SLOT_TIME_20)
+		if (ah->slottime == 20)
 			qi.tqi_cwmin = 2*qi_be.tqi_cwmin;
 		else
 			qi.tqi_cwmin = 4*qi_be.tqi_cwmin;
@@ -290,6 +290,9 @@ void ath9k_htc_swba(struct ath9k_htc_priv *priv,
 	struct ath_common *common = ath9k_hw_common(priv->ah);
 	int slot;
 
+	if (!priv->cur_beacon_conf.enable_beacon)
+		return;
+
 	if (swba->beacon_pending != 0) {
 		priv->beacon.bmisscnt++;
 		if (priv->beacon.bmisscnt > BSTUCK_THRESHOLD) {
@@ -384,7 +387,7 @@ void ath9k_htc_set_tsfadjust(struct ath9k_htc_priv *priv,
 
 static void ath9k_htc_beacon_iter(void *data, u8 *mac, struct ieee80211_vif *vif)
 {
-	bool *beacon_configured = (bool *)data;
+	bool *beacon_configured = data;
 	struct ath9k_htc_vif *avp = (struct ath9k_htc_vif *) vif->drv_priv;
 
 	if (vif->type == NL80211_IFTYPE_STATION &&
@@ -514,7 +517,7 @@ bool ath9k_htc_csa_is_finished(struct ath9k_htc_priv *priv)
 	if (!vif || !vif->csa_active)
 		return false;
 
-	if (!ieee80211_csa_is_complete(vif))
+	if (!ieee80211_beacon_cntdwn_is_complete(vif))
 		return false;
 
 	ieee80211_csa_finish(vif);

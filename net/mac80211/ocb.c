@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-2.0-only
 /*
  * OCB mode implementation
  *
@@ -5,10 +6,6 @@
  *            (c) 2014 Volkswagen Group Research
  * Author:    Rostislav Lisovy <rostislav.lisovy@fel.cvut.cz>
  * Funded by: Volkswagen Group Research
- *
- * This program is free software; you can redistribute it and/or modify
- * it under the terms of the GNU General Public License version 2 as
- * published by the Free Software Foundation.
  */
 
 #include <linux/delay.h>
@@ -50,6 +47,9 @@ void ieee80211_ocb_rx_no_sta(struct ieee80211_sub_if_data *sdata,
 	struct sta_info *sta;
 	int band;
 
+	if (!ifocb->joined)
+		return;
+
 	/* XXX: Consider removing the least recently used entry and
 	 *      allow new one to be added.
 	 */
@@ -75,17 +75,15 @@ void ieee80211_ocb_rx_no_sta(struct ieee80211_sub_if_data *sdata,
 	if (!sta)
 		return;
 
-	sta->rx_stats.last_rx = jiffies;
-
 	/* Add only mandatory rates for now */
 	sband = local->hw.wiphy->bands[band];
-	sta->sta.supp_rates[band] =
+	sta->sta.deflink.supp_rates[band] =
 		ieee80211_mandatory_rates(sband, scan_width);
 
 	spin_lock(&ifocb->incomplete_lock);
 	list_add(&sta->list, &ifocb->incomplete_stations);
 	spin_unlock(&ifocb->incomplete_lock);
-	ieee80211_queue_work(&local->hw, &sdata->work);
+	wiphy_work_queue(local->hw.wiphy, &sdata->work);
 }
 
 static struct sta_info *ieee80211_ocb_finish_sta(struct sta_info *sta)
@@ -152,24 +150,24 @@ void ieee80211_ocb_work(struct ieee80211_sub_if_data *sdata)
 	sdata_unlock(sdata);
 }
 
-static void ieee80211_ocb_housekeeping_timer(unsigned long data)
+static void ieee80211_ocb_housekeeping_timer(struct timer_list *t)
 {
-	struct ieee80211_sub_if_data *sdata = (void *)data;
+	struct ieee80211_sub_if_data *sdata =
+		from_timer(sdata, t, u.ocb.housekeeping_timer);
 	struct ieee80211_local *local = sdata->local;
 	struct ieee80211_if_ocb *ifocb = &sdata->u.ocb;
 
 	set_bit(OCB_WORK_HOUSEKEEPING, &ifocb->wrkq_flags);
 
-	ieee80211_queue_work(&local->hw, &sdata->work);
+	wiphy_work_queue(local->hw.wiphy, &sdata->work);
 }
 
 void ieee80211_ocb_setup_sdata(struct ieee80211_sub_if_data *sdata)
 {
 	struct ieee80211_if_ocb *ifocb = &sdata->u.ocb;
 
-	setup_timer(&ifocb->housekeeping_timer,
-		    ieee80211_ocb_housekeeping_timer,
-		    (unsigned long)sdata);
+	timer_setup(&ifocb->housekeeping_timer,
+		    ieee80211_ocb_housekeeping_timer, 0);
 	INIT_LIST_HEAD(&ifocb->incomplete_stations);
 	spin_lock_init(&ifocb->incomplete_lock);
 }
@@ -201,7 +199,7 @@ int ieee80211_ocb_join(struct ieee80211_sub_if_data *sdata,
 	ifocb->joined = true;
 
 	set_bit(OCB_WORK_HOUSEKEEPING, &ifocb->wrkq_flags);
-	ieee80211_queue_work(&local->hw, &sdata->work);
+	wiphy_work_queue(local->hw.wiphy, &sdata->work);
 
 	netif_carrier_on(sdata->dev);
 	return 0;

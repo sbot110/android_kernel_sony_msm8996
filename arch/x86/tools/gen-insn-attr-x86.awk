@@ -1,4 +1,5 @@
 #!/bin/awk -f
+# SPDX-License-Identifier: GPL-2.0
 # gen-insn-attr-x86.awk: Instruction attribute table generator
 # Written by Masami Hiramatsu <mhiramat@redhat.com>
 #
@@ -72,12 +73,14 @@ BEGIN {
 	lprefix_expr = "\\((66|F2|F3)\\)"
 	max_lprefix = 4
 
-	# All opcodes starting with lower-case 'v' or with (v1) superscript
+	# All opcodes starting with lower-case 'v', 'k' or with (v1) superscript
 	# accepts VEX prefix
-	vexok_opcode_expr = "^v.*"
+	vexok_opcode_expr = "^[vk].*"
 	vexok_expr = "\\(v1\\)"
 	# All opcodes with (v) superscript supports *only* VEX prefix
 	vexonly_expr = "\\(v\\)"
+	# All opcodes with (ev) superscript supports *only* EVEX prefix
+	evexonly_expr = "\\(ev\\)"
 
 	prefix_expr = "\\(Prefix\\)"
 	prefix_num["Operand-Size"] = "INAT_PFX_OPNDSZ"
@@ -95,6 +98,7 @@ BEGIN {
 	prefix_num["Address-Size"] = "INAT_PFX_ADDRSZ"
 	prefix_num["VEX+1byte"] = "INAT_PFX_VEX2"
 	prefix_num["VEX+2byte"] = "INAT_PFX_VEX3"
+	prefix_num["EVEX"] = "INAT_PFX_EVEX"
 
 	clear_vars()
 }
@@ -319,7 +323,9 @@ function convert_operands(count,opnd,       i,j,imm,mod)
 			flags = add_flags(flags, "INAT_MODRM")
 
 		# check VEX codes
-		if (match(ext, vexonly_expr))
+		if (match(ext, evexonly_expr))
+			flags = add_flags(flags, "INAT_VEXOK | INAT_EVEXONLY")
+		else if (match(ext, vexonly_expr))
 			flags = add_flags(flags, "INAT_VEXOK | INAT_VEXONLY")
 		else if (match(ext, vexok_expr) || match(opcode, vexok_opcode_expr))
 			flags = add_flags(flags, "INAT_VEXOK")
@@ -356,6 +362,9 @@ function convert_operands(count,opnd,       i,j,imm,mod)
 END {
 	if (awkchecked != "")
 		exit 1
+
+	print "#ifndef __BOOT_COMPRESSED\n"
+
 	# print escape opcode map's array
 	print "/* Escape opcode map array */"
 	print "const insn_attr_t * const inat_escape_tables[INAT_ESC_MAX + 1]" \
@@ -382,6 +391,51 @@ END {
 		for (j = 0; j < max_lprefix; j++)
 			if (atable[i,j])
 				print "	["i"]["j"] = "atable[i,j]","
-	print "};"
+	print "};\n"
+
+	print "#else /* !__BOOT_COMPRESSED */\n"
+
+	print "/* Escape opcode map array */"
+	print "static const insn_attr_t *inat_escape_tables[INAT_ESC_MAX + 1]" \
+	      "[INAT_LSTPFX_MAX + 1];"
+	print ""
+
+	print "/* Group opcode map array */"
+	print "static const insn_attr_t *inat_group_tables[INAT_GRP_MAX + 1]"\
+	      "[INAT_LSTPFX_MAX + 1];"
+	print ""
+
+	print "/* AVX opcode map array */"
+	print "static const insn_attr_t *inat_avx_tables[X86_VEX_M_MAX + 1]"\
+	      "[INAT_LSTPFX_MAX + 1];"
+	print ""
+
+	print "static void inat_init_tables(void)"
+	print "{"
+
+	# print escape opcode map's array
+	print "\t/* Print Escape opcode map array */"
+	for (i = 0; i < geid; i++)
+		for (j = 0; j < max_lprefix; j++)
+			if (etable[i,j])
+				print "\tinat_escape_tables["i"]["j"] = "etable[i,j]";"
+	print ""
+
+	# print group opcode map's array
+	print "\t/* Print Group opcode map array */"
+	for (i = 0; i < ggid; i++)
+		for (j = 0; j < max_lprefix; j++)
+			if (gtable[i,j])
+				print "\tinat_group_tables["i"]["j"] = "gtable[i,j]";"
+	print ""
+	# print AVX opcode map's array
+	print "\t/* Print AVX opcode map array */"
+	for (i = 0; i < gaid; i++)
+		for (j = 0; j < max_lprefix; j++)
+			if (atable[i,j])
+				print "\tinat_avx_tables["i"]["j"] = "atable[i,j]";"
+
+	print "}"
+	print "#endif"
 }
 

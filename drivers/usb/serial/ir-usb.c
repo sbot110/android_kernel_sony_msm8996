@@ -1,14 +1,10 @@
+// SPDX-License-Identifier: GPL-2.0+
 /*
  * USB IR Dongle driver
  *
  *	Copyright (C) 2001-2002	Greg Kroah-Hartman (greg@kroah.com)
  *	Copyright (C) 2002	Gary Brubaker (xavyer@ix.netcom.com)
  *	Copyright (C) 2010	Johan Hovold (jhovold@gmail.com)
- *
- *	This program is free software; you can redistribute it and/or modify
- *	it under the terms of the GNU General Public License as published by
- *	the Free Software Foundation; either version 2 of the License, or
- *	(at your option) any later version.
  *
  * This driver allows a USB IrDA device to be used as a "dumb" serial device.
  * This can be useful if you do not have access to a full IrDA stack on the
@@ -20,7 +16,7 @@
  * was written by Roman Weissgaerber <weissg@vienna.at>, Dag Brattli
  * <dag@brattli.net>, and Jean Tourrilhes <jt@hpl.hp.com>
  *
- * See Documentation/usb/usb-serial.txt for more information on using this
+ * See Documentation/usb/usb-serial.rst for more information on using this
  * driver
  */
 
@@ -51,7 +47,7 @@ static int xbof = -1;
 static int  ir_startup (struct usb_serial *serial);
 static int ir_write(struct tty_struct *tty, struct usb_serial_port *port,
 		const unsigned char *buf, int count);
-static int ir_write_room(struct tty_struct *tty);
+static unsigned int ir_write_room(struct tty_struct *tty);
 static void ir_write_bulk_callback(struct urb *urb);
 static void ir_process_read_urb(struct urb *urb);
 static void ir_set_termios(struct tty_struct *tty,
@@ -80,6 +76,8 @@ static struct usb_serial_driver ir_device = {
 	.description		= "IR Dongle",
 	.id_table		= ir_id_table,
 	.num_ports		= 1,
+	.num_bulk_in		= 1,
+	.num_bulk_out		= 1,
 	.set_termios		= ir_set_termios,
 	.attach			= ir_startup,
 	.write			= ir_write,
@@ -138,7 +136,7 @@ irda_usb_find_class_desc(struct usb_serial *serial, unsigned int ifnum)
 			0, ifnum, desc, sizeof(*desc), 1000);
 
 	dev_dbg(&serial->dev->dev, "%s -  ret=%d\n", __func__, ret);
-	if (ret < sizeof(*desc)) {
+	if (ret < (int)sizeof(*desc)) {
 		dev_dbg(&serial->dev->dev,
 			"%s - class descriptor read %s (%d)\n", __func__,
 			(ret < 0) ? "failed" : "too short", ret);
@@ -199,9 +197,7 @@ static u8 ir_xbof_change(u8 xbof)
 static int ir_startup(struct usb_serial *serial)
 {
 	struct usb_irda_cs_descriptor *irda_desc;
-
-	if (serial->num_bulk_in < 1 || serial->num_bulk_out < 1)
-		return -ENODEV;
+	int rates;
 
 	irda_desc = irda_usb_find_class_desc(serial, 0);
 	if (!irda_desc) {
@@ -210,18 +206,20 @@ static int ir_startup(struct usb_serial *serial)
 		return -ENODEV;
 	}
 
+	rates = le16_to_cpu(irda_desc->wBaudRate);
+
 	dev_dbg(&serial->dev->dev,
 		"%s - Baud rates supported:%s%s%s%s%s%s%s%s%s\n",
 		__func__,
-		(irda_desc->wBaudRate & USB_IRDA_BR_2400) ? " 2400" : "",
-		(irda_desc->wBaudRate & USB_IRDA_BR_9600) ? " 9600" : "",
-		(irda_desc->wBaudRate & USB_IRDA_BR_19200) ? " 19200" : "",
-		(irda_desc->wBaudRate & USB_IRDA_BR_38400) ? " 38400" : "",
-		(irda_desc->wBaudRate & USB_IRDA_BR_57600) ? " 57600" : "",
-		(irda_desc->wBaudRate & USB_IRDA_BR_115200) ? " 115200" : "",
-		(irda_desc->wBaudRate & USB_IRDA_BR_576000) ? " 576000" : "",
-		(irda_desc->wBaudRate & USB_IRDA_BR_1152000) ? " 1152000" : "",
-		(irda_desc->wBaudRate & USB_IRDA_BR_4000000) ? " 4000000" : "");
+		(rates & USB_IRDA_BR_2400) ? " 2400" : "",
+		(rates & USB_IRDA_BR_9600) ? " 9600" : "",
+		(rates & USB_IRDA_BR_19200) ? " 19200" : "",
+		(rates & USB_IRDA_BR_38400) ? " 38400" : "",
+		(rates & USB_IRDA_BR_57600) ? " 57600" : "",
+		(rates & USB_IRDA_BR_115200) ? " 115200" : "",
+		(rates & USB_IRDA_BR_576000) ? " 576000" : "",
+		(rates & USB_IRDA_BR_1152000) ? " 1152000" : "",
+		(rates & USB_IRDA_BR_4000000) ? " 4000000" : "");
 
 	switch (irda_desc->bmAdditionalBOFs) {
 	case USB_IRDA_AB_48:
@@ -341,10 +339,10 @@ static void ir_write_bulk_callback(struct urb *urb)
 	usb_serial_port_softint(port);
 }
 
-static int ir_write_room(struct tty_struct *tty)
+static unsigned int ir_write_room(struct tty_struct *tty)
 {
 	struct usb_serial_port *port = tty->driver_data;
-	int count = 0;
+	unsigned int count = 0;
 
 	if (port->bulk_out_size == 0)
 		return 0;
@@ -377,23 +375,15 @@ static void ir_process_read_urb(struct urb *urb)
 	tty_flip_buffer_push(&port->port);
 }
 
-static void ir_set_termios_callback(struct urb *urb)
-{
-	kfree(urb->transfer_buffer);
-
-	if (urb->status)
-		dev_dbg(&urb->dev->dev, "%s - non-zero urb status: %d\n",
-			__func__, urb->status);
-}
-
 static void ir_set_termios(struct tty_struct *tty,
 		struct usb_serial_port *port, struct ktermios *old_termios)
 {
-	struct urb *urb;
+	struct usb_device *udev = port->serial->dev;
 	unsigned char *transfer_buffer;
-	int result;
+	int actual_length;
 	speed_t baud;
 	int ir_baud;
+	int ret;
 
 	baud = tty_get_baud_rate(tty);
 
@@ -448,42 +438,22 @@ static void ir_set_termios(struct tty_struct *tty,
 	/*
 	 * send the baud change out on an "empty" data packet
 	 */
-	urb = usb_alloc_urb(0, GFP_KERNEL);
-	if (!urb)
-		return;
-
 	transfer_buffer = kmalloc(1, GFP_KERNEL);
 	if (!transfer_buffer)
-		goto err_buf;
+		return;
 
 	*transfer_buffer = ir_xbof | ir_baud;
 
-	usb_fill_bulk_urb(
-		urb,
-		port->serial->dev,
-		usb_sndbulkpipe(port->serial->dev,
-			port->bulk_out_endpointAddress),
-		transfer_buffer,
-		1,
-		ir_set_termios_callback,
-		port);
-
-	urb->transfer_flags = URB_ZERO_PACKET;
-
-	result = usb_submit_urb(urb, GFP_KERNEL);
-	if (result) {
-		dev_err(&port->dev, "%s - failed to submit urb: %d\n",
-							__func__, result);
-		goto err_subm;
+	ret = usb_bulk_msg(udev,
+			usb_sndbulkpipe(udev, port->bulk_out_endpointAddress),
+			transfer_buffer, 1, &actual_length, 5000);
+	if (ret || actual_length != 1) {
+		if (!ret)
+			ret = -EIO;
+		dev_err(&port->dev, "failed to change line speed: %d\n", ret);
 	}
 
-	usb_free_urb(urb);
-
-	return;
-err_subm:
 	kfree(transfer_buffer);
-err_buf:
-	usb_free_urb(urb);
 }
 
 static int __init ir_init(void)

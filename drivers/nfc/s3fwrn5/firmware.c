@@ -1,26 +1,15 @@
+// SPDX-License-Identifier: GPL-2.0-or-later
 /*
  * NCI based driver for Samsung S3FWRN5 NFC chip
  *
  * Copyright (C) 2015 Samsung Electrnoics
  * Robert Baldyga <r.baldyga@samsung.com>
- *
- * This program is free software; you can redistribute it and/or modify it
- * under the terms and conditions of the GNU General Public License,
- * version 2 or later, as published by the Free Software Foundation.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
- * GNU General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with this program; if not, see <http://www.gnu.org/licenses/>.
  */
 
 #include <linux/completion.h>
 #include <linux/firmware.h>
-#include <linux/crypto.h>
-#include <crypto/sha.h>
+#include <crypto/hash.h>
+#include <crypto/sha1.h>
 
 #include "s3fwrn5.h"
 #include "firmware.h"
@@ -76,9 +65,9 @@ static int s3fwrn5_fw_prep_msg(struct s3fwrn5_fw_info *fw_info,
 	if (!skb)
 		return -ENOMEM;
 
-	memcpy(skb_put(skb, S3FWRN5_FW_HDR_SIZE), &hdr, S3FWRN5_FW_HDR_SIZE);
+	skb_put_data(skb, &hdr, S3FWRN5_FW_HDR_SIZE);
 	if (len)
-		memcpy(skb_put(skb, len), data, len);
+		skb_put_data(skb, data, len);
 
 	*msg = skb;
 
@@ -277,7 +266,7 @@ static int s3fwrn5_fw_complete_update_mode(struct s3fwrn5_fw_info *fw_info)
 }
 
 /*
- * Firmware header stucture:
+ * Firmware header structure:
  *
  * 0x00 - 0x0B : Date and time string (w/o NUL termination)
  * 0x10 - 0x13 : Firmware version
@@ -291,7 +280,7 @@ static int s3fwrn5_fw_complete_update_mode(struct s3fwrn5_fw_info *fw_info)
 
 #define S3FWRN5_FW_IMAGE_HEADER_SIZE 44
 
-static int s3fwrn5_fw_request_firmware(struct s3fwrn5_fw_info *fw_info)
+int s3fwrn5_fw_request_firmware(struct s3fwrn5_fw_info *fw_info)
 {
 	struct s3fwrn5_fw_image *fw = &fw_info->fw;
 	u32 sig_off;
@@ -338,7 +327,7 @@ static int s3fwrn5_fw_get_base_addr(
 	struct s3fwrn5_fw_cmd_get_bootinfo_rsp *bootinfo, u32 *base_addr)
 {
 	int i;
-	struct {
+	static const struct {
 		u8 version[4];
 		u32 base_addr;
 	} match[] = {
@@ -361,7 +350,7 @@ static int s3fwrn5_fw_get_base_addr(
 }
 
 static inline bool
-s3fwrn5_fw_is_custom(struct s3fwrn5_fw_cmd_get_bootinfo_rsp *bootinfo)
+s3fwrn5_fw_is_custom(const struct s3fwrn5_fw_cmd_get_bootinfo_rsp *bootinfo)
 {
 	return !!bootinfo->hw_version[2];
 }
@@ -370,15 +359,6 @@ int s3fwrn5_fw_setup(struct s3fwrn5_fw_info *fw_info)
 {
 	struct s3fwrn5_fw_cmd_get_bootinfo_rsp bootinfo;
 	int ret;
-
-	/* Get firmware data */
-
-	ret = s3fwrn5_fw_request_firmware(fw_info);
-	if (ret < 0) {
-		dev_err(&fw_info->ndev->nfc_dev->dev,
-			"Failed to get fw file, ret=%02x\n", ret);
-		return ret;
-	}
 
 	/* Get bootloader info */
 
@@ -412,7 +392,7 @@ err:
 	return ret;
 }
 
-bool s3fwrn5_fw_check_version(struct s3fwrn5_fw_info *fw_info, u32 version)
+bool s3fwrn5_fw_check_version(const struct s3fwrn5_fw_info *fw_info, u32 version)
 {
 	struct s3fwrn5_fw_version *new = (void *) &fw_info->fw.version;
 	struct s3fwrn5_fw_version *old = (void *) &version;
@@ -431,8 +411,7 @@ int s3fwrn5_fw_download(struct s3fwrn5_fw_info *fw_info)
 {
 	struct s3fwrn5_fw_image *fw = &fw_info->fw;
 	u8 hash_data[SHA1_DIGEST_SIZE];
-	struct scatterlist sg;
-	struct hash_desc desc;
+	struct crypto_shash *tfm;
 	u32 image_size, off;
 	int ret;
 
@@ -440,12 +419,21 @@ int s3fwrn5_fw_download(struct s3fwrn5_fw_info *fw_info)
 
 	/* Compute SHA of firmware data */
 
-	sg_init_one(&sg, fw->image, image_size);
-	desc.tfm = crypto_alloc_hash("sha1", 0, CRYPTO_ALG_ASYNC);
-	crypto_hash_init(&desc);
-	crypto_hash_update(&desc, &sg, image_size);
-	crypto_hash_final(&desc, hash_data);
-	crypto_free_hash(desc.tfm);
+	tfm = crypto_alloc_shash("sha1", 0, 0);
+	if (IS_ERR(tfm)) {
+		dev_err(&fw_info->ndev->nfc_dev->dev,
+			"Cannot allocate shash (code=%pe)\n", tfm);
+		return PTR_ERR(tfm);
+	}
+
+	ret = crypto_shash_tfm_digest(tfm, fw->image, image_size, hash_data);
+
+	crypto_free_shash(tfm);
+	if (ret) {
+		dev_err(&fw_info->ndev->nfc_dev->dev,
+			"Cannot compute hash (code=%d)\n", ret);
+		return ret;
+	}
 
 	/* Firmware update process */
 
@@ -457,7 +445,7 @@ int s3fwrn5_fw_download(struct s3fwrn5_fw_info *fw_info)
 	if (ret < 0) {
 		dev_err(&fw_info->ndev->nfc_dev->dev,
 			"Unable to enter update mode\n");
-		goto out;
+		return ret;
 	}
 
 	for (off = 0; off < image_size; off += fw_info->sector_size) {
@@ -466,7 +454,7 @@ int s3fwrn5_fw_download(struct s3fwrn5_fw_info *fw_info)
 		if (ret < 0) {
 			dev_err(&fw_info->ndev->nfc_dev->dev,
 				"Firmware update error (code=%d)\n", ret);
-			goto out;
+			return ret;
 		}
 	}
 
@@ -474,13 +462,12 @@ int s3fwrn5_fw_download(struct s3fwrn5_fw_info *fw_info)
 	if (ret < 0) {
 		dev_err(&fw_info->ndev->nfc_dev->dev,
 			"Unable to complete update mode\n");
-		goto out;
+		return ret;
 	}
 
 	dev_info(&fw_info->ndev->nfc_dev->dev,
 		"Firmware update: success\n");
 
-out:
 	return ret;
 }
 
@@ -503,7 +490,10 @@ int s3fwrn5_fw_recv_frame(struct nci_dev *ndev, struct sk_buff *skb)
 	struct s3fwrn5_info *info = nci_get_drvdata(ndev);
 	struct s3fwrn5_fw_info *fw_info = &info->fw_info;
 
-	BUG_ON(fw_info->rsp);
+	if (WARN_ON(fw_info->rsp)) {
+		kfree_skb(skb);
+		return -EINVAL;
+	}
 
 	fw_info->rsp = skb;
 

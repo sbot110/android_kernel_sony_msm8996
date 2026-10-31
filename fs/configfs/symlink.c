@@ -1,22 +1,6 @@
-/* -*- mode: c; c-basic-offset: 8; -*-
- * vim: noexpandtab sw=8 ts=8 sts=0:
- *
+// SPDX-License-Identifier: GPL-2.0-or-later
+/*
  * symlink.c - operations for configfs symlinks.
- *
- * This program is free software; you can redistribute it and/or
- * modify it under the terms of the GNU General Public
- * License as published by the Free Software Foundation; either
- * version 2 of the License, or (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
- * General Public License for more details.
- *
- * You should have received a copy of the GNU General Public
- * License along with this program; if not, write to the
- * Free Software Foundation, Inc., 59 Temple Place - Suite 330,
- * Boston, MA 021110-1307, USA.
  *
  * Based on sysfs:
  * 	sysfs is Copyright (C) 2001, 2002, 2003 Patrick Mochel
@@ -69,41 +53,63 @@ static void fill_item_path(struct config_item * item, char * buffer, int length)
 	}
 }
 
+static int configfs_get_target_path(struct config_item *item,
+		struct config_item *target, char *path)
+{
+	int depth, size;
+	char *s;
+
+	depth = item_depth(item);
+	size = item_path_length(target) + depth * 3 - 1;
+	if (size > PATH_MAX)
+		return -ENAMETOOLONG;
+
+	pr_debug("%s: depth = %d, size = %d\n", __func__, depth, size);
+
+	for (s = path; depth--; s += 3)
+		strcpy(s,"../");
+
+	fill_item_path(target, path, size);
+	pr_debug("%s: path = '%s'\n", __func__, path);
+	return 0;
+}
+
 static int create_link(struct config_item *parent_item,
 		       struct config_item *item,
 		       struct dentry *dentry)
 {
 	struct configfs_dirent *target_sd = item->ci_dentry->d_fsdata;
-	struct configfs_symlink *sl;
+	char *body;
 	int ret;
 
-	ret = -ENOENT;
 	if (!configfs_dirent_is_ready(target_sd))
-		goto out;
-	ret = -ENOMEM;
-	sl = kmalloc(sizeof(struct configfs_symlink), GFP_KERNEL);
-	if (sl) {
-		spin_lock(&configfs_dirent_lock);
-		if (target_sd->s_type & CONFIGFS_USET_DROPPING) {
-			spin_unlock(&configfs_dirent_lock);
-			kfree(sl);
-			return -ENOENT;
-		}
-		sl->sl_target = config_item_get(item);
-		list_add(&sl->sl_list, &target_sd->s_links);
-		spin_unlock(&configfs_dirent_lock);
-		ret = configfs_create_link(sl, parent_item->ci_dentry,
-					   dentry);
-		if (ret) {
-			spin_lock(&configfs_dirent_lock);
-			list_del_init(&sl->sl_list);
-			spin_unlock(&configfs_dirent_lock);
-			config_item_put(item);
-			kfree(sl);
-		}
-	}
+		return -ENOENT;
 
-out:
+	body = kzalloc(PAGE_SIZE, GFP_KERNEL);
+	if (!body)
+		return -ENOMEM;
+
+	configfs_get(target_sd);
+	spin_lock(&configfs_dirent_lock);
+	if (target_sd->s_type & CONFIGFS_USET_DROPPING) {
+		spin_unlock(&configfs_dirent_lock);
+		configfs_put(target_sd);
+		kfree(body);
+		return -ENOENT;
+	}
+	target_sd->s_links++;
+	spin_unlock(&configfs_dirent_lock);
+	ret = configfs_get_target_path(parent_item, item, body);
+	if (!ret)
+		ret = configfs_create_link(target_sd, parent_item->ci_dentry,
+					   dentry, body);
+	if (ret) {
+		spin_lock(&configfs_dirent_lock);
+		target_sd->s_links--;
+		spin_unlock(&configfs_dirent_lock);
+		configfs_put(target_sd);
+		kfree(body);
+	}
 	return ret;
 }
 
@@ -131,23 +137,23 @@ static int get_target(const char *symname, struct path *path,
 }
 
 
-int configfs_symlink(struct inode *dir, struct dentry *dentry, const char *symname)
+int configfs_symlink(struct user_namespace *mnt_userns, struct inode *dir,
+		     struct dentry *dentry, const char *symname)
 {
 	int ret;
 	struct path path;
 	struct configfs_dirent *sd;
 	struct config_item *parent_item;
 	struct config_item *target_item = NULL;
-	struct config_item_type *type;
+	const struct config_item_type *type;
 
 	sd = dentry->d_parent->d_fsdata;
 	/*
 	 * Fake invisibility if dir belongs to a group/default groups hierarchy
 	 * being attached
 	 */
-	ret = -ENOENT;
 	if (!configfs_dirent_is_ready(sd))
-		goto out;
+		return -ENOENT;
 
 	parent_item = configfs_get_config_item(dentry->d_parent);
 	type = parent_item->ci_type;
@@ -190,7 +196,8 @@ int configfs_symlink(struct inode *dir, struct dentry *dentry, const char *symna
 	if (dentry->d_inode || d_unhashed(dentry))
 		ret = -EEXIST;
 	else
-		ret = inode_permission(dir, MAY_WRITE | MAY_EXEC);
+		ret = inode_permission(&init_user_ns, dir,
+				       MAY_WRITE | MAY_EXEC);
 	if (!ret)
 		ret = type->ct_item_ops->allow_link(parent_item, target_item);
 	if (!ret) {
@@ -207,24 +214,21 @@ int configfs_symlink(struct inode *dir, struct dentry *dentry, const char *symna
 
 out_put:
 	config_item_put(parent_item);
-
-out:
 	return ret;
 }
 
 int configfs_unlink(struct inode *dir, struct dentry *dentry)
 {
-	struct configfs_dirent *sd = dentry->d_fsdata;
-	struct configfs_symlink *sl;
+	struct configfs_dirent *sd = dentry->d_fsdata, *target_sd;
 	struct config_item *parent_item;
-	struct config_item_type *type;
+	const struct config_item_type *type;
 	int ret;
 
 	ret = -EPERM;  /* What lack-of-symlink returns */
 	if (!(sd->s_type & CONFIGFS_ITEM_LINK))
 		goto out;
 
-	sl = sd->s_element;
+	target_sd = sd->s_element;
 
 	parent_item = configfs_get_config_item(dentry->d_parent);
 	type = parent_item->ci_type;
@@ -238,21 +242,18 @@ int configfs_unlink(struct inode *dir, struct dentry *dentry)
 
 	/*
 	 * drop_link() must be called before
-	 * list_del_init(&sl->sl_list), so that the order of
+	 * decrementing target's ->s_links, so that the order of
 	 * drop_link(this, target) and drop_item(target) is preserved.
 	 */
 	if (type && type->ct_item_ops &&
 	    type->ct_item_ops->drop_link)
 		type->ct_item_ops->drop_link(parent_item,
-					       sl->sl_target);
+					       target_sd->s_element);
 
 	spin_lock(&configfs_dirent_lock);
-	list_del_init(&sl->sl_list);
+	target_sd->s_links--;
 	spin_unlock(&configfs_dirent_lock);
-
-	/* Put reference from create_link() */
-	config_item_put(sl->sl_target);
-	kfree(sl);
+	configfs_put(target_sd);
 
 	config_item_put(parent_item);
 
@@ -262,74 +263,8 @@ out:
 	return ret;
 }
 
-static int configfs_get_target_path(struct config_item * item, struct config_item * target,
-				   char *path)
-{
-	char * s;
-	int depth, size;
-
-	depth = item_depth(item);
-	size = item_path_length(target) + depth * 3 - 1;
-	if (size > PATH_MAX)
-		return -ENAMETOOLONG;
-
-	pr_debug("%s: depth = %d, size = %d\n", __func__, depth, size);
-
-	for (s = path; depth--; s += 3)
-		strcpy(s,"../");
-
-	fill_item_path(target, path, size);
-	pr_debug("%s: path = '%s'\n", __func__, path);
-
-	return 0;
-}
-
-static int configfs_getlink(struct dentry *dentry, char * path)
-{
-	struct config_item *item, *target_item;
-	int error = 0;
-
-	item = configfs_get_config_item(dentry->d_parent);
-	if (!item)
-		return -EINVAL;
-
-	target_item = configfs_get_config_item(dentry);
-	if (!target_item) {
-		config_item_put(item);
-		return -EINVAL;
-	}
-
-	down_read(&configfs_rename_sem);
-	error = configfs_get_target_path(item, target_item, path);
-	up_read(&configfs_rename_sem);
-
-	config_item_put(item);
-	config_item_put(target_item);
-	return error;
-
-}
-
-static const char *configfs_follow_link(struct dentry *dentry, void **cookie)
-{
-	unsigned long page = get_zeroed_page(GFP_KERNEL);
-	int error;
-
-	if (!page)
-		return ERR_PTR(-ENOMEM);
-
-	error = configfs_getlink(dentry, (char *)page);
-	if (!error) {
-		return *cookie = (void *)page;
-	}
-
-	free_page(page);
-	return ERR_PTR(error);
-}
-
 const struct inode_operations configfs_symlink_inode_operations = {
-	.follow_link = configfs_follow_link,
-	.readlink = generic_readlink,
-	.put_link = free_page_put_link,
+	.get_link = simple_get_link,
 	.setattr = configfs_setattr,
 };
 

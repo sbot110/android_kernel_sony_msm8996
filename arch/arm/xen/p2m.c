@@ -1,7 +1,8 @@
-#include <linux/bootmem.h>
+// SPDX-License-Identifier: GPL-2.0-only
+#include <linux/memblock.h>
 #include <linux/gfp.h>
 #include <linux/export.h>
-#include <linux/rwlock.h>
+#include <linux/spinlock.h>
 #include <linux/slab.h>
 #include <linux/types.h>
 #include <linux/dma-mapping.h>
@@ -10,6 +11,7 @@
 
 #include <xen/xen.h>
 #include <xen/interface/memory.h>
+#include <xen/grant_table.h>
 #include <xen/page.h>
 #include <xen/swiotlb-xen.h>
 
@@ -61,17 +63,19 @@ out:
 
 unsigned long __pfn_to_mfn(unsigned long pfn)
 {
-	struct rb_node *n = phys_to_mach.rb_node;
+	struct rb_node *n;
 	struct xen_p2m_entry *entry;
 	unsigned long irqflags;
 
 	read_lock_irqsave(&p2m_lock, irqflags);
+	n = phys_to_mach.rb_node;
 	while (n) {
 		entry = rb_entry(n, struct xen_p2m_entry, rbnode_phys);
 		if (entry->pfn <= pfn &&
 				entry->pfn + entry->nr_pages > pfn) {
+			unsigned long mfn = entry->mfn + (pfn - entry->pfn);
 			read_unlock_irqrestore(&p2m_lock, irqflags);
-			return entry->mfn + (pfn - entry->pfn);
+			return mfn;
 		}
 		if (pfn < entry->pfn)
 			n = n->rb_left;
@@ -107,7 +111,7 @@ int set_foreign_p2m_mapping(struct gnttab_map_grant_ref *map_ops,
 		map_ops[i].status = GNTST_general_error;
 		unmap.host_addr = map_ops[i].host_addr,
 		unmap.handle = map_ops[i].handle;
-		map_ops[i].handle = ~0;
+		map_ops[i].handle = INVALID_GRANT_HANDLE;
 		if (map_ops[i].flags & GNTMAP_device_map)
 			unmap.dev_bus_addr = map_ops[i].dev_bus_addr;
 		else
@@ -128,7 +132,6 @@ int set_foreign_p2m_mapping(struct gnttab_map_grant_ref *map_ops,
 
 	return 0;
 }
-EXPORT_SYMBOL_GPL(set_foreign_p2m_mapping);
 
 int clear_foreign_p2m_mapping(struct gnttab_unmap_grant_ref *unmap_ops,
 			      struct gnttab_unmap_grant_ref *kunmap_ops,
@@ -143,7 +146,6 @@ int clear_foreign_p2m_mapping(struct gnttab_unmap_grant_ref *unmap_ops,
 
 	return 0;
 }
-EXPORT_SYMBOL_GPL(clear_foreign_p2m_mapping);
 
 bool __set_phys_to_machine_multi(unsigned long pfn,
 		unsigned long mfn, unsigned long nr_pages)
@@ -151,10 +153,11 @@ bool __set_phys_to_machine_multi(unsigned long pfn,
 	int rc;
 	unsigned long irqflags;
 	struct xen_p2m_entry *p2m_entry;
-	struct rb_node *n = phys_to_mach.rb_node;
+	struct rb_node *n;
 
 	if (mfn == INVALID_P2M_ENTRY) {
 		write_lock_irqsave(&p2m_lock, irqflags);
+		n = phys_to_mach.rb_node;
 		while (n) {
 			p2m_entry = rb_entry(n, struct xen_p2m_entry, rbnode_phys);
 			if (p2m_entry->pfn <= pfn &&
@@ -173,18 +176,19 @@ bool __set_phys_to_machine_multi(unsigned long pfn,
 		return true;
 	}
 
-	p2m_entry = kzalloc(sizeof(struct xen_p2m_entry), GFP_NOWAIT);
-	if (!p2m_entry) {
-		pr_warn("cannot allocate xen_p2m_entry\n");
+	p2m_entry = kzalloc(sizeof(*p2m_entry), GFP_NOWAIT);
+	if (!p2m_entry)
 		return false;
-	}
+
 	p2m_entry->pfn = pfn;
 	p2m_entry->nr_pages = nr_pages;
 	p2m_entry->mfn = mfn;
 
 	write_lock_irqsave(&p2m_lock, irqflags);
-	if ((rc = xen_add_phys_to_mach_entry(p2m_entry)) < 0) {
+	rc = xen_add_phys_to_mach_entry(p2m_entry);
+	if (rc < 0) {
 		write_unlock_irqrestore(&p2m_lock, irqflags);
+		kfree(p2m_entry);
 		return false;
 	}
 	write_unlock_irqrestore(&p2m_lock, irqflags);

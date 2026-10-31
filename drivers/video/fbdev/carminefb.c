@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-2.0-only
 /*
  * Frame buffer driver for the Carmine GPU.
  *
@@ -526,7 +527,7 @@ static int init_hardware(struct carmine_hw *hw)
 	return 0;
 }
 
-static struct fb_ops carminefb_ops = {
+static const struct fb_ops carminefb_ops = {
 	.owner		= THIS_MODULE,
 	.fb_fillrect	= cfb_fillrect,
 	.fb_copyarea	= cfb_copyarea,
@@ -591,6 +592,7 @@ static int alloc_carmine_fb(void __iomem *regs, void __iomem *smem_base,
 	return 0;
 
 err_dealloc_cmap:
+	fb_destroy_modelist(&info->modelist);
 	fb_dealloc_cmap(&info->cmap);
 err_free_fb:
 	framebuffer_release(info);
@@ -632,7 +634,7 @@ static int carminefb_probe(struct pci_dev *dev, const struct pci_device_id *ent)
 		ret = -EBUSY;
 		goto err_free_hw;
 	}
-	hw->v_regs = ioremap_nocache(carminefb_fix.mmio_start,
+	hw->v_regs = ioremap(carminefb_fix.mmio_start,
 			carminefb_fix.mmio_len);
 	if (!hw->v_regs) {
 		printk(KERN_ERR "carminefb: Can't remap %s register.\n",
@@ -663,7 +665,7 @@ static int carminefb_probe(struct pci_dev *dev, const struct pci_device_id *ent)
 		goto err_unmap_vregs;
 	}
 
-	hw->screen_mem = ioremap_nocache(carminefb_fix.smem_start,
+	hw->screen_mem = ioremap(carminefb_fix.smem_start,
 			carminefb_fix.smem_len);
 	if (!hw->screen_mem) {
 		printk(KERN_ERR "carmine: Can't ioremap smem area.\n");

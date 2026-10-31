@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-2.0
 /*
  *	6522 Versatile Interface Adapter (VIA)
  *
@@ -22,6 +23,7 @@
  *
  */
 
+#include <linux/clocksource.h>
 #include <linux/types.h>
 #include <linux/kernel.h>
 #include <linux/mm.h>
@@ -58,7 +60,7 @@ static int gIER,gIFR,gBufA,gBufB;
  * interrupt. This limitation also seems to apply to VIA clone logic cores in
  * Quadra-like ASICs. (RBV and OSS machines don't have this limitation.)
  *
- * We used to fake it by configuring the relevent VIA pin as an output
+ * We used to fake it by configuring the relevant VIA pin as an output
  * (to mask the interrupt) or input (to unmask). That scheme did not work on
  * (at least) the Quadra 700. A NuBus card's /NMRQ signal is an open-collector
  * circuit (see Designing Cards and Drivers for Macintosh II and Macintosh SE,
@@ -96,6 +98,7 @@ static int gIER,gIFR,gBufA,gBufB;
 static u8 nubus_disabled;
 
 void via_debug_dump(void);
+static void via_nubus_init(void);
 
 /*
  * Initialize the VIAs
@@ -103,29 +106,25 @@ void via_debug_dump(void);
  * First we figure out where they actually _are_ as well as what type of
  * VIA we have for VIA2 (it could be a real VIA or an RBV or even an OSS.)
  * Then we pretty much clear them out and disable all IRQ sources.
- *
- * Note: the OSS is actually "detected" here and not in oss_init(). It just
- *	 seems more logical to do it here since via_init() needs to know
- *	 these things anyways.
  */
 
 void __init via_init(void)
 {
-	switch(macintosh_config->via_type) {
+	via1 = (void *)VIA1_BASE;
+	pr_debug("VIA1 detected at %p\n", via1);
+
+	if (oss_present) {
+		via2 = NULL;
+		rbv_present = 0;
+	} else {
+		switch (macintosh_config->via_type) {
 
 		/* IIci, IIsi, IIvx, IIvi (P6xx), LC series */
 
 		case MAC_VIA_IICI:
-			via1 = (void *) VIA1_BASE;
-			if (macintosh_config->ident == MAC_MODEL_IIFX) {
-				via2 = NULL;
-				rbv_present = 0;
-				oss_present = 1;
-			} else {
-				via2 = (void *) RBV_BASE;
-				rbv_present = 1;
-				oss_present = 0;
-			}
+			via2 = (void *)RBV_BASE;
+			pr_debug("VIA2 (RBV) detected at %p\n", via2);
+			rbv_present = 1;
 			if (macintosh_config->ident == MAC_MODEL_LCIII) {
 				rbv_clear = 0x00;
 			} else {
@@ -144,29 +143,19 @@ void __init via_init(void)
 
 		case MAC_VIA_QUADRA:
 		case MAC_VIA_II:
-			via1 = (void *) VIA1_BASE;
 			via2 = (void *) VIA2_BASE;
+			pr_debug("VIA2 detected at %p\n", via2);
 			rbv_present = 0;
-			oss_present = 0;
 			rbv_clear = 0x00;
 			gIER = vIER;
 			gIFR = vIFR;
 			gBufA = vBufA;
 			gBufB = vBufB;
 			break;
+
 		default:
 			panic("UNKNOWN VIA TYPE");
-	}
-
-	printk(KERN_INFO "VIA1 at %p is a 6522 or clone\n", via1);
-
-	printk(KERN_INFO "VIA2 at %p is ", via2);
-	if (rbv_present) {
-		printk("an RBV\n");
-	} else if (oss_present) {
-		printk("an OSS\n");
-	} else {
-		printk("a 6522 or clone\n");
+		}
 	}
 
 #ifdef DEBUG_VIA
@@ -180,8 +169,6 @@ void __init via_init(void)
 
 	via1[vIER] = 0x7F;
 	via1[vIFR] = 0x7F;
-	via1[vT1LL] = 0;
-	via1[vT1LH] = 0;
 	via1[vT1CL] = 0;
 	via1[vT1CH] = 0;
 	via1[vT2CL] = 0;
@@ -191,7 +178,6 @@ void __init via_init(void)
 
 	/*
 	 * SE/30: disable video IRQ
-	 * XXX: testing for SE/30 VBL
 	 */
 
 	if (macintosh_config->ident == MAC_MODEL_SE30) {
@@ -199,13 +185,18 @@ void __init via_init(void)
 		via1[vBufB] |= 0x40;
 	}
 
-	/*
-	 * Set the RTC bits to a known state: all lines to outputs and
-	 * RTC disabled (yes that's 0 to enable and 1 to disable).
-	 */
-
-	via1[vDirB] |= (VIA1B_vRTCEnb | VIA1B_vRTCClk | VIA1B_vRTCData);
-	via1[vBufB] |= (VIA1B_vRTCEnb | VIA1B_vRTCClk);
+	switch (macintosh_config->adb_type) {
+	case MAC_ADB_IOP:
+	case MAC_ADB_II:
+	case MAC_ADB_PB1:
+		/*
+		 * Set the RTC bits to a known state: all lines to outputs and
+		 * RTC disabled (yes that's 0 to enable and 1 to disable).
+		 */
+		via1[vDirB] |= VIA1B_vRTCEnb | VIA1B_vRTCClk | VIA1B_vRTCData;
+		via1[vBufB] |= VIA1B_vRTCEnb | VIA1B_vRTCClk;
+		break;
+	}
 
 	/* Everything below this point is VIA2/RBV only... */
 
@@ -232,8 +223,6 @@ void __init via_init(void)
 	via2[gIER] = 0x7F;
 	via2[gIFR] = 0x7F | rbv_clear;
 	if (!rbv_present) {
-		via2[vT1LL] = 0;
-		via2[vT1LH] = 0;
 		via2[vT1CL] = 0;
 		via2[vT1CH] = 0;
 		via2[vT2CL] = 0;
@@ -241,6 +230,8 @@ void __init via_init(void)
 		via2[vACR] &= ~0xC0; /* setup T1 timer with no PB7 output */
 		via2[vACR] &= ~0x03; /* disable port A & B latches */
 	}
+
+	via_nubus_init();
 
 	/* Everything below this point is VIA2 only... */
 
@@ -277,9 +268,9 @@ void via_debug_dump(void)
 		(uint) via1[vDirA], (uint) via1[vDirB], (uint) via1[vACR]);
 	printk(KERN_DEBUG "         PCR = 0x%02X  IFR = 0x%02X IER = 0x%02X\n",
 		(uint) via1[vPCR], (uint) via1[vIFR], (uint) via1[vIER]);
-	if (oss_present) {
-		printk(KERN_DEBUG "VIA2: <OSS>\n");
-	} else if (rbv_present) {
+	if (!via2)
+		return;
+	if (rbv_present) {
 		printk(KERN_DEBUG "VIA2:  IFR = 0x%02X  IER = 0x%02X\n",
 			(uint) via2[rIFR], (uint) via2[rIER]);
 		printk(KERN_DEBUG "      SIFR = 0x%02X SIER = 0x%02X\n",
@@ -310,25 +301,10 @@ void via_l2_flush(int writeback)
 }
 
 /*
- * Return the status of the L2 cache on a IIci
- */
-
-int via_get_cache_disable(void)
-{
-	/* Safeguard against being called accidentally */
-	if (!via2) {
-		printk(KERN_ERR "via_get_cache_disable called on a non-VIA machine!\n");
-		return 1;
-	}
-
-	return (int) via2[gBufB] & VIA2B_vCDis;
-}
-
-/*
  * Initialize VIA2 for Nubus access
  */
 
-void __init via_nubus_init(void)
+static void __init via_nubus_init(void)
 {
 	/* unlock nubus transactions */
 
@@ -375,7 +351,7 @@ void via_nubus_irq_startup(int irq)
 			/* Allow NuBus slots 9 through F. */
 			via2[vDirA] &= 0x80 | ~(1 << irq_idx);
 		}
-		/* fall through */
+		fallthrough;
 	case MAC_VIA_IICI:
 		via_irq_enable(irq);
 		break;
@@ -522,10 +498,6 @@ void via_irq_enable(int irq) {
 	int irq_src	= IRQ_SRC(irq);
 	int irq_idx	= IRQ_IDX(irq);
 
-#ifdef DEBUG_IRQUSE
-	printk(KERN_DEBUG "via_irq_enable(%d)\n", irq);
-#endif
-
 	if (irq_src == 1) {
 		via1[vIER] = IER_SET_BIT(irq_idx);
 	} else if (irq_src == 2) {
@@ -553,10 +525,6 @@ void via_irq_enable(int irq) {
 void via_irq_disable(int irq) {
 	int irq_src	= IRQ_SRC(irq);
 	int irq_idx	= IRQ_IDX(irq);
-
-#ifdef DEBUG_IRQUSE
-	printk(KERN_DEBUG "via_irq_disable(%d)\n", irq);
-#endif
 
 	if (irq_src == 1) {
 		via1[vIER] = IER_CLR_BIT(irq_idx);
@@ -595,32 +563,54 @@ EXPORT_SYMBOL(via2_scsi_drq_pending);
 /* timer and clock source */
 
 #define VIA_CLOCK_FREQ     783360                /* VIA "phase 2" clock in Hz */
-#define VIA_TIMER_INTERVAL (1000000 / HZ)        /* microseconds per jiffy */
 #define VIA_TIMER_CYCLES   (VIA_CLOCK_FREQ / HZ) /* clock cycles per jiffy */
 
 #define VIA_TC             (VIA_TIMER_CYCLES - 2) /* including 0 and -1 */
 #define VIA_TC_LOW         (VIA_TC & 0xFF)
 #define VIA_TC_HIGH        (VIA_TC >> 8)
 
-void __init via_init_clock(irq_handler_t timer_routine)
+static u64 mac_read_clk(struct clocksource *cs);
+
+static struct clocksource mac_clk = {
+	.name   = "via1",
+	.rating = 250,
+	.read   = mac_read_clk,
+	.mask   = CLOCKSOURCE_MASK(32),
+	.flags  = CLOCK_SOURCE_IS_CONTINUOUS,
+};
+
+static u32 clk_total, clk_offset;
+
+static irqreturn_t via_timer_handler(int irq, void *dev_id)
 {
-	if (request_irq(IRQ_MAC_TIMER_1, timer_routine, 0, "timer", NULL)) {
+	clk_total += VIA_TIMER_CYCLES;
+	clk_offset = 0;
+	legacy_timer_tick(1);
+
+	return IRQ_HANDLED;
+}
+
+void __init via_init_clock(void)
+{
+	if (request_irq(IRQ_MAC_TIMER_1, via_timer_handler, IRQF_TIMER, "timer",
+			NULL)) {
 		pr_err("Couldn't register %s interrupt\n", "timer");
 		return;
 	}
 
-	via1[vT1LL] = VIA_TC_LOW;
-	via1[vT1LH] = VIA_TC_HIGH;
 	via1[vT1CL] = VIA_TC_LOW;
 	via1[vT1CH] = VIA_TC_HIGH;
 	via1[vACR] |= 0x40;
+
+	clocksource_register_hz(&mac_clk, VIA_CLOCK_FREQ);
 }
 
-u32 mac_gettimeoffset(void)
+static u64 mac_read_clk(struct clocksource *cs)
 {
 	unsigned long flags;
 	u8 count_high;
-	u16 count, offset = 0;
+	u16 count;
+	u32 ticks;
 
 	/*
 	 * Timer counter wrap-around is detected with the timer interrupt flag
@@ -636,11 +626,11 @@ u32 mac_gettimeoffset(void)
 	if (count_high == 0xFF)
 		count_high = 0;
 	if (count_high > 0 && (via1[vIFR] & VIA_TIMER_1_INT))
-		offset = VIA_TIMER_CYCLES;
+		clk_offset = VIA_TIMER_CYCLES;
+	count = count_high << 8;
+	ticks = VIA_TIMER_CYCLES - count;
+	ticks += clk_offset + clk_total;
 	local_irq_restore(flags);
 
-	count = count_high << 8;
-	count = VIA_TIMER_CYCLES - count + offset;
-
-	return ((count * VIA_TIMER_INTERVAL) / VIA_TIMER_CYCLES) * 1000;
+	return ticks;
 }

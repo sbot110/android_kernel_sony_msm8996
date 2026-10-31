@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-2.0
 #include <linux/ucs2_string.h>
 #include <linux/module.h>
 
@@ -7,7 +8,7 @@ ucs2_strnlen(const ucs2_char_t *s, size_t maxlength)
 {
         unsigned long length = 0;
 
-        while (*s++ != 0 && length < maxlength)
+	while (length < maxlength && *s++ != 0)
                 length++;
         return length;
 }
@@ -56,7 +57,7 @@ ucs2_utf8size(const ucs2_char_t *src)
 	unsigned long i;
 	unsigned long j = 0;
 
-	for (i = 0; i < ucs2_strlen(src); i++) {
+	for (i = 0; src[i]; i++) {
 		u16 c = src[i];
 
 		if (c >= 0x800)
@@ -111,3 +112,5 @@ ucs2_as_utf8(u8 *dest, const ucs2_char_t *src, unsigned long maxlength)
 	return j;
 }
 EXPORT_SYMBOL(ucs2_as_utf8);
+
+MODULE_LICENSE("GPL v2");

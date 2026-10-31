@@ -1,12 +1,9 @@
+// SPDX-License-Identifier: GPL-2.0-only
 /*
  *  linux/drivers/mmc/core/bus.c
  *
  *  Copyright (C) 2003 Russell King, All Rights Reserved.
  *  Copyright (C) 2007 Pierre Ossman
- *
- * This program is free software; you can redistribute it and/or modify
- * it under the terms of the GNU General Public License version 2 as
- * published by the Free Software Foundation.
  *
  *  MMC card bus driver model
  */
@@ -18,11 +15,14 @@
 #include <linux/stat.h>
 #include <linux/of.h>
 #include <linux/pm_runtime.h>
+#include <linux/sysfs.h>
 
 #include <linux/mmc/card.h>
 #include <linux/mmc/host.h>
 
 #include "core.h"
+#include "card.h"
+#include "host.h"
 #include "sdio_cis.h"
 #include "bus.h"
 
@@ -35,13 +35,13 @@ static ssize_t type_show(struct device *dev,
 
 	switch (card->type) {
 	case MMC_TYPE_MMC:
-		return sprintf(buf, "MMC\n");
+		return sysfs_emit(buf, "MMC\n");
 	case MMC_TYPE_SD:
-		return sprintf(buf, "SD\n");
+		return sysfs_emit(buf, "SD\n");
 	case MMC_TYPE_SDIO:
-		return sprintf(buf, "SDIO\n");
+		return sysfs_emit(buf, "SDIO\n");
 	case MMC_TYPE_SD_COMBO:
-		return sprintf(buf, "SDcombo\n");
+		return sysfs_emit(buf, "SDcombo\n");
 	default:
 		return -EFAULT;
 	}
@@ -69,6 +69,7 @@ mmc_bus_uevent(struct device *dev, struct kobj_uevent_env *env)
 {
 	struct mmc_card *card = mmc_dev_to_card(dev);
 	const char *type;
+	unsigned int i;
 	int retval = 0;
 
 	switch (card->type) {
@@ -94,6 +95,31 @@ mmc_bus_uevent(struct device *dev, struct kobj_uevent_env *env)
 			return retval;
 	}
 
+	if (card->type == MMC_TYPE_SDIO || card->type == MMC_TYPE_SD_COMBO) {
+		retval = add_uevent_var(env, "SDIO_ID=%04X:%04X",
+					card->cis.vendor, card->cis.device);
+		if (retval)
+			return retval;
+
+		retval = add_uevent_var(env, "SDIO_REVISION=%u.%u",
+					card->major_rev, card->minor_rev);
+		if (retval)
+			return retval;
+
+		for (i = 0; i < card->num_info; i++) {
+			retval = add_uevent_var(env, "SDIO_INFO%u=%s", i+1, card->info[i]);
+			if (retval)
+				return retval;
+		}
+	}
+
+	/*
+	 * SDIO (non-combo) cards are not handled by mmc_block driver and do not
+	 * have accessible CID register which used by mmc_card_name() function.
+	 */
+	if (card->type == MMC_TYPE_SDIO)
+		return 0;
+
 	retval = add_uevent_var(env, "MMC_NAME=%s", mmc_card_name(card));
 	if (retval)
 		return retval;
@@ -115,14 +141,12 @@ static int mmc_bus_probe(struct device *dev)
 	return drv->probe(card);
 }
 
-static int mmc_bus_remove(struct device *dev)
+static void mmc_bus_remove(struct device *dev)
 {
 	struct mmc_driver *drv = to_mmc_driver(dev->driver);
 	struct mmc_card *card = mmc_dev_to_card(dev);
 
 	drv->remove(card);
-
-	return 0;
 }
 
 static void mmc_bus_shutdown(struct device *dev)
@@ -132,18 +156,10 @@ static void mmc_bus_shutdown(struct device *dev)
 	struct mmc_host *host = card->host;
 	int ret;
 
-	if (!drv) {
-		pr_debug("%s: %s: drv is NULL\n", dev_name(dev), __func__);
-		return;
-	}
-
-	if (!card) {
-		pr_debug("%s: %s: card is NULL\n", dev_name(dev), __func__);
-		return;
-	}
-
 	if (dev->driver && drv->shutdown)
 		drv->shutdown(card);
+
+	__mmc_stop_host(host);
 
 	if (host->bus_ops->shutdown) {
 		ret = host->bus_ops->shutdown(host);
@@ -164,22 +180,10 @@ static int mmc_bus_suspend(struct device *dev)
 	if (ret)
 		return ret;
 
-	if (mmc_bus_needs_resume(host))
-		return 0;
 	ret = host->bus_ops->suspend(host);
-
-	/*
-	 * bus_ops->suspend may fail due to some reason
-	 * In such cases if we return error to PM framework
-	 * from here without calling pm_generic_resume then mmc
-	 * request may get stuck since PM framework will assume
-	 * that mmc bus is not suspended (because of error) and
-	 * it won't call resume again.
-	 *
-	 * So in case of error call pm_generic_resume().
-	 */
 	if (ret)
 		pm_generic_resume(dev);
+
 	return ret;
 }
 
@@ -189,17 +193,11 @@ static int mmc_bus_resume(struct device *dev)
 	struct mmc_host *host = card->host;
 	int ret;
 
-	if (mmc_bus_manual_resume(host)) {
-		host->bus_resume_flags |= MMC_BUSRESUME_NEEDS_RESUME;
-		goto skip_full_resume;
-	}
-
 	ret = host->bus_ops->resume(host);
 	if (ret)
 		pr_warn("%s: error %d during resume (card was removed?)\n",
 			mmc_hostname(host), ret);
 
-skip_full_resume:
 	ret = pm_generic_resume(dev);
 	return ret;
 }
@@ -211,9 +209,6 @@ static int mmc_runtime_suspend(struct device *dev)
 	struct mmc_card *card = mmc_dev_to_card(dev);
 	struct mmc_host *host = card->host;
 
-	if (mmc_bus_needs_resume(host))
-		return 0;
-
 	return host->bus_ops->runtime_suspend(host);
 }
 
@@ -222,12 +217,8 @@ static int mmc_runtime_resume(struct device *dev)
 	struct mmc_card *card = mmc_dev_to_card(dev);
 	struct mmc_host *host = card->host;
 
-	if (mmc_bus_needs_resume(host))
-		host->bus_resume_flags &= ~MMC_BUSRESUME_NEEDS_RESUME;
-
 	return host->bus_ops->runtime_resume(host);
 }
-
 #endif /* !CONFIG_PM */
 
 static const struct dev_pm_ops mmc_bus_pm_ops = {
@@ -311,9 +302,6 @@ struct mmc_card *mmc_alloc_card(struct mmc_host *host, struct device_type *type)
 	card->dev.release = mmc_release_card;
 	card->dev.type = type;
 
-	spin_lock_init(&card->wr_pack_stats.lock);
-	spin_lock_init(&card->bkops.stats.lock);
-
 	return card;
 }
 
@@ -387,22 +375,15 @@ int mmc_add_card(struct mmc_card *card)
 #ifdef CONFIG_DEBUG_FS
 	mmc_add_card_debugfs(card);
 #endif
-	mmc_init_context_info(card->host);
-
 	card->dev.of_node = mmc_of_find_child_device(card->host, 0);
 
-	if (mmc_card_sdio(card)) {
-		ret = device_init_wakeup(&card->dev, true);
-		if (ret)
-			pr_err("%s: %s: failed to init wakeup: %d\n",
-			       mmc_hostname(card->host), __func__, ret);
-	}
+	device_enable_async_suspend(&card->dev);
+
 	ret = device_add(&card->dev);
 	if (ret)
 		return ret;
 
 	mmc_card_set_present(card);
-	device_enable_async_suspend(&card->dev);
 
 	return 0;
 }
@@ -413,6 +394,8 @@ int mmc_add_card(struct mmc_card *card)
  */
 void mmc_remove_card(struct mmc_card *card)
 {
+	struct mmc_host *host = card->host;
+
 #ifdef CONFIG_DEBUG_FS
 	mmc_remove_card_debugfs(card);
 #endif
@@ -429,8 +412,10 @@ void mmc_remove_card(struct mmc_card *card)
 		of_node_put(card->dev.of_node);
 	}
 
-	kfree(card->wr_pack_stats.packing_events);
+	if (host->cqe_enabled) {
+		host->cqe_ops->cqe_disable(host);
+		host->cqe_enabled = false;
+	}
 
 	put_device(&card->dev);
 }
-

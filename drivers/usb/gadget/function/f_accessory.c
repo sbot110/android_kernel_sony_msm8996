@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-2.0
 /*
  * Gadget Function Driver for Android USB accessories
  *
@@ -28,6 +29,7 @@
 #include <linux/kthread.h>
 #include <linux/freezer.h>
 #include <linux/kref.h>
+#include <linux/kernel.h>
 
 #include <linux/types.h>
 #include <linux/file.h>
@@ -45,7 +47,6 @@
 
 #define MAX_INST_NAME_LEN        40
 #define BULK_BUFFER_SIZE    16384
-#define BULK_BUFFER_INIT_SIZE 131072
 #define ACC_STRING_SIZE     256
 
 #define PROTOCOL_VERSION    2
@@ -56,9 +57,6 @@
 /* number of tx and rx requests to allocate */
 #define TX_REQ_MAX 4
 #define RX_REQ_MAX 2
-
-unsigned int acc_rx_req_len = BULK_BUFFER_INIT_SIZE;
-unsigned int acc_tx_req_len = BULK_BUFFER_INIT_SIZE;
 
 struct acc_hid_dev {
 	struct list_head	list;
@@ -123,6 +121,12 @@ struct acc_dev {
 	/* delayed work for handling ACCESSORY_START */
 	struct delayed_work start_work;
 
+	/* work for handling ACCESSORY GET PROTOCOL */
+	struct work_struct getprotocol_work;
+
+	/* work for handling ACCESSORY SEND STRING */
+	struct work_struct sendstring_work;
+
 	/* worker for registering and unregistering hid devices */
 	struct work_struct hid_work;
 
@@ -146,7 +150,7 @@ static struct usb_interface_descriptor acc_interface_desc = {
 	.bInterfaceProtocol     = 0,
 };
 
-static struct usb_endpoint_descriptor acc_superspeed_in_desc = {
+static struct usb_endpoint_descriptor acc_superspeedplus_in_desc = {
 	.bLength                = USB_DT_ENDPOINT_SIZE,
 	.bDescriptorType        = USB_DT_ENDPOINT,
 	.bEndpointAddress       = USB_DIR_IN,
@@ -154,13 +158,29 @@ static struct usb_endpoint_descriptor acc_superspeed_in_desc = {
 	.wMaxPacketSize         = cpu_to_le16(1024),
 };
 
-static struct usb_ss_ep_comp_descriptor acc_superspeed_in_comp_desc = {
-	.bLength =		sizeof(acc_superspeed_in_comp_desc),
-	.bDescriptorType =	USB_DT_SS_ENDPOINT_COMP,
+static struct usb_endpoint_descriptor acc_superspeedplus_out_desc = {
+	.bLength                = USB_DT_ENDPOINT_SIZE,
+	.bDescriptorType        = USB_DT_ENDPOINT,
+	.bEndpointAddress       = USB_DIR_OUT,
+	.bmAttributes           = USB_ENDPOINT_XFER_BULK,
+	.wMaxPacketSize         = cpu_to_le16(1024),
+};
+
+static struct usb_ss_ep_comp_descriptor acc_superspeedplus_comp_desc = {
+	.bLength                = sizeof(acc_superspeedplus_comp_desc),
+	.bDescriptorType        = USB_DT_SS_ENDPOINT_COMP,
 
 	/* the following 2 values can be tweaked if necessary */
-	.bMaxBurst =		8,
-	/* .bmAttributes =	0, */
+	.bMaxBurst              = 6,
+	/* .bmAttributes =      0, */
+};
+
+static struct usb_endpoint_descriptor acc_superspeed_in_desc = {
+	.bLength                = USB_DT_ENDPOINT_SIZE,
+	.bDescriptorType        = USB_DT_ENDPOINT,
+	.bEndpointAddress       = USB_DIR_IN,
+	.bmAttributes           = USB_ENDPOINT_XFER_BULK,
+	.wMaxPacketSize         = cpu_to_le16(1024),
 };
 
 static struct usb_endpoint_descriptor acc_superspeed_out_desc = {
@@ -171,15 +191,14 @@ static struct usb_endpoint_descriptor acc_superspeed_out_desc = {
 	.wMaxPacketSize         = cpu_to_le16(1024),
 };
 
-static struct usb_ss_ep_comp_descriptor acc_superspeed_out_comp_desc = {
-	.bLength =		sizeof(acc_superspeed_out_comp_desc),
-	.bDescriptorType =	USB_DT_SS_ENDPOINT_COMP,
+static struct usb_ss_ep_comp_descriptor acc_superspeed_comp_desc = {
+	.bLength                = sizeof(acc_superspeed_comp_desc),
+	.bDescriptorType        = USB_DT_SS_ENDPOINT_COMP,
 
 	/* the following 2 values can be tweaked if necessary */
-	.bMaxBurst =		8,
-	/* .bmAttributes =	0, */
+	.bMaxBurst              = 6,
+	/* .bmAttributes =      0, */
 };
-
 
 static struct usb_endpoint_descriptor acc_highspeed_in_desc = {
 	.bLength                = USB_DT_ENDPOINT_SIZE,
@@ -228,9 +247,18 @@ static struct usb_descriptor_header *hs_acc_descs[] = {
 static struct usb_descriptor_header *ss_acc_descs[] = {
 	(struct usb_descriptor_header *) &acc_interface_desc,
 	(struct usb_descriptor_header *) &acc_superspeed_in_desc,
-	(struct usb_descriptor_header *) &acc_superspeed_in_comp_desc,
+	(struct usb_descriptor_header *) &acc_superspeed_comp_desc,
 	(struct usb_descriptor_header *) &acc_superspeed_out_desc,
-	(struct usb_descriptor_header *) &acc_superspeed_out_comp_desc,
+	(struct usb_descriptor_header *) &acc_superspeed_comp_desc,
+	NULL,
+};
+
+static struct usb_descriptor_header *ssp_acc_descs[] = {
+	(struct usb_descriptor_header *) &acc_interface_desc,
+	(struct usb_descriptor_header *) &acc_superspeedplus_in_desc,
+	(struct usb_descriptor_header *) &acc_superspeedplus_comp_desc,
+	(struct usb_descriptor_header *) &acc_superspeedplus_out_desc,
+	(struct usb_descriptor_header *) &acc_superspeedplus_comp_desc,
 	NULL,
 };
 
@@ -277,6 +305,8 @@ static void __put_acc_dev(struct kref *kref)
 
 	/* Cancel any async work */
 	cancel_delayed_work_sync(&dev->start_work);
+	cancel_work_sync(&dev->getprotocol_work);
+	cancel_work_sync(&dev->sendstring_work);
 	cancel_work_sync(&dev->hid_work);
 
 	ref->acc_dev = NULL;
@@ -394,7 +424,6 @@ static void acc_complete_set_string(struct usb_ep *ep, struct usb_request *req)
 	struct acc_dev	*dev = ep->driver_data;
 	char *string_dest = NULL;
 	int length = req->actual;
-	unsigned long flags;
 
 	if (req->status != 0) {
 		pr_err("acc_complete_set_string, err %d\n", req->status);
@@ -420,26 +449,22 @@ static void acc_complete_set_string(struct usb_ep *ep, struct usb_request *req)
 	case ACCESSORY_STRING_SERIAL:
 		string_dest = dev->serial;
 		break;
-	default:
+	}
+	if (string_dest) {
+		unsigned long flags;
+
+		if (length >= ACC_STRING_SIZE)
+			length = ACC_STRING_SIZE - 1;
+
+		spin_lock_irqsave(&dev->lock, flags);
+		memcpy(string_dest, req->buf, length);
+		/* ensure zero termination */
+		string_dest[length] = 0;
+		spin_unlock_irqrestore(&dev->lock, flags);
+	} else {
 		pr_err("unknown accessory string index %d\n",
-					dev->string_index);
-		return;
+			dev->string_index);
 	}
-
-	if (!length) {
-		pr_debug("zero length for accessory string index %d\n",
-						dev->string_index);
-		return;
-	}
-
-	if (length >= ACC_STRING_SIZE)
-		length = ACC_STRING_SIZE - 1;
-
-	spin_lock_irqsave(&dev->lock, flags);
-	memcpy(string_dest, req->buf, length);
-	/* ensure zero termination */
-	string_dest[length] = 0;
-	spin_unlock_irqrestore(&dev->lock, flags);
 }
 
 static void acc_complete_set_hid_report_desc(struct usb_ep *ep,
@@ -476,7 +501,7 @@ static void acc_complete_send_hid_event(struct usb_ep *ep,
 		return;
 	}
 
-	hid_report_raw_event(hid->hid, HID_INPUT_REPORT, req->buf, length, 1);
+	__hid_report_raw_event(hid->hid, HID_INPUT_REPORT, req->buf, length, length, 1);
 }
 
 static int acc_hid_parse(struct hid_device *hid)
@@ -612,7 +637,7 @@ static int create_bulk_endpoints(struct acc_dev *dev,
 	struct usb_ep *ep;
 	int i;
 
-	DBG(cdev, "create_bulk_endpoints dev: %pK\n", dev);
+	DBG(cdev, "create_bulk_endpoints dev: %p\n", dev);
 
 	ep = usb_ep_autoconfig(cdev->gadget, in_desc);
 	if (!ep) {
@@ -632,36 +657,18 @@ static int create_bulk_endpoints(struct acc_dev *dev,
 	ep->driver_data = dev;		/* claim the endpoint */
 	dev->ep_out = ep;
 
-retry_tx_alloc:
 	/* now allocate requests for our endpoints */
 	for (i = 0; i < TX_REQ_MAX; i++) {
-		req = acc_request_new(dev->ep_in, acc_tx_req_len);
-		if (!req) {
-			if (acc_tx_req_len <= BULK_BUFFER_SIZE)
-				goto fail;
-			while ((req = req_get(dev, &dev->tx_idle)))
-				acc_request_free(req, dev->ep_in);
-			acc_tx_req_len /= 2;
-			goto retry_tx_alloc;
-		}
+		req = acc_request_new(dev->ep_in, BULK_BUFFER_SIZE);
+		if (!req)
+			goto fail;
 		req->complete = acc_complete_in;
 		req_put(dev, &dev->tx_idle, req);
 	}
-
-retry_rx_alloc:
 	for (i = 0; i < RX_REQ_MAX; i++) {
-		req = acc_request_new(dev->ep_out, acc_rx_req_len);
-		if (!req) {
-			if (acc_rx_req_len <= BULK_BUFFER_SIZE)
-				goto fail;
-			for (i = 0; i < RX_REQ_MAX; i++) {
-				acc_request_free(dev->rx_req[i],
-						dev->ep_out);
-				dev->rx_req[i] = NULL;
-			}
-			acc_rx_req_len /= 2;
-			goto retry_rx_alloc;
-		}
+		req = acc_request_new(dev->ep_out, BULK_BUFFER_SIZE);
+		if (!req)
+			goto fail;
 		req->complete = acc_complete_out;
 		dev->rx_req[i] = req;
 	}
@@ -676,6 +683,7 @@ fail:
 		acc_request_free(dev->rx_req[i], dev->ep_out);
 		dev->rx_req[i] = NULL;
 	}
+
 	return -1;
 }
 
@@ -684,7 +692,9 @@ static ssize_t acc_read(struct file *fp, char __user *buf,
 {
 	struct acc_dev *dev = fp->private_data;
 	struct usb_request *req;
-	ssize_t r = count, xfer, len;
+	ssize_t r = count;
+	ssize_t data_length;
+	unsigned xfer;
 	int ret = 0;
 
 	pr_debug("acc_read(%zu)\n", count);
@@ -694,8 +704,8 @@ static ssize_t acc_read(struct file *fp, char __user *buf,
 		return -ENODEV;
 	}
 
-	if (count > acc_rx_req_len)
-		count = acc_rx_req_len;
+	if (count > BULK_BUFFER_SIZE)
+		count = BULK_BUFFER_SIZE;
 
 	/* we will block until we're online */
 	pr_debug("acc_read: waiting for online\n");
@@ -705,7 +715,20 @@ static ssize_t acc_read(struct file *fp, char __user *buf,
 		goto done;
 	}
 
-	len = ALIGN(count, dev->ep_out->maxpacket);
+	if (!dev->rx_req[0]) {
+		pr_warn("acc_read: USB request already handled/freed");
+		r = -EINVAL;
+		goto done;
+	}
+
+	/*
+	 * Calculate the data length by considering termination character.
+	 * Then compansite the difference of rounding up to
+	 * integer multiple of maxpacket size.
+	 */
+	data_length = count;
+	data_length += dev->ep_out->maxpacket - 1;
+	data_length -= data_length % dev->ep_out->maxpacket;
 
 	if (dev->rx_done) {
 		// last req cancelled. try to get it.
@@ -716,14 +739,14 @@ static ssize_t acc_read(struct file *fp, char __user *buf,
 requeue_req:
 	/* queue a request */
 	req = dev->rx_req[0];
-	req->length = len;
+	req->length = data_length;
 	dev->rx_done = 0;
 	ret = usb_ep_queue(dev->ep_out, req, GFP_KERNEL);
 	if (ret < 0) {
 		r = -EIO;
 		goto done;
 	} else {
-		pr_debug("rx %pK queue\n", req);
+		pr_debug("rx %p queue\n", req);
 	}
 
 	/* wait for a request to complete */
@@ -746,7 +769,7 @@ copy_data:
 		if (req->actual == 0)
 			goto requeue_req;
 
-		pr_debug("rx %pK %u\n", req, req->actual);
+		pr_debug("rx %p %u\n", req, req->actual);
 		xfer = (req->actual < count) ? req->actual : count;
 		r = xfer;
 		if (copy_to_user(buf, req->buf, xfer))
@@ -776,31 +799,30 @@ static ssize_t acc_write(struct file *fp, const char __user *buf,
 	}
 
 	while (count > 0) {
-		if (!dev->online) {
+		/* get an idle tx request to use */
+		req = 0;
+		ret = wait_event_interruptible(dev->write_wq,
+			((req = req_get(dev, &dev->tx_idle)) || !dev->online));
+		if (!dev->online || dev->disconnected) {
 			pr_debug("acc_write dev->error\n");
 			r = -EIO;
 			break;
 		}
 
-		/* get an idle tx request to use */
-		req = 0;
-		ret = wait_event_interruptible(dev->write_wq,
-			((req = req_get(dev, &dev->tx_idle)) || !dev->online));
 		if (!req) {
 			r = ret;
 			break;
 		}
 
-		if (count > acc_tx_req_len) {
-			xfer = acc_tx_req_len;
+		if (count > BULK_BUFFER_SIZE) {
+			xfer = BULK_BUFFER_SIZE;
 			/* ZLP, They will be more TX requests so not yet. */
 			req->zero = 0;
 		} else {
 			xfer = count;
-			/*
-			 * If the data length is a multple of the
+			/* If the data length is a multple of the
 			 * maxpacket size then send a zero length packet(ZLP).
-			 */
+			*/
 			req->zero = ((xfer % dev->ep_in->maxpacket) == 0);
 		}
 		if (copy_from_user(req->buf, buf, xfer)) {
@@ -910,9 +932,7 @@ static const struct file_operations acc_fops = {
 	.read = acc_read,
 	.write = acc_write,
 	.unlocked_ioctl = acc_ioctl,
-#ifdef CONFIG_COMPAT
 	.compat_ioctl = acc_ioctl,
-#endif
 	.open = acc_open,
 	.release = acc_release,
 };
@@ -982,6 +1002,7 @@ int acc_ctrlrequest(struct usb_composite_dev *cdev,
 			value = 0;
 			cdev->req->complete = acc_complete_setup_noop;
 		} else if (b_request == ACCESSORY_SEND_STRING) {
+			schedule_work(&dev->sendstring_work);
 			dev->string_index = w_index;
 			cdev->gadget->ep0->driver_data = dev;
 			cdev->req->complete = acc_complete_set_string;
@@ -1028,6 +1049,7 @@ int acc_ctrlrequest(struct usb_composite_dev *cdev,
 		}
 	} else if (b_requestType == (USB_DIR_IN | USB_TYPE_VENDOR)) {
 		if (b_request == ACCESSORY_GET_PROTOCOL) {
+			schedule_work(&dev->getprotocol_work);
 			*((u16 *)cdev->req->buf) = PROTOCOL_VERSION;
 			value = sizeof(u16);
 			cdev->req->complete = acc_complete_setup_noop;
@@ -1040,8 +1062,6 @@ int acc_ctrlrequest(struct usb_composite_dev *cdev,
 			memset(dev->serial, 0, sizeof(dev->serial));
 			dev->start_requested = 0;
 			dev->audio_mode = 0;
-			strlcpy(dev->manufacturer, "Android", ACC_STRING_SIZE);
-			strlcpy(dev->model, "Android", ACC_STRING_SIZE);
 		}
 	}
 
@@ -1091,20 +1111,19 @@ __acc_function_bind(struct usb_configuration *c,
 			struct usb_function *f, bool configfs)
 {
 	struct usb_composite_dev *cdev = c->cdev;
+	struct usb_string *us;
 	struct acc_dev	*dev = func_to_dev(f);
 	int			id;
 	int			ret;
 
-	DBG(cdev, "acc_function_bind dev: %pK\n", dev);
+	DBG(cdev, "acc_function_bind dev: %p\n", dev);
 
 	if (configfs) {
-		if (acc_string_defs[INTERFACE_STRING_INDEX].id == 0) {
-			ret = usb_string_id(c->cdev);
-			if (ret < 0)
-				return ret;
-			acc_string_defs[INTERFACE_STRING_INDEX].id = ret;
-			acc_interface_desc.iInterface = ret;
-		}
+		us = usb_gstrings_attach(cdev, acc_strings, ARRAY_SIZE(acc_string_defs));
+		if (IS_ERR(us))
+			return PTR_ERR(us);
+		ret = us[INTERFACE_STRING_INDEX].id;
+		acc_interface_desc.iInterface = ret;
 		dev->cdev = c->cdev;
 	}
 	ret = hid_register_driver(&acc_hid_driver);
@@ -1126,20 +1145,22 @@ __acc_function_bind(struct usb_configuration *c,
 		return ret;
 
 	/* support high speed hardware */
-	if (gadget_is_dualspeed(c->cdev->gadget)) {
-		acc_highspeed_in_desc.bEndpointAddress =
-			acc_fullspeed_in_desc.bEndpointAddress;
-		acc_highspeed_out_desc.bEndpointAddress =
-			acc_fullspeed_out_desc.bEndpointAddress;
-	}
+	acc_highspeed_in_desc.bEndpointAddress =
+		acc_fullspeed_in_desc.bEndpointAddress;
+	acc_highspeed_out_desc.bEndpointAddress =
+		acc_fullspeed_out_desc.bEndpointAddress;
 
 	/* support super speed hardware */
-	if (gadget_is_superspeed(c->cdev->gadget)) {
-		acc_superspeed_in_desc.bEndpointAddress =
-			acc_fullspeed_in_desc.bEndpointAddress;
-		acc_superspeed_out_desc.bEndpointAddress =
-			acc_fullspeed_out_desc.bEndpointAddress;
-	}
+	acc_superspeed_in_desc.bEndpointAddress =
+		acc_fullspeed_in_desc.bEndpointAddress;
+	acc_superspeed_out_desc.bEndpointAddress =
+		acc_fullspeed_out_desc.bEndpointAddress;
+
+	/* support super speed plus hardware */
+	acc_superspeedplus_in_desc.bEndpointAddress =
+		acc_fullspeed_in_desc.bEndpointAddress;
+	acc_superspeedplus_out_desc.bEndpointAddress =
+		acc_fullspeed_out_desc.bEndpointAddress;
 
 	DBG(cdev, "%s speed %s: IN/%s, OUT/%s\n",
 			gadget_is_dualspeed(c->cdev->gadget) ? "dual" : "full",
@@ -1204,6 +1225,20 @@ acc_function_unbind(struct usb_configuration *c, struct usb_function *f)
 	acc_hid_unbind(dev);
 }
 
+static void acc_getprotocol_work(struct work_struct *data)
+{
+	char *envp[2] = { "ACCESSORY=GETPROTOCOL", NULL };
+
+	kobject_uevent_env(&acc_device.this_device->kobj, KOBJ_CHANGE, envp);
+}
+
+static void acc_sendstring_work(struct work_struct *data)
+{
+	char *envp[2] = { "ACCESSORY=SENDSTRING", NULL };
+
+	kobject_uevent_env(&acc_device.this_device->kobj, KOBJ_CHANGE, envp);
+}
+
 static void acc_start_work(struct work_struct *data)
 {
 	char *envp[2] = { "ACCESSORY=START", NULL };
@@ -1215,6 +1250,9 @@ static int acc_hid_init(struct acc_hid_dev *hdev)
 {
 	struct hid_device *hid;
 	int ret;
+	int i;
+	struct hid_report *report;
+	struct hid_report_enum *report_enum;
 
 	hid = hid_allocate_device();
 	if (IS_ERR(hid))
@@ -1232,6 +1270,30 @@ static int acc_hid_init(struct acc_hid_dev *hdev)
 		pr_err("can't add hid device: %d\n", ret);
 		hid_destroy_device(hid);
 		return ret;
+	}
+
+	for (i = 0; i < HID_REPORT_TYPES; i++) {
+		report_enum = &hid->report_enum[i];
+		list_for_each_entry(report, &report_enum->report_list, list) {
+			unsigned int expected_size = DIV_ROUND_UP(report->size, 8);
+
+			/*
+			 * hid_report_len() is not used here because it relies on
+			 * report->id > 0 to determine if an extra byte is needed.
+			 * However, hid_report_raw_event() uses report_enum->numbered.
+			 * If a descriptor has some reports with IDs and some without,
+			 * hid_report_len() will underestimate the size of the ID-less
+			 * report by 1 byte, leading to a 1-byte OOB write.
+			 */
+			if (report_enum->numbered)
+				expected_size++;
+
+			if (expected_size > USB_COMP_EP0_BUFSIZ) {
+				pr_err("AOA hid report size %u is too large\n", expected_size);
+				hid_destroy_device(hid);
+				return -EINVAL;
+			}
+		}
 	}
 
 	hdev->hid = hid;
@@ -1283,7 +1345,7 @@ static void acc_hid_work(struct work_struct *data)
 	list_for_each_safe(entry, temp, &new_list) {
 		hid = list_entry(entry, struct acc_hid_dev, list);
 		if (acc_hid_init(hid)) {
-			pr_err("can't add HID device %pK\n", hid);
+			pr_err("can't add HID device %p\n", hid);
 			acc_hid_delete(hid);
 		} else {
 			spin_lock_irqsave(&dev->lock, flags);
@@ -1379,6 +1441,8 @@ static int acc_setup(void)
 	INIT_LIST_HEAD(&dev->dead_hid_list);
 	INIT_DELAYED_WORK(&dev->start_work, acc_start_work);
 	INIT_WORK(&dev->hid_work, acc_hid_work);
+	INIT_WORK(&dev->getprotocol_work, acc_getprotocol_work);
+	INIT_WORK(&dev->sendstring_work, acc_sendstring_work);
 
 	dev->ref = ref;
 	if (cmpxchg_relaxed(&ref->acc_dev, NULL, dev)) {
@@ -1523,6 +1587,7 @@ static struct usb_function *acc_alloc(struct usb_function_instance *fi)
 	dev->function.fs_descriptors = fs_acc_descs;
 	dev->function.hs_descriptors = hs_acc_descs;
 	dev->function.ss_descriptors = ss_acc_descs;
+	dev->function.ssp_descriptors = ssp_acc_descs;
 	dev->function.bind = acc_function_bind_configfs;
 	dev->function.unbind = acc_function_unbind;
 	dev->function.set_alt = acc_function_set_alt;

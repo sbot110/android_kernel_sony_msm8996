@@ -12,6 +12,7 @@
 #include <linux/delay.h>
 #include <linux/platform_device.h>
 #include <linux/dma-mapping.h>
+#include <linux/dma-direct.h>
 #include <linux/errno.h>
 #include <linux/gfp.h>
 #include <linux/fb.h>
@@ -39,9 +40,7 @@ struct gbefb_par {
 	int valid;
 };
 
-#ifdef CONFIG_SGI_IP32
 #define GBE_BASE	0x16000000 /* SGI O2 */
-#endif
 
 /* macro for fastest write-though access to the framebuffer */
 #ifdef CONFIG_MIPS
@@ -50,10 +49,6 @@ struct gbefb_par {
 #else
 #define pgprot_fb(_prot) (((_prot) & (~_CACHE_MASK)) | _CACHE_CACHABLE_NO_WA)
 #endif
-#endif
-#ifdef CONFIG_X86
-#define pgprot_fb(_prot) (((_prot) & ~_PAGE_CACHE_MASK) |	\
-			  cachemode2protval(_PAGE_CACHE_MODE_UC_MINUS))
 #endif
 
 /*
@@ -71,7 +66,7 @@ struct gbefb_par {
 static unsigned int gbe_mem_size = CONFIG_FB_GBE_MEM * 1024*1024;
 static void *gbe_mem;
 static dma_addr_t gbe_dma_addr;
-static unsigned long gbe_mem_phys;
+static phys_addr_t gbe_mem_phys;
 
 static struct {
 	uint16_t *cpu;
@@ -204,7 +199,7 @@ static void gbe_reset(void)
 static void gbe_turn_off(void)
 {
 	int i;
-	unsigned int val, x, y, vpixen_off;
+	unsigned int val, y, vpixen_off;
 
 	gbe_turned_on = 0;
 
@@ -255,7 +250,6 @@ static void gbe_turn_off(void)
 
 	for (i = 0; i < 100000; i++) {
 		val = gbe->vt_xy;
-		x = GET_GBE_FIELD(VT_XY, X, val);
 		y = GET_GBE_FIELD(VT_XY, Y, val);
 		if (y < vpixen_off)
 			break;
@@ -266,7 +260,6 @@ static void gbe_turn_off(void)
 		       "gbefb: wait for vpixen_off timed out\n");
 	for (i = 0; i < 10000; i++) {
 		val = gbe->vt_xy;
-		x = GET_GBE_FIELD(VT_XY, X, val);
 		y = GET_GBE_FIELD(VT_XY, Y, val);
 		if (y > vpixen_off)
 			break;
@@ -279,7 +272,7 @@ static void gbe_turn_off(void)
 	val = 0;
 	SET_GBE_FIELD(VT_XY, FREEZE, val, 1);
 	gbe->vt_xy = val;
-	udelay(10000);
+	mdelay(10);
 	for (i = 0; i < 10000; i++) {
 		val = gbe->vt_xy;
 		if (GET_GBE_FIELD(VT_XY, FREEZE, val) != 1)
@@ -294,7 +287,7 @@ static void gbe_turn_off(void)
 	val = gbe->dotclock;
 	SET_GBE_FIELD(DOTCLK, RUN, val, 0);
 	gbe->dotclock = val;
-	udelay(10000);
+	mdelay(10);
 	for (i = 0; i < 10000; i++) {
 		val = gbe->dotclock;
 		if (GET_GBE_FIELD(DOTCLK, RUN, val))
@@ -331,7 +324,7 @@ static void gbe_turn_on(void)
 	val = gbe->dotclock;
 	SET_GBE_FIELD(DOTCLK, RUN, val, 1);
 	gbe->dotclock = val;
-	udelay(10000);
+	mdelay(10);
 	for (i = 0; i < 10000; i++) {
 		val = gbe->dotclock;
 		if (GET_GBE_FIELD(DOTCLK, RUN, val) != 1)
@@ -346,7 +339,7 @@ static void gbe_turn_on(void)
 	val = 0;
 	SET_GBE_FIELD(VT_XY, FREEZE, val, 0);
 	gbe->vt_xy = val;
-	udelay(10000);
+	mdelay(10);
 	for (i = 0; i < 10000; i++) {
 		val = gbe->vt_xy;
 		if (GET_GBE_FIELD(VT_XY, FREEZE, val))
@@ -547,7 +540,7 @@ static void gbe_set_timing_info(struct gbe_timing_info *timing)
 	SET_GBE_FIELD(DOTCLK, P, val, timing->pll_p);
 	SET_GBE_FIELD(DOTCLK, RUN, val, 0);	/* do not start yet */
 	gbe->dotclock = val;
-	udelay(10000);
+	mdelay(10);
 
 	/* setup pixel counter */
 	val = 0;
@@ -1018,9 +1011,10 @@ static int gbefb_mmap(struct fb_info *info,
 
 	/* remap using the fastest write-through mode on architecture */
 	/* try not polluting the cache when possible */
+#ifdef CONFIG_MIPS
 	pgprot_val(vma->vm_page_prot) =
 		pgprot_fb(pgprot_val(vma->vm_page_prot));
-
+#endif
 	/* VM_IO | VM_DONTEXPAND | VM_DONTDUMP are set by remap_pfn_range() */
 
 	/* look for the starting tile */
@@ -1049,7 +1043,7 @@ static int gbefb_mmap(struct fb_info *info,
 	return 0;
 }
 
-static struct fb_ops gbefb_ops = {
+static const struct fb_ops gbefb_ops = {
 	.owner		= THIS_MODULE,
 	.fb_check_var	= gbefb_check_var,
 	.fb_set_par	= gbefb_set_par,
@@ -1162,9 +1156,9 @@ static int gbefb_probe(struct platform_device *p_dev)
 	}
 	gbe_revision = gbe->ctrlstat & 15;
 
-	gbe_tiles.cpu =
-		dma_alloc_coherent(NULL, GBE_TLB_SIZE * sizeof(uint16_t),
-				   &gbe_tiles.dma, GFP_KERNEL);
+	gbe_tiles.cpu = dmam_alloc_coherent(&p_dev->dev,
+				GBE_TLB_SIZE * sizeof(uint16_t),
+				&gbe_tiles.dma, GFP_KERNEL);
 	if (!gbe_tiles.cpu) {
 		printk(KERN_ERR "gbefb: couldn't allocate tiles table\n");
 		ret = -ENOMEM;
@@ -1178,22 +1172,23 @@ static int gbefb_probe(struct platform_device *p_dev)
 		if (!gbe_mem) {
 			printk(KERN_ERR "gbefb: couldn't map framebuffer\n");
 			ret = -ENOMEM;
-			goto out_tiles_free;
+			goto out_release_mem_region;
 		}
 
 		gbe_dma_addr = 0;
 	} else {
 		/* try to allocate memory with the classical allocator
 		 * this has high chance to fail on low memory machines */
-		gbe_mem = dma_alloc_writecombine(NULL, gbe_mem_size,
-						 &gbe_dma_addr, GFP_KERNEL);
+		gbe_mem = dmam_alloc_attrs(&p_dev->dev, gbe_mem_size,
+				&gbe_dma_addr, GFP_KERNEL,
+				DMA_ATTR_WRITE_COMBINE);
 		if (!gbe_mem) {
 			printk(KERN_ERR "gbefb: couldn't allocate framebuffer memory\n");
 			ret = -ENOMEM;
-			goto out_tiles_free;
+			goto out_release_mem_region;
 		}
 
-		gbe_mem_phys = (unsigned long) gbe_dma_addr;
+		gbe_mem_phys = dma_to_phys(&p_dev->dev, gbe_dma_addr);
 	}
 
 	par = info->par;
@@ -1237,11 +1232,6 @@ static int gbefb_probe(struct platform_device *p_dev)
 
 out_gbe_unmap:
 	arch_phys_wc_del(par->wc_cookie);
-	if (gbe_dma_addr)
-		dma_free_writecombine(NULL, gbe_mem_size, gbe_mem, gbe_mem_phys);
-out_tiles_free:
-	dma_free_coherent(NULL, GBE_TLB_SIZE * sizeof(uint16_t),
-			  (void *)gbe_tiles.cpu, gbe_tiles.dma);
 out_release_mem_region:
 	release_mem_region(GBE_BASE, sizeof(struct sgi_gbe));
 out_release_framebuffer:
@@ -1258,10 +1248,6 @@ static int gbefb_remove(struct platform_device* p_dev)
 	unregister_framebuffer(info);
 	gbe_turn_off();
 	arch_phys_wc_del(par->wc_cookie);
-	if (gbe_dma_addr)
-		dma_free_writecombine(NULL, gbe_mem_size, gbe_mem, gbe_mem_phys);
-	dma_free_coherent(NULL, GBE_TLB_SIZE * sizeof(uint16_t),
-			  (void *)gbe_tiles.cpu, gbe_tiles.dma);
 	release_mem_region(GBE_BASE, sizeof(struct sgi_gbe));
 	gbefb_remove_sysfs(&p_dev->dev);
 	framebuffer_release(info);
@@ -1282,7 +1268,7 @@ static struct platform_device *gbefb_device;
 static int __init gbefb_init(void)
 {
 	int ret = platform_driver_register(&gbefb_driver);
-	if (!ret) {
+	if (IS_ENABLED(CONFIG_SGI_IP32) && !ret) {
 		gbefb_device = platform_device_alloc("gbefb", 0);
 		if (gbefb_device) {
 			ret = platform_device_add(gbefb_device);

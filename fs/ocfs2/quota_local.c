@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-2.0
 /*
  *  Implementation of operations over local quota file
  */
@@ -136,14 +137,13 @@ static int ocfs2_read_quota_block(struct inode *inode, u64 v_block,
 	int rc = 0;
 	struct buffer_head *tmp = *bh;
 
-	if (i_size_read(inode) >> inode->i_sb->s_blocksize_bits <= v_block) {
-		ocfs2_error(inode->i_sb,
-			    "Quota file %llu is probably corrupted! Requested to read block %Lu but file has size only %Lu\n",
-			    (unsigned long long)OCFS2_I(inode)->ip_blkno,
-			    (unsigned long long)v_block,
-			    (unsigned long long)i_size_read(inode));
-		return -EIO;
-	}
+	if (i_size_read(inode) >> inode->i_sb->s_blocksize_bits <= v_block)
+		return ocfs2_error(inode->i_sb,
+				"Quota file %llu is probably corrupted! Requested to read block %Lu but file has size only %Lu\n",
+				(unsigned long long)OCFS2_I(inode)->ip_blkno,
+				(unsigned long long)v_block,
+				(unsigned long long)i_size_read(inode));
+
 	rc = ocfs2_read_virt_blocks(inode, v_block, 1, &tmp, 0,
 				    ocfs2_validate_quota_block);
 	if (rc)
@@ -302,7 +302,7 @@ static int ocfs2_add_recovery_chunk(struct super_block *sb,
 	if (!rc)
 		return -ENOMEM;
 	rc->rc_chunk = chunk;
-	rc->rc_bitmap = kmalloc(sb->s_blocksize, GFP_NOFS);
+	rc->rc_bitmap = kzalloc(sb->s_blocksize, GFP_NOFS);
 	if (!rc->rc_bitmap) {
 		kfree(rc);
 		return -ENOMEM;
@@ -453,8 +453,7 @@ out:
 
 /* Sync changes in local quota file into global quota file and
  * reinitialize local quota file.
- * The function expects local quota file to be already locked and
- * dqonoff_mutex locked. */
+ * The function expects local quota file to be already locked. */
 static int ocfs2_recover_local_quota_file(struct inode *lqinode,
 					  int type,
 					  struct ocfs2_quota_recovery *rec)
@@ -520,8 +519,8 @@ static int ocfs2_recover_local_quota_file(struct inode *lqinode,
 				mlog_errno(status);
 				goto out_drop_lock;
 			}
-			mutex_lock(&sb_dqopt(sb)->dqio_mutex);
-			spin_lock(&dq_data_lock);
+			down_write(&sb_dqopt(sb)->dqio_sem);
+			spin_lock(&dquot->dq_dqb_lock);
 			/* Add usage from quota entry into quota changes
 			 * of our node. Auxiliary variables are important
 			 * due to signedness */
@@ -529,7 +528,7 @@ static int ocfs2_recover_local_quota_file(struct inode *lqinode,
 			inodechange = le64_to_cpu(dqblk->dqb_inodemod);
 			dquot->dq_dqb.dqb_curspace += spacechange;
 			dquot->dq_dqb.dqb_curinodes += inodechange;
-			spin_unlock(&dq_data_lock);
+			spin_unlock(&dquot->dq_dqb_lock);
 			/* We want to drop reference held by the crashed
 			 * node. Since we have our own reference we know
 			 * global structure actually won't be freed. */
@@ -553,7 +552,7 @@ static int ocfs2_recover_local_quota_file(struct inode *lqinode,
 			unlock_buffer(qbh);
 			ocfs2_journal_dirty(handle, qbh);
 out_commit:
-			mutex_unlock(&sb_dqopt(sb)->dqio_mutex);
+			up_write(&sb_dqopt(sb)->dqio_sem);
 			ocfs2_commit_trans(OCFS2_SB(sb), handle);
 out_drop_lock:
 			ocfs2_unlock_global_qf(oinfo, 1);
@@ -585,7 +584,6 @@ int ocfs2_finish_quota_recovery(struct ocfs2_super *osb,
 {
 	unsigned int ino[OCFS2_MAXQUOTAS] = { LOCAL_USER_QUOTA_SYSTEM_INODE,
 					      LOCAL_GROUP_QUOTA_SYSTEM_INODE };
-	struct super_block *sb = osb->sb;
 	struct ocfs2_local_disk_dqinfo *ldinfo;
 	struct buffer_head *bh;
 	handle_t *handle;
@@ -597,7 +595,6 @@ int ocfs2_finish_quota_recovery(struct ocfs2_super *osb,
 	printk(KERN_NOTICE "ocfs2: Finishing quota recovery on device (%s) for "
 	       "slot %u\n", osb->dev_str, slot_num);
 
-	mutex_lock(&sb_dqopt(sb)->dqonoff_mutex);
 	for (type = 0; type < OCFS2_MAXQUOTAS; type++) {
 		if (list_empty(&(rec->r_list[type])))
 			continue;
@@ -674,8 +671,7 @@ out_put:
 			break;
 	}
 out:
-	mutex_unlock(&sb_dqopt(sb)->dqonoff_mutex);
-	kfree(rec);
+	ocfs2_free_quota_recovery(rec);
 	return status;
 }
 
@@ -689,17 +685,15 @@ static int ocfs2_local_read_info(struct super_block *sb, int type)
 	int status;
 	struct buffer_head *bh = NULL;
 	struct ocfs2_quota_recovery *rec;
-	int locked = 0;
+	int locked = 0, global_read = 0;
 
-	/* We don't need the lock and we have to acquire quota file locks
-	 * which will later depend on this lock */
-	mutex_unlock(&sb_dqopt(sb)->dqio_mutex);
 	info->dqi_max_spc_limit = 0x7fffffffffffffffLL;
 	info->dqi_max_ino_limit = 0x7fffffffffffffffLL;
 	oinfo = kmalloc(sizeof(struct ocfs2_mem_dqinfo), GFP_NOFS);
 	if (!oinfo) {
 		mlog(ML_ERROR, "failed to allocate memory for ocfs2 quota"
 			       " info.");
+		status = -ENOMEM;
 		goto out_err;
 	}
 	info->dqi_priv = oinfo;
@@ -712,6 +706,7 @@ static int ocfs2_local_read_info(struct super_block *sb, int type)
 	status = ocfs2_global_read_info(sb, type);
 	if (status < 0)
 		goto out_err;
+	global_read = 1;
 
 	status = ocfs2_inode_lock(lqinode, &oinfo->dqi_lqi_bh, 1);
 	if (status < 0) {
@@ -772,7 +767,6 @@ static int ocfs2_local_read_info(struct super_block *sb, int type)
 		goto out_err;
 	}
 
-	mutex_lock(&sb_dqopt(sb)->dqio_mutex);
 	return 0;
 out_err:
 	if (oinfo) {
@@ -783,11 +777,12 @@ out_err:
 		if (locked)
 			ocfs2_inode_unlock(lqinode, 1);
 		ocfs2_release_local_quota_bitmaps(&oinfo->dqi_chunk);
+		if (global_read)
+			cancel_delayed_work_sync(&oinfo->dqi_sync_work);
 		kfree(oinfo);
 	}
 	brelse(bh);
-	mutex_lock(&sb_dqopt(sb)->dqio_mutex);
-	return -1;
+	return status;
 }
 
 /* Write local info to quota file */
@@ -816,7 +811,7 @@ static int ocfs2_local_free_info(struct super_block *sb, int type)
 	struct ocfs2_quota_chunk *chunk;
 	struct ocfs2_local_disk_chunk *dchunk;
 	int mark_clean = 1, len;
-	int status;
+	int status = 0;
 
 	iput(oinfo->dqi_gqinode);
 	ocfs2_simple_drop_lockres(OCFS2_SB(sb), &oinfo->dqi_gqlock);
@@ -840,7 +835,9 @@ static int ocfs2_local_free_info(struct super_block *sb, int type)
 	}
 	ocfs2_release_local_quota_bitmaps(&oinfo->dqi_chunk);
 
-	/* dqonoff_mutex protects us against racing with recovery thread... */
+	/*
+	 * ocfs2_dismount_volume() has already aborted quota recovery...
+	 */
 	if (oinfo->dqi_rec) {
 		ocfs2_free_quota_recovery(oinfo->dqi_rec);
 		mark_clean = 0;
@@ -855,17 +852,15 @@ static int ocfs2_local_free_info(struct super_block *sb, int type)
 				 oinfo->dqi_libh,
 				 olq_update_info,
 				 info);
-	if (status < 0) {
+	if (status < 0)
 		mlog_errno(status);
-		goto out;
-	}
-
 out:
 	ocfs2_inode_unlock(sb_dqopt(sb)->files[type], 1);
 	brelse(oinfo->dqi_libh);
 	brelse(oinfo->dqi_lqi_bh);
 	kfree(oinfo);
-	return 0;
+	info->dqi_priv = NULL;
+	return status;
 }
 
 static void olq_set_dquot(struct buffer_head *bh, void *private)
@@ -879,12 +874,12 @@ static void olq_set_dquot(struct buffer_head *bh, void *private)
 
 	dqblk->dqb_id = cpu_to_le64(from_kqid(&init_user_ns,
 					      od->dq_dquot.dq_id));
-	spin_lock(&dq_data_lock);
+	spin_lock(&od->dq_dquot.dq_dqb_lock);
 	dqblk->dqb_spacemod = cpu_to_le64(od->dq_dquot.dq_dqb.dqb_curspace -
 					  od->dq_origspace);
 	dqblk->dqb_inodemod = cpu_to_le64(od->dq_dquot.dq_dqb.dqb_curinodes -
 					  od->dq_originodes);
-	spin_unlock(&dq_data_lock);
+	spin_unlock(&od->dq_dquot.dq_dqb_lock);
 	trace_olq_set_dquot(
 		(unsigned long long)le64_to_cpu(dqblk->dqb_spacemod),
 		(unsigned long long)le64_to_cpu(dqblk->dqb_inodemod),

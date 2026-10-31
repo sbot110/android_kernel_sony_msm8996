@@ -1,0 +1,70 @@
+Dora Linux 4.19 build validation — 2026-10-31
+====================================================
+
+Status: PASS for standalone ARM64 kernel build.
+Hardware/LOS21 boot readiness: NOT ESTABLISHED.
+
+Validated code commit: 2b64053e1dd9d40a5b9f1645ac5b9aaf9a900796
+Branch: kernel-4.19-701905467803253630
+Kernel release: 4.19.318-dora-4.19+
+Host: Debian 13 x86_64 managed cloud executor
+ARM64 + ARM32 GCC: Debian 12.2.0-14cross1
+Cross binutils: Debian 2.44
+Host GCC: 14; bison 3.8.2; flex 2.6.4
+
+Command: OUT_DIR=/workspace/work/dora-4.19-out JOBS=6 scripts/dora/build.sh
+CROSS_COMPILE=aarch64-linux-gnu-
+CROSS_COMPILE_COMPAT=arm-linux-gnueabi-
+Exit code: 0
+
+Tool packages were extracted outside the source tree. The cloud command
+used PATH/LD_LIBRARY_PATH for that prefix and BISON_PKGDATADIR/M4 for
+the extracted bison/m4 data. WSL instructions use installed host packages.
+No full LineageOS build, boot.img packaging or physical phone test ran.
+WSL Ubuntu 22.04 instructions were prepared; that OS was not executed here.
+
+Configuration: 246 explicit assignments retained; 35 required built-ins pass.
+MDSS, KGSL, BCM4359, Sony controlfnc/preallocation, SELinux, Binder/BinderFS,
+BPF, namespaces, cgroups, PSI, ext4/F2FS, dm-verity and USB gadget are built in.
+.config SHA256: 03e9583d17bdb15a7f13ddfafc5191e8ede3425dc564ac714e7fc6ecf67d4b46
+
+Verified formats/content:
+- vmlinux: ELF64, e_machine=AArch64 (183).
+- Image: ARM64 magic at offset 0x38.
+- gzip decompression of Image.gz equals Image exactly.
+- DTB: valid FDT magic and total-size header.
+- Image.gz-dtb is exactly Image.gz followed by the single selected dora DTB.
+- Defined vmlinux symbols include adreno_probe, mdss_mdp_probe,
+  dhd_module_init, somc_wifi_init, binder_init and selinux_init.
+
+Artifacts (size in bytes; SHA256):
+vmlinux
+  19408672  14a552f7d9a8b042ff7ff347a612c6802dc16a4a1061d0ba8f6d0c34d5377f59
+arch/arm64/boot/Image
+  15243776  dd0e938e3710f981eecfde9dd014091870927f0105b3245bb6397c039dfa289a
+arch/arm64/boot/Image.gz
+  7561611  b7b886ab848ce6134ba6537371bbe0af440277fb5a911b29d7dc837b329f7aee
+arch/arm64/boot/dts/qcom/msm8996-sony-xperia-tone-dora.dtb
+  36583  02bc38feebf9281e916a281980543691f9f5331722c8f83a10e3bb69215261fc
+arch/arm64/boot/Image.gz-dtb
+  7598194  cc9ec41851451ef977cad60b3d763d6e1edbdf45bd55669bcc52fc0d8491ee5c
+
+Other checks:
+- USB configfs.o built with Android UEVENT disabled after its guard fix.
+- led-core.o built with LED triggers disabled after its guard fix.
+- Three WPA version/cipher/AKM function bodies match the 4.4 reference.
+- git diff --check and bash -n scripts/dora/build.sh pass.
+
+The successful build was reached by correcting confirmed compiler/linker
+failures and configuration dependencies, not by removing MDSS/KGSL/Wi-Fi
+or adding fake device implementations. Compiler warnings remain in the
+vendor source. This is not a warning-free or runtime-tested kernel.
+
+These hashes identify this specific build. Timestamp, build number and
+host/user metadata can change hashes on another machine. They do not
+promise a bit-identical rebuild without fixing those inputs.
+
+Known hardware blockers: headless PM8994/PMI8994 v3.1 DT, maxcpus=2,
+no completed Sony display/touch/audio/charger/camera integration, ION ABI
+change and mismatch between upstream PCIe DT and vendor msm_pcie Wi-Fi glue.
+See README_KERNEL_4.19.md and dora-wifi-port.txt before hardware testing.

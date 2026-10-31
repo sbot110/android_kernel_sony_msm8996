@@ -1,0 +1,6 @@
+config WIFI_CONTROL_FUNC
+	bool "Sony WiFi power and PCIe control"
+	depends on BCMDHD_PCIE && PCI_MSM
+	help
+	  Sony tone board power sequencing and PCIe enumeration for BCMDHD.
+

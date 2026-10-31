@@ -4,7 +4,7 @@ Dora Linux 4.19 build validation — 2026-10-31
 Status: PASS for standalone ARM64 kernel build.
 Hardware/LOS21 boot readiness: NOT ESTABLISHED.
 
-Validated code commit: 2b64053e1dd9d40a5b9f1645ac5b9aaf9a900796
+Validated code commit: 892a6b7be0b8878ced0ac02c47f667f458dd9ab8
 Branch: kernel-4.19-701905467803253630
 Kernel release: 4.19.318-dora-4.19+
 Host: Debian 13 x86_64 managed cloud executor
@@ -23,10 +23,10 @@ the extracted bison/m4 data. WSL instructions use installed host packages.
 No full LineageOS build, boot.img packaging or physical phone test ran.
 WSL Ubuntu 22.04 instructions were prepared; that OS was not executed here.
 
-Configuration: 246 explicit assignments retained; 35 required built-ins pass.
+Configuration: 251 explicit assignments retained; 35 required built-ins pass.
 MDSS, KGSL, BCM4359, Sony controlfnc/preallocation, SELinux, Binder/BinderFS,
 BPF, namespaces, cgroups, PSI, ext4/F2FS, dm-verity and USB gadget are built in.
-.config SHA256: 03e9583d17bdb15a7f13ddfafc5191e8ede3425dc564ac714e7fc6ecf67d4b46
+.config SHA256: 2d34d4bf16b61460795bb2d3c124ae6d2e0ea2d5ddec9646ff554f944560ce79
 
 Verified formats/content:
 - vmlinux: ELF64, e_machine=AArch64 (183).
@@ -39,15 +39,15 @@ Verified formats/content:
 
 Artifacts (size in bytes; SHA256):
 vmlinux
-  19408672  14a552f7d9a8b042ff7ff347a612c6802dc16a4a1061d0ba8f6d0c34d5377f59
+  19588136  d91787d469f43330b21a07b43e3782e20d005506dec00b9d5f862fbb9a858328
 arch/arm64/boot/Image
-  15243776  dd0e938e3710f981eecfde9dd014091870927f0105b3245bb6397c039dfa289a
+  15391232  29909267fc04e4c2a99ac5490b6de3b713fbecf7352b078bd702f8eac854f2fc
 arch/arm64/boot/Image.gz
-  7561611  b7b886ab848ce6134ba6537371bbe0af440277fb5a911b29d7dc837b329f7aee
+  7623493  14400691ba8186cb2316a4502961094922cdd0128695255bea80a988ba7f29f2
 arch/arm64/boot/dts/qcom/msm8996-sony-xperia-tone-dora.dtb
   36583  02bc38feebf9281e916a281980543691f9f5331722c8f83a10e3bb69215261fc
 arch/arm64/boot/Image.gz-dtb
-  7598194  cc9ec41851451ef977cad60b3d763d6e1edbdf45bd55669bcc52fc0d8491ee5c
+  7660076  1ec6cd386b2676c810200843a576a387fd45e4766ee19941a9ca27aa0393d9ab
 
 Other checks:
 - USB configfs.o built with Android UEVENT disabled after its guard fix.
@@ -68,3 +68,17 @@ Known hardware blockers: headless PM8994/PMI8994 v3.1 DT, maxcpus=2,
 no completed Sony display/touch/audio/charger/camera integration, ION ABI
 change and mismatch between upstream PCIe DT and vendor msm_pcie Wi-Fi glue.
 See README_KERNEL_4.19.md and dora-wifi-port.txt before hardware testing.
+
+Additional hardware-port checks:
+- Full build with real Sony panel/incell, LAB/IBB API and ION_LEGACY=y exits 0.
+- Native CCF PLL8996/v2 bindings compile; original revision paths retained.
+- Defined symbols include ion_legacy_ioctl, incell_control_mode,
+  mdss_dsi_panel_driver_detection and qpnp_lab_set_precharge.
+- All six Sony panel source files match the 4.4 reference byte-for-byte.
+- ADC boundary tests cover AUO/JDI/LGD/Sharp3/Sharp9; 1179626 selects AUO4.
+- User LCD/clock data is evidence from F8132 running 4.4, not 4.19.
+- Legacy ION userspace smoke test compiles with -Wall -Wextra -Werror.
+  Runtime test SKIP (77): no /dev/ion in the cloud environment.
+- Unfinished charger/VADC/BCL and audio stack drafts were not activated
+  or published as functional hardware support.
+- F8131/F8132 source/build/runtime matrix: dora-compatibility.md.

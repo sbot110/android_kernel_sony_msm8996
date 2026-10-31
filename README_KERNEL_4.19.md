@@ -10,9 +10,15 @@
 
 **Сборочная цель выполнена:** ARM64 vmlinux, Image.gz, DTB dora и
 Image.gz-dtb успешно получены с MDSS, KGSL и BCMDHD, код выхода сборки 0.
-Проверенный код: 2b64053e1. Форматы, контрольные суммы, toolchain и пределы
+Дальнейший аппаратный перенос и проверки: 892a6b7be. Форматы, контрольные суммы, toolchain и пределы
 проверки записаны в [протоколе сборки](Documentation/sony/dora-build-validation.txt).
 Это подтверждение сборки на ПК, а не завершения аппаратного порта.
+
+**F8131 и F8132 обязательны одновременно.** Подробная
+[матрица совместимости](Documentation/sony/dora-compatibility.md) различает
+проверку исходников, компиляцию и данные с физического устройства.
+Логи AUO F8132 относятся к рабочему 4.4; они не являются тестом нового 4.19.
+Ни модель SIM, ни один экземпляр панели не используются для сужения порта.
 
 ## Происхождение исходников и история
 
@@ -72,7 +78,7 @@ F8131 и F8132 требуют отдельных испытаний modem/SIM/DS
 | Подсистема | Что имеется в 4.19 | Что ещё требуется |
 | --- | --- | --- |
 | CPU / clocks | Generic GCC/MMCC MSM8996 и pinctrl | Старые qcom,gcc-8996/mmsscc-8996/gpucc-8996 bindings и числовые clock IDs несовместимы с generic framework; проверить DVFS, RPM и binning |
-| Дисплей | Vendor MDSS, включая ревизии MSM8996 | Перенести Sony panel selection, reset/power sequencing, PHY timings, подсветку и 1080p60 в рабочий DT |
+| Дисплей | Vendor MDSS; перенесены исходники Sony panel/incell, LAB/IBB API и MSM8996 PLL bindings | Завершить реальную цепочку DT: MDSS/bus/SMMU/clock/power/reset/подсветка для всех вариантов |
 | GPU | KGSL и Adreno 530 | Проверить IOMMU, firmware, secure buffers и ioctl ABI с реальными vendor библиотеками |
 | Wi-Fi | Перенесены BCMDHD BCM4359, Sony controlfnc/preallocation и адаптация API 4.19 | Начальный DT использует upstream PCIe, а Sony glue требует vendor msm_pcie; связка DT/controller ещё не готова, runtime-успех не заявляется |
 | UFS / SD | Qualcomm UFS/PHY и SDHCI | Проверить питание, clocks, IOMMU, ICE и сохранность данных на устройстве |
@@ -87,11 +93,19 @@ APQ8096/QDSP6 sound card, а не старый Sony Tasha/HAL контракт. 
 
 ### ION и vendor ABI
 
-Подтверждён существенный разрыв allocator ABI. Старый ion_allocation_data
+Разрыв allocator ABI частично закрыт настоящими per-open IDR handles:
+alloc/free/share/map/import и compat32 используют реальные dma-buf references,
+а не fd как фиктивный handle. Исправлены unwind при copy-out failure и lifetime
+независимых share fd. Native fd ABI сохранён. Добавлен device-side smoke test
+tools/testing/selftests/ion/dora-legacy-handles.c; в облаке он пропускается
+с кодом 77, поскольку /dev/ion отсутствует. Runtime успех не заявляется.
+
+Исходный старый ion_allocation_data
 содержал len/align и handle с отдельными share/map/free операциями.
 В 4.19 allocation возвращает fd, а msm_ion.h задаёт TARGET_ION_ABI_VERSION 2.
 Старые gralloc/camera/audio binaries нужно проверить на использование этого
-API. Нужна реальная совместимость реализации или подходящий userspace;
+API. CUSTOM/cache-range ioctls, over-page alignment и secure heap interoperability
+пока не покрыты. Нужна полная совместимость реализации или подходящий userspace;
 замена деклараций UAPI не решает проблему. KGSL/MDSS ioctl, структуры,
 32-битные клиенты и secure heaps также требуют отдельной проверки.
 

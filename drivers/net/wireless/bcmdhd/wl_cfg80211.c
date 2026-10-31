@@ -3958,7 +3958,10 @@ wl_set_wpa_version(struct net_device *dev, struct cfg80211_connect_params *sme)
 		return BCME_ERROR;
 	}
 
-	if (sme->crypto.wpa_versions & NL80211_WPA_VERSION_1)
+	if ((sme->crypto.wpa_versions & NL80211_WPA_VERSION_1) &&
+		(sme->crypto.wpa_versions & NL80211_WPA_VERSION_2))
+		val = WPA2_AUTH_PSK | WPA_AUTH_PSK;
+	else if (sme->crypto.wpa_versions & NL80211_WPA_VERSION_1)
 		val = WPA_AUTH_PSK |
 #ifdef BCMCCX
 			WPA_AUTH_CCKM |
@@ -4175,6 +4178,15 @@ wl_set_set_cipher(struct net_device *dev, struct cfg80211_connect_params *sme)
 			WL_DBG((" NO, is_wps_conn, Set pval | gval to WSEC"));
 			wsec_val = pval | gval;
 
+			/* TEMP DIAG: force CCMP/AES for WPA2-PSK when cipher data is lost. */
+                        if (wsec_val == 0 && sme->privacy &&
+                            (sme->crypto.wpa_versions & NL80211_WPA_VERSION_2) &&
+                            sme->crypto.n_akm_suites > 0 &&
+                            sme->crypto.akm_suites[0] == WLAN_AKM_SUITE_PSK) {
+                                wsec_val = AES_ENABLED;
+                                WL_ERR(("TEMP DIAG: forcing WPA2-PSK WSEC AES (0x%x)\n", wsec_val));
+                        }
+
 			WL_DBG((" Set WSEC to fW 0x%x \n", wsec_val));
 			err = wldev_iovar_setint_bsscfg(dev, "wsec",
 				wsec_val, bssidx);
@@ -4290,7 +4302,11 @@ wl_set_key_mgmt(struct net_device *dev, struct cfg80211_connect_params *sme)
 				val = WPA_AUTH_UNSPECIFIED;
 				break;
 			case WLAN_AKM_SUITE_PSK:
-				val = WPA_AUTH_PSK;
+				if ((sme->crypto.wpa_versions & NL80211_WPA_VERSION_1) &&
+					(sme->crypto.wpa_versions & NL80211_WPA_VERSION_2))
+					val = WPA2_AUTH_PSK | WPA_AUTH_PSK;
+				else
+					val = WPA_AUTH_PSK;
 				break;
 #ifdef BCMCCX
 			case WLAN_AKM_SUITE_CCKM:
@@ -4320,7 +4336,10 @@ wl_set_key_mgmt(struct net_device *dev, struct cfg80211_connect_params *sme)
 				break;
 #endif /* MFP */
 			case WLAN_AKM_SUITE_PSK:
-				val = WPA2_AUTH_PSK;
+				if (sme->crypto.wpa_versions & NL80211_WPA_VERSION_1)
+					val = WPA2_AUTH_PSK | WPA_AUTH_PSK;
+				else
+					val = WPA2_AUTH_PSK;
 				break;
 #if defined(WLFBT) && defined(WLAN_AKM_SUITE_FT_8021X)
 			case WLAN_AKM_SUITE_FT_8021X:
@@ -4689,6 +4708,16 @@ wl_cfg80211_connect(struct wiphy *wiphy, struct net_device *dev,
 		WL_DBG(("No channel info from user space\n"));
 		cfg->channel = 0;
 	}
+        WL_ERR(("WIFI-SME-SEC: wpa_versions=0x%x n_akm=%d akm0=0x%x n_pairwise=%d pairwise0=0x%x group=0x%x auth_type=%d privacy=%d ie_len=%zu\n",
+                sme->crypto.wpa_versions,
+                sme->crypto.n_akm_suites,
+                sme->crypto.n_akm_suites ? sme->crypto.akm_suites[0] : 0,
+                sme->crypto.n_ciphers_pairwise,
+                sme->crypto.n_ciphers_pairwise ? sme->crypto.ciphers_pairwise[0] : 0,
+                sme->crypto.cipher_group,
+                sme->auth_type,
+                sme->privacy,
+                sme->ie_len));
 	WL_DBG(("3. set wapi version \n"));
 	err = wl_set_wpa_version(dev, sme);
 	if (unlikely(err)) {
@@ -4799,6 +4828,35 @@ wl_cfg80211_connect(struct wiphy *wiphy, struct net_device *dev,
 		kfree(ext_join_params);
 		return BCME_ERROR;
 	}
+          {
+                  s32 dbg_auth = -1;
+                  s32 dbg_wsec = -1;
+                  s32 dbg_wpa_auth = -1;
+                  s32 dbg_mfp = -1;
+                  s32 dbg_err_auth;
+                  s32 dbg_err_wsec;
+                  s32 dbg_err_wpa_auth;
+                  s32 dbg_err_mfp;
+
+                  dbg_err_auth = wldev_iovar_getint_bsscfg(dev, "auth",
+                          &dbg_auth, bssidx);
+                  dbg_err_wsec = wldev_iovar_getint_bsscfg(dev, "wsec",
+                          &dbg_wsec, bssidx);
+                  dbg_err_wpa_auth = wldev_iovar_getint_bsscfg(dev, "wpa_auth",
+                          &dbg_wpa_auth, bssidx);
+                  dbg_err_mfp = wldev_iovar_getint(dev, "mfp", &dbg_mfp);
+
+                  WL_ERR(("WIFI-SEC-BEFORE-JOIN: bssidx=%d "
+                          "auth=0x%x(err=%d) wsec=0x%x(err=%d) "
+                          "wpa_auth=0x%x(err=%d) mfp=%d(err=%d) ie_len=%zu\n",
+                          bssidx,
+                          dbg_auth, dbg_err_auth,
+                          dbg_wsec, dbg_err_wsec,
+                          dbg_wpa_auth, dbg_err_wpa_auth,
+                          dbg_mfp, dbg_err_mfp,
+                          sme->ie_len));
+          }
+
 	err = wldev_iovar_setbuf_bsscfg(dev, "join", ext_join_params, join_params_size,
 		cfg->ioctl_buf, WLC_IOCTL_MAXLEN, bssidx, &cfg->ioctl_buf_sync);
 
@@ -9874,6 +9932,11 @@ wl_notify_connect_status(struct bcm_cfg80211 *cfg, bcm_struct_cfgdev *cfgdev,
 			wl_get_auth_assoc_status(cfg, ndev, e);
 			return 0;
 		}
+               if (event == WLC_E_PRUNE) {
+                       WL_ERR(("WLC_E_PRUNE: status %d, reason %d\n",
+                               (int)ntoh32(e->status),
+                               (int)ntoh32(e->reason)));
+               }
 		DHD_DISABLE_RUNTIME_PM((dhd_pub_t *)cfg->pub);
 		if (wl_is_linkup(cfg, e, ndev)) {
 			wl_link_up(cfg);
@@ -11462,6 +11525,7 @@ static void wl_init_event_handler(struct bcm_cfg80211 *cfg)
 	cfg->evt_handler[WLC_E_SCAN_COMPLETE] = wl_notify_scan_status;
 	cfg->evt_handler[WLC_E_AUTH] = wl_notify_connect_status;
 	cfg->evt_handler[WLC_E_ASSOC] = wl_notify_connect_status;
+	cfg->evt_handler[WLC_E_PRUNE] = wl_notify_connect_status;
 	cfg->evt_handler[WLC_E_LINK] = wl_notify_connect_status;
 	cfg->evt_handler[WLC_E_DEAUTH_IND] = wl_notify_connect_status;
 	cfg->evt_handler[WLC_E_DEAUTH] = wl_notify_connect_status;
@@ -15886,7 +15950,7 @@ bool wl_cfg80211_is_concurrent_mode(void)
 	}
 }
 
-void* wl_cfg80211_get_dhdp()
+void* wl_cfg80211_get_dhdp(void)
 {
 	struct bcm_cfg80211 *cfg = g_bcm_cfg;
 

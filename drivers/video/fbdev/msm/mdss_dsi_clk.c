@@ -187,7 +187,8 @@ static int dsi_link_clk_set_rate(struct dsi_link_clks *l_clks)
 
 	rc = clk_set_rate(l_clks->clks.pixel_clk, l_clks->pix_clk_rate);
 	if (rc) {
-		pr_err("clk_set_rate failed for pixel_clk rc = %d\n", rc);
+		pr_err("DSI-PIXCLK-FAIL: manager=%s requested=%u rc=%d\n",
+		       mngr->name, l_clks->pix_clk_rate, rc);
 		goto error;
 	}
 
@@ -702,10 +703,21 @@ static int dsi_set_clk_rate(struct mdss_dsi_clk_mngr *mngr, int clk, u32 rate,
 	case MDSS_DSI_LINK_PIX_CLK:
 		mngr->link_clks.pix_clk_rate = rate;
 		if (!flags) {
-			rc = clk_set_rate(mngr->link_clks.clks.pixel_clk, rate);
-			if (rc)
-				pr_err("failed to set rate for pix clk rc=%d\n",
-				       rc);
+			unsigned long current_rate;
+			long rounded_rate;
+
+			current_rate = clk_get_rate(
+				mngr->link_clks.clks.pixel_clk);
+			rounded_rate = clk_round_rate(
+				mngr->link_clks.clks.pixel_clk, rate);
+
+			rc = clk_set_rate(
+				mngr->link_clks.clks.pixel_clk, rate);
+			if (rc) {
+				pr_err("DSI-PIXCLK-DIAG: name=%s requested=%u current=%lu rounded=%ld rc=%d\n",
+					mngr->name, rate, current_rate,
+					rounded_rate, rc);
+			}
 		}
 		break;
 	default:

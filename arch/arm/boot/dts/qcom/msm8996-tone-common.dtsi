@@ -31,11 +31,12 @@
 	firmware: firmware {
 		android {
 			compatible = "android,firmware";
+			boot_devices = "any";
 			fstab {
 				compatible = "android,fstab";
 				system {
 					compatible = "android,system";
-					dev = "/dev/block/platform/soc/7464900.sdhci/by-name/system";
+					dev = "/dev/block/by-name/system";
 					type = "ext4";
 					mnt_flags = "ro,barrier=1";
 					fsmgr_flags = "wait";
@@ -43,7 +44,7 @@
 				};
 				vendor {
 					compatible = "android,vendor";
-					dev = "/dev/block/platform/soc/7464900.sdhci/by-name/oem";
+					dev = "/dev/block/by-name/oem";
 					type = "squashfs";
 					mnt_flags = "ro,barrier=1";
 					fsmgr_flags = "wait";

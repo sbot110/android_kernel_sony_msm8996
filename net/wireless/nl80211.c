@@ -7848,6 +7848,19 @@ static int nl80211_crypto_settings(struct cfg80211_registered_device *rdev,
 		memcpy(settings->akm_suites, data, len);
 	}
 
+	/* TEMP DIAG: restore CCMP lost before cfg80211_connect_params. */
+	if ((settings->wpa_versions & NL80211_WPA_VERSION_2) &&
+	    settings->n_akm_suites > 0 &&
+	    settings->akm_suites[0] == WLAN_AKM_SUITE_PSK &&
+	    settings->n_ciphers_pairwise == 0 &&
+	    settings->cipher_group == 0 &&
+	    cipher_limit > 0) {
+		settings->n_ciphers_pairwise = 1;
+		settings->ciphers_pairwise[0] = WLAN_CIPHER_SUITE_CCMP;
+		settings->cipher_group = WLAN_CIPHER_SUITE_CCMP;
+		pr_info("nl80211: TEMP WPA2-PSK CCMP fallback applied\n");
+	}
+
 	return 0;
 }
 

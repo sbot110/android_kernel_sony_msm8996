@@ -1,0 +1,225 @@
+// SPDX-License-Identifier: BSD-3-Clause
+/*
+ * Sony Xperia X Performance (dora: F8131 Single SIM / F8132 Dual SIM)
+ * Hardware platform base ported from Sony Linux 4.4.302 (0c295b15b6d0) to Linux 5.15.
+ */
+
+#include <dt-bindings/iio/qcom,spmi-vadc.h>
+#include <dt-bindings/input/linux-event-codes.h>
+
+/delete-node/ &tof_sensor;
+/delete-node/ &pm8994_l11;
+/delete-node/ &pm8994_l14;
+
+/ {
+	aliases {
+		mmc0 = &sdhc1;
+		mmc1 = &sdhc2;
+		serial0 = &blsp2_uart2;
+		serial1 = &blsp1_uart2;
+	};
+
+	chosen {
+		stdout-path = "serial0:115200n8";
+	};
+
+	reserved-memory {
+		/* Enlarge default CMA pool to 64 MiB as in Sony 4.4 msm8996-tone-dora-common.dtsi */
+		linux,cma {
+			compatible = "shared-dma-pool";
+			alloc-ranges = <0x0 0x00000000 0x0 0xffffffff>;
+			reusable;
+			size = <0x0 0x4000000>;
+			linux,cma-default;
+		};
+	};
+
+	/* Legacy early-mount DT fstab for LineageOS / Sony oem->vendor squashfs layout */
+	firmware {
+		android {
+			compatible = "android,firmware";
+
+			fstab {
+				compatible = "android,fstab";
+
+				system {
+					compatible = "android,system";
+					dev = "/dev/block/platform/soc/7464900.sdhci/by-name/system";
+					type = "ext4";
+					mnt_flags = "ro,barrier=1";
+					fsmgr_flags = "wait";
+					status = "okay";
+				};
+
+				vendor {
+					compatible = "android,vendor";
+					dev = "/dev/block/platform/soc/7464900.sdhci/by-name/oem";
+					type = "squashfs";
+					mnt_flags = "ro,barrier=1";
+					fsmgr_flags = "wait";
+					status = "okay";
+				};
+			};
+		};
+	};
+
+	gpio-keys {
+		compatible = "gpio-keys";
+		label = "dora-gpio-keys";
+		pinctrl-names = "default";
+		pinctrl-0 = <&hall_lid_default>;
+
+		key-volume-down {
+			label = "volume_down";
+			gpios = <&pm8994_gpios 2 GPIO_ACTIVE_LOW>;
+			linux,input-type = <EV_KEY>;
+			linux,code = <KEY_VOLUMEDOWN>;
+			debounce-interval = <15>;
+			wakeup-source;
+		};
+
+		key-volume-up {
+			label = "volume_up";
+			gpios = <&pm8994_gpios 3 GPIO_ACTIVE_LOW>;
+			linux,input-type = <EV_KEY>;
+			linux,code = <KEY_VOLUMEUP>;
+			debounce-interval = <15>;
+			wakeup-source;
+		};
+
+		key-camera-snapshot {
+			label = "cam_snapshot";
+			gpios = <&pm8994_gpios 4 GPIO_ACTIVE_LOW>;
+			linux,input-type = <EV_KEY>;
+			linux,code = <KEY_CAMERA>;
+			debounce-interval = <15>;
+			wakeup-source;
+		};
+
+		key-camera-focus {
+			label = "cam_focus";
+			gpios = <&pm8994_gpios 5 GPIO_ACTIVE_LOW>;
+			linux,input-type = <EV_KEY>;
+			linux,code = <KEY_CAMERA_FOCUS>;
+			debounce-interval = <15>;
+			wakeup-source;
+		};
+
+		/* Rohm BU520x1NVX Hall effect cover sensor on TLMM GPIO 78 */
+		switch-lid {
+			label = "lid";
+			gpios = <&tlmm 78 GPIO_ACTIVE_LOW>;
+			linux,input-type = <EV_SW>;
+			linux,code = <SW_LID>;
+			debounce-interval = <120>;
+			wakeup-source;
+		};
+	};
+
+	/* Sony Dora platform bridge: SIM1/UIM2 tray detect (F8131 SS / F8132 DSDS) & userspace sysfs */
+	somc_dora_platform: somc-dora-platform {
+		compatible = "somc,dora-platform";
+		pinctrl-names = "default";
+		pinctrl-0 = <&sim1_det_default &uim_detect_en &dora_nc_gpios>;
+		sim1-det-gpios = <&tlmm 112 GPIO_ACTIVE_HIGH>;
+		uim2-det-gpios = <&tlmm 29 GPIO_ACTIVE_HIGH>;
+		status = "okay";
+	};
+};
+
+/* Dora uses eMMC 5.1 on sdhc1 (7464900.sdhci), not UFS */
+&sdhc1 {
+	status = "okay";
+	vmmc-supply = <&pm8994_l20>;
+	vqmmc-supply = <&pm8994_s4>;
+	bus-width = <8>;
+	non-removable;
+	mmc-ddr-1_8v;
+	mmc-hs200-1_8v;
+	mmc-hs400-1_8v;
+};
+
+/* MicroSD + F8132 Dual-SIM hybrid tray on sdhc2 (74a4900.sdhci) */
+&sdhc2 {
+	status = "okay";
+	cd-gpios = <&tlmm 40 GPIO_ACTIVE_LOW>;
+	vmmc-supply = <&pm8994_l21>;
+	vqmmc-supply = <&pm8994_l13>;
+};
+
+&ufshc {
+	status = "disabled";
+};
+
+&ufsphy {
+	status = "disabled";
+};
+
+/* Dora uses Micro-USB (ID on GPIO 24), no USB-C FUSB301 on BLSP2 I2C5 */
+&blsp2_i2c5 {
+	status = "disabled";
+};
+
+&usb_detect {
+	pins = "gpio24";
+};
+
+&usb3_id {
+	id-gpio = <&tlmm 24 GPIO_ACTIVE_LOW>;
+};
+
+/* PM8994 VADC channels for LCD_ID_ADC (MPP2 -> AMUX6) and Sony Thermistor inputs */
+&pm8994_vadc {
+	adc-chan@14 {
+		reg = <VADC_P_MUX5_1_1>;
+		label = "flash_therm";
+	};
+
+	adc-chan@15 {
+		reg = <VADC_P_MUX6_1_1>;
+		label = "lcd_id_adc";
+	};
+
+	adc-chan@73 {
+		reg = <VADC_LR_MUX4_PU1_AMUX_THM1>;
+		label = "msm_therm";
+	};
+
+	adc-chan@74 {
+		reg = <VADC_LR_MUX5_PU1_AMUX_THM2>;
+		label = "emmc_therm";
+	};
+};
+
+&tlmm {
+	dora_nc_gpios: dora-nc-gpios {
+		gpio49-nc {
+			pins = "gpio49", "gpio77";
+			function = "gpio";
+			drive-strength = <2>;
+			bias-pull-down;
+		};
+
+		gpio73-74-nc {
+			pins = "gpio73", "gpio74";
+			function = "gpio";
+			drive-strength = <2>;
+			bias-disable;
+			output-low;
+		};
+	};
+
+	hall_lid_default: hall-lid-default {
+		pins = "gpio78";
+		function = "gpio";
+		drive-strength = <2>;
+		bias-pull-up;
+	};
+
+	sim1_det_default: sim1-det-default {
+		pins = "gpio112";
+		function = "gpio";
+		drive-strength = <2>;
+		bias-disable;
+	};
+};

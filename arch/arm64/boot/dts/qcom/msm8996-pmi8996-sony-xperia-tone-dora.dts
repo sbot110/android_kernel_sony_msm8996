@@ -1,11 +1,15 @@
 // SPDX-License-Identifier: BSD-3-Clause
 /*
- * Copyright (c) 2021, Konrad Dybcio <konrad.dybcio@somainline.org>
+ * Sony Xperia X Performance F8131 / F8132 (MSM8996 v3.1 + PM8994 + PMI8996)
  */
 
 #include "msm8996-sony-xperia-tone-dora.dts"
 #include "pmi8996.dtsi"
 
 / {
-	model = "Sony Xperia X Performance (PMI8996)";
+	model = "SoMC Dora-ROW (Sony Xperia X Performance F8131/F8132 PMI8996)";
+	compatible = "somc,dora-row", "sony,dora-row", "qcom,msm8996";
+	qcom,msm-id = <246 0x30001>;
+	qcom,pmic-id = <0x20009 0x10013 0 0>;
+	qcom,board-id = <8 0>;
 };

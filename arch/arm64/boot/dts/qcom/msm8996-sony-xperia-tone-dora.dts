@@ -1,27 +1,17 @@
 // SPDX-License-Identifier: BSD-3-Clause
 /*
- * Copyright (c) 2021, AngeloGioacchino Del Regno
- *                     <angelogioacchino.delregno@somainline.org>
- * Copyright (c) 2021, Konrad Dybcio <konrad.dybcio@somainline.org>
+ * Sony Xperia X Performance F8131 / F8132 (MSM8996 v3.1 + PM8994 + PMI8994)
  */
 
 /dts-v1/;
 
 #include "msm8996-sony-xperia-tone.dtsi"
+#include "msm8996-sony-xperia-tone-dora-common.dtsi"
 
 / {
-	model = "Sony Xperia X Performance";
-	compatible = "sony,dora-row", "qcom,msm8996";
-};
-
-/delete-node/ &tof_sensor;
-/delete-node/ &pm8994_l11;
-/delete-node/ &pm8994_l14;
-
-&usb_detect {
-	pins = "gpio24";
-};
-
-&usb3_id {
-	id-gpio = <&tlmm 24 GPIO_ACTIVE_LOW>;
+	model = "SoMC Dora-ROW (Sony Xperia X Performance F8131/F8132)";
+	compatible = "somc,dora-row", "sony,dora-row", "qcom,msm8996";
+	qcom,msm-id = <246 0x30001>;
+	qcom,pmic-id = <0x20009 0x2000a 0 0>;
+	qcom,board-id = <8 0>;
 };

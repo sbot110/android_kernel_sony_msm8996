@@ -15,7 +15,11 @@ config ION_LEGACY
 	bool "Legacy ion"
 	depends on ION
 	help
-	  Choose this option to enable the legacy ion. If in doubt, say N.
+	  Enable real per-open legacy ION allocation handles backed by dma-bufs,
+	  including alloc/free/share/map/import and 32-bit allocation translation.
+	  Native fd-based clients continue to work. Alignment above PAGE_SIZE and
+	  vendor CUSTOM/cache-range ioctls are not emulated; users of those APIs
+	  still need a separate compatibility implementation. If in doubt, say N.
 
 config ION_SYSTEM_HEAP
 	bool "Ion system heap"

@@ -19,11 +19,6 @@ union ion_ioctl_arg {
 	struct ion_allocation_data allocation;
 	struct ion_heap_query query;
 	struct ion_prefetch_data prefetch_data;
-#ifdef CONFIG_ION_LEGACY
-	struct ion_fd_data fd;
-	struct ion_old_allocation_data old_allocation;
-	struct ion_handle_data handle;
-#endif
 };
 
 static int validate_ioctl_arg(unsigned int cmd, union ion_ioctl_arg *arg)
@@ -42,26 +37,18 @@ static int validate_ioctl_arg(unsigned int cmd, union ion_ioctl_arg *arg)
 	return 0;
 }
 
-/* fix up the cases where the ioctl direction bits are incorrect */
-static unsigned int ion_ioctl_dir(unsigned int cmd)
-{
-	switch (cmd) {
-#ifdef CONFIG_ION_LEGACY
-	case ION_IOC_FREE:
-		return _IOC_WRITE;
-#endif
-	default:
-		return _IOC_DIR(cmd);
-	}
-}
-
 long ion_ioctl(struct file *filp, unsigned int cmd, unsigned long arg)
 {
 	int ret = 0;
 	unsigned int dir;
 	union ion_ioctl_arg data;
 
-	dir = ion_ioctl_dir(cmd);
+#ifdef CONFIG_ION_LEGACY
+	if (ion_legacy_cmd(cmd))
+		return ion_legacy_ioctl(filp, cmd, arg);
+#endif
+
+	dir = _IOC_DIR(cmd);
 
 	if (_IOC_SIZE(cmd) > sizeof(data))
 		return -EINVAL;
@@ -86,17 +73,29 @@ long ion_ioctl(struct file *filp, unsigned int cmd, unsigned long arg)
 	switch (cmd) {
 	case ION_IOC_ALLOC:
 	{
+		struct dma_buf *buffer;
 		int fd;
 
-		fd = ion_alloc_fd(data.allocation.len,
-				  data.allocation.heap_id_mask,
-				  data.allocation.flags);
-		if (fd < 0)
+		buffer = ion_alloc_dmabuf(data.allocation.len,
+					data.allocation.heap_id_mask,
+					data.allocation.flags);
+		if (IS_ERR(buffer))
+			return PTR_ERR(buffer);
+		fd = get_unused_fd_flags(O_CLOEXEC);
+		if (fd < 0) {
+			dma_buf_put(buffer);
 			return fd;
+		}
 
 		data.allocation.fd = fd;
-
-		break;
+		if (copy_to_user((void __user *)arg, &data.allocation,
+				 sizeof(data.allocation))) {
+			put_unused_fd(fd);
+			dma_buf_put(buffer);
+			return -EFAULT;
+		}
+		fd_install(fd, buffer->file);
+		return 0;
 	}
 	case ION_IOC_HEAP_QUERY:
 		ret = ion_query_heaps(&data.query);
@@ -128,41 +127,6 @@ long ion_ioctl(struct file *filp, unsigned int cmd, unsigned long arg)
 			return ret;
 		break;
 	}
-#ifdef CONFIG_ION_LEGACY
-	case ION_OLD_IOC_ALLOC:
-	{
-		int fd;
-
-		fd = ion_alloc_fd(data.old_allocation.len,
-				  data.old_allocation.heap_id_mask,
-				  data.old_allocation.flags);
-		if (fd < 0)
-			return fd;
-
-		data.old_allocation.handle = fd;
-
-		break;
-	}
-	case ION_IOC_FREE:
-		/*
-		 * libion passes 0 as the handle to check for this ioctl's
-		 * existence and expects -ENOTTY on kernel 4.12+ as an indicator
-		 * of having a new ION ABI. We want to use new ION as much as
-		 * possible, so pretend that this ioctl doesn't exist when
-		 * libion checks for it.
-		 */
-		if (!data.handle.handle)
-			ret = -ENOTTY;
-
-		break;
-	case ION_IOC_SHARE:
-	case ION_IOC_MAP:
-		data.fd.fd = data.fd.handle;
-		break;
-	case ION_IOC_IMPORT:
-		data.fd.handle = data.fd.fd;
-		break;
-#endif
 	default:
 		return -ENOTTY;
 	}

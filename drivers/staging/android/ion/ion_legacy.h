@@ -1,6 +1,8 @@
 #ifndef _ION_LEGACY_H
 #define _ION_LEGACY_H
 
+#include <linux/fs.h>
+
 #ifdef CONFIG_ION_LEGACY
 
 #include "../uapi/ion.h"
@@ -95,6 +97,16 @@ struct ion_handle_data {
  * filed set to the corresponding opaque handle.
  */
 #define ION_IOC_IMPORT		_IOWR(ION_IOC_MAGIC, 5, struct ion_fd_data)
+
+#define ION_IOC_SYNC		_IOWR(ION_IOC_MAGIC, 7, struct ion_fd_data)
+
+int ion_legacy_open(struct inode *inode, struct file *file);
+int ion_legacy_release(struct inode *inode, struct file *file);
+bool ion_legacy_cmd(unsigned int cmd);
+long ion_legacy_ioctl(struct file *file, unsigned int cmd, unsigned long arg);
+#ifdef CONFIG_COMPAT
+long ion_legacy_compat_alloc(struct file *file, unsigned long arg);
+#endif
 
 #endif /* CONFIG_ION_LEGACY */
 

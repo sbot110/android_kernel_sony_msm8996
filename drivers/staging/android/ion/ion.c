@@ -38,6 +38,7 @@
 #include "ion.h"
 #include "ion_secure_util.h"
 #include "compat_ion.h"
+#include "ion_legacy.h"
 
 static struct ion_device *internal_dev;
 static atomic_long_t total_heap_bytes;
@@ -1034,6 +1035,11 @@ static const struct dma_buf_ops dma_buf_ops = {
 	.get_flags = ion_dma_buf_get_flags,
 };
 
+bool ion_is_ion_dma_buf(struct dma_buf *buffer)
+{
+	return buffer->ops == &dma_buf_ops;
+}
+
 struct dma_buf *ion_alloc_dmabuf(size_t len, unsigned int heap_id_mask,
 				 unsigned int flags)
 {
@@ -1194,6 +1200,10 @@ out:
 
 static const struct file_operations ion_fops = {
 	.owner          = THIS_MODULE,
+#ifdef CONFIG_ION_LEGACY
+	.open = ion_legacy_open,
+	.release = ion_legacy_release,
+#endif
 	.unlocked_ioctl = ion_ioctl,
 #ifdef CONFIG_COMPAT
 #ifdef CONFIG_ION_LEGACY

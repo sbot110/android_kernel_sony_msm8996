@@ -34,6 +34,9 @@ overrides. Копирование только ID в начальный 4.19 DTS
 
 Текущий начальный 4.19 DT описывает только v3.1 + PM8994/PMI8994 и ограничивает
 bring-up двумя CPU. Полное покрытие четырёх исходных вариантов ещё отсутствует.
+Добавлен supplement REVID/VADC/FG/BCL с исходными каналами, IRQ, JEITA и
+профилем Dora 1300-3513, 330 кОм, диапазоном 17%. Это улучшает одну настоящую
+аппаратную конфигурацию, не заменяя остальные тремя копиями с другими ID.
 
 ## SIM / modem / radio
 
@@ -67,7 +70,9 @@ F8131 — SIM1, звонки/SMS/LTE/передача данных; F8132 — о
 Диапазоны не пересекаются. Сохранён исходный выбор по lcdid_adc из bootargs,
 somc,lcd-id-adc и somc,dsi-index, а не выбор по номеру модели телефона.
 Драйвер Sony panel/incell перенесён как исходный код и компилируется отдельно;
-начальный board DT пока не включает эти панели и их полную цепочку providers.
+board DT пока не включает эти панели и их полную цепочку providers.
+Clearpad получил backend уведомлений fbdev MDSS/Tone incell; I2C12 и полная
+цепочка питания/панели ещё требуют подключения.
 
 Контрольные данные пользователя **F8132 / рабочее 4.4**:
 
@@ -97,16 +102,33 @@ ADC выбирает AUO однозначно. bitclk=8*byteclk=6*pclk; знач
 | AUO 1080p60 | С, Н | Д4.4, С, Н | Полный MDSS/SMMU/bus/clock/regulator DT и физическая загрузка |
 | JDI/LGD/Sharp ID3/ID9 | С, Н | С, Н | Аппараты с каждой реально установленной панелью |
 | GPU Adreno 530 / ION | Б, О, Н | Б, О, Н | GPU DT, secure firmware/heaps, ioctl/cache ABI и vendor EGL/gralloc |
-| BCM4359 / Wi-Fi | Б, О, Н | Б, О, Н | Согласовать upstream PCIe DT с vendor msm_pcie API; firmware/calibration |
-| Тачскрин Clearpad | С, О, Н | С, О, Н | Совместимый incell provider, I2C12 DT и PM/reset binding |
-| Звук / DSP / WCD9335 | С, О, Н | С, О, Н | Полная vendor DSP/machine/SLIMbus связка и маршруты |
+| BCM4359 / Wi-Fi | С, Б, Н | С, Б, Н | Vendor host/QMP/GCC DT подключён; проверить DMA/SMMU, link training, firmware/calibration, WPA2 и wakeup |
+| Тачскрин Clearpad | С, Б, О, Н | С, Б, О, Н | Fbdev MDSS/Tone incell код собран; I2C12 DT и PM/reset цепочка ещё не подключены |
+| Звук / DSP / WCD9335 | С, Б, О, Н | С, Б, О, Н | Sony machine/APRv2/Q6/WCD9335 собраны; LPASS/PIL/SSR/SLIMbus DT/firmware и Sony effects ABI ещё не завершены |
 | Камеры | О, Н | О, Н | Sensor/CCI/ISP/EEPROM/actuator DT, drivers и vendor ABI |
 | UFS / SD | Б, Н | Б, Н | Оба набора PMIC/stepping, ICE, suspend, filesystem integrity |
 | USB / ADB / MTP / OTG | Б, Н | Б, Н | PHY/VBUS/role detection и физическая проверка |
-| Зарядка / FG / thermal / BCL | О, Н | О, Н | Настоящие VADC/BCL и Sony policy; без отключения safety paths |
+| FG / VADC / BCL | С, Б, Н | С, Б, Н | Реальные драйверы и PM8994/PMI8994 DT; проверить PMIC/profile, калибровку, IRQ, SOC, JEITA на каждом аппарате |
+| Зарядка / OTG / BC1.2 | С, Б, О, Н | С, Б, О, Н | Sony SMBcharger собран; отсутствует подключённый DPDM/PHY и полный microUSB ID/MPP provider |
 | Modem / calls / SMS / data | О, Н | О, Н | Firmware/SSR/SMD/GLINK/RMNET/IPA, RIL и регистрация в сети |
 | SIM configuration | С: ss userspace | С: dsds userspace | SIM1 отдельно и оба слота/DSDS отдельно |
 | Suspend/resume / 4 CPU / DVFS | О, Н | О, Н | CPR/SAW/binning/clock/PMIC variants и измерения |
+
+Bluetooth/FM, GNSS, NFC, fingerprint, дополнительные датчики и вибромотор
+не прошли полную отдельную ревизию driver/DT/firmware ABI этого порта.
+Их нельзя считать поддержанными по наличию общих драйверов в базе.
+
+Обязательные физические испытания:
+
+- **F8131:** реальные SoC/PMIC/board IDs и выбранный DTB, холодный запуск,
+  установленная панель/LCD ID и 1080p60, touch, GPU, Wi-Fi WPA2/reconnect,
+  звук/микрофоны/гарнитура, камеры, UFS/SD, USB/OTG, батарея/температуры,
+  зарядка/отсечки/JEITA, suspend/resume и четыре CPU; отдельно SIM1,
+  звонки, SMS, LTE/data и восстановление модема.
+- **F8132:** тот же полный аппаратный набор проверяется заново на F8132;
+  дополнительно оба SIM-слота, DSDS standby, входящие на оба номера,
+  смена data SIM, звук во время звонков и восстановление модема.
+  Предоставленные AUO данные доказывают работу панели только под 4.4.
 
 Б означает наличие кода в сборочной проверке, а не привязку к работающему DT.
 В частности, существование KGSL или PCI_MSM в vmlinux не доказывает probe GPU/Wi-Fi.

@@ -67,8 +67,11 @@ DTB, without changing any Git branch. The 128-byte profile has an additional
 explicit length/hash check. A charger node is rejected until its real PHY
 provider integration is completed.
 
-The source/profile hash can be checked against the original Git object:
+A single-branch 4.19 clone may not contain the separate 4.4 reference object.
+Fetch that exact commit into FETCH_HEAD without creating/switching branches,
+then compare the original source/profile hash:
 
+  git fetch origin 0c295b15b6d0fb59a64e13b9e0ef2070818ef2a1
   git show 0c295b15b6d0fb59a64e13b9e0ef2070818ef2a1:arch/arm/boot/dts/qcom/batterydata-tone-dora-send.dtsi | sha256sum
   sha256sum arch/arm64/boot/dts/qcom/sony/dora/batterydata-tone-dora-send.dtsi
 

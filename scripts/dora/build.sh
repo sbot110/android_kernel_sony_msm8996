@@ -35,6 +35,7 @@ make -C "$root" O="$out" tone_dora_defconfig 2>&1 | tee "$out/config.log"
 python3 "$root/scripts/dora/check-config.py" "$out/.config"
 python3 "$root/scripts/dora/check-panels.py"
 python3 "$root/scripts/dora/check-panel-selection.py"
+python3 "$root/scripts/dora/check-ufs-phy.py"
 dtb=qcom/msm8996-sony-xperia-tone-dora.dtb
 make -C "$root" O="$out" -j"$jobs" Image.gz "$dtb" 2>&1 | tee "$out/build.log"
 python3 "$root/scripts/dora/check-dt.py" "$out/arch/arm64/boot/dts/$dtb"

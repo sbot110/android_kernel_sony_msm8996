@@ -34,6 +34,16 @@ def validate(out, dtbs):
             "vmlinux is not ELF64 little-endian")
     require(struct.unpack_from("<HH", elf, 16) == (2, 183),
             "vmlinux is not an AArch64 executable")
+    symbols = {line.split()[2]: line.split()[1]
+               for line in (out / "System.map").read_text().splitlines()
+               if len(line.split()) == 3}
+    linked = """qusb2_phy_probe msm8996_dora_init_tbl
+        ufs_qcom_phy_qmp_14nm_probe glink_rpm_probe qcom_apcs_ipc_probe
+        pmic_gpio_probe pmic_mpp_probe simple_pm_bus_probe
+        mdss_dsi_panel_driver_detection bpf_int_jit_compile""".split()
+    for symbol in linked:
+        require(symbol in symbols and symbols[symbol].upper() != "U",
+                "required provider/implementation absent from System.map: " + symbol)
 
     compressed = (boot / "Image.gz").read_bytes()
     inflater = zlib.decompressobj(16 + zlib.MAX_WBITS)
@@ -83,6 +93,7 @@ def validate(out, dtbs):
                               sha256=hashlib.sha256(data).hexdigest()))
     return dict(status="PASS", scope="build formats and exact DTB payload only",
                 bootloader_selection="UNVERIFIED", device_boot="UNTESTED",
+                linked_implementations=linked,
                 image_header=dict(text_offset=text_offset, image_size=image_size, flags=flags),
                 appended_dtbs=entries, artifacts=artifacts)
 

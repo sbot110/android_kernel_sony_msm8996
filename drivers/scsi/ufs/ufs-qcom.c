@@ -1240,6 +1240,10 @@ static int ufs_qcom_bus_register(struct ufs_qcom_host *host)
 	host->bus_vote.max_bus_bw.attr.name = "max_bus_bw";
 	host->bus_vote.max_bus_bw.attr.mode = 0644;
 	err = device_create_file(dev, &host->bus_vote.max_bus_bw);
+	if (err) {
+		msm_bus_scale_unregister_client(host->bus_vote.client_handle);
+		host->bus_vote.client_handle = 0;
+	}
 out:
 	return err;
 }
@@ -2300,6 +2304,9 @@ out_disable_vddp:
 out_unregister_bus:
 	phy_exit(host->generic_phy);
 out_unregister_bus_only:
+#ifdef CONFIG_QCOM_BUS_SCALING
+	device_remove_file(dev, &host->bus_vote.max_bus_bw);
+#endif
 	msm_bus_scale_unregister_client(host->bus_vote.client_handle);
 out_variant_clear:
 	ufs_qcom_pm_qos_remove(host);
@@ -2313,6 +2320,9 @@ static void ufs_qcom_exit(struct ufs_hba *hba)
 {
 	struct ufs_qcom_host *host = ufshcd_get_variant(hba);
 
+#ifdef CONFIG_QCOM_BUS_SCALING
+	device_remove_file(hba->dev, &host->bus_vote.max_bus_bw);
+#endif
 	msm_bus_scale_unregister_client(host->bus_vote.client_handle);
 	ufs_qcom_disable_lane_clks(host);
 	if (host->is_phy_pwr_on) {

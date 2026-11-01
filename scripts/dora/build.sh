@@ -28,8 +28,10 @@ done
 } > "$out/toolchain.txt"
 make -C "$root" O="$out" tone_dora_defconfig 2>&1 | tee "$out/config.log"
 python3 "$root/scripts/dora/check-config.py" "$out/.config"
+python3 "$root/scripts/dora/check-panels.py"
 dtb=qcom/msm8996-sony-xperia-tone-dora.dtb
 make -C "$root" O="$out" -j"$jobs" Image.gz "$dtb" 2>&1 | tee "$out/build.log"
+python3 "$root/scripts/dora/check-power-dt.py" "$out/arch/arm64/boot/dts/$dtb"
 # Explicit list avoids accidentally appending unrelated/stale DTBs from O=.
 image="$out/arch/arm64/boot/Image.gz"
 tree="$out/arch/arm64/boot/dts/$dtb"

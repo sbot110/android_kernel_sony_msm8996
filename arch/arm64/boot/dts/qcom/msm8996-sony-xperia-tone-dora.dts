@@ -8,10 +8,12 @@
 /dts-v1/;
 
 #include "msm8996-sony-xperia-tone.dtsi"
+#include "msm8996-sony-xperia-tone-pcie.dtsi"
+#include "msm8996-sony-xperia-tone-power.dtsi"
 
 / {
 	model = "Sony Xperia X Performance";
-	compatible = "sony,dora-row", "qcom,msm8996";
+	compatible = "somc,dora-row", "sony,dora-row", "qcom,msm8996";
 };
 
 /delete-node/ &pm8994_l11;

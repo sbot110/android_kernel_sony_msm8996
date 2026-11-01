@@ -1,0 +1,374 @@
+// SPDX-License-Identifier: GPL-2.0-only
+/*
+ * Copyright (c) 2014-2017, 2019, The Linux Foundation. All rights reserved.
+ * Copyright (C) 2014-2016 Sony Mobile Communications Inc.
+ *
+ * Sony 4.4.302 power data, reference commit:
+ * 0c295b15b6d0fb59a64e13b9e0ef2070818ef2a1.
+ * Final msm8996-v3-tone-dora_generic.dts data were compared as flattened DTs.
+ * See Documentation/sony/dora-power-dt.txt for provenance and validation.
+ *
+ * Include after msm8996-sony-xperia-tone.dtsi. This describes the real
+ * PM8994 + PMI8994 baseline only; it does not add another stepping/PMIC DTB.
+ * Do not infer F8131/F8132 PMIC selection from the SIM count.
+ */
+
+#include <dt-bindings/interrupt-controller/irq.h>
+
+/ {
+	tone_dora_batterydata: qcom,battery-data {
+		qcom,batt-id-range-pct = <17>;
+		#include "sony/dora/batterydata-tone-dora-send.dtsi"
+	};
+};
+
+&spmi_bus {
+	pmic@0 {
+		pm8994_revid: revid@100 {
+			compatible = "qcom,qpnp-revid";
+			reg = <0x100>;
+		};
+
+		pm8994_vadc: vadc@3100 {
+			compatible = "qcom,qpnp-vadc";
+			reg = <0x3100>;
+			#address-cells = <0x1>;
+			#size-cells = <0x0>;
+			interrupts = <0x0 0x31 0x0 IRQ_TYPE_NONE>;
+			interrupt-names = "eoc-int-en-set";
+			qcom,adc-bit-resolution = <0xf>;
+			qcom,adc-vdd-reference = <0x708>;
+			qcom,vadc-poll-eoc;
+
+			chan@8 {
+				label = "die_temp";
+				reg = <0x8>;
+				qcom,decimation = <0x0>;
+				qcom,pre-div-channel-scaling = <0x0>;
+				qcom,calibration-type = "absolute";
+				qcom,scale-function = <0x3>;
+				qcom,hw-settle-time = <0x0>;
+				qcom,fast-avg-setup = <0x0>;
+			};
+
+			chan@9 {
+				label = "ref_625mv";
+				reg = <0x9>;
+				qcom,decimation = <0x0>;
+				qcom,pre-div-channel-scaling = <0x0>;
+				qcom,calibration-type = "absolute";
+				qcom,scale-function = <0x0>;
+				qcom,hw-settle-time = <0x0>;
+				qcom,fast-avg-setup = <0x0>;
+			};
+
+			chan@a {
+				label = "ref_1250v";
+				reg = <0xa>;
+				qcom,decimation = <0x0>;
+				qcom,pre-div-channel-scaling = <0x0>;
+				qcom,calibration-type = "absolute";
+				qcom,scale-function = <0x0>;
+				qcom,hw-settle-time = <0x0>;
+				qcom,fast-avg-setup = <0x0>;
+			};
+
+			chan@5 {
+				label = "vcoin";
+				reg = <0x5>;
+				qcom,decimation = <0x0>;
+				qcom,pre-div-channel-scaling = <0x1>;
+				qcom,calibration-type = "absolute";
+				qcom,scale-function = <0x0>;
+				qcom,hw-settle-time = <0x0>;
+				qcom,fast-avg-setup = <0x0>;
+			};
+
+			chan@7 {
+				label = "vph_pwr";
+				reg = <0x7>;
+				qcom,decimation = <0x0>;
+				qcom,pre-div-channel-scaling = <0x1>;
+				qcom,calibration-type = "absolute";
+				qcom,scale-function = <0x0>;
+				qcom,hw-settle-time = <0x0>;
+				qcom,fast-avg-setup = <0x0>;
+			};
+
+			chan@73 {
+				label = "msm_therm";
+				reg = <0x73>;
+				qcom,decimation = <0x0>;
+				qcom,pre-div-channel-scaling = <0x0>;
+				qcom,calibration-type = "ratiometric";
+				qcom,scale-function = <0x11>;
+				qcom,hw-settle-time = <0x2>;
+				qcom,fast-avg-setup = <0x0>;
+			};
+
+			chan@74 {
+				label = "emmc_therm";
+				reg = <0x74>;
+				qcom,decimation = <0x0>;
+				qcom,pre-div-channel-scaling = <0x0>;
+				qcom,calibration-type = "ratiometric";
+				qcom,scale-function = <0x11>;
+				qcom,hw-settle-time = <0x2>;
+				qcom,fast-avg-setup = <0x0>;
+			};
+
+			chan@75 {
+				label = "pa_therm0";
+				reg = <0x75>;
+				qcom,decimation = <0x0>;
+				qcom,pre-div-channel-scaling = <0x0>;
+				qcom,calibration-type = "ratiometric";
+				qcom,scale-function = <0x2>;
+				qcom,hw-settle-time = <0x2>;
+				qcom,fast-avg-setup = <0x0>;
+			};
+
+			chan@77 {
+				label = "pa_therm1";
+				reg = <0x77>;
+				qcom,decimation = <0x0>;
+				qcom,pre-div-channel-scaling = <0x0>;
+				qcom,calibration-type = "ratiometric";
+				qcom,scale-function = <0x2>;
+				qcom,hw-settle-time = <0x2>;
+				qcom,fast-avg-setup = <0x0>;
+			};
+
+			chan@78 {
+				label = "quiet_therm";
+				reg = <0x78>;
+				qcom,decimation = <0x0>;
+				qcom,pre-div-channel-scaling = <0x0>;
+				qcom,calibration-type = "ratiometric";
+				qcom,scale-function = <0x2>;
+				qcom,hw-settle-time = <0x2>;
+				qcom,fast-avg-setup = <0x0>;
+			};
+
+			chan@7c {
+				label = "xo_therm_buf";
+				reg = <0x7c>;
+				qcom,decimation = <0x0>;
+				qcom,pre-div-channel-scaling = <0x0>;
+				qcom,calibration-type = "ratiometric";
+				qcom,scale-function = <0x4>;
+				qcom,hw-settle-time = <0x2>;
+				qcom,fast-avg-setup = <0x0>;
+			};
+
+			chan@14 {
+				label = "flash_therm";
+				reg = <0x14>;
+				qcom,decimation = <0x0>;
+				qcom,pre-div-channel-scaling = <0x0>;
+				qcom,calibration-type = "ratiometric";
+				qcom,scale-function = <0x11>;
+				qcom,hw-settle-time = <0x2>;
+				qcom,fast-avg-setup = <0x0>;
+				qcom,vadc-thermal-node;
+			};
+
+			chan@39 {
+				label = "usb_id_lv";
+				reg = <0x39>;
+				qcom,decimation = <0x0>;
+				qcom,pre-div-channel-scaling = <0x0>;
+				qcom,calibration-type = "absolute";
+				qcom,scale-function = <0x0>;
+				qcom,hw-settle-time = <0x5>;
+				qcom,fast-avg-setup = <0x0>;
+			};
+		};
+	};
+
+	pmic@2 {
+		pmi8994_revid: revid@100 {
+			compatible = "qcom,qpnp-revid";
+			reg = <0x100>;
+		};
+
+		pmi8994_vadc: vadc@3100 {
+			compatible = "qcom,qpnp-vadc";
+			reg = <0x3100>;
+			#address-cells = <0x1>;
+			#size-cells = <0x0>;
+			interrupts = <0x2 0x31 0x0 IRQ_TYPE_NONE>,
+				<0x2 0x31 0x3 IRQ_TYPE_NONE>,
+				<0x2 0x31 0x4 IRQ_TYPE_NONE>;
+			interrupt-names = "eoc-int-en-set", "high-thr-en-set", "low-thr-en-set";
+			qcom,adc-bit-resolution = <0xf>;
+			qcom,adc-vdd-reference = <0x708>;
+			qcom,vadc-poll-eoc;
+			qcom,vadc-meas-int-mode;
+			qcom,pmic-revid = <&pmi8994_revid>;
+
+			chan@d {
+				label = "chg_temp";
+				reg = <0xd>;
+				qcom,decimation = <0x0>;
+				qcom,pre-div-channel-scaling = <0x0>;
+				qcom,calibration-type = "absolute";
+				qcom,scale-function = <0x10>;
+				qcom,hw-settle-time = <0x0>;
+				qcom,fast-avg-setup = <0x0>;
+			};
+
+			chan@0 {
+				label = "usbin";
+				reg = <0x0>;
+				qcom,decimation = <0x0>;
+				qcom,pre-div-channel-scaling = <0x4>;
+				qcom,calibration-type = "absolute";
+				qcom,scale-function = <0x0>;
+				qcom,hw-settle-time = <0x0>;
+				qcom,fast-avg-setup = <0x0>;
+			};
+
+			chan@1 {
+				label = "dcin";
+				reg = <0x1>;
+				qcom,decimation = <0x0>;
+				qcom,pre-div-channel-scaling = <0x4>;
+				qcom,calibration-type = "absolute";
+				qcom,scale-function = <0x0>;
+				qcom,hw-settle-time = <0x0>;
+				qcom,fast-avg-setup = <0x0>;
+			};
+
+			chan@43 {
+				label = "usb_dp";
+				reg = <0x43>;
+				qcom,decimation = <0x0>;
+				qcom,pre-div-channel-scaling = <0x1>;
+				qcom,calibration-type = "absolute";
+				qcom,scale-function = <0x0>;
+				qcom,hw-settle-time = <0x0>;
+				qcom,fast-avg-setup = <0x0>;
+			};
+
+			chan@44 {
+				label = "usb_dm";
+				reg = <0x44>;
+				qcom,decimation = <0x0>;
+				qcom,pre-div-channel-scaling = <0x1>;
+				qcom,calibration-type = "absolute";
+				qcom,scale-function = <0x0>;
+				qcom,hw-settle-time = <0x0>;
+				qcom,fast-avg-setup = <0x0>;
+			};
+		};
+
+		pmi8994_bcl: bcl@4200 {
+			compatible = "qcom,msm-bcl";
+			reg = <0x4200 0x88e>;
+			reg-names = "fg_user_adc", "pon_spare";
+			interrupts = <0x2 0x42 0x0 IRQ_TYPE_NONE>,
+				<0x2 0x42 0x1 IRQ_TYPE_NONE>;
+			interrupt-names = "bcl-high-ibat-int", "bcl-low-vbat-int";
+			qcom,vbat-scaling-factor = <0x9858>;
+			qcom,vbat-gain-numerator = <0x1>;
+			qcom,vbat-gain-denominator = <0x80>;
+			qcom,vbat-polling-delay-ms = <0x64>;
+			qcom,ibat-scaling-factor = <0x9858>;
+			qcom,ibat-gain-numerator = <0x1>;
+			qcom,ibat-gain-denominator = <0x80>;
+			qcom,ibat-offset-numerator = <0x4b0>;
+			qcom,ibat-offset-denominator = <0x1>;
+			qcom,ibat-polling-delay-ms = <0x64>;
+			qcom,inhibit-derating-ua = <0x86470>;
+		};
+
+		pmi8994_fg: qcom,fg {
+			compatible = "qcom,qpnp-fg";
+			#address-cells = <0x1>;
+			#size-cells = <0x1>;
+			qcom,resume-soc = <0x5f>;
+			status = "okay";
+			qcom,bcl-lm-threshold-ma = <0x7f>;
+			qcom,bcl-mh-threshold-ma = <0x195>;
+			qcom,fg-iterm-ma = <0x96>;
+			qcom,fg-chg-iterm-ma = <0x96>;
+			qcom,cycle-counter-en;
+			qcom,capacity-learning-on;
+			qcom,fg-cc-cv-threshold-mv = <0x10c2>;
+			qcom,pmic-revid = <&pmi8994_revid>;
+			qcom,battery-data = <&tone_dora_batterydata>;
+			qcom,ext-sense-type;
+			qcom,hot-bat-decidegc = <0x226>;
+			qcom,warm-bat-decidegc = <0x1c2>;
+			qcom,cool-bat-decidegc = <0x64>;
+			qcom,cold-bat-decidegc = <0x32>;
+			qcom,cl-max-increment-deciperc = <0x0>;
+			qcom,cl-max-decrement-deciperc = <0x14>;
+			qcom,cl-max-start-capacity = <0x28>;
+			qcom,hold-soc-while-full;
+			qcom,thermal-coefficients = [ec 85 75 4a fc 35];
+			qcom,vbat-estimate-diff-mv = <0xc8>;
+			qcom,cl-vbat-est-thr-uv = <0x493e0>;
+			somc,resume-soc-raw-full-normal = <0xf3>;
+			somc,resume-soc-raw-full-aging = <0xe3>;
+			somc,resume-soc-raw-not-full-normal = <0xfd>;
+			somc,resume-soc-raw-not-full-aging = <0xef>;
+			qcom,cold-hot-jeita-hysteresis = <0x14 0x14>;
+			somc,cool-warm-jeita-hysteresis = <0x14 0x14>;
+
+			qcom,fg-soc@4000 {
+				status = "okay";
+				reg = <0x4000 0x100>;
+				interrupts = <0x2 0x40 0x0 IRQ_TYPE_NONE>,
+					<0x2 0x40 0x1 IRQ_TYPE_NONE>,
+					<0x2 0x40 0x2 IRQ_TYPE_NONE>,
+					<0x2 0x40 0x3 IRQ_TYPE_NONE>,
+					<0x2 0x40 0x4 IRQ_TYPE_NONE>,
+					<0x2 0x40 0x5 IRQ_TYPE_NONE>,
+					<0x2 0x40 0x6 IRQ_TYPE_NONE>,
+					<0x2 0x40 0x7 IRQ_TYPE_NONE>;
+				interrupt-names = "high-soc", "low-soc", "full-soc", "empty-soc", "delta-soc", "first-est-done", "sw-fallbk-ocv", "sw-fallbk-new-batt";
+			};
+
+			qcom,fg-batt@4100 {
+				reg = <0x4100 0x100>;
+				interrupts = <0x2 0x41 0x0 IRQ_TYPE_NONE>,
+					<0x2 0x41 0x1 IRQ_TYPE_NONE>,
+					<0x2 0x41 0x2 IRQ_TYPE_NONE>,
+					<0x2 0x41 0x3 IRQ_TYPE_NONE>,
+					<0x2 0x41 0x4 IRQ_TYPE_NONE>,
+					<0x2 0x41 0x5 IRQ_TYPE_NONE>,
+					<0x2 0x41 0x6 IRQ_TYPE_NONE>,
+					<0x2 0x41 0x7 IRQ_TYPE_NONE>;
+				interrupt-names = "soft-cold", "soft-hot", "vbatt-low", "batt-ided", "batt-id-req", "batt-unknown", "batt-missing", "batt-match";
+			};
+
+			qcom,fg-adc-vbat@4254 {
+				reg = <0x4254 0x1>;
+			};
+
+			qcom,fg-adc-ibat@4255 {
+				reg = <0x4255 0x1>;
+			};
+
+			qcom,revid-tp-rev@1f1 {
+				reg = <0x1f1 0x1>;
+			};
+
+			qcom,fg-memif@4400 {
+				status = "okay";
+				reg = <0x4400 0x100>;
+				interrupts = <0x2 0x44 0x0 IRQ_TYPE_NONE>,
+					<0x2 0x44 0x1 IRQ_TYPE_NONE>;
+				interrupt-names = "mem-avail", "data-rcvry-sug";
+			};
+		};
+
+		/*
+		 * Charger DT is intentionally absent: the current native QUSB2 PHY
+		 * does not export the original dpdm regulator. Adding a supply to
+		 * that PHY, or a fixed substitute, would misdescribe the hardware.
+		 */
+	};
+};

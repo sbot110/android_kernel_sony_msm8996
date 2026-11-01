@@ -1,0 +1,91 @@
+Sony dora PM8994/PMI8994 Device Tree data — 2026-11-01
+====================================================
+
+The dora DTS includes msm8996-sony-xperia-tone-power.dtsi after the shared
+Tone description and PCIe supplement. It adds the actual legacy REVID,
+VADC, BCL and fuel-gauge nodes under the existing native PMIC parents.
+The native RTC, GPIO and MPP providers are retained; no second RTC is added.
+This is the PM8994/PMI8994 v3.1 bring-up target, not full coverage of every
+original SoC stepping/PMIC combination. F8131/F8132 are both targets; SIM
+count does not select the PMIC subtype.
+
+Source and comparison
+---------------------
+Reference commit: 0c295b15b6d0fb59a64e13b9e0ef2070818ef2a1.
+Original entry: arch/arm/boot/dts/qcom/msm8996-v3-tone-dora_generic.dts.
+The complete original entry was preprocessed and flattened before extracting
+the selected nodes. This preserves final MSM8996/MTP/Tone/Dora overrides,
+rather than copying only the base PMIC DTS or using an MTP battery profile.
+
+All 32 selected PMIC/profile nodes were compared property by property with
+the flattened reference. Child names and all non-phandle property bytes
+match after these explicit adaptations:
+
+- Native PMIC parents use address-cells=1, size-cells=0. Top-level REVID and
+  VADC reg values therefore become <0x100> and <0x3100>.
+- BCL's two original windows become <0x4200>, <0x88e> with their existing
+  fg_user_adc and pon_spare names. The driver reads the actual first cells.
+- FG retains its own child address/size cells=1/1, original register windows
+  and named interrupts. Its hardware interface is not a GEN3/GEN4 FG.
+- Numeric phandles are regenerated; revision/profile references are checked
+  against the correct semantic target rather than comparing arbitrary IDs.
+
+PM8994 VADC channels: 08,09,0a,05,07,73,74,75,77,78,7c,14,39.
+PMI8994 VADC channels: 0d,00,01,43,44. Final calibration, predivision,
+settling, scale-function and labels are retained, including Dora USB-ID39,
+charger temperature and USB D+/D- channels. PMI VADC monitoring uses the
+original EOC/high/low IRQs and actual revision provider.
+BCL uses USID2 peripheral42 IRQbits0/1 and the original scaling/calibration
+properties, including 550000uA inhibit derating for this PMIC baseline.
+
+Battery and FG
+--------------
+The original batterydata-tone-dora-send.dtsi is copied byte-for-byte under
+arch/arm64/boot/dts/qcom/sony/dora/.
+Raw source SHA256:
+  1cd3a0f43cb11ea2f80c79e75f23ec058697decccefd2917a885e218ffff21b3
+The profile is 1300-3513, battery ID 330kohm, final accepted ID range 17%.
+Its 128-byte qcom,fg-profile-data SHA256 is:
+  9f2a3d631d534612f43003a6944d2e5b2b09fb80beddcd96b3dba99e1be4beb0
+Tone thermal/aging/resume settings and Dora 150mA termination plus 20/20
+cold/hot and cool/warm JEITA hysteresis are preserved.
+
+Reproducible local checks
+------------------------
+The build script runs this check on the actual compiled target DTB:
+
+  python3 scripts/dora/check-power-dt.py \
+    out/dora/arch/arm64/boot/dts/qcom/msm8996-sony-xperia-tone-dora.dtb
+
+Documentation/sony/dora-power-dt.json stores normalized per-node SHA256
+values derived from the ORIGINAL flattened DTB. The validator parses the
+compiled 4.19 FDT, checks its bounds and node/property structure, resolves
+phandles to selected semantic nodes, and compares every selected node's
+property bytes and child names. Its digests(nodes, reference=True) function
+also permits recomputing the manifest from a separately compiled original
+DTB, without changing any Git branch. The 128-byte profile has an additional
+explicit length/hash check. A charger node is rejected until its real PHY
+provider integration is completed.
+
+The source/profile hash can be checked against the original Git object:
+
+  git show 0c295b15b6d0fb59a64e13b9e0ef2070818ef2a1:arch/arm/boot/dts/qcom/batterydata-tone-dora-send.dtsi | sha256sum
+  sha256sum arch/arm64/boot/dts/qcom/sony/dora/batterydata-tone-dora-send.dtsi
+
+The scratch comparison passed all 32 nodes. DT compilation retained the
+same seven pre-existing base warnings; no additional warning came from
+this supplement. See dora-build-validation.txt for the final combined build.
+
+Remaining limits
+----------------
+The charger node is absent because the active generic QUSB2 PHY does not
+export the original DPDM regulator or Sony DP/DM power-supply contract.
+The separate vendor PHY implementation is real but cannot own the same
+hardware concurrently. See dora-usb-dpdm-gap.txt and dora-charger-port.txt.
+An FG node/profile does not establish complete charging or Android battery
+operation when the coupled charger control supply is unavailable.
+
+PMI8996 BCL derating/IBB/flash and v3.0 CPR/clock overrides are not claimed
+by changing only root IDs. Both F8131 and F8132 need real PMIC/stepping
+selection, profile/calibration, SOC/temperature/current, JEITA, IRQ and
+suspend/resume tests. No phone has booted this 4.19 port in these checks.

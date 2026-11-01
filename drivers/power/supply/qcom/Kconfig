@@ -2,6 +2,51 @@
 
 menu "Qualcomm Technologies, Inc. Charger and Fuel Gauge support"
 
+config QPNP_SMBCHARGER
+	bool "Legacy QPNP SMB charger for PMI8994/PMI8996"
+	depends on MFD_SPMI_PMIC && PM_SLEEP && EXTCON && REGULATOR && INPUT && RTC_CLASS
+	depends on SENSORS_QPNP_ADC_VOLTAGE && SONY_MSM8996_BCL
+	select OF_BATTERYDATA
+	help
+	  Real Qualcomm switch-mode charger used by Sony Tone devices.
+
+config QPNP_SMBCHARGER_RTC_DEVICE
+	string "RTC used by the legacy QPNP SMB charger"
+	depends on QPNP_SMBCHARGER
+	default RTC_HCTOSYS_DEVICE if RTC_HCTOSYS
+	default "rtc0"
+	help
+	  Real RTC used for elapsed-time charging decisions.
+
+config QPNP_SMBCHARGER_EXTENSION
+	bool "Sony Tone SMB charger extensions"
+	depends on QPNP_SMBCHARGER
+	select SOMC_CHARGER_EXTENSION
+	help
+	  Include the Sony charging policy, USB detection and diagnostics.
+
+config QPNP_FG
+	tristate "Legacy QPNP fuel gauge for PM8994/PMI8996"
+	depends on MFD_SPMI_PMIC && RTC_CLASS && PM_SLEEP
+	select OF_BATTERYDATA
+	select QPNP_REVID
+	help
+	  Real Qualcomm fuel-gauge implementation and Sony Tone battery support.
+
+config QPNP_FG_EXTENSION
+	bool "Sony Tone fuel-gauge extensions"
+	depends on QPNP_FG
+	help
+	  Include the Sony battery aging, JEITA and battery-profile controls.
+
+config QPNP_FG_RTC_DEVICE
+	string "RTC used by the legacy QPNP fuel gauge"
+	depends on QPNP_FG
+	default RTC_HCTOSYS_DEVICE if RTC_HCTOSYS
+	default "rtc0"
+	help
+	  Name of the real RTC used for elapsed-time battery accounting.
+
 config QPNP_SMB2
         tristate "SMB2 Battery Charger"
         depends on MFD_SPMI_PMIC

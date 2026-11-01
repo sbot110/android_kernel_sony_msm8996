@@ -2885,6 +2885,19 @@ static struct clk_branch gcc_aggre0_cnoc_ahb_clk = {
 	},
 };
 
+/* Sony4.4 clock-gcc-8996.c: GCC_AGGRE0_NOC_MPU_CFG_AHB_CBCR, no rate vote. */
+static struct clk_branch gcc_aggre0_noc_mpu_cfg_ahb_clk = {
+	.halt_reg = 0x85000,
+	.clkr = {
+		.enable_reg = 0x85000,
+		.enable_mask = BIT(0),
+		.hw.init = &(struct clk_init_data){
+			.name = "gcc_aggre0_noc_mpu_cfg_ahb_clk",
+			.ops = &clk_branch2_ops,
+		},
+	},
+};
+
 static struct clk_branch gcc_smmu_aggre0_axi_clk = {
 	.halt_reg = 0x81014,
 	.clkr = {
@@ -3317,6 +3330,7 @@ static struct clk_regmap *gcc_msm8996_clocks[] = {
 	[GCC_UFS_TX_SYMBOL_CLK_CORE_CLK] = &gcc_ufs_tx_symbol_clk_core_clk.clkr,
 	[GCC_AGGRE0_SNOC_AXI_CLK] = &gcc_aggre0_snoc_axi_clk.clkr,
 	[GCC_AGGRE0_CNOC_AHB_CLK] = &gcc_aggre0_cnoc_ahb_clk.clkr,
+	[GCC_AGGRE0_NOC_MPU_CFG_AHB_CLK] = &gcc_aggre0_noc_mpu_cfg_ahb_clk.clkr,
 	[GCC_SMMU_AGGRE0_AXI_CLK] = &gcc_smmu_aggre0_axi_clk.clkr,
 	[GCC_SMMU_AGGRE0_AHB_CLK] = &gcc_smmu_aggre0_ahb_clk.clkr,
 	[GCC_AGGRE2_UFS_AXI_CLK] = &gcc_aggre2_ufs_axi_clk.clkr,

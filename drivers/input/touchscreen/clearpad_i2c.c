@@ -188,21 +188,23 @@ static int clearpad_parse_dt(struct device *dev,
 
 	pdata->irq_gpio = of_get_named_gpio_flags(np, "synaptics,irq_gpio",
 			0, &pdata->irq_gpio_flags);
-	return 0;
+	return gpio_is_valid(pdata->irq_gpio) ? 0 :
+		(pdata->irq_gpio < 0 ? pdata->irq_gpio : -EINVAL);
 }
 #else
 static int clearpad_parse_dt(struct device *dev,
-		struct clearpad_platform_data *pdata)
+		struct clearpad_platform_data_t *pdata)
 {
 	return -ENODEV;
 }
 #endif
 
+#ifndef CONFIG_TOUCHSCREEN_CLEARPAD_FB
 static int clearpad_get_active_panel(struct device_node *np)
 {
 	struct device_node *node;
 	struct drm_panel *panel;
-	int i, count;
+	int i, count, ret = -ENODEV;
 
 	count = of_count_phandle_with_args(np, "panel", NULL);
 	if (count <= 0)
@@ -216,10 +218,13 @@ static int clearpad_get_active_panel(struct device_node *np)
 			clearpad_active_panel = panel;
 			return 0;
 		}
+		if (PTR_ERR(panel) == -EPROBE_DEFER)
+			ret = -EPROBE_DEFER;
 	}
 
-	return -ENODEV;
+	return ret;
 }
+#endif
 
 static int clearpad_i2c_probe(struct i2c_client *client,
 				      const struct i2c_device_id *id)
@@ -235,12 +240,13 @@ static int clearpad_i2c_probe(struct i2c_client *client,
 	struct clearpad_i2c_t *this;
 	int rc;
 
+#ifndef CONFIG_TOUCHSCREEN_CLEARPAD_FB
 	rc = clearpad_get_active_panel(client->dev.of_node);
 	if (rc < 0) {
 		dev_err(&client->dev, "%s: Active panel not found, aborting probe\n", __func__);
-		rc = -ENODEV;
 		goto exit;
 	}
+#endif
 
 	if (client->dev.of_node) {
 		clearpad_data.pdata = devm_kzalloc(&client->dev,

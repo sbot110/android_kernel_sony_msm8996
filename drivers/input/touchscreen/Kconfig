@@ -216,6 +216,7 @@ config TOUCHSCREEN_CHIPONE_ICN8505
 
 config TOUCHSCREEN_CLEARPAD_CORE
 	tristate "Clearpad Touchscreen core driver module"
+	depends on DRM || FB_MSM_MDSS_SPECIFIC_PANEL
 	help
 	  Say Y here if you have a Synaptics Touchscreen.
 	
@@ -223,6 +224,13 @@ config TOUCHSCREEN_CLEARPAD_CORE
 
 	  To compile this driver as a module, choose M here: the
 	  module will be called clearpad_core.
+
+config TOUCHSCREEN_CLEARPAD_FB
+	def_bool FB_MSM_MDSS_SPECIFIC_PANEL
+	help
+	  Sony Tone uses the MDSS framebuffer and incell API together. Select
+	  this backend whenever that panel driver supplies the incell API;
+	  other boards retain the DRM panel backend.
 
 config TOUCHSCREEN_CLEARPAD_I2C
 	tristate "Clearpad Touchscreen I2C bus module"

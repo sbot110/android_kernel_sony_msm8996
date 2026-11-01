@@ -11,6 +11,7 @@
 #include <linux/input.h>
 #include <linux/module.h>
 #include <linux/interrupt.h>
+#include <linux/irq.h>
 #include <linux/delay.h>
 #include <linux/incell.h>
 #include <linux/of_gpio.h>
@@ -21,6 +22,9 @@
 #include <linux/sched.h>
 #include <linux/time.h>
 #include <linux/timer.h>
+#ifdef CONFIG_TOUCHSCREEN_CLEARPAD_FB
+#include <linux/fb.h>
+#endif
 #ifdef CONFIG_ARM
 #include <asm/mach-types.h>
 #endif
@@ -1003,7 +1007,7 @@ struct clearpad_t {
 	int irq;
 	atomic_t irq_enabled;
 	enum clearpad_force_sleep_e force_sleep;
-	struct notifier_block drm_notif;
+	struct notifier_block display_notif;
 	char fwname[SYN_STRING_LENGTH + 1];
 	char result_info[SYN_STRING_LENGTH + 1];
 	bool flash_requested;
@@ -1025,10 +1029,22 @@ struct clearpad_t {
 	struct fb_t wakeup;
 	struct clearpad_lockdown_area_t lda;
 	bool access_test_enabled;
-	struct device virtdev;
+	struct device *virtdev;
+	struct mutex irq_lock;
+	bool stopping;
+	bool irq_requested;
+	bool noise_irq_requested;
+	bool display_notifier_registered;
+	bool sysfs_created;
+	bool wakeup_sysfs_created;
+	bool input_link_created;
+	bool wakeup_initialized;
 };
 
+#ifndef CONFIG_TOUCHSCREEN_CLEARPAD_FB
 struct drm_panel *clearpad_active_panel;
+EXPORT_SYMBOL_GPL(clearpad_active_panel);
+#endif
 
 /*
  * Function prototypes
@@ -1077,11 +1093,18 @@ static void clearpad_debug_registers(struct clearpad_t *this);
  * Functions
  */
 
+static bool clearpad_schedule_delayed_work(struct clearpad_t *this,
+					  struct delayed_work *work,
+					  unsigned long delay)
+{
+	if (READ_ONCE(this->stopping))
+		return false;
+	return schedule_delayed_work(work, delay);
+}
+
 static inline bool is_equal_cstring(const char *a, const char *b)
 {
-	size_t length = max(strnlen(a, PAGE_SIZE), strnlen(b, PAGE_SIZE));
-
-	return strncmp(a, b, length) == 0;
+	return strcmp(a, b) == 0;
 }
 
 static char *clearpad_s(u8 *array, size_t size)
@@ -1116,8 +1139,11 @@ static bool is_irq_enabled(struct clearpad_t *this)
 /* need LOCK(&this->lock) */
 static void clearpad_set_irq(struct clearpad_t *this, bool enable)
 {
-	int rc = atomic_cmpxchg(&this->irq_enabled, !enable, enable);
+	int rc;
 
+	if (!this->irq_requested || this->stopping)
+		return;
+	rc = atomic_cmpxchg(&this->irq_enabled, !enable, enable);
 	if (rc == enable) {
 		dev_err(&this->pdev->dev, "%s: unbalanced, tried to set %d\n",
 				__func__, enable);
@@ -1140,6 +1166,10 @@ static int clearpad_set_noise_det_irq(struct clearpad_t *this, bool enable,
 
 	if (this->noise_det.supported && this->chip_id == SYN_CHIP_332U) {
 		spin_lock_irqsave(&this->noise_det.slock, flags);
+		if (!this->noise_irq_requested || this->stopping) {
+			spin_unlock_irqrestore(&this->noise_det.slock, flags);
+			return -ENODEV;
+		}
 		if (enable && set_first_irq)
 			this->noise_det.first_irq = true;
 		if (enable && !this->noise_det.enabled) {
@@ -1251,7 +1281,11 @@ static int touchctrl_hwreset(struct clearpad_t *this, int mode)
 	switch (mode) {
 	case SYN_HWRESET:
 	case SYN_FORCE_HWRESET:
+#ifdef CONFIG_TOUCHSCREEN_CLEARPAD_FB
+		raw_mode = INCELL_DISPLAY_HW_RESET;
+#else
 		raw_mode = INCELL_TOUCH_RESET;
+#endif
 		break;
 	default:
 		LOGE(this, "unknown HW reset mode (%d)\n", mode);
@@ -1453,6 +1487,10 @@ static int clearpad_ctrl_session_begin(struct clearpad_t *this,
 	touchctrl->session = session;
 
 	LOCK(&this->lock);
+	if (this->stopping) {
+		rc = -ENODEV;
+		goto err_in_lock_power;
+	}
 	/* keep touch power for this session */
 	if (!touchctrl_lock_power(this, session, true, false)) {
 		LOGE(this, "failed to lock power\n");
@@ -3953,12 +3991,14 @@ static void clearpad_watchdog_work(struct work_struct *work)
 	LOGD(this, "start\n");
 
 	LOCK(&this->lock);
+	if (this->stopping)
+		goto not_ready_to_access_i2c;
 	if (!this->dev_active || this->interrupt.count == 0) {
 		LOGI(this, "avoid to access I2C before waiting %d ms delay\n",
 				this->reset.delay_for_powerup_ms);
 
 		if (!this->touchctrl.will_powerdown && !this->flash_requested)
-			schedule_delayed_work(&this->watchdog.work,
+			clearpad_schedule_delayed_work(this, &this->watchdog.work,
 					      this->watchdog.delay);
 
 		goto not_ready_to_access_i2c;
@@ -3986,7 +4026,7 @@ static void clearpad_watchdog_work(struct work_struct *work)
 			LOGE(this, "failed to get interrupt (rc=%d)\n", rc);
 	}
 	if (this->dev_active && !this->flash_requested)
-		schedule_delayed_work(&this->watchdog.work,
+		clearpad_schedule_delayed_work(this, &this->watchdog.work,
 				      this->watchdog.delay);
 	touchctrl_unlock_power(this, __func__);
 not_ready_to_access_i2c:
@@ -4002,7 +4042,7 @@ static void clearpad_watchdog_update(struct clearpad_t *this)
 	cancel_delayed_work(&this->watchdog.work);
 
 	if (this->dev_active && !this->flash_requested)
-		schedule_delayed_work(&this->watchdog.work,
+		clearpad_schedule_delayed_work(this, &this->watchdog.work,
 				      this->watchdog.delay);
 }
 
@@ -4225,6 +4265,8 @@ static void clearpad_reset_work(struct work_struct *work)
 	     this->interrupt.for_reset.name);
 
 	LOCK(&this->lock);
+	if (this->stopping)
+		goto err_in_lock_power;
 	if (!touchctrl_lock_power(this, __func__, true, false)) {
 		LOG_STAT(this, "stop reset work because of no power\n");
 		clearpad_notify_interrupt(this,
@@ -4271,7 +4313,7 @@ retry_reset:
 	if ((rc == -EAGAIN || rc == -EBUSY) &&
 	    reset->retry++ < SYN_RETRY_NUM_OF_RESET) {
 		LOGI(this, "schedule reset for retry (rc=%d)\n", rc);
-		schedule_delayed_work(&reset->work, 1 * HZ);
+		clearpad_schedule_delayed_work(this, &reset->work, 1 * HZ);
 	} else if (rc) {
 		LOGE(this, "failed to execute %s '%s'\n",
 		     NAME_OF(clearpad_reset_name, reset->mode),
@@ -4296,6 +4338,9 @@ static void clearpad_reset(struct clearpad_t *this,
 			  enum clearpad_reset_e mode, const char *cause)
 {
 	struct clearpad_reset_t *reset = &this->reset;
+
+	if (this->stopping)
+		return;
 
 	if (!this->dev_active
 	    && mode != SYN_FORCE_HWRESET && mode != SYN_FORCE_SWRESET) {
@@ -4323,7 +4368,7 @@ static void clearpad_reset(struct clearpad_t *this,
 	reset->retry = 0;
 	LOGE(this, "schedule %s '%s'\n",
 	     NAME_OF(clearpad_reset_name, mode), cause);
-	if (!schedule_delayed_work(&reset->work, 0))
+	if (!clearpad_schedule_delayed_work(this, &reset->work, 0))
 		LOGI(this, "already reset on queue\n");
 
 err_in_device_mode:
@@ -5075,6 +5120,10 @@ static irqreturn_t clearpad_threaded_handler(int irq, void *dev_id)
 	get_monotonic_boottime(&this->interrupt.threaded_handler_ts);
 
 	LOCK(&this->lock);
+	if (this->stopping || !this->irq_requested) {
+		UNLOCK(&this->lock);
+		return IRQ_HANDLED;
+	}
 	locked = touchctrl_lock_power(this, "irq_handler", true, false);
 	/* workaround to clear interrupt status */
 	if (!locked)
@@ -5108,6 +5157,9 @@ static irqreturn_t clearpad_hard_handler(int irq, void *dev_id)
 	irqreturn_t ret;
 	bool val;
 
+	if (READ_ONCE(this->stopping))
+		return IRQ_HANDLED;
+
 	get_monotonic_boottime(&this->interrupt.hard_handler_ts);
 
 	spin_lock_irqsave(&this->slock, flags);
@@ -5138,6 +5190,10 @@ static irqreturn_t clearpad_noise_det_threaded_handler(int irq, void *dev_id)
 
 	get_monotonic_boottime(&this->noise_det.threaded_handler_ts);
 	LOCK(&this->lock);
+	if (this->stopping || !this->noise_irq_requested) {
+		UNLOCK(&this->lock);
+		return IRQ_HANDLED;
+	}
 
 	retry = clearpad_process_noise_det_irq(this);
 
@@ -5176,6 +5232,9 @@ static irqreturn_t clearpad_noise_det_hard_handler(int irq, void *dev_id)
 	irqreturn_t ret;
 	unsigned long flags;
 
+	if (READ_ONCE(this->stopping))
+		return IRQ_HANDLED;
+
 	get_monotonic_boottime(&this->noise_det.hard_handler_ts);
 	if (clearpad_set_noise_det_irq(this, false, false))
 		HWLOGE(this, "no noise_det irq change(disable)\n");
@@ -5213,10 +5272,80 @@ static irqreturn_t clearpad_noise_det_hard_handler(int irq, void *dev_id)
 	return ret;
 }
 
+/* Called without this->lock; IRQ threads take that lock. */
+static int clearpad_request_irqs(struct clearpad_t *this)
+{
+	unsigned long flags;
+	int ret = 0;
+
+	LOCK(&this->lock);
+	if (this->stopping) {
+		ret = -ENODEV;
+		goto out;
+	}
+	if (!this->irq_requested) {
+		irq_set_status_flags(this->irq, IRQ_NOAUTOEN);
+		ret = devm_request_threaded_irq(&this->pdev->dev, this->irq,
+				clearpad_hard_handler, clearpad_threaded_handler,
+				IRQF_TRIGGER_LOW | IRQF_ONESHOT,
+				this->pdev->dev.driver->name, this);
+		irq_clear_status_flags(this->irq, IRQ_NOAUTOEN);
+		if (ret)
+			goto out;
+		this->irq_requested = true;
+		atomic_set(&this->irq_enabled, 0);
+	}
+	if (this->noise_det.supported && !this->noise_irq_requested) {
+		irq_set_status_flags(this->noise_det.irq, IRQ_NOAUTOEN);
+		ret = devm_request_threaded_irq(&this->pdev->dev,
+				this->noise_det.irq,
+				clearpad_noise_det_hard_handler,
+				clearpad_noise_det_threaded_handler,
+				IRQF_TRIGGER_RISING | IRQF_ONESHOT,
+				"clearpad_noise_det", this);
+		irq_clear_status_flags(this->noise_det.irq, IRQ_NOAUTOEN);
+		if (ret)
+			goto out;
+		spin_lock_irqsave(&this->noise_det.slock, flags);
+		this->noise_irq_requested = true;
+		this->noise_det.enabled = false;
+		spin_unlock_irqrestore(&this->noise_det.slock, flags);
+	}
+out:
+	UNLOCK(&this->lock);
+	return ret;
+}
+
+static void clearpad_free_irqs(struct clearpad_t *this)
+{
+	unsigned long flags;
+	bool main_requested, noise_requested;
+
+	LOCK(&this->lock);
+	main_requested = this->irq_requested;
+	this->irq_requested = false;
+	atomic_set(&this->irq_enabled, 0);
+	spin_lock_irqsave(&this->noise_det.slock, flags);
+	noise_requested = this->noise_irq_requested;
+	this->noise_irq_requested = false;
+	this->noise_det.enabled = false;
+	spin_unlock_irqrestore(&this->noise_det.slock, flags);
+	UNLOCK(&this->lock);
+
+	/* free_irq() waits for IRQ threads, which must be able to take lock. */
+	if (main_requested)
+		devm_free_irq(&this->pdev->dev, this->irq, this);
+	if (noise_requested)
+		devm_free_irq(&this->pdev->dev, this->noise_det.irq, this);
+}
+
 static int clearpad_device_open(struct input_dev *dev)
 {
 	struct clearpad_t *this = input_get_drvdata(dev);
 	int rc;
+
+	if (READ_ONCE(this->stopping))
+		return -ENODEV;
 
 	LOG_STAT(this, "state=%s\n", NAME_OF(clearpad_state_name, this->state));
 
@@ -5702,68 +5831,54 @@ err_in_check_post_probe:
 }
 
 static ssize_t clearpad_enabled_store(struct device *dev,
-		struct device_attribute *attr,
-		const char *buf, size_t size)
+		struct device_attribute *attr, const char *buf, size_t size)
 {
 	struct clearpad_t *this = dev_get_drvdata(dev);
-	int rc = 0;
+	bool enable;
+	int ret = 0;
 
-	LOGD(this, "start\n");
+	if (sysfs_streq(buf, "1"))
+		enable = true;
+	else if (sysfs_streq(buf, "0"))
+		enable = false;
+	else
+		return -EINVAL;
 
+	mutex_lock(&this->irq_lock);
+	if (READ_ONCE(this->stopping)) {
+		ret = -ENODEV;
+		goto out;
+	}
 	if (!this->post_probe.done) {
-		LOGW(this, "post_probe hasn't finished, please retry later\n");
-		goto err_in_check_post_probe;
+		ret = -EAGAIN;
+		goto out;
+	}
+	if (!enable) {
+		clearpad_free_irqs(this);
+		ret = clearpad_gpio_export(this, &this->input->dev, true);
+		if (!ret)
+			goto out;
+	} else {
+		ret = clearpad_gpio_export(this, &this->input->dev, false);
+		if (ret)
+			goto out;
 	}
 
+	ret = clearpad_request_irqs(this);
+	if (ret) {
+		clearpad_free_irqs(this);
+		goto out;
+	}
 	LOCK(&this->lock);
-
-	if (sysfs_streq(buf, "1")) {
-		rc = clearpad_gpio_export(this, &this->input->dev,
-						false);
-		if (rc)
-			LOGE(this, "failed to unexport gpio\n");
-		goto enable;
-	} else if (sysfs_streq(buf, "0")) {
-		devm_free_irq(&this->pdev->dev, this->irq, this);
-		if (this->noise_det.supported)
-			devm_free_irq(&this->pdev->dev,
-				      this->noise_det.irq, this);
-		rc = clearpad_gpio_export(this, &this->input->dev,
-						true);
-		if (rc) {
-			LOGE(this, "failed to export gpio\n");
-			goto enable;
-		}
+	if (this->dev_active && !this->stopping) {
+		if (!is_irq_enabled(this))
+			clearpad_set_irq(this, true);
+		clearpad_set_noise_det_irq(this, true, true);
 	}
-	goto end;
-
-enable:
-	rc = devm_request_threaded_irq(&this->pdev->dev,
-				this->irq,
-				clearpad_hard_handler,
-				clearpad_threaded_handler,
-				IRQF_TRIGGER_LOW | IRQF_ONESHOT,
-				this->pdev->dev.driver->name, this);
-	if (rc)
-		LOGE(this, "irq %d busy? <%d>\n", this->irq, rc);
-
-	if (this->noise_det.supported) {
-		rc = devm_request_threaded_irq(&this->pdev->dev,
-					this->noise_det.irq,
-					clearpad_noise_det_hard_handler,
-					clearpad_noise_det_threaded_handler,
-					IRQF_TRIGGER_RISING | IRQF_ONESHOT,
-					"clearpad_noise_det", this);
-		if (rc)
-			LOGE(this, "noise_det irq %d busy? <%d>\n",
-			       this->noise_det.irq, rc);
-	}
-end:
 	UNLOCK(&this->lock);
-
-err_in_check_post_probe:
-	LOG_STAT(this, "state=%s\n", NAME_OF(clearpad_state_name, this->state));
-	return strnlen(buf, PAGE_SIZE);
+out:
+	mutex_unlock(&this->irq_lock);
+	return ret ? ret : size;
 }
 
 static ssize_t clearpad_glove_enabled_store(struct device *dev,
@@ -6397,7 +6512,7 @@ static ssize_t clearpad_post_probe_start_store(struct device *dev,
 		if (this->post_probe.start) {
 			HWLOGI(this, "start post probe"
 			       "with post_probe_start sysfs\n");
-			schedule_delayed_work(&this->post_probe.work, 0);
+			clearpad_schedule_delayed_work(this, &this->post_probe.work, 0);
 		}
 	}
 	UNLOCK(&this->lock);
@@ -6672,7 +6787,7 @@ static ssize_t clearpad_debug_hwtest_store(struct device *dev,
 			this->watchdog.delay = msecs_to_jiffies(ms);
 			this->watchdog.enabled = true;
 			HWLOGI(this, "start watchdog (interval ms=%d)\n", ms);
-			schedule_delayed_work(&this->watchdog.work,
+			clearpad_schedule_delayed_work(this, &this->watchdog.work,
 					      this->watchdog.delay);
 		}
 		break;
@@ -7361,9 +7476,11 @@ static int clearpad_input_ev_init(struct clearpad_t *this)
 					&clearpad_wakeup_gesture_attr);
 		if (rc) {
 			LOGE(this, "sysfs_create_file failed: %d\n", rc);
+			of_node_put(this->evdt_node);
 			this->evdt_node = NULL;
 			goto end;
 		}
+		this->wakeup_sysfs_created = true;
 		LOGI(this, "touch wakeup feature ok\n");
 	}
 end:
@@ -7524,7 +7641,7 @@ static void clearpad_cb_unblank_handler(struct clearpad_t *this)
 		HWLOGI(this, "ignore UNBLANK event before post probe\n");
 		if (this->post_probe.start) {
 			HWLOGI(this, "schedule post probe work for fail-safe\n");
-			schedule_delayed_work(&this->post_probe.work, 0);
+			clearpad_schedule_delayed_work(this, &this->post_probe.work, 0);
 		}
 		goto err_in_post_probe_done;
 	}
@@ -7544,53 +7661,83 @@ err_in_post_probe_done:
 	       ts.tv_sec, ts.tv_nsec);
 }
 
-static int clearpad_drm_notifier_callback(struct notifier_block *self,
+/* Both backends deliver the same early/late incell power transitions. */
+static int clearpad_display_notifier_callback(struct notifier_block *self,
 				unsigned long event, void *data)
 {
+	struct clearpad_t *this = container_of(self, struct clearpad_t,
+					    display_notif);
+#ifdef CONFIG_TOUCHSCREEN_CLEARPAD_FB
+	struct fb_event *evdata = data;
+	bool early = event == FB_EARLY_EVENT_BLANK ||
+		     event == FB_EXT_EARLY_EVENT_BLANK;
+	bool late = event == FB_EVENT_BLANK || event == FB_EXT_EVENT_BLANK;
+	const int powerdown = FB_BLANK_POWERDOWN;
+	const int unblank = FB_BLANK_UNBLANK;
+#else
 	struct drm_panel_notifier *evdata = data;
+	bool early = event == DRM_PANEL_EARLY_EVENT_BLANK;
+	bool late = event == DRM_PANEL_EVENT_BLANK;
+	const int powerdown = DRM_PANEL_BLANK_POWERDOWN;
+	const int unblank = DRM_PANEL_BLANK_UNBLANK;
+#endif
 	int blank;
-	struct clearpad_t *this = container_of(self, struct clearpad_t, drm_notif);
 
-	if (evdata && evdata->data && this) {
-		if (event == DRM_PANEL_EARLY_EVENT_BLANK) {
-			blank = *(int *)evdata->data;
-			HWLOGI(this, "Before: %s\n",
-				(blank == DRM_PANEL_BLANK_POWERDOWN) ? "Powerdown" :
-				(blank == DRM_PANEL_BLANK_UNBLANK) ? "Unblank" :
-				 "???");
-			switch (blank) {
-			case DRM_PANEL_BLANK_POWERDOWN:
-				clearpad_cb_early_powerdown_handler(this);
-				if (clearpad_set_suspend_mode(this))
-					LOGE(this, "failed to set suspend mode\n");
-				if (this->watchdog.enabled)
-					cancel_delayed_work(&this->watchdog.work);
-				break;
-			case DRM_PANEL_BLANK_UNBLANK:
-				clearpad_cb_early_unblank_handler(this);
-				break;
-			default:
-				break;
-			}
-		} else if (event == DRM_PANEL_EVENT_BLANK) {
-			blank = *(int *)evdata->data;
-			HWLOGI(this, "After: %s\n",
-				(blank == DRM_PANEL_BLANK_POWERDOWN) ? "Powerdown" :
-				(blank == DRM_PANEL_BLANK_UNBLANK) ? "Unblank" :
-				 "???");
-			switch (blank) {
-			case DRM_PANEL_BLANK_POWERDOWN:
-				clearpad_cb_powerdown_handler(this);
-				break;
-			case DRM_PANEL_BLANK_UNBLANK:
-				clearpad_cb_unblank_handler(this);
-			default:
-				break;
-			}
+	if (READ_ONCE(this->stopping) || !evdata || !evdata->data ||
+	    (!early && !late))
+		return NOTIFY_DONE;
+	blank = *(int *)evdata->data;
+	if (early) {
+		if (blank == powerdown) {
+			clearpad_cb_early_powerdown_handler(this);
+#ifndef CONFIG_TOUCHSCREEN_CLEARPAD_FB
+			if (clearpad_set_suspend_mode(this))
+				LOGE(this, "failed to set suspend mode\n");
+			if (this->watchdog.enabled)
+				cancel_delayed_work(&this->watchdog.work);
+#endif
+		} else if (blank == unblank) {
+			clearpad_cb_early_unblank_handler(this);
 		}
+	} else if (blank == powerdown) {
+		clearpad_cb_powerdown_handler(this);
+	} else if (blank == unblank) {
+		clearpad_cb_unblank_handler(this);
 	}
-
+	/* Preserve zero: fb_blank() uses it to allow failed-blank rollback. */
 	return 0;
+}
+
+static int clearpad_register_display_notifier(struct clearpad_t *this)
+{
+	int ret;
+
+	this->display_notif.notifier_call = clearpad_display_notifier_callback;
+#ifdef CONFIG_TOUCHSCREEN_CLEARPAD_FB
+	ret = fb_register_client(&this->display_notif);
+#else
+	if (!clearpad_active_panel)
+		return -EPROBE_DEFER;
+	ret = drm_panel_notifier_register(clearpad_active_panel,
+					 &this->display_notif);
+#endif
+	if (!ret)
+		this->display_notifier_registered = true;
+	return ret;
+}
+
+static void clearpad_unregister_display_notifier(struct clearpad_t *this)
+{
+	if (!this->display_notifier_registered)
+		return;
+#ifdef CONFIG_TOUCHSCREEN_CLEARPAD_FB
+	fb_unregister_client(&this->display_notif);
+#else
+	if (clearpad_active_panel)
+		drm_panel_notifier_unregister(clearpad_active_panel,
+					      &this->display_notif);
+#endif
+	this->display_notifier_registered = false;
 }
 
 /*
@@ -8850,6 +8997,74 @@ static unsigned int clearpad_get_lockdown_family_id(struct clearpad_t *this)
 	return this->lda.family_id;
 }
 
+static void clearpad_release_resources(struct clearpad_t *this)
+{
+	unsigned long flags;
+
+	/* Stop all producers before draining work or dropping input state. */
+	LOCK(&this->lock);
+	spin_lock_irqsave(&this->noise_det.slock, flags);
+	WRITE_ONCE(this->stopping, true);
+	if (this->noise_irq_requested && this->noise_det.enabled) {
+		disable_irq_nosync(this->noise_det.irq);
+		this->noise_det.enabled = false;
+	}
+	spin_unlock_irqrestore(&this->noise_det.slock, flags);
+	if (this->irq_requested && atomic_xchg(&this->irq_enabled, 0))
+		disable_irq_nosync(this->irq);
+	this->watchdog.enabled = false;
+	this->post_probe.start = false;
+	this->touchctrl.will_powerdown = true;
+	clearpad_notify_interrupt(this, &this->interrupt.for_reset, -ENODEV);
+	clearpad_notify_interrupt(this, &this->interrupt.for_F34, -ENODEV);
+	clearpad_notify_interrupt(this, &this->interrupt.for_F54, -ENODEV);
+	UNLOCK(&this->lock);
+
+	clearpad_unregister_display_notifier(this);
+	if (this->input_link_created) {
+		const char *name = this->pdata->symlink_name ? : CLEARPAD_NAME;
+
+		sysfs_remove_link(this->input->dev.kobj.parent, name);
+		this->input_link_created = false;
+	}
+	if (this->virtdev) {
+		sysfs_remove_link(&this->virtdev->kobj, "touch");
+		root_device_unregister(this->virtdev);
+		this->virtdev = NULL;
+	}
+	if (this->sysfs_created) {
+		clearpad_remove_sysfs_entries(this, clearpad_sysfs_attrs);
+		this->sysfs_created = false;
+	}
+	if (this->wakeup_sysfs_created) {
+		device_remove_file(&this->input->dev,
+				   &clearpad_wakeup_gesture_attr);
+		this->wakeup_sysfs_created = false;
+	}
+	/* Sysfs removals above also wait for any in-flight IRQ debug store. */
+	clearpad_free_irqs(this);
+	cancel_delayed_work_sync(&this->post_probe.work);
+	cancel_work_sync(&this->thread_resume.work);
+	cancel_delayed_work_sync(&this->reset.work);
+	cancel_delayed_work_sync(&this->watchdog.work);
+	if (this->thread_resume.work_queue) {
+		destroy_workqueue(this->thread_resume.work_queue);
+		this->thread_resume.work_queue = NULL;
+	}
+	if (this->input) {
+		/* Drop optional GPIO export links while the input kobject exists. */
+		clearpad_gpio_export(this, &this->input->dev, false);
+		input_unregister_device(this->input);
+		this->input = NULL;
+	}
+	of_node_put(this->evdt_node);
+	this->evdt_node = NULL;
+	if (this->wakeup_initialized) {
+		device_init_wakeup(&this->pdev->dev, false);
+		this->wakeup_initialized = false;
+	}
+}
+
 static int clearpad_probe(struct platform_device *pdev)
 {
 	struct clearpad_data_t *cdata = pdev->dev.platform_data;
@@ -8860,17 +9075,22 @@ static int clearpad_probe(struct platform_device *pdev)
 	struct timespec ts;
 	int rc;
 	bool retry = false;
+	bool session_locked = false;
 #ifdef CONFIG_TOUCHSCREEN_CLEARPAD_RMI_DEV
 	struct platform_device *rmi_dev = NULL;
+	bool rmi_added = false;
 #endif
-	char *path_name = "common_touch";
+	const char *path_name = "common_touch";
 
+	if (!cdata)
+		return -EINVAL;
 	this = devm_kzalloc(&pdev->dev, sizeof(struct clearpad_t), GFP_KERNEL);
 	if (!this) {
 		rc = -ENOMEM;
 		retry = true;
 		goto end;
 	}
+	this->pdev = pdev;
 	/* Start logging for probe (no lock until end of probe) */
 	get_monotonic_boottime(&ts);
 	this->hwtest.log_size =
@@ -8882,6 +9102,8 @@ static int clearpad_probe(struct platform_device *pdev)
 	this->wakeup.unblank_early_done = false;
 	mutex_init(&this->lock.lock);
 	spin_lock_init(&this->slock);
+	spin_lock_init(&this->noise_det.slock);
+	mutex_init(&this->irq_lock);
 
 	touchctrl = &this->touchctrl;
 	mutex_init(&touchctrl->session_lock.lock);
@@ -8897,19 +9119,19 @@ static int clearpad_probe(struct platform_device *pdev)
 	INIT_DELAYED_WORK(&this->watchdog.work, clearpad_watchdog_work);
 	mutex_init(&this->hwtest.lock.lock);
 
+	INIT_WORK(&this->thread_resume.work, clearpad_thread_resume_work);
 	this->thread_resume.work_queue
 		= create_workqueue("clearpad_thread_resume");
 	if (!this->thread_resume.work_queue) {
 		HWLOGE(this, "no create workqueue\n");
-		rc = -EINVAL;
-		goto err_work_queue;
+		rc = -ENOMEM;
+		goto err_free;
 	}
-	INIT_WORK(&this->thread_resume.work, clearpad_thread_resume_work);
 
 	dev_set_drvdata(&pdev->dev, this);
 	/* LOGx is available after this */
 	LOCK(&touchctrl->session_lock);
-	this->pdev = pdev;
+	session_locked = true;
 	this->pdata = cdata->pdata;
 	if (!this->pdata) {
 		HWLOGE(this, "no platform data\n");
@@ -8931,8 +9153,6 @@ static int clearpad_probe(struct platform_device *pdev)
 			goto err_free;
 		}
 	}
-
-	spin_lock_init(&this->noise_det.slock);
 
 	if (this->access_test_enabled) {
 		rc = clearpad_driver_access_test(this);
@@ -8956,82 +9176,75 @@ static int clearpad_probe(struct platform_device *pdev)
 						sizeof(struct clearpad_data_t));
 		if (rc) {
 			HWLOGE(this, "err in platform_device_add_data\n");
-			goto err_device_put;
+			goto err_free;
 		}
 
 		rc = platform_device_add(rmi_dev);
 		if (rc) {
 			HWLOGE(this, "err in platform_device_add\n");
-			goto err_device_put;
+			goto err_free;
 		}
 
+		rmi_added = true;
 		if (!rmi_dev->dev.driver) {
 			HWLOGE(this, "no rmi dev\n");
 			rc = -ENODEV;
-			goto err_device_put;
+			goto err_free;
 		}
 		cdata->rmi_dev = rmi_dev;
 	}
 #endif
 
-	device_init_wakeup(&this->pdev->dev, 1);
-
-	if (clearpad_active_panel) {
-		HWLOGI(this, "register drm callback\n");
-		this->drm_notif.notifier_call = clearpad_drm_notifier_callback;
-		rc = drm_panel_notifier_register(clearpad_active_panel, &this->drm_notif);
-		if (rc < 0) {
-			HWLOGE(this, "unable to register drm_notifier\n");
-			goto err_in_drm_register_client;
-		}
-	}
+	rc = device_init_wakeup(&this->pdev->dev, true);
+	if (rc)
+		goto err_free;
+	this->wakeup_initialized = true;
 
 	this->force_sleep = FSMODE_OFF;
 
+	if (!gpio_is_valid(this->pdata->irq_gpio)) {
+		rc = this->pdata->irq_gpio < 0 ? this->pdata->irq_gpio : -EINVAL;
+		goto err_free;
+	}
 	this->irq = gpio_to_irq(this->pdata->irq_gpio);
-	rc = devm_request_threaded_irq(&this->pdev->dev,
-				this->irq,
-				clearpad_hard_handler,
-				clearpad_threaded_handler,
-				IRQF_TRIGGER_LOW | IRQF_ONESHOT,
-				this->pdev->dev.driver->name, this);
-	if (rc) {
-		HWLOGE(this, "failed to request threaded irq %d (rc=%d)\n",
-		       this->irq, rc);
-		goto err_in_request_threaded_irq;
+	if (this->irq < 0) {
+		rc = this->irq;
+		goto err_free;
 	}
-	disable_irq_nosync(this->irq);
-	atomic_set(&this->irq_enabled, 0);
-
 	if (this->noise_det.supported) {
-		this->noise_det.irq = gpio_to_irq(this->noise_det.irq_gpio);
-		rc = devm_request_threaded_irq(&this->pdev->dev,
-					this->noise_det.irq,
-					clearpad_noise_det_hard_handler,
-					clearpad_noise_det_threaded_handler,
-					IRQF_TRIGGER_RISING | IRQF_ONESHOT,
-					"clearpad_noise_det", this);
-		if (rc) {
-			HWLOGE(this, "failed to request threaded irq %d"
-			       " (rc=%d)\n",
-			       this->noise_det.irq, rc);
-			goto err_in_request_threaded_irq_gpio_noise_det;
+		if (!gpio_is_valid(this->noise_det.irq_gpio)) {
+			rc = this->noise_det.irq_gpio < 0 ?
+				this->noise_det.irq_gpio : -EINVAL;
+			goto err_free;
 		}
-		disable_irq_nosync(this->noise_det.irq);
+		this->noise_det.irq = gpio_to_irq(this->noise_det.irq_gpio);
+		if (this->noise_det.irq < 0) {
+			rc = this->noise_det.irq;
+			goto err_free;
+		}
 	}
+	rc = clearpad_request_irqs(this);
+	if (rc)
+		goto err_free;
 
 	HWLOGI(this, "input init\n");
 	rc = clearpad_input_init(this);
 	if (rc) {
 		HWLOGE(this, "err in input init\n");
-		goto err_in_input_init;
+		goto err_free;
 	}
 
 	HWLOGI(this, "ev init\n");
 	rc = clearpad_input_ev_init(this);
 	if (rc) {
 		HWLOGE(this, "err in ev init\n");
-		goto err_in_ev_init;
+		goto err_free;
+	}
+
+	rc = clearpad_register_display_notifier(this);
+	if (rc < 0) {
+		HWLOGE(this, "unable to register display notifier\n");
+		goto err_free;
 	}
 
 	/* sysfs */
@@ -9039,8 +9252,9 @@ static int clearpad_probe(struct platform_device *pdev)
 	rc = clearpad_create_sysfs_entries(this, clearpad_sysfs_attrs);
 	if (rc) {
 		HWLOGE(this, "unable to create feature sysfs\n");
-		goto err_in_create_sysfs_entries;
+		goto err_free;
 	}
+	this->sysfs_created = true;
 
 	/* create symlink */
 	parent = this->input->dev.kobj.parent;
@@ -9048,48 +9262,47 @@ static int clearpad_probe(struct platform_device *pdev)
 	rc = sysfs_create_link(parent, &this->input->dev.kobj, symlink_name);
 	if (rc) {
 		HWLOGE(this, "sysfs_create_link error\n");
-		goto err_in_create_link;
+		goto err_free;
 	}
-	dev_set_name(&this->virtdev, "%s", path_name);
-	rc = device_register(&this->virtdev);
+	this->input_link_created = true;
+	this->virtdev = root_device_register(path_name);
+	if (IS_ERR(this->virtdev)) {
+		rc = PTR_ERR(this->virtdev);
+		this->virtdev = NULL;
+		goto err_free;
+	}
+	rc = sysfs_create_link(&this->virtdev->kobj,
+			       &this->input->dev.kobj, "touch");
 	if (rc)
-		HWLOGE(this, "device virtdev register error\n");
-	dev_set_drvdata(&this->virtdev, this);
-	rc = sysfs_create_link(&this->virtdev.kobj, &this->input->dev.kobj, "touch");
-	if (rc)
-		HWLOGE(this, "common sysfs link error\n");
+		goto err_free;
 
 	if (this->post_probe.start) {
 		HWLOGI(this, "schedule post probe\n");
-		schedule_delayed_work(&this->post_probe.work, 0);
+		clearpad_schedule_delayed_work(this, &this->post_probe.work, 0);
 	} else {
 		HWLOGI(this, "post_probe_start sysfs is required"
 		       "to start post probe\n");
 	}
 	UNLOCK(&touchctrl->session_lock);
+	session_locked = false;
 	goto end_log;
 
-err_in_create_link:
-	clearpad_remove_sysfs_entries(this, clearpad_sysfs_attrs);
-err_in_create_sysfs_entries:
-err_in_ev_init:
-err_in_input_init:
-err_in_request_threaded_irq_gpio_noise_det:
-err_in_request_threaded_irq:
-	if (clearpad_active_panel)
-		drm_panel_notifier_unregister(clearpad_active_panel,
-				&this->drm_notif);
-err_in_drm_register_client:
-#ifdef CONFIG_TOUCHSCREEN_CLEARPAD_RMI_DEV
-err_device_put:
-	if (rmi_dev)
-		platform_device_put(rmi_dev);
-#endif
 err_free:
-	UNLOCK(&touchctrl->session_lock);
+	if (session_locked)
+		UNLOCK(&touchctrl->session_lock);
+	clearpad_release_resources(this);
+#ifdef CONFIG_TOUCHSCREEN_CLEARPAD_RMI_DEV
+	if (rmi_dev) {
+		if (rmi_added)
+			platform_device_unregister(rmi_dev);
+		else
+			platform_device_put(rmi_dev);
+		if (cdata->rmi_dev == rmi_dev)
+			cdata->rmi_dev = NULL;
+	}
+#endif
 	dev_set_drvdata(&pdev->dev, NULL);
-	destroy_workqueue(this->thread_resume.work_queue);
-err_work_queue:
+
 end_log:
 	get_monotonic_boottime(&ts);
 	HWLOGI(this, "end probe @ %ld.%06ld (rc=%d)\n",
@@ -9221,7 +9434,7 @@ err_in_ctrl_session_begin:
 		if (this->post_probe.retry <= SYN_RETRY_NUM_OF_POST_PROBE) {
 			HWLOGI(this, "reschedule post probe (%d)\n",
 			       this->post_probe.retry);
-			schedule_delayed_work(&this->post_probe.work, 3 * HZ);
+			clearpad_schedule_delayed_work(this, &this->post_probe.work, 3 * HZ);
 		} else {
 			this->post_probe.retry = 0;
 			HWLOGE(this, "stop post probe\n");
@@ -9257,6 +9470,8 @@ static void clearpad_thread_resume_work(struct work_struct *work)
 
 	get_monotonic_boottime(&ts);
 	LOCK(&this->lock);
+	if (this->stopping)
+		goto end;
 	if (this->dev_active) {
 		HWLOGI(this, "device is already active\n");
 		goto already_active;
@@ -9282,25 +9497,25 @@ static void clearpad_thread_resume_work(struct work_struct *work)
 	this->interrupt.count = 0;
 	if (clearpad_handle_if_first_event(this) < 0)
 		LOGE(this, "failed to handle first event\n");
-		/* Workaround for Kagura sharp panel id 9  & Maple*/
-		if (this->chip_id == SYN_CHIP_3500) {
-			switch (this->device_info.customer_family) {
-			case 0xd0:
-			case 0xd1:
-				HWLOGW(this, "Force Calibration for Maple\n");
-				rc = clearpad_put(
-					SYNF(this, F54_ANALOG, COMMAND,
-						this->reg_offset.f54_cmd00),
-					ANALOG_COMMAND_FORCE_CALIBRATION_MASK);
-				if (rc)
-					LOGE(this, "failed to force calibrate\n");
-				break;
-			default:
-				break;
-			}
+	/* Workaround for Kagura sharp panel id 9  & Maple*/
+	if (this->chip_id == SYN_CHIP_3500) {
+		switch (this->device_info.customer_family) {
+		case 0xd0:
+		case 0xd1:
+			HWLOGW(this, "Force Calibration for Maple\n");
+			rc = clearpad_put(
+				SYNF(this, F54_ANALOG, COMMAND,
+					this->reg_offset.f54_cmd00),
+				ANALOG_COMMAND_FORCE_CALIBRATION_MASK);
+			if (rc)
+				LOGE(this, "failed to force calibrate\n");
+			break;
+		default:
+			break;
 		}
+	}
 
-		touchctrl_unlock_power(this, "cb_unblank");
+	touchctrl_unlock_power(this, "cb_unblank");
 
 	get_monotonic_boottime(&ts);
 	HWLOGI(this, "end thread_resume @ %ld.%06ld\n",
@@ -9316,28 +9531,17 @@ end:
 
 static int clearpad_remove(struct platform_device *pdev)
 {
+	struct clearpad_t *this = dev_get_drvdata(&pdev->dev);
 #ifdef CONFIG_TOUCHSCREEN_CLEARPAD_RMI_DEV
 	struct clearpad_data_t *cdata = pdev->dev.platform_data;
 #endif
-	struct clearpad_t *this = dev_get_drvdata(&pdev->dev);
-	char *symlink_name = this->pdata->symlink_name ? : CLEARPAD_NAME;
 
-	cancel_delayed_work_sync(&this->watchdog.work);
-	cancel_delayed_work_sync(&this->reset.work);
-	flush_workqueue(this->thread_resume.work_queue);
-	destroy_workqueue(this->thread_resume.work_queue);
-	device_init_wakeup(&this->pdev->dev, 0);
-	devm_free_irq(&this->pdev->dev, this->irq, this);
-	if (this->noise_det.supported)
-		devm_free_irq(&this->pdev->dev, this->noise_det.irq, this);
-	sysfs_remove_link(this->input->dev.kobj.parent, symlink_name);
-	clearpad_remove_sysfs_entries(this, clearpad_sysfs_attrs);
-	if (clearpad_active_panel)
-		drm_panel_notifier_unregister(clearpad_active_panel,
-				&this->drm_notif);
-	input_unregister_device(this->input);
+	clearpad_release_resources(this);
 #ifdef CONFIG_TOUCHSCREEN_CLEARPAD_RMI_DEV
-	platform_device_unregister(cdata->rmi_dev);
+	if (cdata->rmi_dev) {
+		platform_device_unregister(cdata->rmi_dev);
+		cdata->rmi_dev = NULL;
+	}
 #endif
 	dev_set_drvdata(&pdev->dev, NULL);
 	return 0;

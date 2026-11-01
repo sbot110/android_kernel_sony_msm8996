@@ -1176,9 +1176,11 @@ void tasha_event_register(
 {
 	struct tasha_priv *tasha = snd_soc_component_get_drvdata(component);
 
-	if (tasha)
+	if (tasha) {
+		mutex_lock(&tasha->codec_mutex);
 		tasha->machine_codec_event_cb = machine_event_cb;
-	else
+		mutex_unlock(&tasha->codec_mutex);
+	} else
 		dev_dbg(component->dev, "%s: Invalid tasha_priv data\n",
 			__func__);
 }
@@ -14151,6 +14153,10 @@ static void tasha_codec_remove(struct snd_soc_component *component)
 {
 	struct tasha_priv *tasha = snd_soc_component_get_drvdata(component);
 	struct wcd9xxx *control;
+
+	mutex_lock(&tasha->codec_mutex);
+	tasha->machine_codec_event_cb = NULL;
+	mutex_unlock(&tasha->codec_mutex);
 
 	control = dev_get_drvdata(component->dev->parent);
 	control->num_rx_port = 0;

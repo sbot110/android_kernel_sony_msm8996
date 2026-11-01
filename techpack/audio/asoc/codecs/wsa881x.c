@@ -485,7 +485,7 @@ static ssize_t codec_debug_read(struct file *file, char __user *ubuf,
 static ssize_t codec_debug_peek_write(struct file *file,
 		const char __user *ubuf, size_t cnt, loff_t *ppos)
 {
-	char lbuf[SWR_SLV_WR_BUF_LEN];
+	char lbuf[SWR_SLV_WR_BUF_LEN] = { 0 };
 	int rc = 0;
 	u32 param[5];
 	struct swr_device *pdev = NULL;
@@ -514,7 +514,7 @@ static ssize_t codec_debug_peek_write(struct file *file,
 
 	lbuf[cnt] = '\0';
 	rc = get_parameters(lbuf, param, 1);
-	if (!((param[0] <= SWR_SLV_MAX_REG_ADDR) && (rc == 0)))
+	if ((rc != 0) || (param[0] > SWR_SLV_MAX_REG_ADDR))
 		return -EINVAL;
 	swr_read(pdev, pdev->dev_num, param[0], &wsa881x->read_data, 1);
 	if (rc == 0)
@@ -528,7 +528,7 @@ static ssize_t codec_debug_peek_write(struct file *file,
 static ssize_t codec_debug_write(struct file *file,
 		const char __user *ubuf, size_t cnt, loff_t *ppos)
 {
-	char lbuf[SWR_SLV_WR_BUF_LEN];
+	char lbuf[SWR_SLV_WR_BUF_LEN] = { 0 };
 	int rc = 0;
 	u32 param[5];
 	struct swr_device *pdev;
@@ -549,8 +549,8 @@ static ssize_t codec_debug_write(struct file *file,
 
 	lbuf[cnt] = '\0';
 	rc = get_parameters(lbuf, param, 2);
-	if (!((param[0] <= SWR_SLV_MAX_REG_ADDR) &&
-				(param[1] <= 0xFF) && (rc == 0)))
+	if ((rc != 0) || (param[0] > SWR_SLV_MAX_REG_ADDR) ||
+	    (param[1] > 0xFF))
 		return -EINVAL;
 	swr_write(pdev, pdev->dev_num, param[0], &param[1]);
 	if (rc == 0)

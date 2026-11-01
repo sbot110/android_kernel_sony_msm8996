@@ -9,8 +9,7 @@ endif
 ifeq ($(KERNEL_BUILD), 1)
 	# These are configurable via Kconfig for kernel-based builds
 	# Need to explicitly configure for Android-based builds
-	AUDIO_BLD_DIR := $(shell pwd)/kernel/msm-4.19
-	AUDIO_ROOT := $(AUDIO_BLD_DIR)/techpack/audio
+	AUDIO_ROOT := $(srctree)/techpack/audio
 endif
 
 ifeq ($(KERNEL_BUILD), 0)
@@ -330,3 +329,7 @@ machine_dlkm-y := $(MACHINE_OBJS)
 
 obj-$(CONFIG_SND_SOC_CPE) += cpe_lsm_dlkm.o
 cpe_lsm_dlkm-y := $(CPE_LSM_OBJS)
+
+# Sony MSM8996 machine uses the existing APRv2/WCD9335 stack above.
+obj-$(CONFIG_SND_SOC_SONY_MSM8996) += sony_msm8996.o
+sony_msm8996-y := msm8996-sony.o

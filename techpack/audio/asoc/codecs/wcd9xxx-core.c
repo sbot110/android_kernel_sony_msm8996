@@ -820,7 +820,7 @@ static ssize_t codec_debug_write(struct file *filp,
 	const char __user *ubuf, size_t cnt, loff_t *ppos)
 {
 	char *access_str = filp->private_data;
-	char lbuf[32];
+	char lbuf[32] = { 0 };
 	int rc;
 	long int param[5];
 
@@ -836,8 +836,7 @@ static ssize_t codec_debug_write(struct file *filp,
 	if (!strcmp(access_str, "slimslave_poke")) {
 		/* write */
 		rc = get_parameters(lbuf, param, 2);
-		if ((param[0] <= 0x3FF) && (param[1] <= 0xFF) &&
-			(rc == 0))
+		if ((rc == 0) && (param[0] <= 0x3FF) && (param[1] <= 0xFF))
 			wcd9xxx_interface_reg_write(debugCodec, param[0],
 				param[1]);
 		else
@@ -845,7 +844,7 @@ static ssize_t codec_debug_write(struct file *filp,
 	} else if (!strcmp(access_str, "slimslave_peek")) {
 		/* read */
 		rc = get_parameters(lbuf, param, 1);
-		if ((param[0] <= 0x3FF) && (rc == 0))
+		if ((rc == 0) && (param[0] <= 0x3FF))
 			read_data = wcd9xxx_interface_reg_read(debugCodec,
 				param[0]);
 		else

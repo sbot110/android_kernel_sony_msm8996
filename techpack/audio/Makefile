@@ -1,3 +1,8 @@
+ifeq ($(CONFIG_SND_SOC_SONY_MSM8996), y)
+include $(srctree)/techpack/audio/config/doraauto.conf
+LINUXINCLUDE += -include $(srctree)/techpack/audio/config/doraautoconf.h
+endif
+
 # auto-detect subdirs
 ifeq ($(CONFIG_ARCH_SDXPOORWILLS), y)
 include $(srctree)/techpack/audio/config/sdxpoorwillsauto.conf

@@ -316,7 +316,7 @@ static ssize_t swrm_debug_read(struct file *file, char __user *ubuf,
 static ssize_t swrm_debug_write(struct file *filp,
 	const char __user *ubuf, size_t cnt, loff_t *ppos)
 {
-	char lbuf[SWR_MSTR_WR_BUF_LEN];
+	char lbuf[SWR_MSTR_WR_BUF_LEN] = { 0 };
 	int rc;
 	u32 param[5];
 	char *access_str;
@@ -336,9 +336,8 @@ static ssize_t swrm_debug_write(struct file *filp,
 	if (!strcmp(access_str, "swrm_poke")) {
 		/* write */
 		rc = get_parameters(lbuf, param, 2);
-		if ((param[0] <= SWR_MSTR_MAX_REG_ADDR) &&
-			(param[1] <= 0xFFFFFFFF) &&
-			(rc == 0))
+		if ((rc == 0) && (param[0] <= SWR_MSTR_MAX_REG_ADDR) &&
+		    (param[1] <= 0xFFFFFFFF))
 			rc = dbgswrm->write(dbgswrm->handle, param[0],
 					    param[1]);
 		else
@@ -346,7 +345,7 @@ static ssize_t swrm_debug_write(struct file *filp,
 	} else if (!strcmp(access_str, "swrm_peek")) {
 		/* read */
 		rc = get_parameters(lbuf, param, 1);
-		if ((param[0] <= SWR_MSTR_MAX_REG_ADDR) && (rc == 0))
+		if ((rc == 0) && (param[0] <= SWR_MSTR_MAX_REG_ADDR))
 			read_data = dbgswrm->read(dbgswrm->handle, param[0]);
 		else
 			rc = -EINVAL;
@@ -1324,7 +1323,7 @@ static int swrm_get_logical_dev_num(struct swr_master *mstr, u64 dev_id,
 						*dev_num = i;
 						ret = 0;
 					}
-					dev_dbg(swrm->dev, "%s: devnum %d is assigned for dev addr %lx\n",
+					dev_dbg(swrm->dev, "%s: devnum %d is assigned for dev addr %llx\n",
 						__func__, i, swr_dev->addr);
 				}
 			}

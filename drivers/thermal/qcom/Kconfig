@@ -113,6 +113,18 @@ config QTI_RPM_SMD_COOLING_DEVICE
 
 	  If you want this support, you should say Y here.
 
+config SONY_MSM8996_BCL
+	bool "Sony MSM8996 legacy PMIC BCL monitor"
+	depends on SPMI && OF && POWER_SUPPLY && ARM64
+	depends on !MSM_BCL_PERIPHERAL_CTL
+	depends on QCOM_SCM
+	select REGMAP_SPMI
+	help
+	  Build the original PM8994/PMI8994 BCL register driver and msm_bcl
+	  measurement API used by the Sony MSM8996 charger. The driver also
+	  retains the original LMH variant; do not enable the newer BCL backend
+	  for the same peripheral. Measurements require a real DT-described PMIC.
+
 config MSM_BCL_PERIPHERAL_CTL
 	bool "BCL driver to control the PMIC BCL peripheral"
 	depends on SPMI && THERMAL_OF

@@ -4,6 +4,7 @@
 #
 
 obj-$(CONFIG_HWMON)		+= hwmon.o
+obj-$(CONFIG_SENSORS_QPNP_ADC_VOLTAGE) += qpnp-adc-voltage.o qpnp-adc-legacy-common.o
 obj-$(CONFIG_HWMON_VID)		+= hwmon-vid.o
 
 # APCI drivers

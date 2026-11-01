@@ -2,6 +2,16 @@
 # Hardware monitoring chip drivers configuration
 #
 
+config SENSORS_QPNP_ADC_VOLTAGE
+	bool "Sony Tone legacy QPNP voltage ADC and monitor"
+	depends on HWMON && SPMI && OF && THERMAL
+	depends on QPNP_REVID
+	select REGMAP_SPMI
+	help
+	  Real PMI8994/PMI8996 VADC conversions and threshold monitoring
+	  needed by the Sony Tone charger. Its private compatibility API
+	  is kept separate from the native IIO/ADC-TM interfaces.
+
 menuconfig HWMON
 	tristate "Hardware Monitoring support"
 	depends on HAS_IOMEM

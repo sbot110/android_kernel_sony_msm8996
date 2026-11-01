@@ -18,7 +18,7 @@
 
 static
 int ufs_qcom_phy_qmp_14nm_phy_calibrate(struct ufs_qcom_phy *ufs_qcom_phy,
-					bool is_rate_B)
+					bool is_rate_B, bool is_g4)
 {
 	int err;
 	int tbl_size_A, tbl_size_B;
@@ -26,6 +26,10 @@ int ufs_qcom_phy_qmp_14nm_phy_calibrate(struct ufs_qcom_phy *ufs_qcom_phy,
 	u8 major = ufs_qcom_phy->host_ctrl_rev_major;
 	u16 minor = ufs_qcom_phy->host_ctrl_rev_minor;
 	u16 step = ufs_qcom_phy->host_ctrl_rev_step;
+
+	/* These original MSM8996 tables cover HS-G1/G2/G3, never G4. */
+	if (is_g4)
+		return -EOPNOTSUPP;
 
 	tbl_size_B = ARRAY_SIZE(phy_cal_table_rate_B);
 	tbl_B = phy_cal_table_rate_B;
@@ -85,14 +89,14 @@ static int ufs_qcom_phy_qmp_14nm_init(struct phy *generic_phy)
 	struct ufs_qcom_phy *phy_common = &phy->common_cfg;
 	int err;
 
-	err = ufs_qcom_phy_init_clks(generic_phy, phy_common);
+	err = ufs_qcom_phy_init_clks(phy_common);
 	if (err) {
 		dev_err(phy_common->dev, "%s: ufs_qcom_phy_init_clks() failed %d\n",
 			__func__, err);
 		goto out;
 	}
 
-	err = ufs_qcom_phy_init_vregulators(generic_phy, phy_common);
+	err = ufs_qcom_phy_init_vregulators(phy_common);
 	if (err) {
 		dev_err(phy_common->dev, "%s: ufs_qcom_phy_init_vregulators() failed %d\n",
 			__func__, err);
@@ -228,7 +232,6 @@ out:
 
 static const struct phy_ops ufs_qcom_phy_qmp_14nm_phy_ops = {
 	.init		= ufs_qcom_phy_qmp_14nm_init,
-	.exit		= ufs_qcom_phy_exit,
 	.power_on	= ufs_qcom_phy_power_on,
 	.power_off	= ufs_qcom_phy_power_off,
 	.owner		= THIS_MODULE,
@@ -276,22 +279,8 @@ out:
 	return err;
 }
 
-static int ufs_qcom_phy_qmp_14nm_remove(struct platform_device *pdev)
-{
-	struct device *dev = &pdev->dev;
-	struct phy *generic_phy = to_phy(dev);
-	struct ufs_qcom_phy *ufs_qcom_phy = get_ufs_qcom_phy(generic_phy);
-	int err = 0;
-
-	err = ufs_qcom_phy_remove(generic_phy, ufs_qcom_phy);
-	if (err)
-		dev_err(dev, "%s: ufs_qcom_phy_remove failed = %d\n",
-			__func__, err);
-
-	return err;
-}
-
 static const struct of_device_id ufs_qcom_phy_qmp_14nm_of_match[] = {
+	{.compatible = "qcom,msm8996-ufs-phy-qmp-14nm"},
 	{.compatible = "qcom,ufs-phy-qmp-14nm"},
 	{},
 };
@@ -299,10 +288,11 @@ MODULE_DEVICE_TABLE(of, ufs_qcom_phy_qmp_14nm_of_match);
 
 static struct platform_driver ufs_qcom_phy_qmp_14nm_driver = {
 	.probe = ufs_qcom_phy_qmp_14nm_probe,
-	.remove = ufs_qcom_phy_qmp_14nm_remove,
 	.driver = {
 		.of_match_table = ufs_qcom_phy_qmp_14nm_of_match,
 		.name = "ufs_qcom_phy_qmp_14nm",
+		/* Storage consumers must be stopped before a PHY can be removed. */
+		.suppress_bind_attrs = true,
 	},
 };
 

@@ -46,7 +46,7 @@ int ufs_qcom_phy_calibrate(struct ufs_qcom_phy *ufs_qcom_phy,
 
 	if (!tbl_A) {
 		dev_err(ufs_qcom_phy->dev, "%s: tbl_A is NULL", __func__);
-		ret = EINVAL;
+		ret = -EINVAL;
 		goto out;
 	}
 
@@ -62,7 +62,7 @@ int ufs_qcom_phy_calibrate(struct ufs_qcom_phy *ufs_qcom_phy,
 		if (!tbl_B) {
 			dev_err(ufs_qcom_phy->dev, "%s: tbl_B is NULL",
 				__func__);
-			ret = EINVAL;
+			ret = -EINVAL;
 			goto out;
 		}
 
@@ -212,15 +212,19 @@ int ufs_qcom_phy_init_clks(struct ufs_qcom_phy *phy_common)
 	 * tx_iface_clk does not exist in newer version of ufs-phy HW,
 	 * so don't return error if it is not found
 	 */
-	__ufs_qcom_phy_clk_get(phy_common->dev, "tx_iface_clk",
+	err = __ufs_qcom_phy_clk_get(phy_common->dev, "tx_iface_clk",
 				   &phy_common->tx_iface_clk, false);
+	if (err == -EPROBE_DEFER)
+		goto out;
 
 	/*
 	 * rx_iface_clk does not exist in newer version of ufs-phy HW,
 	 * so don't return error if it is not found
 	 */
-	__ufs_qcom_phy_clk_get(phy_common->dev, "rx_iface_clk",
+	err = __ufs_qcom_phy_clk_get(phy_common->dev, "rx_iface_clk",
 				   &phy_common->rx_iface_clk, false);
+	if (err == -EPROBE_DEFER)
+		goto out;
 
 skip_txrx_clk:
 	err = ufs_qcom_phy_clk_get(phy_common->dev, "ref_clk_src",
@@ -232,22 +236,28 @@ skip_txrx_clk:
 	 * "ref_clk_parent" is optional hence don't abort init if it's not
 	 * found.
 	 */
-	__ufs_qcom_phy_clk_get(phy_common->dev, "ref_clk_parent",
+	err = __ufs_qcom_phy_clk_get(phy_common->dev, "ref_clk_parent",
 				   &phy_common->ref_clk_parent, false);
+	if (err == -EPROBE_DEFER)
+		goto out;
 
 	/*
 	 * Some platforms may not have the ON/OFF control for reference clock,
 	 * hence this clock may be optional.
 	 */
-	__ufs_qcom_phy_clk_get(phy_common->dev, "ref_clk",
+	err = __ufs_qcom_phy_clk_get(phy_common->dev, "ref_clk",
 				   &phy_common->ref_clk, false);
+	if (err == -EPROBE_DEFER)
+		goto out;
 
 	/*
 	 * "ref_aux_clk" is optional and only supported by certain
 	 * phy versions, don't abort init if it's not found.
 	 */
-	__ufs_qcom_phy_clk_get(phy_common->dev, "ref_aux_clk",
+	err = __ufs_qcom_phy_clk_get(phy_common->dev, "ref_aux_clk",
 				   &phy_common->ref_aux_clk, false);
+	if (err != -EPROBE_DEFER)
+		err = 0;
 out:
 	return err;
 }
@@ -263,7 +273,7 @@ static int ufs_qcom_phy_init_vreg(struct device *dev,
 
 	if (dev->of_node) {
 		snprintf(prop_name, MAX_PROP_NAME, "%s-supply", name);
-		if (!of_parse_phandle(dev->of_node, prop_name, 0)) {
+		if (!of_find_property(dev->of_node, prop_name, NULL)) {
 			dev_dbg(dev, "No vreg data found for %s\n", prop_name);
 			return -ENODATA;
 		}
@@ -327,8 +337,11 @@ int ufs_qcom_phy_init_vregulators(struct ufs_qcom_phy *phy_common)
 	if (err)
 		goto out;
 
-	ufs_qcom_phy_init_vreg(phy_common->dev, &phy_common->vddp_ref_clk,
-		"vddp-ref-clk");
+	err = ufs_qcom_phy_init_vreg(phy_common->dev,
+				     &phy_common->vddp_ref_clk, "vddp-ref-clk");
+	if (err && err != -ENODATA)
+		goto out;
+	err = 0;
 
 	if (phy_common->rpmh_rsc.qphy_rsc_name) {
 		phy_common->rpmh_rsc.qphy_rsc_addr =
@@ -336,7 +349,7 @@ int ufs_qcom_phy_init_vregulators(struct ufs_qcom_phy *phy_common)
 		if (!phy_common->rpmh_rsc.qphy_rsc_addr) {
 			dev_err(phy_common->dev, "%s: Invalid rpmh resource address\n",
 					__func__);
-			err = EINVAL;
+			err = -EINVAL;
 		}
 	}
 out:

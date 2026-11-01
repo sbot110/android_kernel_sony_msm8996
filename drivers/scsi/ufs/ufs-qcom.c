@@ -2000,9 +2000,13 @@ static void ufs_qcom_pm_qos_remove(struct ufs_qcom_host *host)
 	if (!host->pm_qos.groups)
 		return;
 
+	device_remove_file(host->hba->var->dev, &host->pm_qos.enable_attr);
+	device_remove_file(host->hba->var->dev, &host->pm_qos.latency_attr);
+	/* Drain callbacks while their PM QoS requests are still registered. */
+	destroy_workqueue(host->pm_qos.workq);
+
 	for (i = 0; i < host->pm_qos.num_groups; i++)
 		pm_qos_remove_request(&host->pm_qos.groups[i].req);
-	destroy_workqueue(host->pm_qos.workq);
 
 	kfree(host->pm_qos.groups);
 	host->pm_qos.groups = NULL;
@@ -2041,6 +2045,7 @@ static int ufs_qcom_parse_reg_info(struct ufs_qcom_host *host, char *name,
 	struct ufs_vreg *vreg = NULL;
 	struct device *dev = host->hba->dev;
 	struct device_node *np = dev->of_node;
+	struct device_node *supply_node;
 
 	if (!np) {
 		dev_err(dev, "%s: non DT initialization\n", __func__);
@@ -2048,12 +2053,14 @@ static int ufs_qcom_parse_reg_info(struct ufs_qcom_host *host, char *name,
 	}
 
 	snprintf(prop_name, MAX_PROP_SIZE, "%s-supply", name);
-	if (!of_parse_phandle(np, prop_name, 0)) {
+	supply_node = of_parse_phandle(np, prop_name, 0);
+	if (!supply_node) {
 		dev_info(dev, "%s: Unable to find %s regulator, assuming enabled\n",
 			 __func__, prop_name);
-		ret = -ENODEV;
+		ret = -ENOENT;
 		goto out;
 	}
+	of_node_put(supply_node);
 
 	vreg = devm_kzalloc(dev, sizeof(*vreg), GFP_KERNEL);
 	if (!vreg)
@@ -2078,6 +2085,7 @@ static int ufs_qcom_parse_reg_info(struct ufs_qcom_host *host, char *name,
 		ret = PTR_ERR(vreg->reg);
 		dev_err(dev, "%s: %s get failed, err=%d\n",
 			__func__, vreg->name, ret);
+		goto out;
 	}
 
 	snprintf(prop_name, MAX_PROP_SIZE, "%s-min-uV", name);
@@ -2225,8 +2233,12 @@ static int ufs_qcom_init(struct ufs_hba *hba)
 
 	err = ufs_qcom_parse_reg_info(host, "qcom,vddp-ref-clk",
 				      &host->vddp_ref_clk);
+	if (err && err != -ENOENT)
+		goto out_unregister_bus_only;
 
-	phy_init(host->generic_phy);
+	err = phy_init(host->generic_phy);
+	if (err)
+		goto out_unregister_bus_only;
 
 	if (host->vddp_ref_clk) {
 		err = ufs_qcom_enable_vreg(dev, host->vddp_ref_clk);
@@ -2239,6 +2251,8 @@ static int ufs_qcom_init(struct ufs_hba *hba)
 
 	err = ufs_qcom_parse_reg_info(host, "qcom,vccq-parent",
 				      &host->vccq_parent);
+	if (err && err != -ENOENT)
+		goto out_disable_vddp;
 	if (host->vccq_parent) {
 		err = ufs_qcom_config_vreg(hba->dev, host->vccq_parent, true);
 		if (err) {
@@ -2285,8 +2299,10 @@ out_disable_vddp:
 		ufs_qcom_disable_vreg(dev, host->vddp_ref_clk);
 out_unregister_bus:
 	phy_exit(host->generic_phy);
+out_unregister_bus_only:
 	msm_bus_scale_unregister_client(host->bus_vote.client_handle);
 out_variant_clear:
+	ufs_qcom_pm_qos_remove(host);
 	devm_kfree(dev, host);
 	ufshcd_set_variant(hba, NULL);
 out:

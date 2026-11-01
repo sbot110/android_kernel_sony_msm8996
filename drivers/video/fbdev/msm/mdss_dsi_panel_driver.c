@@ -48,7 +48,9 @@ static struct fps_data fpsd, vpsd;
 #define NODE_OF_HYBRID "/soc/dsi_panel_pwr_supply_hybrid_incell"
 #define NODE_OF_FULL "/soc/dsi_panel_pwr_supply_full_incell"
 
-static unsigned long lcdid_adc = 1505000;
+/* A missing bootloader LCD ID must not select a preferred panel by accident. */
+static u32 lcdid_adc;
+static bool lcdid_adc_valid;
 static void vsync_handler(struct mdss_mdp_ctl *ctl, ktime_t t);
 
 static struct mdss_mdp_vsync_handler vs_handle;
@@ -56,13 +58,14 @@ static bool display_onoff_state;
 
 static int __init lcdid_adc_setup(char *str)
 {
-	unsigned long res;
+	u32 res;
 
-	if (!*str)
-		return 0;
-	if (!kstrtoul(str, 0, &res))
-		lcdid_adc = res;
+	lcdid_adc_valid = false;
+	if (!str || !*str || kstrtou32(str, 0, &res))
+		return 1;
 
+	lcdid_adc = res;
+	lcdid_adc_valid = true;
 	return 1;
 }
 __setup("lcdid_adc=", lcdid_adc_setup);
@@ -72,43 +75,83 @@ void mdss_dsi_panel_driver_detection(
 		struct device_node **np)
 {
 	u32 res[ADC_PNUM];
-	int rc = 0;
-	struct device_node *parent;
+	int rc;
+	struct device_node *preferred;
+	struct device_node *parent = NULL;
 	struct device_node *next;
-	u32 dev_index = 0;
-	u32 dsi_index = 0;
-	u32 adc_uv = 0;
+	struct device_node *selected = NULL;
+	u32 dev_index;
+	u32 dsi_index;
+
+	if (!np)
+		return;
+	preferred = *np;
+	*np = NULL;
+	if (!preferred) {
+		dev_err(&pdev->dev, "%s: no panel parent to search\n", __func__);
+		return;
+	}
+	if (!lcdid_adc_valid) {
+		dev_err(&pdev->dev, "%s: missing or invalid lcdid_adc\n", __func__);
+		goto out;
+	}
 
 	rc = of_property_read_u32(pdev->dev.of_node, "cell-index", &dev_index);
 	if (rc) {
-		dev_err(&pdev->dev,
-			"%s: Cell-index not specified, rc=%d\n",
-						__func__, rc);
-		return;
+		dev_err(&pdev->dev, "%s: cell-index not specified, rc=%d\n",
+			__func__, rc);
+		goto out;
 	}
 
-	parent = of_get_parent(*np);
+	parent = of_get_parent(preferred);
+	if (!parent) {
+		dev_err(&pdev->dev, "%s: missing panel parent\n", __func__);
+		goto out;
+	}
 
-	adc_uv = lcdid_adc;
-	pr_notice("%s: physical:%d\n", __func__, adc_uv);
-
+	pr_notice("%s: physical:%u\n", __func__, lcdid_adc);
 	for_each_child_of_node(parent, next) {
 		rc = of_property_read_u32(next, "somc,dsi-index", &dsi_index);
 		if (rc)
 			dsi_index = 0;
 		if (dsi_index != dev_index)
 			continue;
-
-		rc = of_property_read_u32_array(next,
-				"somc,lcd-id-adc", res, ADC_PNUM);
-		if (rc)
-			continue;
-		if (adc_uv < res[ADC_RNG_MIN] || res[ADC_RNG_MAX] < adc_uv)
+		if (!of_find_property(next, "somc,lcd-id-adc", NULL))
 			continue;
 
-		*np = next;
-		break;
+		if (of_property_count_u32_elems(next, "somc,lcd-id-adc") !=
+				ADC_PNUM ||
+		    of_property_read_u32_array(next, "somc,lcd-id-adc", res,
+				ADC_PNUM) ||
+		    res[ADC_RNG_MIN] > res[ADC_RNG_MAX]) {
+			dev_err(&pdev->dev, "%s: malformed LCD ID range in %pOF\n",
+				__func__, next);
+			goto invalid;
+		}
+		if (lcdid_adc < res[ADC_RNG_MIN] ||
+		    res[ADC_RNG_MAX] < lcdid_adc)
+			continue;
+		if (selected) {
+			dev_err(&pdev->dev, "%s: ambiguous LCD ID %u\n",
+				__func__, lcdid_adc);
+			goto invalid;
+		}
+		selected = of_node_get(next);
 	}
+	if (!selected)
+		dev_err(&pdev->dev, "%s: no panel for LCD ID %u\n",
+			__func__, lcdid_adc);
+	goto out;
+
+invalid:
+	/* The iterator holds next until it advances; early exits must put it. */
+	of_node_put(next);
+	of_node_put(selected);
+	selected = NULL;
+out:
+	of_node_put(parent);
+	of_node_put(preferred);
+	*np = selected;
 }
 
 static int mdss_dsi_panel_driver_vreg_name_to_config(

@@ -13,11 +13,12 @@ fi
 export ARCH=arm64
 export CROSS_COMPILE=${CROSS_COMPILE:-aarch64-linux-gnu-}
 export CROSS_COMPILE_COMPAT=${CROSS_COMPILE_COMPAT:-arm-linux-gnueabi-}
+export PYTHONDONTWRITEBYTECODE=1
 out=${OUT_DIR:-"$root/out/dora"}
 mkdir -p -- "$out"
 out=$(cd -- "$out" && pwd)
 jobs=${JOBS:-4}
-for command in "${CROSS_COMPILE}gcc" "${CROSS_COMPILE_COMPAT}gcc" python3 make; do
+for command in "${CROSS_COMPILE}gcc" "${CROSS_COMPILE_COMPAT}gcc" python3 make bison flex bc; do
     command -v "$command" >/dev/null
 done
 {
@@ -25,17 +26,26 @@ done
     "${CROSS_COMPILE}gcc" --version
     "${CROSS_COMPILE_COMPAT}gcc" --version
     "${CROSS_COMPILE}ld" --version
+    "${CROSS_COMPILE_COMPAT}ld" --version
+    "${HOSTCC:-gcc}" --version
+    bison --version
+    flex --version
 } > "$out/toolchain.txt"
 make -C "$root" O="$out" tone_dora_defconfig 2>&1 | tee "$out/config.log"
 python3 "$root/scripts/dora/check-config.py" "$out/.config"
 python3 "$root/scripts/dora/check-panels.py"
+python3 "$root/scripts/dora/check-panel-selection.py"
 dtb=qcom/msm8996-sony-xperia-tone-dora.dtb
 make -C "$root" O="$out" -j"$jobs" Image.gz "$dtb" 2>&1 | tee "$out/build.log"
+python3 "$root/scripts/dora/check-dt.py" "$out/arch/arm64/boot/dts/$dtb"
 python3 "$root/scripts/dora/check-power-dt.py" "$out/arch/arm64/boot/dts/$dtb"
 # Explicit list avoids accidentally appending unrelated/stale DTBs from O=.
 image="$out/arch/arm64/boot/Image.gz"
 tree="$out/arch/arm64/boot/dts/$dtb"
 cat -- "$image" "$tree" > "$out/arch/arm64/boot/Image.gz-dtb"
-sha256sum "$image" "$tree" "$out/arch/arm64/boot/Image.gz-dtb" \
+python3 "$root/scripts/dora/check-artifacts.py" "$out" --dtb "$dtb" \
+    --report "$out/artifact-validation.json"
+sha256sum "$out/.config" "$out/vmlinux" "$out/arch/arm64/boot/Image" \
+    "$image" "$tree" "$out/arch/arm64/boot/Image.gz-dtb" \
     > "$out/SHA256SUMS"
 printf 'Built bring-up artifacts in %s; hardware readiness is not established.\n' "$out"

@@ -5,6 +5,8 @@ QUSB2 controller supports LS/FS/HS usb connectivity on Qualcomm chipsets.
 
 Required properties:
  - compatible: compatible list, contains
+	       "sony,dora-qusb2-phy", "qcom,msm8996-qusb2-phy" for the
+	       MSM8996 PHY with Sony Xperia X Performance board tuning,
 	       "qcom,msm8996-qusb2-phy" for 14nm PHY on msm8996,
 	       "qcom,sdm845-qusb2-phy" for 10nm PHY on sdm845.
 
@@ -24,7 +26,8 @@ Required properties:
 
 Optional properties:
  - nvmem-cells: Phandle to nvmem cell that contains 'HS Tx trim'
-		tuning parameter value for qusb2 phy.
+		tuning parameter value for qusb2 phy. A nonzero fuse overrides
+		the default high nibble, including Sony board-specific defaults.
 
  - qcom,tcsr-syscon: Phandle to TCSR syscon register region.
  - qcom,imp-res-offset-value: It is a 6 bit value that specifies offset to be

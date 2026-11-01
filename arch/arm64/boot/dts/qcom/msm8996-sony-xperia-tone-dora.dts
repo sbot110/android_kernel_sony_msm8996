@@ -19,10 +19,20 @@
 /delete-node/ &pm8994_l11;
 /delete-node/ &pm8994_l14;
 
-&usb_detect {
-	pins = "gpio24";
+/* Use the original Tone electrical tuning with the native PHY provider. */
+&hsusb_phy1 {
+	compatible = "sony,dora-qusb2-phy", "qcom,msm8996-qusb2-phy";
 };
 
-&usb3_id {
-	id-gpios = <&msmgpio 24 GPIO_ACTIVE_LOW>;
+/*
+ * Sony's USB_DETECT is an output used with an ADC/pullup circuit, not a
+ * digital microUSB ID input. Do not request it as an extcon IRQ. Fixed
+ * peripheral mode does not use an ID extcon; real VBUS/OTG detection still
+ * requires the Sony charger/ADC integration.
+ */
+/delete-node/ &usb3_id;
+/delete-node/ &usb_detect;
+
+&{/soc/usb@6a00000/dwc3@6a00000} {
+	/delete-property/ extcon;
 };

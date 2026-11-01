@@ -152,6 +152,29 @@ static const struct qusb2_phy_init_tbl msm8996_init_tbl[] = {
 	QUSB2_PHY_INIT_CFG(QUSB2PHY_PLL_PWR_CTRL, 0x00),
 };
 
+/*
+ * Sony Tone board tuning: Copyright (c) 2014 Sony Mobile Communications Inc.
+ * From msm8996-tone-common.dtsi, reference
+ * 0c295b15b6d0fb59a64e13b9e0ef2070818ef2a1 (GPL-2.0).
+ * The MSM8996 PLL sequence is unchanged. A nonzero per-device TUNE2 fuse
+ * still replaces the high nibble after this board default is programmed.
+ */
+static const struct qusb2_phy_init_tbl msm8996_dora_init_tbl[] = {
+	QUSB2_PHY_INIT_CFG_L(QUSB2PHY_PORT_TUNE1, 0xd0),
+	QUSB2_PHY_INIT_CFG_L(QUSB2PHY_PORT_TUNE2, 0xa3),
+	QUSB2_PHY_INIT_CFG_L(QUSB2PHY_PORT_TUNE3, 0x83),
+	QUSB2_PHY_INIT_CFG_L(QUSB2PHY_PORT_TUNE4, 0xc7),
+
+	QUSB2_PHY_INIT_CFG(QUSB2PHY_PLL_TUNE, 0x30),
+	QUSB2_PHY_INIT_CFG(QUSB2PHY_PLL_USER_CTL1, 0x79),
+	QUSB2_PHY_INIT_CFG(QUSB2PHY_PLL_USER_CTL2, 0x21),
+
+	QUSB2_PHY_INIT_CFG_L(QUSB2PHY_PORT_TEST2, 0x14),
+
+	QUSB2_PHY_INIT_CFG(QUSB2PHY_PLL_AUTOPGM_CTL1, 0x9f),
+	QUSB2_PHY_INIT_CFG(QUSB2PHY_PLL_PWR_CTRL, 0x00),
+};
+
 static const unsigned int sdm845_regs_layout[] = {
 	[QUSB2PHY_PLL_CORE_INPUT_OVERRIDE] = 0xa8,
 	[QUSB2PHY_PLL_STATUS]		= 0x1a0,
@@ -213,6 +236,17 @@ struct qusb2_phy_cfg {
 static const struct qusb2_phy_cfg msm8996_phy_cfg = {
 	.tbl		= msm8996_init_tbl,
 	.tbl_num	= ARRAY_SIZE(msm8996_init_tbl),
+	.regs		= msm8996_regs_layout,
+
+	.has_pll_test	= true,
+	.disable_ctrl	= (CLAMP_N_EN | FREEZIO_N | POWER_DOWN),
+	.mask_core_ready = PLL_LOCKED,
+	.autoresume_en	 = BIT(3),
+};
+
+static const struct qusb2_phy_cfg msm8996_dora_phy_cfg = {
+	.tbl		= msm8996_dora_init_tbl,
+	.tbl_num	= ARRAY_SIZE(msm8996_dora_init_tbl),
 	.regs		= msm8996_regs_layout,
 
 	.has_pll_test	= true,
@@ -734,6 +768,9 @@ static const struct phy_ops qusb2_phy_gen_ops = {
 
 static const struct of_device_id qusb2_phy_of_match_table[] = {
 	{
+		.compatible	= "sony,dora-qusb2-phy",
+		.data		= &msm8996_dora_phy_cfg,
+	}, {
 		.compatible	= "qcom,msm8996-qusb2-phy",
 		.data		= &msm8996_phy_cfg,
 	}, {

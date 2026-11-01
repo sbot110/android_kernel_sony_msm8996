@@ -10,7 +10,8 @@ Observed providers and consumers
 
 The active board description uses the generic PHY driver
   drivers/phy/qualcomm/phy-qcom-qusb2.c
-with compatible "qcom,msm8996-qusb2-phy", hsusb_phy1 at 0x07411000.
+with compatible "sony,dora-qusb2-phy", "qcom,msm8996-qusb2-phy",
+hsusb_phy1 at 0x07411000.
 The board uses dwc3-qcom plus a high-speed, peripheral-only DWC3 child. That
 child refers to hsusb_phy1 through "phys" / "phy-names = usb2-phy".
 The PHY driver exports a generic PHY, not a DPDM regulator or "dpdm" supply.
@@ -61,7 +62,11 @@ These corner integers are not microvolt values and cannot be copied into a
 native voltage-regulator supply. Original clocks are cfg_ahb_clk and
 ref_clk_src; the CMOS reference selection is described through ref_clk_addr
 0x00388018. The reference efuse resource starts at 0x0007024c with bit 21,
-width 4; the generic driver uses a QFPROM nvmem cell instead.
+width 4; the generic driver uses a QFPROM nvmem cell instead. The native
+cell reads 0x7424e bits 5..8, whereas the legacy word starts at 0x7024c
+bit 21. Upstream QFPROM distinguishes corrected and raw register views;
+the native cell is retained rather than changing the address by assumption.
+Physical trim/USB electrical validation is still required.
 
 DPF_DMF enable:
 - Under the PHY lock, vote digital/analog rails, including analog voltage/load.
@@ -92,6 +97,17 @@ properties do not express every changed bit. The old Sony DT contains
 qcom,tune2-offset = <0xfffffffe>; no consumer of that exact property was found
 in either inspected driver tree. Do not claim that the property already
 adjusts efuse tuning or silently reinterpret it as another binding.
+
+The native driver now has an explicit "sony,dora-qusb2-phy" compatible for
+this board. It selects the complete ten-entry Sony initialization sequence,
+including TUNE1/2/3/4 = d0/a3/83/c7, with the same MSM8996 register layout,
+PLL sequence, reset, clocks and regulators. Nonzero per-device nvmem trim
+still overrides the high TUNE2 nibble after board defaults; an unfused or
+unreadable trim leaves the Sony a3 fallback. The original Sony copyright,
+GPL-2.0 provenance and source commit are retained beside the table. Generic
+MSM8996 and SDM845 compatibles retain their existing tables. This restores
+board tuning; it neither creates a DPDM provider nor enables charging. PHY
+lock, USB electrical behavior and suspend still require physical tests.
 
 Required proper integration
 ---------------------------
@@ -127,8 +143,12 @@ Two real approaches require further implementation and testing:
    vendor driver differs from the reference. Audit and test work/notifier
    cleanup and clock/regulator error paths before enabling the binding.
 
-Current ID-GPIO extcon/peripheral bring-up does not by itself provide the
-complete charger VBUS/type/OTG policy. Restore a real charger/USB event path,
+The Dora DT no longer describes USB_DETECT GPIO24 as a digital ID input.
+Sony uses this output with a VADC/pullup circuit; the removed GPIO extcon
+was not an implementation of that circuit. DWC3 remains fixed high-speed
+peripheral mode without ID/VBUS extcon. dwc3-qcom's no-extcon path enables
+the peripheral VBUS override; this is not real cable/charger detection.
+Restore a real charger/USB event path,
 avoid competing USB power-supply owners, and verify ordinary SDP/CDP/DCP
 charging before enabling high-voltage negotiation. Native and vendor PHY
 interrupt-bit definitions also differ; resolve against the MSM8996 source

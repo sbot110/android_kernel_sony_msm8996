@@ -9,6 +9,12 @@ Sony Xperia X Performance / dora / MSM8996. Нельзя считать эту �
 нового 4.19 не выполнен; **О** — необходимый компонент/связка отсутствует.
 Ни одна функция 4.19 пока не имеет статуса физически подтверждённой.
 
+Общий статус — **BUILDABLE**. В продолжении от HEAD c06cad974 внесены
+реальные исправления USB PHY/ID, выбора панели и Android config.
+Проверки структуры DT и формата образа автоматизированы; это не BOOT TEST READY.
+Точные незавершённые связи: [dora-hardware-blockers.md](dora-hardware-blockers.md).
+Kernel/userspace границы LOS21: [dora-android14-audit.md](dora-android14-audit.md).
+
 ## Модели, board-id и варианты DT
 
 Эталон: 0c295b15b6d0fb59a64e13b9e0ef2070818ef2a1.
@@ -31,6 +37,11 @@ PMIC/stepping, а F8132 другому. Назначать DTB по этому �
 IBB discharge, BCL derating и flash ramp. v3.0 имеет собственные clock/CPR
 overrides. Копирование только ID в начальный 4.19 DTS не переносит эти отличия.
 Поэтому фиктивные четыре DTB с одними изменёнными идентификаторами не созданы.
+Повторная компиляция четырёх эталонов уточнила конечные значения: IBB
+discharge равен 32 у всех, поскольку Tone override заменяет 300 из
+PMI8996 include. Различаются BCL derating (550000 против 0), flash ramp
+(6P7_US против 27_US), а также 7/8 GPU CPR corners и их реальные voltage
+и clock mappings для v3.0/v3.1.
 
 Текущий начальный 4.19 DT описывает только v3.1 + PM8994/PMI8994 и ограничивает
 bring-up двумя CPU. Полное покрытие четырёх исходных вариантов ещё отсутствует.
@@ -69,6 +80,9 @@ F8131 — SIM1, звонки/SMS/LTE/передача данных; F8132 — о
 
 Диапазоны не пересекаются. Сохранён исходный выбор по lcdid_adc из bootargs,
 somc,lcd-id-adc и somc,dsi-index, а не выбор по номеру модели телефона.
+Нет неявного fallback на preferred panel: отсутствующий/ошибочный/неизвестный
+ID и некорректные/неоднозначные диапазоны завершают выбор с NULL. Host-тест
+реальной функции проверяет эти пути, все штатные диапазоны и OF references.
 Драйвер Sony panel/incell перенесён как исходный код и компилируется отдельно;
 board DT пока не включает эти панели и их полную цепочку providers.
 Clearpad получил backend уведомлений fbdev MDSS/Tone incell; I2C12 и полная
@@ -106,13 +120,17 @@ ADC выбирает AUO однозначно. bitclk=8*byteclk=6*pclk; знач
 | Тачскрин Clearpad | С, Б, О, Н | С, Б, О, Н | Fbdev MDSS/Tone incell код собран; I2C12 DT и PM/reset цепочка ещё не подключены |
 | Звук / DSP / WCD9335 | С, Б, О, Н | С, Б, О, Н | Sony machine/APRv2/Q6/WCD9335 собраны; LPASS/PIL/SSR/SLIMbus DT/firmware и Sony effects ABI ещё не завершены |
 | Камеры | О, Н | О, Н | Sensor/CCI/ISP/EEPROM/actuator DT, drivers и vendor ABI |
-| UFS / SD | Б, Н | Б, Н | Оба набора PMIC/stepping, ICE, suspend, filesystem integrity |
-| USB / ADB / MTP / OTG | Б, Н | Б, Н | PHY/VBUS/role detection и физическая проверка |
+| UFS / SD | С, Б, О, Н | С, Б, О, Н | Sony UFS14nm восстановлен; отсутствие bus vectors/BIMC/NoC блокирует probe. ICE, suspend и filesystem integrity не проверены |
+| USB / ADB / MTP / OTG | С, Б, Н | С, Б, Н | Sony PHY tuning восстановлен; ложный GPIO24 ID удалён; реальный VBUS/role detection и OTG ещё не реализованы |
 | FG / VADC / BCL | С, Б, Н | С, Б, Н | Реальные драйверы и PM8994/PMI8994 DT; проверить PMIC/profile, калибровку, IRQ, SOC, JEITA на каждом аппарате |
 | Зарядка / OTG / BC1.2 | С, Б, О, Н | С, Б, О, Н | Sony SMBcharger собран; отсутствует подключённый DPDM/PHY и полный microUSB ID/MPP provider |
 | Modem / calls / SMS / data | О, Н | О, Н | Firmware/SSR/SMD/GLINK/RMNET/IPA, RIL и регистрация в сети |
 | SIM configuration | С: ss userspace | С: dsds userspace | SIM1 отдельно и оба слота/DSDS отдельно |
 | Suspend/resume / 4 CPU / DVFS | О, Н | О, Н | CPR/SAW/binning/clock/PMIC variants и измерения |
+
+Разрешённая .config оставляет CPU_FREQ/CPU_IDLE выключенными. Четыре CPU
+узла и NR_CPUS=4 не заменяют отсутствующие CPU clock/OPP/regulator/genpd
+связи; maxcpus=2 сохранён. Наличие thermal sensors не доказывает throttling.
 
 Bluetooth/FM, GNSS, NFC, fingerprint, дополнительные датчики и вибромотор
 не прошли полную отдельную ревизию driver/DT/firmware ABI этого порта.

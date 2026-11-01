@@ -37,13 +37,14 @@ when clearing a stale WEP key. The old Sony sme.c fix is present in effect;
 the diagnostic nl80211 forced-CCMP fallback was not blindly copied into
 the newer wireless core.
 
-IMPORTANT HARDWARE INTEGRATION LIMITATION
-The initial dora DT uses the upstream qcom,pcie-msm8996 controller binding.
-The retained Sony BCMDHD glue calls the vendor msm_pcie_* API and requires
-PCI_MSM, whose host binding is different. Both implementations compiling
-does not connect the two APIs or create the Sony WLAN platform device.
-The DT/PCIe/GPIO integration must be completed against real hardware;
-no synthetic controller adapter or fake successful probe is provided.
+HARDWARE INTEGRATION AND REMAINING LIMITS
+The current dora PCIe supplement uses qcom,msm8996-pci-msm, the real vendor
+host implementing the msm_pcie_* API called by Sony BCMDHD glue. It adds
+the android,bcmdhd_wlan platform device, retains native QMP/GCC providers
+and gives GPIO84 one owner. See dora-pcie-port.txt for INTx and SPI254.
+This supersedes the initial upstream-host binding limitation. Link
+training, DMA/SMMU topology, firmware/calibration and wake behavior still
+need hardware validation; successful compilation is not a successful probe.
 
 Required runtime tests: real calibration/firmware load, WPA2-PSK/CCMP,
 mixed WPA/WPA2, reconnect, AP mode, scan/roam, suspend/resume, interface

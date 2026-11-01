@@ -1,132 +1,132 @@
 Dora Linux 4.19 build validation — 2026-11-01
 ===========================================
 
-Status: PASS for standalone ARM64 kernel + selected Dora DTB build.
-Complete hardware port / LOS21 boot readiness: NOT ESTABLISHED.
-Targets: F8131 Single SIM and F8132 Dual SIM; neither has booted this 4.19
-kernel in these checks. User AUO logs are from working 4.4 on F8132.
+Status: BUILDABLE. Complete hardware port: INCOMPLETE.
+BOOT TEST READY: NO. F8131 boot: UNTESTED. F8132 boot: UNTESTED.
+Neither compilation nor a valid appended DTB proves Sony bootloader selection.
 
-Validated CODE commit: 6bc0dab111b423b7ee0de123fab1d45e4247171c
+Initial branch HEAD: c06cad9740c8cfc590807c256b45af4f6485008c
+Validated CODE commit: 4746e42d1abd9c155a85397d01a7f30b21e60344
 Branch: kernel-4.19-701905467803253630
 Kernel release: 4.19.318-dora-4.19+
-Host: Debian 13 x86_64 managed cloud executor
-ARM64 + ARM32 GCC: Debian 12.2.0-14; cross binutils 2.44
-Host GCC 14; bison 3.8.2; flex 2.6.4
+Final documentation-only commit is identified in the accompanying final report.
+The source/config/scripts used here match the validated code commit; later
+working-tree changes during compilation were documentation only.
 
-Command: OUT_DIR=/workspace/work/dora-4.19-out JOBS=6 scripts/dora/build.sh
-CROSS_COMPILE=aarch64-linux-gnu-
-CROSS_COMPILE_COMPAT=arm-linux-gnueabi-
-Final exit code: 0
-Cloud log: /workspace/work/dora-hardware-v2-verified-build.log
-The final run rebuilt the changed code and completed MODPOST, vmlinux link,
-Image and gzip generation, exact selected-DTB append and checksum generation.
-An earlier all-driver run also linked successfully. A later final check
-found a real s64 printk format mismatch in battery-legacy; commit 6bc0dab11
-corrects it and the subsequent rebuild exits 0 without that warning.
+Build execution
+---------------
+Host: Debian 13 x86_64 cloud executor; two CPU quota, JOBS=3.
+ARM64 GCC and ARM32 compat GCC: Debian 12.2.0-14.
+ARM64/ARM32 binutils: 2.40. Host GCC 14.2.0-19.
+bison 3.8.2, flex 2.6.4, system dtc 1.6.1 for independent decoding.
+Toolchain packages extracted outside source; no system tools replaced.
 
-Tool packages were extracted outside the source tree. The cloud command
-used PATH/LD_LIBRARY_PATH for that prefix and BISON_PKGDATADIR/M4 for the
-extracted tools. Installed host packages are used in the WSL instructions.
-No full LineageOS build, boot.img packaging or phone test ran. Ubuntu 22.04
-WSL instructions are provided in README_KERNEL_4.19.md; that OS was not
-executed here. Hashes include timestamp/build/user metadata and do not
-promise a bit-identical rebuild on another machine.
+Command:
+  source /workspace/work/toolchain/env.sh
+  OUT_DIR=/workspace/work/dora-verified-out JOBS=3 scripts/dora/build.sh
+Fresh O= directory: yes; complete kernel object compilation, MODPOST,
+vmlinux link, Image generation, gzip and selected-DTB assembly executed.
+Final command exit code: 0
+Retained log: dora-final-build.log
+Retained exit record: dora-final-build.exit (0)
+Full tool versions: toolchain.txt; SHA256 package list retained separately.
 
-Resolved configuration and real linked components
-------------------------------------------------
-268 explicit defconfig assignments retained; 35 required built-ins pass.
-ARM64/COMPAT, Binder/BinderFS, BPF/cgroup BPF, namespaces, cgroups, PSI,
-SELinux, ext4/F2FS, dm-verity/FEC and USB gadget remain enabled.
-MDSS/Sony panel/incell, KGSL/Adreno 530, BCMDHD4359/controlfnc/preallocation,
-legacy ION handles, real VADC/BCL/FG/SMBcharger with Sony extensions,
-Sony MSM8996/Tasha APRv2/Q6/WCD9335 and FB Clearpad are built in.
-The initial DT still limits bootargs to maxcpus=2; NR_CPUS=4 alone
-is not proof of four-core/DVFS support. Compiling a driver does not prove
-that its DT/provider/firmware chain can probe or its userspace ABI works.
+The earlier dora-clean-out build completed but lacked active core providers.
+Two superseded clean verification runs were intentionally interrupted (143)
+after source audits identified missing providers and a UFS unwind defect.
+They are not counted as successful final builds. The fresh final build above
+is the authoritative result for the corrected source and configuration.
+
+Checks actually run
+-------------------
+- Resolved .config: 277 explicit assignments and 87 required built-ins PASS.
+  ARM64 BPF JIT ALWAYS_ON, PSI default-on, default SELinux with runtime disable
+  off; real memfd/ashmem, Binder/BinderFS, fscrypt/FS/DM/loop/USB dependencies.
+- check-panels.py PASS: all five Sony panel data sets, original ADC boundaries,
+  0x11FFEA selects AUO4; no AUO120/dynamic switching activated.
+- check-panel-selection.py PASS: host compilation/execution of the actual
+  selector with a refcounted OF model, success and malformed/unknown IDs.
+- check-ufs-phy.py PASS: original 14nm calibration header digest and actual
+  selector/common write functions; six revision/rate combinations, VCO quirk,
+  unknown/G4 rejection without writes; bounded host MMIO model only.
+- check-dt.py PASS: current v3.1/PM8994/PMI8994 IDs; four CPU nodes and retained
+  maxcpus=2; 213 structural provider/IRQ references. No GPIO ID extcon/charger.
+  These checks do not validate electrical behavior, driver probe or clock IDs.
+- check-power-dt.py PASS: 32 Sony PMIC/profile nodes and exact 128-byte profile.
+- check-artifacts.py PASS: ELF64 LE AArch64 executable; ARM64 Image magic;
+  Image.gz exact decompression; one exact ordered DTB and no trailing bytes.
+- Negative checks PASS: bad Image magic, stale/truncated/duplicate DTB payload,
+  wrong stepping, removed CPU limit, forced panel ID, dangling regulator,
+  malformed interrupt data, PHY name/count mismatch and missing real linked
+  provider all rejected. The previous missing-provider configuration and
+  vmlinux are also rejected, rather than counted as a valid current build.
+- Four ORIGINAL Sony4.4 reference DTS compiled for comparison, exit 0 each;
+  their IDs match dora-original-dtb-ids.json. These are NOT new 4.19 artifacts.
+- Independent dtc decode of target DTB exit 0; dtc1.6.1 emits 15 inherited
+  layout/interrupt-provider warnings. They were not hidden by synthetic nodes.
+- WPA-version/cipher/AKM function bodies compare byte-for-byte with Sony4.4.
+  Original fixes retained; WPA2 association/reconnect remains untested.
+- External tone-common SELinux cmdline patch: git apply --check exit 0 on
+  exact referenced BoardConfigCommon.mk. Patch NOT APPLIED to device/vendor.
+- Existing legacy ION smoke test compiled on host, then SKIPPED with code77
+  because /dev/ion is absent. This is not a target runtime pass.
+- bash -n scripts/dora/build.sh and git diff --check PASS.
+
+Compiler warnings remain: 97 warning diagnostics in the clean build.
+Examples include inherited format diagnostics in vendor KGSL/SMMU/RPMSG,
+slub and a compat VDSO GNU-stack warning. No warning-free build is claimed.
+Full diagnostics are retained in compiler-warnings.txt and the full log.
+No post-hoc compiler error filtering or lowered error policy was used.
+
+Linked implementations checked in System.map:
+adreno_probe, mdss_mdp_probe, dhd_module_init, somc_wifi_init, sony_legacy_qpnp_vadc_read, msm_bcl_read, smbchg_probe, fg_probe, msm8996_asoc_machine_probe, clearpad_probe, ion_legacy_ioctl, mdss_dsi_panel_driver_detection, incell_control_mode, binder_init, selinux_init, bpf_int_jit_compile, qusb2_phy_probe, lcdid_adc_setup, msm8996_dora_init_tbl, ufs_qcom_phy_qmp_14nm_probe, glink_rpm_probe, qcom_apcs_ipc_probe, pmic_gpio_probe, pmic_mpp_probe, simple_pm_bus_probe
 
 Verified artifacts
 ------------------
-- vmlinux is ELF64 little-endian, e_machine=AArch64(183).
-- Image has ARM64 header magic at offset 0x38.
-- Decompressing Image.gz equals Image byte-for-byte.
-- The selected DTB has valid FDT magic and exact total-size header.
-- Image.gz-dtb equals Image.gz followed by that single DTB, with no stale
-  or unrelated DTBs appended from the O= directory.
-- System.map contains these defined implementations:
-  adreno_probe
-  mdss_mdp_probe
-  dhd_module_init
-  somc_wifi_init
-  sony_legacy_qpnp_vadc_read
-  msm_bcl_read
-  smbchg_probe
-  fg_probe
-  msm8996_asoc_machine_probe
-  clearpad_probe
-  ion_legacy_ioctl
-  mdss_dsi_panel_driver_detection
-  incell_control_mode
-  binder_init
-  selinux_init
-
-Artifacts (bytes; SHA256):
 vmlinux
-  24294664  c019da5940d45ddfbd5b87f0184ad71471d67725256555dd47f6564c2187388c
-arch/arm64/boot/Image
-  19378688  9509b98845f248a78f69bac893336352c30684311580d127a6ed5102da46ce45
-arch/arm64/boot/Image.gz
-  8820822  e75a0ebab24ec30a870f12fb62ccbd0cc20551f32f656f29e846122963c287fa
-arch/arm64/boot/dts/qcom/msm8996-sony-xperia-tone-dora.dtb
-  44155  37f35a85388354952cb085a640d1fa6e6f71cb87afffe808d8795dcd1c7a06ae
-arch/arm64/boot/Image.gz-dtb
-  8864977  b1c9c63d2e30f49ae47f1c4c5ce3306bea3d06fd44a5b9549fb537d4bbec335b
+  24374656 bytes  SHA256 d7b5f0e6c07295c8f754d8eae722846d1a263d7658009f8aa229f4eba479f1e2
 .config
-  137226  1b3c817a957137d7598791696c9c1a8063c2fe7c6adae4384691d8bc9fe1d498
+  137255 bytes  SHA256 229bbe5f087cfe40989b2d06f1679e6134e6949c0c2fea868cec337cd0503599
+arch/arm64/boot/Image
+  19448320 bytes  SHA256 9749d6df1bb78c2921ec469439e0796f900d6a12766ceacab6eae8abad8eb8fc
+arch/arm64/boot/Image.gz
+  8840499 bytes  SHA256 27b285f3604e709049d2cbf686ecde2159c2779f9ee54e356902336ef02f6a10
+arch/arm64/boot/dts/qcom/msm8996-sony-xperia-tone-dora.dtb
+  43899 bytes  SHA256 40bb5f11928b545e21322d6cd83012dd2ea1aad1c428bc5af552c67fce159a3f
+arch/arm64/boot/Image.gz-dtb
+  8884398 bytes  SHA256 b8dd90b4aef8ab161e5f9671478bac124fc6e560790bb43d13a5193d527e98f5
 
-Data/API/lifecycle checks
--------------------------
-- check-panels.py passes: all six original panel files retain exact bytes;
-  AUO/JDI/LGD/Sharp3/Sharp9 ADC ranges/boundaries remain valid and the user
-  F8132 lcdid_adc=0x11FFEA selects AUO 4 with the reported clock ratios.
-  Panel activation is still absent from the current headless board DT.
-- check-power-dt.py passes on the actual selected compiled DTB: 32 PMIC and
-  profile nodes match the final flattened original Sony 4.4 properties,
-  allowing only documented native reg-cell and semantic-phandle conversion.
-  Dora's 128-byte profile and 17% ID range match; no charger node is enabled.
-- The power-supply enum/sysfs tables have compile-time count checks.
-  power_supply_sysfs.o compiled with and without SOMC_CHARGER_EXTENSION;
-  original IDs remain in place and the missing Wipower string is corrected.
-- VADC/BCL/FG/SMB and Sony extensions passed isolated object builds.
-  ADC and charger lifecycle/error paths received independent source review.
-- Clearpad core/I2C passed separate FB and retained DRM object builds.
-- Sony audio/switch archives passed with the existing audio -Werror checks;
-  whole-archive ld -r passed. This is supplemented by the final whole-kernel
-  link above. Original machine DAI/route string sets were compared exactly.
-- No BCMDHD WPA functions changed in this round; the prior source comparison
-  of WPA-version/cipher/AKM functions to the 4.4 reference remains applicable.
-- git diff --check and bash -n scripts/dora/build.sh pass.
+Appended DTB selection metadata:
+  qcom,msm-id = <246 0x30001>
+  qcom,board-id = <8 0>
+  qcom,pmic-id = <0x20009 0x2000a 0 0>
+  offset after gzip = 8840499 bytes
+  DTB size = 43899 bytes
+Sony bootloader matching/header/signature behavior: UNVERIFIED.
 
-The final incremental build has no compiler diagnostics for the rebuilt
-objects. This does not claim a warning-free clean build of the entire vendor
-tree. Standalone DT compilation retains seven existing base warnings; they
-were not hidden by replacing data or adding synthetic providers.
+Remaining work and per-model limits
+----------------------------------
+Only one initial 4.19 hardware variant is present. Three genuine SoC/PMIC
+variants, CPU clocks/CPR/SAW/binning/DVFS/idle, MDSS/DSI/panel providers,
+GPU/IOMMU/secure heaps/vendor ABI, DSP/SLIMbus/audio and modem/RIL/SSR
+integration are incomplete. The UFS host still rejects missing msm-bus
+vectors/NoC topology; real PHY restoration does not prove storage probe.
+USB DPDM/QC/microUSB ID/VBUS/OTG has no complete provider path; charger DT remains inactive. A disabled DT node does not prove
+the state left by the bootloader is electrically safe.
 
-Remaining limits and per-model hardware tests
----------------------------------------------
-One actual MSM8996 v3.1 + PM8994/PMI8994 DTB is built. Original v3.0 and
-PMI8996 clock/CPR/BCL/IBB/flash overrides remain incomplete. There are no
-three artificial DT copies with only changed root IDs.
-MDSS panel/provider activation, I2C12 touch DT, LPASS/PIL/SSR/SLIMbus/audio
-firmware DT, cameras, modem/radio/DSDS, full GPU/ION/vendor ABI and four-core
-power management are not complete. Sony DSP-effects extensions are also
-incomplete. PHY/DPDM and complete Sony microUSB ID/MPP integration block
-full charger/BC1.2/OTG/HVDCP claims; the separate existing vendor PHY cannot
-share the same hardware with the active generic PHY.
+F8131: Single SIM userspace model; no boot or radio/hardware tests performed.
+F8132: Dual SIM/DSDS userspace model; no boot, either SIM slot, DSDS, radio
+or hardware tests performed. The old AUO4 logs belong to Sony4.4 only.
+Neither model is considered BOOT TEST READY.
 
-No successful 4.19 boot, working charge safety, common boot.img or full
-hardware support is claimed. F8131 and F8132 each require actual ID/DTB,
-panel/touch, storage integrity, GPU, Wi-Fi/WPA2, USB, audio/cameras, battery
-calibration/JEITA/cutoffs, suspend and CPU tests. F8131 needs single-SIM
-radio tests; F8132 additionally needs both slots, DSDS, data-SIM switching
-and incoming-call/voice recovery tests. See dora-compatibility.md and the
-individual port reports for the source/build/runtime matrix and next work.
+LineageOS21: source/config/interface audit only; no full Android checkout,
+real LOS21 ramdisk, boot.img packaging or Android integration build available.
+No bpfloader, vold or BoringSSL target success is claimed. The known DEVMAP
+map-flag ABI gap is documented; unsupported flags were not merely declared
+in UAPI. Old status1 alone does not establish its cause.
+
+No phone boot/flashing, partition writes, formatting, SELinux/verity disabling
+or device/vendor repository changes were performed. Prepared binaries are
+build evidence, not a flash-ready boot image. See dora-hardware-blockers.md,
+dora-android14-audit.md and dora-compatibility.md for the diagnostic plan and
+the remaining implementation and physical-device requirements.

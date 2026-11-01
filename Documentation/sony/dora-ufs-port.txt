@@ -1,0 +1,69 @@
+Sony Dora MSM8996 UFS QMP 14nm port
+==================================
+
+Source: Sony4.4 reference 0c295b15b6d0fb59a64e13b9e0ef2070818ef2a1,
+drivers/phy/phy-qcom-ufs-qmp-14nm.c and .h. Original Linux Foundation
+copyright and GPL-2.0-only notices are retained. Commit 5a920a766 imports
+both files unchanged; the following commit adapts their APIs separately.
+The entire calibration header remains byte-for-byte identical, SHA256:
+3829c8be1322b07099eee7ae313c68af28557388b51ff2c71c57650248435e02
+
+Actual missing provider
+-----------------------
+The selected DT uses qcom,msm8996-ufs-phy-qmp-14nm at 0x627000/0xda8.
+Before this change no driver matched it: PHY_QCOM_UFS compiled the common
+layer and SDM845/newer PHYs, not MSM8996 14nm. A string check in the common
+clock helper was not a platform-driver binding. Sony's old compatible is
+qcom,ufs-phy-qmp-14nm; the port accepts both explicit hardware bindings.
+The PHY and controller register windows and their clock-name lists match
+the final Sony4.4 DT. Native GCC/RPM clock IDs are retained; old hashed Sony
+clock IDs are not copied into the new framework.
+
+Preserved behavior and adaptation
+---------------------------------
+- Original rate-A tables for controller revisions 2.0.0/2.1.0/2.2.0,
+  rate-B overrides, SVS configuration and VCO bootloader tuning retained.
+- Original analog power-collapse reset/barrier and RX line-config logic.
+- Current calibrate callback takes a third HS-G4 flag. HS-G4 returns EOPNOTSUPP
+  without register writes; unknown revisions return ENODEV. No substitute
+  calibration values or faster operating mode is invented.
+- Clock/regulator init uses the actual one-argument 4.19 APIs. Obsolete
+  exit/remove calls and invalid to_phy(platform_device) conversion are
+  removed; resources use the common devm ownership. Manual driver unbind
+  is suppressed because storage consumers must be quiesced first.
+- Common optional-clock EPROBE_DEFER and optional supply failures now
+  propagate. Missing optional supply differs from a provider error.
+- UFS host now checks phy_init() and regulator parse errors. Deferred
+  regulator errors are not overwritten by successful voltage-property
+  reads; error paths do not call phy_exit for a failed initialization.
+- Host failures release PM QoS attributes/work/requests before freeing
+  state; queued work drains before its PM QoS requests are removed.
+- Published max_bus_bw attributes are removed before unregistering the
+  bus client or freeing host state; failed attribute creation releases
+  the just-registered client. This also makes deferred reprobe cleanup safe.
+- Calibration/common RPMH error returns use negative errno values.
+
+Host checks
+------------
+check-ufs-phy.py verifies the original header digest and compiles/runs the
+actual calibration-selector/common-write functions against a bounded MMIO
+model. It covers all six revision/rate combinations, VCO preservation and
+G4/unknown revision rejection without writes. This does not emulate clocks,
+electrical calibration, PHY lock, hibern8, storage commands or data integrity.
+The new PHY, common helpers and changed UFS host compile as ARM64 objects;
+the complete kernel/link results are recorded in dora-build-validation.txt.
+
+Remaining controller/bus blocker
+--------------------------------
+The port is NOT proof that UFS can probe or mount Android filesystems.
+CONFIG_QCOM_BUS_SCALING is enabled, and ufs_qcom_bus_register() requires
+real msm-bus topology plus matching vectors/names. Sony4.4 has 12 cases
+and two paths (ufs1, MIN through MAX). The current native board DT has
+neither those vectors nor the complete original BIMC/NoC provider topology.
+The host will reject missing bus data; this check was not disabled and no
+fake bandwidth vote/provider was added to create a successful probe.
+
+ICE/secure firmware and vendor crypto ABI, real regulator/clock probe,
+link startup, configured lanes, hibern8, reset, suspend and storage integrity
+remain physical-device requirements for F8131 and F8132 separately.
+No storage command, partition write or filesystem format was performed.

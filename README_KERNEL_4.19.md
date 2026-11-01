@@ -3,6 +3,14 @@
 Устройство: dora / tone, F8131/F8132, Qualcomm MSM8996.
 Дата обновления: 2026-11-01.
 
+**Текущий статус: BUILDABLE. Завершение аппаратного порта не достигнуто.**
+В этом продолжении исправлены Sony QUSB2 tuning, ошибочный GPIO USB ID и
+fallback выбора панели; усилены Android config и проверки
+DT/ARM64/appended DTB. Подробный [аудит блокеров](Documentation/sony/dora-hardware-blockers.md)
+объясняет, почему четыре аппаратных варианта и первая безопасная загрузка
+ещё не готовы. [Аудит LOS21](Documentation/sony/dora-android14-audit.md)
+разделяет проверенные kernel interfaces и непроверенные runtime ошибки.
+
 **В корне теперь настоящие исходники Linux 4.19.318. Это начальный перенос,
 а не готовое к загрузке ядро LineageOS 21.** Импорт базы, компиляция и
 работоспособность оборудования — разные этапы. Загрузка телефона и
@@ -56,6 +64,11 @@ namespaces, seccomp, SELinux, ext4/F2FS, dm-verity/FEC, сети и USB gadget.
 Наличие функций проверять по разрешённой .config: запись в defconfig
 может быть отброшена Kconfig из-за зависимостей. IncFS присутствует в базе;
 FUSE BPF не следует считать обязательным или реализованным по одному имени.
+BPF_JIT_ALWAYS_ON включает настоящий ARM64 JIT с начала работы; PSI включён
+по умолчанию, runtime disable SELinux запрещён. Проверяются 277 явных
+назначений и 87 необходимых built-ins, включая memfd/ashmem и fscrypt.
+Отдельно включены реальные DT providers RPM GLINK/APCS, PMIC GPIO/MPP,
+simple-pm-bus, QUSB2 и MSM8996 UFS14nm; их наличие проверяется в System.map.
 
 ## Device Tree: начальный headless bring-up
 
@@ -74,6 +87,9 @@ FUSE BPF не следует считать обязательным или ре
   дисплея, touch, аудио, зарядки, камер и secure firmware ещё не завершён.
 - Подключён vendor PCIe host для BCM4359 с native QMP PHY/GCC genpd;
   GPIO84 имеет одного владельца. INTx и link-down SPI254 сверены с Sony.
+- Native QUSB2 использует точные Sony board TUNE1/2/3/4 d0/a3/83/c7
+  с сохранением nvmem trim. Неверный GPIO24 ID extcon удалён; остаётся
+  фиксированный high-speed peripheral mode без реального VBUS/OTG provider.
 - PMIC supplement описывает реальные REVID/VADC/FG/BCL и профиль Dora
   1300-3513 (330 кОм, 17%) для PM8994/PMI8994. Это не заменяет зарядку.
 - Отсутствующие в 4.19 bindings не заменяются придуманными узлами.
@@ -90,7 +106,7 @@ F8131 и F8132 требуют отдельных испытаний modem/SIM/DS
 | Дисплей | Vendor MDSS; перенесены исходники Sony panel/incell, LAB/IBB API и MSM8996 PLL bindings | Завершить реальную цепочку DT: MDSS/bus/SMMU/clock/power/reset/подсветка для всех вариантов |
 | GPU | KGSL и Adreno 530 | Проверить IOMMU, firmware, secure buffers и ioctl ABI с реальными vendor библиотеками |
 | Wi-Fi | BCMDHD BCM4359 и Sony glue; DT теперь использует реальный vendor msm_pcie с QMP PHY | Проверить link training, DMA/SMMU, firmware/calibration, WPA2, IRQ, suspend/wakeup на обоих аппаратах |
-| UFS / SD | Qualcomm UFS/PHY и SDHCI | Проверить питание, clocks, IOMMU, ICE и сохранность данных на устройстве |
+| UFS / SD | Восстановлен настоящий Sony UFS QMP14nm, native UFS/SDHCI | Требуются UFS bus vectors и BIMC/NoC topology; без них probe блокируется. ICE и сохранность данных не проверены |
 | USB | DWC3 и gadget/configfs | Проверить role switching, PHY, VBUS/OTG, ADB/MTP и зарядку |
 | Звук | Перенесены Sony MSM8996/Tasha machine, vendor APRv2/Q6, WCD9335/CPE/WSA и switch; полная линковка проходит | Реальные LPASS/PIL/SSR, SLIMbus, clocks/IOMMU/firmware и sound DT; Sony DSP-effects extensions остаются неполными |
 | Питание | Перенесены настоящие Sony QPNP VADC, BCL, FG и SMBcharger с расширениями; native PM/IRQ/work lifetime | Зарядка требует настоящего DPDM/PHY provider, Sony microUSB ID/MPP и физической проверки safety paths; другие PMIC/SoC DT варианты ещё не перенесены |
@@ -122,6 +138,9 @@ SND_SOC_MSM8996/APQ8096 не используется как её замена. 
   notifications и Tone incell reset без назначения одной панели.
 - [PMIC DT](Documentation/sony/dora-power-dt.txt): сравнение с итоговым
   Sony DT и исходный профиль батареи без подмены данными MTP.
+- [UFS14nm](Documentation/sony/dora-ufs-port.txt): исходные Sony calibration
+  tables, native PHY API, реальные provider/init errors и безопасный unwind;
+  UFS bus topology всё ещё отсутствует, это не доказательство работы накопителя.
 
 DPDM regulator не заменён fixed-regulator: он должен управлять настоящим
 PHY и высокоимпедансным состоянием D+/D-. Зарядный DT пока не активирован.
@@ -166,6 +185,10 @@ netdev lifetime: [dora-wifi-port.txt](Documentation/sony/dora-wifi-port.txt).
 в DT: удалены dynamic mode switching и режимы 1080p120. Итоговые панели
 сохранены в истории как эталон; работа Sony 1080p60 в новом DT пока
 не подтверждена. Одни диагностические сообщения не означают перенос панели.
+Выбор по LCD ID теперь прекращается при отсутствующем, некорректном,
+неизвестном или неоднозначном значении. Предпочтительная панель не остаётся
+неявным fallback; отдельный host-тест реальной функции проверяет все пять
+диапазонов и баланс OF references. Это не физическое испытание дисплея.
 
 ## Android 14 и загрузочный образ
 
@@ -186,7 +209,7 @@ Image.gz-dtb не является готовым boot.img: header, cmdline, ram
 
 Работать в Linux filesystem WSL, а не в /mnt/c. Нужны оба cross toolchain:
 новая база использует CROSS_COMPILE_COMPAT, не старый CROSS_COMPILE_ARM32.
-В облаке используются GCC 12.2 и binutils 2.44, размещённые вне исходников;
+В текущей облачной проверке используются GCC 12.2 и binutils 2.40 вне исходников;
 версии Ubuntu могут отличаться, поэтому сохраняйте версии и полный журнал.
 
 ```bash
@@ -211,8 +234,15 @@ JOBS=4 OUT_DIR="$PWD/out/dora" scripts/dora/build.sh
 
 Скрипт проверяет имя рабочей ветки, записывает версии toolchain, генерирует
 конфигурацию и проверяет её через scripts/dora/check-config.py, сверяет все
-исходные панели и ADC-диапазоны. Затем собирает Image.gz и ровно qcom/msm8996-sony-xperia-tone-dora.dtb, соединяет их
-в Image.gz-dtb и записывает SHA256SUMS. Скомпилированные 32 узла PMIC/profile
+исходные панели и ADC-диапазоны, выполняет host-тест выбора панели. Затем
+проверяет исходные UFS14nm таблицы и реальный calibration selector в host-модели,
+собирает Image.gz и ровно qcom/msm8996-sony-xperia-tone-dora.dtb, соединяет их
+в Image.gz-dtb и записывает SHA256SUMS для vmlinux, .config и образов.
+check-dt.py проверяет текущий hardware tuple и структурные provider/IRQ связи.
+check-artifacts.py проверяет AArch64 ELF, ARM64 header, gzip round-trip и
+точный порядок/состав appended DTB, а также System.map реализации активных
+providers; пишет artifact-validation.json.
+Это не доказывает выбор DTB загрузчиком Sony. Скомпилированные 32 узла PMIC/profile
 проверяются scripts/dora/check-power-dt.py по итоговым данным Sony 4.4.
 Явный список исключает попадание
 посторонних или старых DTB из O= каталога. Существенные драйверы этой

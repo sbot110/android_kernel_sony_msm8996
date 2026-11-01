@@ -18,16 +18,16 @@ LSM. Возможность permissive policy в userdebug сама по себ�
 подтверждением enforcing: окончательные cmdline/init/policy проверяются
 отдельно в Android.
 
-`scripts/dora/check-config.py` проверяет 81 обязательный built-in по итоговой
+`scripts/dora/check-config.py` проверяет 87 обязательных built-ins по итоговой
 `.config`, включая скрытые зависимости, а также стандартный ARM64 Binder
 ABI, default SELinux и отсутствие отключения PSI. Наличие имён в defconfig
 больше не является единственным свидетельством для memfd/ashmem, cgroup BPF,
 fscrypt, loop, OverlayFS, ION/fences и configfs USB.
 
-Команда генерации `make O=/workspace/work/dora-clean-out ARCH=arm64
+Команда генерации `make O=/workspace/work/dora-verified-out ARCH=arm64
 CROSS_COMPILE=aarch64-linux-gnu- CROSS_COMPILE_COMPAT=arm-linux-gnueabi-
 tone_dora_defconfig` завершилась с кодом 0. Проверка разрешённой `.config`
-завершилась с кодом 0: 271 explicit assignments, 81 required built-ins.
+завершилась с кодом 0: 277 explicit assignments, 87 required built-ins.
 Полный результат компиляции записывается отдельно в dora-build-validation.txt.
 
 ## Реализация интерфейсов
@@ -113,6 +113,9 @@ BoardConfigCommon.mk принудительно добавляет `androidboot.
 `patches/tone-common-enforcing-cmdline.patch`; он **не применён** к device tree
 и требует отдельного разрешения на изменение внешнего репозитория.
 Удаление параметра не доказывает полноту policy и не заменяет сборку LOS21.
+В том же cmdline остаётся `lpm_levels.sleep_disabled=1`. Наличие SUSPEND=y
+не доказывает deep sleep с такой внешней конфигурацией. Параметр не удалён
+вслепую: сначала нужны реальные CPU/CPR/SAW/power-domain связи и испытания.
 
 Там же указан XZ ramdisk. Поэтому проверка требует итоговый `RD_XZ=y`,
 а не только BLK_DEV_INITRD. Сохранены исходные boot parameters из документации;

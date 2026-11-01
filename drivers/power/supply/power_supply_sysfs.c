@@ -45,8 +45,8 @@ static const char * const power_supply_type_text[] = {
 	"USB_DCP", "USB_CDP", "USB_ACA", "USB_C",
 	"USB_PD", "USB_PD_DRP", "BrickID",
 	"USB_HVDCP", "USB_HVDCP_3", "USB_HVDCP_3P5", "Wireless", "USB_FLOAT",
-	"BMS", "Parallel", "Main", "USB_C_UFP", "USB_C_DFP",
-	"Charge_Pump",
+	"BMS", "Parallel", "Main", "Wipower", "USB_C_UFP", "USB_C_DFP",
+	"Charge_Pump", "TYPEC", "Retry detection",
 };
 
 static const char * const power_supply_usb_type_text[] = {
@@ -555,6 +555,19 @@ static struct device_attribute power_supply_attrs[] = {
 	POWER_SUPPLY_ATTR(auth),
 #endif
 	POWER_SUPPLY_ATTR(serial_number),
+	/* Tone integer properties are outside the string-property range. */
+	POWER_SUPPLY_ATTR(ignore_false_negative_isense),
+	POWER_SUPPLY_ATTR(enable_jeita_detection),
+	POWER_SUPPLY_ATTR(battery_info),
+	POWER_SUPPLY_ATTR(battery_info_id),
+	POWER_SUPPLY_ATTR(batt_aging),
+	POWER_SUPPLY_ATTR(vfloat_mv),
+	POWER_SUPPLY_ATTR(fv_cmp_cfg),
+	POWER_SUPPLY_ATTR(sub_type),
+	POWER_SUPPLY_ATTR(allow_hvdcp3),
+	POWER_SUPPLY_ATTR(max_pulse_allowed),
+	POWER_SUPPLY_ATTR(input_current_state),
+	POWER_SUPPLY_ATTR(usbin_det),
 };
 
 static struct attribute *
@@ -600,6 +613,11 @@ static const struct attribute_group *power_supply_attr_groups[] = {
 void power_supply_init_attrs(struct device_type *dev_type)
 {
 	int i;
+
+	BUILD_BUG_ON(ARRAY_SIZE(power_supply_type_text) !=
+		     POWER_SUPPLY_TYPE_RETRY_DET + 1);
+	BUILD_BUG_ON(ARRAY_SIZE(power_supply_attrs) !=
+		     POWER_SUPPLY_PROP_USBIN_DET + 1);
 
 	dev_type->groups = power_supply_attr_groups;
 

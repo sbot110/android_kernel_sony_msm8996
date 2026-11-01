@@ -48,17 +48,37 @@ def main():
         elif actual.get(key, "n") != value:
             errors.append("CONFIG_%s requested %s, resolved %s" %
                           (key, value, actual.get(key, "n")))
-    required = """ARM64 COMPAT COMPAT_VDSO CGROUPS MEMCG MEMCG_SWAP
-        CPUSETS CGROUP_PIDS CGROUP_DEVICE CGROUP_BPF BPF_SYSCALL BPF_JIT
+    # Check the resolved interfaces as well as explicit defconfig entries.
+    # Several of these (MEMFD_CREATE, SOCK_CGROUP_DATA, CONFIGFS_FS and
+    # FS_ENCRYPTION_ALGS) are selected by dependencies rather than prompts.
+    # bpffs is built by BPF_SYSCALL in this tree; there is no BPF_FS symbol.
+    required = """ARM64 COMPAT COMPAT_VDSO BLK_DEV_INITRD RD_XZ
+        CGROUPS MEMCG MEMCG_SWAP BLK_CGROUP CGROUP_SCHED FAIR_GROUP_SCHED
+        CGROUP_CPUACCT CGROUP_FREEZER CPUSETS CGROUP_PIDS CGROUP_DEVICE
+        CGROUP_BPF SOCK_CGROUP_DATA BPF BPF_SYSCALL HAVE_EBPF_JIT BPF_JIT
+        BPF_JIT_ALWAYS_ON NETFILTER_XT_MATCH_BPF NET_CLS_BPF NET_ACT_BPF
         NAMESPACES UTS_NS IPC_NS PID_NS NET_NS PSI MEMBARRIER SECCOMP
-        SECCOMP_FILTER SECURITY_SELINUX EXT4_FS EXT4_ENCRYPTION DM_VERITY
-        DM_VERITY_FEC INET IPV6 TUN FUSE_FS ANDROID_BINDER_IPC
+        SECCOMP_FILTER SECURITY SECURITY_NETWORK SECURITY_SELINUX
+        EXT4_FS EXT4_FS_POSIX_ACL EXT4_FS_SECURITY EXT4_ENCRYPTION
+        F2FS_FS F2FS_FS_XATTR F2FS_FS_SECURITY F2FS_FS_ENCRYPTION
+        FS_ENCRYPTION FS_ENCRYPTION_ALGS QUOTA QFMT_V2 DM_CRYPT DM_VERITY
+        DM_VERITY_FEC BLK_DEV_LOOP OVERLAY_FS INET IPV6 TUN FUSE_FS
+        TMPFS TMPFS_POSIX_ACL MEMFD_CREATE ASHMEM ION ION_LEGACY SYNC_FILE
+        USB_GADGET CONFIGFS_FS USB_CONFIGFS USB_CONFIGFS_F_FS
+        USB_CONFIGFS_F_MTP USB_CONFIGFS_F_PTP USB_CONFIGFS_F_ACC
+        USB_CONFIGFS_RNDIS PM_AUTOSLEEP PM_WAKELOCKS ANDROID_BINDER_IPC
         ANDROID_BINDERFS QCOM_KGSL FB_MSM_MDSS SCSI_UFS_QCOM""".split()
     for key in required:
         if actual.get(key) != "y":
             errors.append("required built-in not selected: CONFIG_" + key)
     if actual.get("ANDROID_BINDER_DEVICES") != '"binder,hwbinder,vndbinder"':
         errors.append("expected binder,hwbinder,vndbinder device names")
+    for key in ("PSI_DEFAULT_DISABLED", "SECURITY_SELINUX_DISABLE",
+                "ANDROID_BINDER_IPC_32BIT"):
+        if actual.get(key, "n") != "n":
+            errors.append("incompatible with dora Android userspace: CONFIG_" + key)
+    if actual.get("DEFAULT_SECURITY") != '"selinux"':
+        errors.append("SELinux must remain the default security module")
     if errors:
         for message in errors:
             print("FAIL:", message)

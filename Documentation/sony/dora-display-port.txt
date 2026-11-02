@@ -1,0 +1,106 @@
+Sony dora MSM8996 display integration, Stage 3
+============================================
+
+Hardware source: sbot110/android_kernel_sony_msm8996 commit
+0c295b15b6d0fb59a64e13b9e0ef2070818ef2a1. Original Qualcomm and Sony
+copyright notices are retained in the imported DTS and WLED implementation.
+No SDM845 MDSS, panel, voltage or clock data is substituted.
+
+The retained graph
+------------------
+msm8996-sony-xperia-tone-display.dtsi supplies original MDP/VBIF register
+layout, bandwidth vectors, DSI controller/14nm PHY/PLL resources, native MMCC
+clock translations, panel rail descriptions, Sony reset/TE/incell GPIOs,
+and all five retained Sony panel datasets. It selects panels through the
+bootloader's lcdid_adc value; the former default panel remains an enumeration
+anchor with its all-encompassing ADC range removed. Missing or unmatched IDs
+fail selection. The original 1080p60 init/off commands and PHY timing bytes
+remain unchanged; 1080p120 timing children and all enable flags for dynamic
+clock/FPS/mode switching are removed in final overrides.
+
+msm8996-sony-xperia-tone-display-pmic.dtsi preserves the final, flattened Sony
+LAB/IBB and WLED settings shared by all four original SoC/PMIC variants. IBB
+discharge is 32. Final WLED values are 660 mA boost current limit, 20 mA string
+current and strings 0/1/2, with the Sony initial/power-save brightness values;
+using the earlier common-PMIC 980 mA / 25 mA / four-string settings would be
+incorrect. The original Sony WLED3 driver is ported with SPMI regmap access,
+real PMIC revision and short-circuit handling, deferred-probe propagation,
+and complete workqueue/IRQ/sysfs/LED cleanup. The modern PMI8998 WLED driver
+is not substituted.
+
+msm8996-sony-xperia-tone-smmu.dtsi describes real MDP/ROT SMMU-v2 resources,
+stream IDs, interrupts, original v3 implementation-defined register values,
+MMCC clocks and bus votes. Explicit qcom,regulator-names="vdd" is necessary
+for this 4.19 arm-smmu implementation to acquire its physical power supply.
+The MDP context-bank probe now reports a missing IOMMU domain as deferred
+probe, rejects a failed debug-register mapping and decodes the address with
+the node's actual cell count.
+
+Native MMCC GDSCs retain sole ownership of domain registers. The new
+qcom,genpd-regulator adapter translates the old enable/disable API into a
+balanced runtime-PM vote on the mandatory native power-domain attachment.
+It provides neither voltage nor mode control. Missing attachment defers;
+resume/suspend failures preserve correct usage counts. MDSS, DSI and SMMU
+bus clients call msm_bus_scale_client_init() before legacy registration to
+establish real bus supplier readiness/lifetime dependencies.
+
+The vendor PLL's exported MMCC parent aliases now have DT clock IDs 24..27.
+The CCF clk_set_parent() path requires those exact alias objects, rather
+than their underlying vendor PLL mux objects. The aliases remain 1:1 real
+PLL outputs, with CLK_SET_RATE_PARENT; no rate or frequency is invented.
+
+Mandatory hardware activation gate: still a P0 blocker
+-----------------------------------------------------
+The final include msm8996-sony-xperia-tone-display-safety.dtsi disables MDP,
+DSI, both PLLs, MDP/ROT SMMUs, LAB/IBB and WLED. The graph is intentionally
+retained and tested, but it must not drive hardware yet.
+
+Exact missing implementation: drivers/clk/qcom/mmcc-msm8996.c registers
+mdp_clk_src / byte0_clk_src / pclk0_clk_src using native CCF RCG operations,
+without coupling prepared clock rates to the Sony vdd_dig RPM corner vote.
+The original drivers/clk/msm/clock-mmss-8996.c acquires vdd_dig at probe and
+uses VDD_DIG_FMAX_MAP. The Sony clock provider's DT connects that supply to
+pm8994_s1_corner. For the supported v3 MSM8996 frequency table the original
+limits are:
+
+                   LOWER          LOW            NOMINAL        HIGH
+  MDP source       171430000      275000000      330000000      412500000 Hz
+  DSI byte0        131250000      210000000      262500000      -
+  DSI pixel0       175000000      280000000      350000000      -
+
+The v3 clock driver applies the MDP table/limit overrides in
+msm_mmsscc_8996_v3_fixup(). Native frequency entries alone
+preserve rates but do not reproduce voltage-corner voting. In 4.19
+mdss_mdp_irq_clk_setup() calls mdss_mdp_set_clk_rate(max_mdp_clk_rate, false),
+which can request 412.5 MHz and therefore needs the original HIGH corner.
+Inherited bootloader voltage is not evidence that this request is safe.
+
+Next implementation must add real RPM logical-corner semantics, then
+couple clock prepare/rate changes to voltage votes before increasing rate
+and release votes after decreasing/disabling; preserve aggregation with
+other MMCC/GCC users, rollback and all Sony v3 frequency limits. It must
+not send corner indices through a microvolt regulator interface, hold an
+invented constant voltage, duplicate GDSC MMIO ownership, or remove the gate
+merely because the kernel links. SMMU/bus clocks need the same audit.
+
+Validation and limits
+---------------------
+check-display-dt.py compares 33 display nodes against a committed manifest
+extracted from the final expanded original DTBs for all four SoC/PMIC tuples
+(source SHA256 values included). It checks all five selector intervals,
+unknown-ID rejection, original command/timing/electrical data, PHY/MMCC/PLL
+parents, bus/GDSC/SMMU/rail dependencies and the mandatory final safety gates.
+Its fault mutations reject missing bus/clock/rail, dynamic FPS and unsafe
+activation. check-panels.py separately checks original source-data hashes.
+check-genpd-regulator.py compiles and executes the actual regulator enable,
+disable, status and teardown functions with fault-injected runtime-PM calls;
+it covers failed resume/suspend, retries, duplicate calls and vote balance.
+
+ARM64 component builds include native-genpd regulator, Sony WLED, MDP/DSI,
+MDSS context banks, arm-smmu and the 14nm PLL. Full-kernel build evidence is
+recorded separately in dora-build-validation.txt, not inferred here.
+
+No panel illumination, PMIC programming, secure-buffer/domain allocation,
+ESD recovery, incell/touch interaction, runtime clock rate, resume, display
+handoff or bootloader LCD-ID behavior is confirmed without physical-device
+logs. This integration does not make the kernel BOOT TEST READY.

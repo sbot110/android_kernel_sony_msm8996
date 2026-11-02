@@ -2961,6 +2961,9 @@ static int mdss_mdp_probe(struct platform_device *pdev)
 		pr_err("MDP driver only supports device tree probe\n");
 		return -ENOTSUPP;
 	}
+	rc = msm_bus_scale_client_init(&pdev->dev);
+	if (rc)
+		return rc;
 
 	if (mdss_res) {
 		pr_err("MDP already initialized\n");

@@ -60,7 +60,7 @@
     "byteclk": 112129920,
     "escclk": 19200000
   },
-  "activation": "Not included by the initial 4.19 board DT; provider and board port remain incomplete.",
+  "activation": "All five panels are included by the Stage 3 display graph; final display safety gate keeps hardware disabled until native MMCC frequency/RPM-corner coupling is implemented. No panel is forced.",
   "reference_files_sha256": {
     "dsi-panel-dora.dtsi": "c9955437c8b56351a5f75f3d2043eeadeee05597b98a909d496379b5c9c81a9a",
     "dsi-panel-somc-synaptics-auo-1080p-cmd.dtsi": "8300001a3af918d8eb813d09a2d22814a23b4403b6000aef75c91b6006d2a72c",

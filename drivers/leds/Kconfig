@@ -778,6 +778,16 @@ config LEDS_NIC78BX
 	  To compile this driver as a module, choose M here: the module
 	  will be called leds-nic78bx.
 
+config LEDS_QPNP_WLED
+	tristate "Sony Qualcomm PMI8994 WLED"
+	depends on LEDS_CLASS && OF && SPMI && QPNP_REVID
+	depends on !BACKLIGHT_QCOM_SPMI_WLED
+	select REGMAP
+	select LEDS_TRIGGERS
+	help
+	  Original Sony PMI8994/PMI8996 WLED implementation and bkl-trigger
+	  LED interface for the MSM8996 fbdev display stack.
+
 config LEDS_QTI_TRI_LED
 	tristate "LED support for Qualcomm Technologies, Inc. TRI_LED"
 	depends on LEDS_CLASS && MFD_SPMI_PMIC && PWM && OF

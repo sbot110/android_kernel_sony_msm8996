@@ -5283,12 +5283,16 @@ static int arm_smmu_init_regulators(struct arm_smmu_power_resources *pwr)
 static int arm_smmu_init_bus_scaling(struct arm_smmu_power_resources *pwr)
 {
 	struct device *dev = pwr->dev;
+	int ret;
 
 	/* We don't want the bus APIs to print an error message */
 	if (!of_find_property(dev->of_node, "qcom,msm-bus,name", NULL)) {
 		dev_dbg(dev, "No bus scaling info\n");
 		return 0;
 	}
+	ret = msm_bus_scale_client_init(dev);
+	if (ret)
+		return ret;
 
 	pwr->bus_dt_data = msm_bus_cl_get_pdata(pwr->pdev);
 	if (!pwr->bus_dt_data) {

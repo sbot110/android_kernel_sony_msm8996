@@ -32,6 +32,12 @@
 #define SHADOW_POST_N1_DIV_1_CLK  22
 #define SHADOW_VCO_CLK_1_CLK      23
 
+/* Native MSM8996 MMCC parent aliases, one-to-one with real PLL mux outputs. */
+#define DSI0_PLL_BYTE_MMCC_CLK   24
+#define DSI0_PLL_PIXEL_MMCC_CLK  25
+#define DSI1_PLL_BYTE_MMCC_CLK   26
+#define DSI1_PLL_PIXEL_MMCC_CLK  27
+
 /* DP PLL clocks */
 #define DP_VCO_CLK			0
 #define DP_PHY_PLL_LINK_CLK		1

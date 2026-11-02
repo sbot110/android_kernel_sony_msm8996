@@ -774,7 +774,8 @@ int mdss_smmu_probe(struct platform_device *pdev)
 	const struct of_device_id *match;
 	struct dss_module_power *mp;
 	char name[MAX_CLIENT_NAME_LEN];
-	const __be32 *address = NULL, *size = NULL;
+	const __be32 *address;
+	u64 size;
 
 	if (!mdata) {
 		pr_err("probe failed as mdata is not initialized\n");
@@ -862,6 +863,7 @@ int mdss_smmu_probe(struct platform_device *pdev)
 	mdss_smmu->domain = iommu_get_domain_for_dev(dev);
 	if (!mdss_smmu->domain) {
 		pr_err("iommu get domain for dev: %s failed\n", dev_name(dev));
+		rc = -EPROBE_DEFER;
 		goto disable_power;
 	}
 
@@ -870,24 +872,26 @@ int mdss_smmu_probe(struct platform_device *pdev)
 		mdss_smmu->base.is_secure = true;
 	}
 
+	address = of_get_address(pdev->dev.of_node, 0, &size, NULL);
+	if (address) {
+		mdss_smmu->mmu_base = devm_ioremap(&pdev->dev,
+			of_read_number(address, of_n_addr_cells(pdev->dev.of_node)),
+			size);
+		if (!mdss_smmu->mmu_base) {
+			rc = -ENOMEM;
+			goto disable_power;
+		}
+	} else {
+		pr_debug("unable to map context bank base\n");
+	}
 	if (!mdata->handoff_pending)
 		mdss_smmu_enable_power(mdss_smmu, false);
 	else
 		mdss_smmu->handoff_pending = true;
-
 	mdss_smmu->base.dev = dev;
 	mdss_smmu->domain_attached = true;
-
 	iommu_set_fault_handler(mdss_smmu->domain,
 			mdss_smmu_fault_handler, mdss_smmu);
-	address = of_get_address(pdev->dev.of_node, 0, 0, 0);
-	if (address) {
-		size = address + 1;
-		mdss_smmu->mmu_base = ioremap(be32_to_cpu(*address),
-			be32_to_cpu(*size));
-	} else {
-		pr_debug("unable to map context bank base\n");
-	}
 
 	mdss_smmu->base.iommu_ctrl = mdata->mdss_util->iommu_ctrl;
 	mdss_smmu->base.reg_lock = mdata->mdss_util->vbif_reg_lock;

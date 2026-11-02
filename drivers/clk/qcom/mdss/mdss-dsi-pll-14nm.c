@@ -43,9 +43,14 @@ static struct clk_fixed_factor msm8996_pll_aliases[DSI_PLL_NUM][2] = {
 };
 
 static int msm8996_register_mmcc_parents(struct platform_device *pdev,
-				       unsigned int index)
+				       unsigned int index,
+				       struct clk_onecell_data *clk_data)
 {
 	struct clk *clk;
+	const unsigned int ids[DSI_PLL_NUM][2] = {
+		{ DSI0_PLL_PIXEL_MMCC_CLK, DSI0_PLL_BYTE_MMCC_CLK },
+		{ DSI1_PLL_PIXEL_MMCC_CLK, DSI1_PLL_BYTE_MMCC_CLK },
+	};
 	int i;
 
 	if (!of_device_is_compatible(pdev->dev.of_node,
@@ -59,6 +64,7 @@ static int msm8996_register_mmcc_parents(struct platform_device *pdev,
 				       &msm8996_pll_aliases[index][i].hw);
 		if (IS_ERR(clk))
 			return PTR_ERR(clk);
+		clk_data->clks[ids[index][i]] = clk;
 	}
 	return 0;
 }
@@ -526,7 +532,7 @@ int dsi_pll_clock_register_14nm(struct platform_device *pdev,
 	struct clk_onecell_data *clk_data;
 	struct clk *clk;
 	struct regmap *regmap;
-	int num_clks = ARRAY_SIZE(mdss_dsi_pllcc_14nm);
+	int num_clks = DSI1_PLL_PIXEL_MMCC_CLK + 1;
 
 	if (!pdev || !pdev->dev.of_node) {
 		pr_err("Invalid input parameters\n");
@@ -609,8 +615,6 @@ int dsi_pll_clock_register_14nm(struct platform_device *pdev,
 			clk_data->clks[i] = clk;
 		}
 
-		rc = of_clk_add_provider(pdev->dev.of_node,
-				of_clk_src_onecell_get, clk_data);
 	} else {
 		regmap = devm_regmap_init(&pdev->dev, &post_n1_div_regmap_bus,
 					pll_res, &dsi_pll_14nm_config);
@@ -646,17 +650,19 @@ int dsi_pll_clock_register_14nm(struct platform_device *pdev,
 			}
 			clk_data->clks[i] = clk;
 		}
-
-		rc = of_clk_add_provider(pdev->dev.of_node,
-				of_clk_src_onecell_get, clk_data);
 	}
 
+	/*
+	 * Publish only after the native MMCC parent aliases are also registered.
+	 * DSI clk_set_parent must receive these aliases, not their underlying
+	 * mux objects: CCF validates the exact MMCC parent identity.
+	 */
+	rc = msm8996_register_mmcc_parents(pdev, pll_res->index, clk_data);
+	if (rc)
+		return rc;
+	rc = of_clk_add_provider(pdev->dev.of_node,
+				 of_clk_src_onecell_get, clk_data);
 	if (!rc) {
-		rc = msm8996_register_mmcc_parents(pdev, pll_res->index);
-		if (rc) {
-			of_clk_del_provider(pdev->dev.of_node);
-			return rc;
-		}
 		pr_info("Registered DSI PLL ndx=%d clocks successfully\n",
 						pll_res->index);
 		return rc;

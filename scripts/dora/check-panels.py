@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Check retained Sony panel data and ADC selection, without claiming DT activation."""
+"""Check retained Sony panel data and ADC selection, with compiled graph checked separately."""
 import hashlib
 import json
 import re
@@ -45,4 +45,4 @@ assert "somc,auo_synaptics_cmd_4_panel" == control["node"]
 print("PASS: all five Sony panel datasets and init/off command bytes retained")
 print("PASS: inclusive ADC boundaries for AUO/JDI/LGD/Sharp ID3/Sharp ID9")
 print("PASS: reported F8132 0x11FFEA selects AUO Panel Name=4; clock ratios agree")
-print("Source/data checks only: initial 4.19 board DT does not activate these panels.")
+print("Source/data checks only: run check-display-dt.py for compiled graph and safety gates.")

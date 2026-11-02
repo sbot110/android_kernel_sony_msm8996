@@ -3769,13 +3769,17 @@ static int mdss_dsi_bus_scale_init(struct platform_device *pdev,
 {
 	int rc = 0;
 
+	rc = msm_bus_scale_client_init(&pdev->dev);
+	if (rc)
+		return rc;
 	sdata->bus_scale_table = msm_bus_cl_get_pdata(pdev);
 	if (IS_ERR_OR_NULL(sdata->bus_scale_table)) {
-		rc = PTR_ERR(sdata->bus_scale_table);
+		rc = sdata->bus_scale_table ? PTR_ERR(sdata->bus_scale_table) :
+			-ENODATA;
 		pr_err("%s: msm_bus_cl_get_pdata() failed, rc=%d\n", __func__,
 								     rc);
-		return rc;
 		sdata->bus_scale_table = NULL;
+		return rc;
 	}
 
 	sdata->bus_handle =

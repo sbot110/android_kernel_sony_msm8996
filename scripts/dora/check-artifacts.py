@@ -40,7 +40,11 @@ def validate(out, dtbs):
     linked = """qusb2_phy_probe msm8996_dora_init_tbl
         ufs_qcom_phy_qmp_14nm_probe glink_rpm_probe qcom_apcs_ipc_probe
         pmic_gpio_probe pmic_mpp_probe simple_pm_bus_probe
-        mdss_dsi_panel_driver_detection bpf_int_jit_compile""".split()
+        mdss_dsi_panel_driver_detection bpf_int_jit_compile
+        qcom_smd_rpm_probe msm_bus_device_probe msm8996_boot_probe
+        qcom_genpd_regulator_probe qpnp_wled_probe msm8996_gfx_probe
+        cpr3_hmss_regulator_probe cpr3_mmss_regulator_probe
+        kryo_regulator_probe msm_apm_probe""".split()
     for symbol in linked:
         require(symbol in symbols and symbols[symbol].upper() != "U",
                 "required provider/implementation absent from System.map: " + symbol)
@@ -56,11 +60,18 @@ def validate(out, dtbs):
     keys = ("qcom,msm-id", "qcom,board-id", "qcom,pmic-id")
     known = {tuple(tuple(int(v, 0) for v in entry[key].split()) for key in keys)
              for entry in reference}
+    expected_order = [
+        ((246, 0x30000), (8, 0), (0x20009, 0x2000a, 0, 0)),
+        ((246, 0x30000), (8, 0), (0x20009, 0x10013, 0, 0)),
+        ((246, 0x30001), (8, 0), (0x20009, 0x2000a, 0, 0)),
+        ((246, 0x30001), (8, 0), (0x20009, 0x10013, 0, 0)),
+    ]
+    require(len(dtbs) == 4, "all four original Sony hardware datasets are required")
     seen, entries = set(), []
     combined = (boot / "Image.gz-dtb").read_bytes()
     require(combined[:len(compressed)] == compressed, "appended image gzip prefix differs")
     offset = len(compressed)
-    paths = [out / "vmlinux", out / ".config", boot / "Image", boot / "Image.gz"]
+    paths = [out / "vmlinux", out / ".config", out / "System.map", boot / "Image", boot / "Image.gz"]
     for name in dtbs:
         relative = Path(name)
         require(not relative.is_absolute() and ".." not in relative.parts
@@ -75,6 +86,7 @@ def validate(out, dtbs):
             identity.append(struct.unpack(">%dI" % count, value))
         identity = tuple(identity)
         require(identity in known, "DTB IDs differ from the original Dora tuples: " + name)
+        require(identity == expected_order[len(entries)], "DTB order differs from Sony Dora Makefile: " + name)
         require(identity not in seen, "duplicate appended hardware tuple: " + name)
         seen.add(identity)
         data = path.read_bytes()

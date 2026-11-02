@@ -69,14 +69,19 @@ def main():
         USB_CONFIGFS_RNDIS PM_AUTOSLEEP PM_WAKELOCKS ANDROID_BINDER_IPC
         ANDROID_BINDERFS QCOM_KGSL FB_MSM_MDSS SCSI_UFS_QCOM SIMPLE_PM_BUS
         PINCTRL_QCOM_SPMI_PMIC QCOM_APCS_IPC RPMSG_QCOM_GLINK_RPM
-        PHY_QCOM_QUSB2 PHY_QCOM_UFS_QMP_14NM""".split()
+        PHY_QCOM_QUSB2 PHY_QCOM_UFS_QMP_14NM QCOM_BUS_SCALING
+        QCOM_SMD_RPM REGULATOR_QCOM_GENPD PM_GENERIC_DOMAINS
+        QCOM_MSM8996_BOOT_CLOCK REGULATOR_CPR3_HMSS REGULATOR_CPR3_MMSS
+        REGULATOR_KRYO REGULATOR_SPM REGULATOR_MEM_ACC MSM_APM MSM_SPM
+        LEDS_QPNP_WLED LEDS_TRIGGERS""".split()
     for key in required:
         if actual.get(key) != "y":
             errors.append("required built-in not selected: CONFIG_" + key)
     if actual.get("ANDROID_BINDER_DEVICES") != '"binder,hwbinder,vndbinder"':
         errors.append("expected binder,hwbinder,vndbinder device names")
     for key in ("PSI_DEFAULT_DISABLED", "SECURITY_SELINUX_DISABLE",
-                "ANDROID_BINDER_IPC_32BIT"):
+                "ANDROID_BINDER_IPC_32BIT", "CPU_FREQ", "CPU_IDLE",
+                "BACKLIGHT_QCOM_SPMI_WLED"):
         if actual.get(key, "n") != "n":
             errors.append("incompatible with dora Android userspace: CONFIG_" + key)
     if actual.get("DEFAULT_SECURITY") != '"selinux"':

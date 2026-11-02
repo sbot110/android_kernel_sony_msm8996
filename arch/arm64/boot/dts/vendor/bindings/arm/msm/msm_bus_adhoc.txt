@@ -268,3 +268,22 @@ Example for ALC client:
 	qcom,msm-bus,vectors-alc =
 			<0 0>,
 			<500 1600>;
+
+Native MSM8996 RPM transport and supplier lifetime
+------------------------------------------------
+A fabric using the native qcom,rpm-msm8996 RPMSG transport must contain:
+- qcom,rpm: phandle to the RPM request node bound by qcom_smd_rpm. The
+  complete fabric defers probing until that real supplier is bound.
+
+For a native consumer such as UFS or MDSS:
+- qcom,msm-bus-provider: phandle to its qcom,msm-bus-device fabric.
+  The consumer must call msm_bus_scale_client_init() before registering
+  its vectors. This establishes a managed supplier link and propagates
+  deferred probing; it does not create a fabric or replace bandwidth data.
+
+Legacy platforms without these properties retain their legacy transport.
+A disabled legacy RPM implementation is an error, never a successful vote.
+Active and sleep bandwidth requests carry the full 64-bit byte/s value.
+Zero is valid for a genuine released vote, not as a stand-in for hardware.
+Native clock/GDSC specifiers must address populated MSM8996 provider IDs;
+legacy hashed Sony clock IDs cannot be used with native CCF controllers.

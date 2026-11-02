@@ -1208,6 +1208,10 @@ static int ufs_qcom_bus_register(struct ufs_qcom_host *host)
 	struct platform_device *pdev = to_platform_device(dev);
 	struct device_node *np = dev->of_node;
 
+	err = msm_bus_scale_client_init(dev);
+	if (err)
+		return err;
+
 	bus_pdata = msm_bus_cl_get_pdata(pdev);
 	if (!bus_pdata) {
 		dev_err(dev, "%s: failed to get bus vectors\n", __func__);
@@ -1219,6 +1223,8 @@ static int ufs_qcom_bus_register(struct ufs_qcom_host *host)
 	if (err < 0 || err != bus_pdata->num_usecases) {
 		dev_err(dev, "%s: qcom,bus-vector-names not specified correctly %d\n",
 				__func__, err);
+		if (err >= 0)
+			err = -EINVAL;
 		goto out;
 	}
 
@@ -1233,6 +1239,14 @@ static int ufs_qcom_bus_register(struct ufs_qcom_host *host)
 	/* cache the vote index for minimum and maximum bandwidth */
 	host->bus_vote.min_bw_vote = ufs_qcom_get_bus_vote(host, "MIN");
 	host->bus_vote.max_bw_vote = ufs_qcom_get_bus_vote(host, "MAX");
+	if (host->bus_vote.min_bw_vote < 0 || host->bus_vote.max_bw_vote < 0) {
+		err = -EINVAL;
+		msm_bus_scale_unregister_client(host->bus_vote.client_handle);
+		host->bus_vote.client_handle = 0;
+		goto out;
+	}
+	/* MIN has not yet been submitted; do not skip the first real vote. */
+	host->bus_vote.curr_vote = -1;
 
 	host->bus_vote.max_bus_bw.show = show_ufs_to_mem_max_bus_bw;
 	host->bus_vote.max_bus_bw.store = store_ufs_to_mem_max_bus_bw;
@@ -1563,6 +1577,8 @@ static int ufs_qcom_setup_clocks(struct ufs_hba *hba, bool on,
 	if (on && (status == POST_CHANGE)) {
 		if (!host->is_phy_pwr_on) {
 			err = phy_power_on(host->generic_phy);
+			if (err)
+				goto out;
 			host->is_phy_pwr_on = true;
 		}
 		/* enable the device ref clock for HS mode*/
@@ -2277,8 +2293,12 @@ static int ufs_qcom_init(struct ufs_hba *hba)
 	ufs_qcom_set_caps(hba);
 	ufs_qcom_advertise_quirks(hba);
 
-	ufs_qcom_set_bus_vote(hba, true);
-	ufs_qcom_setup_clocks(hba, true, POST_CHANGE);
+	err = ufs_qcom_set_bus_vote(hba, true);
+	if (err)
+		goto out_set_load_vccq_parent;
+	err = ufs_qcom_setup_clocks(hba, true, POST_CHANGE);
+	if (err)
+		goto out_release_bus_vote;
 
 	host->dbg_print_en |= UFS_QCOM_DEFAULT_DBG_PRINT_EN;
 	ufs_qcom_get_default_testbus_cfg(host);
@@ -2295,6 +2315,8 @@ static int ufs_qcom_init(struct ufs_hba *hba)
 
 	goto out;
 
+out_release_bus_vote:
+	ufs_qcom_set_bus_vote(hba, false);
 out_set_load_vccq_parent:
 	if (host->vccq_parent)
 		ufs_qcom_config_vreg(hba->dev, host->vccq_parent, false);

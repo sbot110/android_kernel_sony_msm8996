@@ -138,7 +138,10 @@ struct msm_bus_node_info_type {
 	struct node_agg_params_type agg_params;
 };
 
+struct qcom_smd_rpm;
+
 struct msm_bus_node_device_type {
+	struct qcom_smd_rpm *rpm;
 	struct msm_bus_node_info_type *node_info;
 	struct msm_bus_fab_device_type *fabdev;
 	int num_lnodes;
@@ -155,6 +158,7 @@ struct msm_bus_node_device_type {
 	bool dirty;
 	struct list_head dev_link;
 	struct list_head devlist;
+	struct list_head owner_link;
 };
 
 static inline struct msm_bus_node_device_type *to_msm_bus_node(struct device *d)
@@ -172,6 +176,9 @@ void *msm_bus_realloc_devmem(struct device *dev, void *p, size_t old_size,
 extern struct msm_bus_device_node_registration
 	*msm_bus_of_to_pdata(struct platform_device *pdev);
 extern void msm_bus_arb_setops_adhoc(struct msm_bus_arb_ops *arb_ops);
+extern void msm_bus_arb_clearops_adhoc(struct msm_bus_arb_ops *arb_ops);
+void msm_bus_arb_lock_adhoc(void);
+void msm_bus_arb_unlock_adhoc(void);
 extern int msm_bus_bimc_set_ops(struct msm_bus_node_device_type *bus_dev);
 extern int msm_bus_noc_set_ops(struct msm_bus_node_device_type *bus_dev);
 extern int msm_bus_qnoc_set_ops(struct msm_bus_node_device_type *bus_dev);

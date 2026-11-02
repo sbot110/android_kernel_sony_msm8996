@@ -2,7 +2,9 @@
 #ifndef __QCOM_SMD_RPM_H__
 #define __QCOM_SMD_RPM_H__
 
+struct device;
 struct qcom_smd_rpm;
+struct qcom_smd_rpm *qcom_smd_rpm_get(struct device *consumer);
 
 #define QCOM_SMD_RPM_ACTIVE_STATE        0
 #define QCOM_SMD_RPM_SLEEP_STATE         1

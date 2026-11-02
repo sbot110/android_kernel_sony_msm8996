@@ -150,6 +150,7 @@ struct nodeclk {
 	bool enable_only_clk;
 	bool setrate_only_clk;
 	bool enable;
+	bool reg_enabled;
 	char reg_name[MAX_REG_NAME];
 };
 

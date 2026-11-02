@@ -13,10 +13,54 @@
 #include <linux/mutex.h>
 #include <linux/radix-tree.h>
 #include <linux/clk.h>
+#include <linux/of_platform.h>
 #include <linux/msm-bus.h>
 #include "msm_bus_core.h"
 
 struct msm_bus_arb_ops arb_ops;
+
+/*
+ * Native board descriptions name the real fabric supplier. Legacy callers
+ * without the property retain their original singleton registration path.
+ */
+int msm_bus_scale_client_init(struct device *dev)
+{
+	struct device_node *np;
+	struct platform_device *supplier;
+	struct device_link *link;
+	int ret = 0;
+
+	if (!dev || !dev->of_node)
+		return 0;
+	if (!of_find_property(dev->of_node, "qcom,msm-bus-provider", NULL))
+		return 0;
+	np = of_parse_phandle(dev->of_node, "qcom,msm-bus-provider", 0);
+	if (!np)
+		return -EINVAL;
+	if (!of_device_is_compatible(np, "qcom,msm-bus-device")) {
+		of_node_put(np);
+		return -EINVAL;
+	}
+	supplier = of_find_device_by_node(np);
+	of_node_put(np);
+	if (!supplier)
+		return -EPROBE_DEFER;
+
+	device_lock(&supplier->dev);
+	if (!supplier->dev.driver ||
+	    !smp_load_acquire(&arb_ops.register_client)) {
+		ret = -EPROBE_DEFER;
+		goto out;
+	}
+	link = device_link_add(dev, &supplier->dev, DL_FLAG_AUTOREMOVE_CONSUMER);
+	if (!link)
+		ret = -EINVAL;
+out:
+	device_unlock(&supplier->dev);
+	put_device(&supplier->dev);
+	return ret;
+}
+EXPORT_SYMBOL_GPL(msm_bus_scale_client_init);
 
 /**
  * msm_bus_scale_register_client() - Register the clients with the msm bus
@@ -30,8 +74,10 @@ struct msm_bus_arb_ops arb_ops;
  */
 uint32_t msm_bus_scale_register_client(struct msm_bus_scale_pdata *pdata)
 {
-	if (arb_ops.register_client)
-		return arb_ops.register_client(pdata);
+	typeof(arb_ops.register_client) callback = smp_load_acquire(&arb_ops.register_client);
+
+	if (callback)
+		return callback(pdata);
 	pr_err("%s: Bus driver not ready.\n",
 			__func__);
 	return 0;
@@ -48,8 +94,10 @@ EXPORT_SYMBOL(msm_bus_scale_register_client);
  */
 int msm_bus_scale_client_update_request(uint32_t cl, unsigned int index)
 {
-	if (arb_ops.update_request)
-		return arb_ops.update_request(cl, index);
+	typeof(arb_ops.update_request) callback = smp_load_acquire(&arb_ops.update_request);
+
+	if (callback)
+		return callback(cl, index);
 	pr_err("%s: Bus driver not ready.\n",
 			__func__);
 	return -EPROBE_DEFER;
@@ -65,8 +113,10 @@ EXPORT_SYMBOL(msm_bus_scale_client_update_request);
 int msm_bus_scale_client_update_context(uint32_t cl, bool active_only,
 							unsigned int ctx_idx)
 {
-	if (arb_ops.update_context)
-		return arb_ops.update_context(cl, active_only, ctx_idx);
+	typeof(arb_ops.update_context) callback = smp_load_acquire(&arb_ops.update_context);
+
+	if (callback)
+		return callback(cl, active_only, ctx_idx);
 
 	return -EPROBE_DEFER;
 }
@@ -78,8 +128,10 @@ EXPORT_SYMBOL(msm_bus_scale_client_update_context);
  */
 void msm_bus_scale_unregister_client(uint32_t cl)
 {
-	if (arb_ops.unregister_client)
-		arb_ops.unregister_client(cl);
+	typeof(arb_ops.unregister_client) callback = smp_load_acquire(&arb_ops.unregister_client);
+
+	if (callback)
+		callback(cl);
 	else {
 		pr_err("%s: Bus driver not ready.\n",
 				__func__);
@@ -104,8 +156,10 @@ EXPORT_SYMBOL(msm_bus_scale_unregister_client);
 struct msm_bus_client_handle*
 msm_bus_scale_register(uint32_t mas, uint32_t slv, char *name, bool active_only)
 {
-	if (arb_ops.register_cl)
-		return arb_ops.register_cl(mas, slv, name, active_only);
+	typeof(arb_ops.register_cl) callback = smp_load_acquire(&arb_ops.register_cl);
+
+	if (callback)
+		return callback(mas, slv, name, active_only);
 	pr_err("%s: Bus driver not ready.\n",
 			__func__);
 	return ERR_PTR(-EPROBE_DEFER);
@@ -122,8 +176,10 @@ EXPORT_SYMBOL(msm_bus_scale_register);
  */
 int msm_bus_scale_update_bw(struct msm_bus_client_handle *cl, u64 ab, u64 ib)
 {
-	if (arb_ops.update_request)
-		return arb_ops.update_bw(cl, ab, ib);
+	typeof(arb_ops.update_bw) callback = smp_load_acquire(&arb_ops.update_bw);
+
+	if (callback)
+		return callback(cl, ab, ib);
 	pr_err("%s: Bus driver not ready.\n", __func__);
 	return -EPROBE_DEFER;
 }
@@ -143,8 +199,10 @@ int
 msm_bus_scale_update_bw_context(struct msm_bus_client_handle *cl, u64 act_ab,
 				u64 act_ib, u64 dual_ib, u64 dual_ab)
 {
-	if (arb_ops.update_context)
-		return arb_ops.update_bw_context(cl, act_ab, act_ib,
+	typeof(arb_ops.update_bw_context) callback = smp_load_acquire(&arb_ops.update_bw_context);
+
+	if (callback)
+		return callback(cl, act_ab, act_ib,
 							dual_ab, dual_ib);
 
 	return -EPROBE_DEFER;
@@ -159,8 +217,10 @@ EXPORT_SYMBOL(msm_bus_scale_update_bw_context);
  */
 void msm_bus_scale_unregister(struct msm_bus_client_handle *cl)
 {
-	if (arb_ops.unregister)
-		arb_ops.unregister(cl);
+	typeof(arb_ops.unregister) callback = smp_load_acquire(&arb_ops.unregister);
+
+	if (callback)
+		callback(cl);
 	else
 		pr_err("%s: Bus driver not ready.\n",
 				__func__);
@@ -179,8 +239,10 @@ EXPORT_SYMBOL(msm_bus_scale_unregister);
 int msm_bus_scale_query_tcs_cmd(struct msm_bus_tcs_usecase *tcs_usecase,
 					uint32_t cl, unsigned int index)
 {
-	if (arb_ops.query_usecase)
-		return arb_ops.query_usecase(tcs_usecase, cl, index);
+	typeof(arb_ops.query_usecase) callback = smp_load_acquire(&arb_ops.query_usecase);
+
+	if (callback)
+		return callback(tcs_usecase, cl, index);
 	pr_err("%s: Bus driver not ready.\n",
 			__func__);
 	return -EPROBE_DEFER;
@@ -198,8 +260,10 @@ EXPORT_SYMBOL(msm_bus_scale_query_tcs_cmd);
 int msm_bus_scale_query_tcs_cmd_all(struct msm_bus_tcs_handle *tcs_handle,
 					uint32_t cl)
 {
-	if (arb_ops.query_usecase)
-		return arb_ops.query_usecase_all(tcs_handle, cl);
+	typeof(arb_ops.query_usecase_all) callback = smp_load_acquire(&arb_ops.query_usecase_all);
+
+	if (callback)
+		return callback(tcs_handle, cl);
 	pr_err("%s: Bus driver not ready.\n",
 			__func__);
 	return -EPROBE_DEFER;

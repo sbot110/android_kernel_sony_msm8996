@@ -106,6 +106,7 @@ struct msm_bus_tcs_handle {
 #if (defined(CONFIG_QCOM_BUS_SCALING) ||\
 	defined(CONFIG_QCOM_BUS_TOPOLOGY_ADHOC))
 int __init msm_bus_fabric_init_driver(void);
+int msm_bus_scale_client_init(struct device *dev);
 uint32_t msm_bus_scale_register_client(struct msm_bus_scale_pdata *pdata);
 int msm_bus_scale_client_update_request(uint32_t cl, unsigned int index);
 void msm_bus_scale_unregister_client(uint32_t cl);
@@ -130,6 +131,10 @@ int msm_bus_axi_portunhalt(int master_port);
 
 #else
 static inline int __init msm_bus_fabric_init_driver(void) { return 0; }
+static inline int msm_bus_scale_client_init(struct device *dev)
+{
+	return -ENODEV;
+}
 static struct msm_bus_client_handle dummy_cl;
 
 static inline uint32_t

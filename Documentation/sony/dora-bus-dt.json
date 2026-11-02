@@ -1,0 +1,2325 @@
+{
+  "clock_migration": [
+    {
+      "driver": "drivers/clk/qcom/gcc-msm8996.c",
+      "native_id": 204,
+      "native_symbol": "GCC_AGGRE0_SNOC_AXI_CLK",
+      "provider": "qcom,gcc-msm8996",
+      "sony_id": 1011115008,
+      "sony_symbol": "clk_gcc_aggre0_snoc_axi_clk"
+    },
+    {
+      "driver": "drivers/clk/qcom/gcc-msm8996.c",
+      "native_id": 205,
+      "native_symbol": "GCC_AGGRE0_CNOC_AHB_CLK",
+      "provider": "qcom,gcc-msm8996",
+      "sony_id": 1403213145,
+      "sony_symbol": "clk_gcc_aggre0_cnoc_ahb_clk"
+    },
+    {
+      "driver": "drivers/clk/qcom/gcc-msm8996.c",
+      "native_id": 221,
+      "native_symbol": "GCC_AGGRE0_NOC_MPU_CFG_AHB_CLK",
+      "provider": "qcom,gcc-msm8996",
+      "sony_id": 1545320674,
+      "sony_symbol": "clk_gcc_aggre0_noc_mpu_cfg_ahb_clk"
+    },
+    {
+      "driver": "drivers/clk/qcom/clk-smd-rpm.c",
+      "native_id": 106,
+      "native_symbol": "RPM_SMD_AGGR1_NOC_CLK",
+      "provider": "qcom,rpmcc-msm8996",
+      "sony_id": 77249448,
+      "sony_symbol": "clk_aggre1_noc_clk"
+    },
+    {
+      "driver": "drivers/clk/qcom/clk-smd-rpm.c",
+      "native_id": 107,
+      "native_symbol": "RPM_SMD_AGGR1_NOC_A_CLK",
+      "provider": "qcom,rpmcc-msm8996",
+      "sony_id": 3241034272,
+      "sony_symbol": "clk_aggre1_noc_a_clk"
+    },
+    {
+      "driver": "drivers/clk/qcom/clk-smd-rpm.c",
+      "native_id": 108,
+      "native_symbol": "RPM_SMD_AGGR2_NOC_CLK",
+      "provider": "qcom,rpmcc-msm8996",
+      "sony_id": 2858947588,
+      "sony_symbol": "clk_aggre2_noc_clk"
+    },
+    {
+      "driver": "drivers/clk/qcom/clk-smd-rpm.c",
+      "native_id": 109,
+      "native_symbol": "RPM_SMD_AGGR2_NOC_A_CLK",
+      "provider": "qcom,rpmcc-msm8996",
+      "sony_id": 3400953993,
+      "sony_symbol": "clk_aggre2_noc_a_clk"
+    },
+    {
+      "driver": "drivers/clk/qcom/gcc-msm8996.c",
+      "native_id": 193,
+      "native_symbol": "GCC_UFS_AXI_CLK",
+      "provider": "qcom,gcc-msm8996",
+      "sony_id": 1204241319,
+      "sony_symbol": "clk_gcc_ufs_axi_clk"
+    },
+    {
+      "driver": "drivers/clk/qcom/gcc-msm8996.c",
+      "native_id": 209,
+      "native_symbol": "GCC_AGGRE2_UFS_AXI_CLK",
+      "provider": "qcom,gcc-msm8996",
+      "sony_id": 3005108625,
+      "sony_symbol": "clk_gcc_aggre2_ufs_axi_clk"
+    },
+    {
+      "driver": "drivers/clk/qcom/clk-smd-rpm.c",
+      "native_id": 6,
+      "native_symbol": "RPM_SMD_BIMC_CLK",
+      "provider": "qcom,rpmcc-msm8996",
+      "sony_id": 3524460266,
+      "sony_symbol": "clk_bimc_msmbus_clk"
+    },
+    {
+      "driver": "drivers/clk/qcom/clk-smd-rpm.c",
+      "native_id": 7,
+      "native_symbol": "RPM_SMD_BIMC_A_CLK",
+      "provider": "qcom,rpmcc-msm8996",
+      "sony_id": 1909564569,
+      "sony_symbol": "clk_bimc_msmbus_a_clk"
+    },
+    {
+      "driver": "drivers/clk/qcom/clk-smd-rpm.c",
+      "native_id": 40,
+      "native_symbol": "RPM_SMD_CNOC_CLK",
+      "provider": "qcom,rpmcc-msm8996",
+      "sony_id": 1646431069,
+      "sony_symbol": "clk_cnoc_msmbus_clk"
+    },
+    {
+      "driver": "drivers/clk/qcom/clk-smd-rpm.c",
+      "native_id": 41,
+      "native_symbol": "RPM_SMD_CNOC_A_CLK",
+      "provider": "qcom,rpmcc-msm8996",
+      "sony_id": 1732520277,
+      "sony_symbol": "clk_cnoc_msmbus_a_clk"
+    },
+    {
+      "driver": "drivers/clk/qcom/clk-smd-rpm.c",
+      "native_id": 104,
+      "native_symbol": "RPM_SMD_MMAXI_CLK",
+      "provider": "qcom,rpmcc-msm8996",
+      "sony_id": 3679138278,
+      "sony_symbol": "clk_mmssnoc_axi_clk"
+    },
+    {
+      "driver": "drivers/clk/qcom/clk-smd-rpm.c",
+      "native_id": 105,
+      "native_symbol": "RPM_SMD_MMAXI_A_CLK",
+      "provider": "qcom,rpmcc-msm8996",
+      "sony_id": 3566667284,
+      "sony_symbol": "clk_mmssnoc_axi_a_clk"
+    },
+    {
+      "driver": "drivers/clk/qcom/mmcc-msm8996.c",
+      "native_id": 63,
+      "native_symbol": "MMSS_MMAGIC_AHB_CLK",
+      "provider": "qcom,mmcc-msm8996",
+      "sony_id": 1024848560,
+      "sony_symbol": "clk_mmss_mmagic_ahb_clk"
+    },
+    {
+      "driver": "drivers/clk/qcom/mmcc-msm8996.c",
+      "native_id": 64,
+      "native_symbol": "MMSS_MMAGIC_CFG_AHB_CLK",
+      "provider": "qcom,mmcc-msm8996",
+      "sony_id": 1586800674,
+      "sony_symbol": "clk_mmss_mmagic_cfg_ahb_clk"
+    },
+    {
+      "driver": "drivers/clk/qcom/mmcc-msm8996.c",
+      "native_id": 84,
+      "native_symbol": "MMAGIC_MDSS_AXI_CLK",
+      "provider": "qcom,mmcc-msm8996",
+      "sony_id": 2687868176,
+      "sony_symbol": "clk_mmagic_mdss_axi_clk"
+    },
+    {
+      "driver": "drivers/clk/qcom/mmcc-msm8996.c",
+      "native_id": 85,
+      "native_symbol": "MMAGIC_MDSS_NOC_CFG_AHB_CLK",
+      "provider": "qcom,mmcc-msm8996",
+      "sony_id": 2624410754,
+      "sony_symbol": "clk_mmagic_mdss_noc_cfg_ahb_clk"
+    },
+    {
+      "driver": "drivers/clk/qcom/mmcc-msm8996.c",
+      "native_id": 73,
+      "native_symbol": "MMAGIC_CAMSS_AXI_CLK",
+      "provider": "qcom,mmcc-msm8996",
+      "sony_id": 2830221675,
+      "sony_symbol": "clk_mmagic_camss_axi_clk"
+    },
+    {
+      "driver": "drivers/clk/qcom/mmcc-msm8996.c",
+      "native_id": 74,
+      "native_symbol": "MMAGIC_CAMSS_NOC_CFG_AHB_CLK",
+      "provider": "qcom,mmcc-msm8996",
+      "sony_id": 1367525401,
+      "sony_symbol": "clk_mmagic_camss_noc_cfg_ahb_clk"
+    },
+    {
+      "driver": "drivers/clk/qcom/mmcc-msm8996.c",
+      "native_id": 93,
+      "native_symbol": "MMAGIC_VIDEO_AXI_CLK",
+      "provider": "qcom,mmcc-msm8996",
+      "sony_id": 2073172419,
+      "sony_symbol": "clk_mmagic_video_axi_clk"
+    },
+    {
+      "driver": "drivers/clk/qcom/mmcc-msm8996.c",
+      "native_id": 94,
+      "native_symbol": "MMAGIC_VIDEO_NOC_CFG_AHB_CLK",
+      "provider": "qcom,mmcc-msm8996",
+      "sony_id": 1361367638,
+      "sony_symbol": "clk_mmagic_video_noc_cfg_ahb_clk"
+    },
+    {
+      "driver": "drivers/clk/qcom/mmcc-msm8996.c",
+      "native_id": 16,
+      "native_symbol": "AHB_CLK_SRC",
+      "provider": "qcom,mmcc-msm8996",
+      "sony_id": 2264175107,
+      "sony_symbol": "clk_ahb_clk_src"
+    },
+    {
+      "driver": "drivers/clk/qcom/clk-smd-rpm.c",
+      "native_id": 2,
+      "native_symbol": "RPM_SMD_PCNOC_CLK",
+      "provider": "qcom,rpmcc-msm8996",
+      "sony_id": 951671927,
+      "sony_symbol": "clk_pnoc_msmbus_clk"
+    },
+    {
+      "driver": "drivers/clk/qcom/clk-smd-rpm.c",
+      "native_id": 3,
+      "native_symbol": "RPM_SMD_PCNOC_A_CLK",
+      "provider": "qcom,rpmcc-msm8996",
+      "sony_id": 2358988435,
+      "sony_symbol": "clk_pnoc_msmbus_a_clk"
+    },
+    {
+      "driver": "drivers/clk/qcom/clk-smd-rpm.c",
+      "native_id": 4,
+      "native_symbol": "RPM_SMD_SNOC_CLK",
+      "provider": "qcom,rpmcc-msm8996",
+      "sony_id": 3868199862,
+      "sony_symbol": "clk_snoc_msmbus_clk"
+    },
+    {
+      "driver": "drivers/clk/qcom/clk-smd-rpm.c",
+      "native_id": 5,
+      "native_symbol": "RPM_SMD_SNOC_A_CLK",
+      "provider": "qcom,rpmcc-msm8996",
+      "sony_id": 1564902333,
+      "sony_symbol": "clk_snoc_msmbus_a_clk"
+    },
+    {
+      "driver": "drivers/clk/qcom/mmcc-msm8996.c",
+      "native_id": 70,
+      "native_symbol": "MMSS_MMAGIC_MAXI_CLK",
+      "provider": "qcom,mmcc-msm8996",
+      "sony_id": 3182385911,
+      "sony_symbol": "clk_mmss_mmagic_maxi_clk"
+    }
+  ],
+  "domain_migration": {
+    "gdsc_aggre0_noc": {
+      "index": 0,
+      "provider": "qcom,gcc-msm8996",
+      "symbol": "AGGRE0_NOC_GDSC"
+    },
+    "gdsc_mmagic_bimc": {
+      "index": 15,
+      "provider": "qcom,mmcc-msm8996",
+      "symbol": "MMAGIC_BIMC_GDSC"
+    },
+    "gdsc_mmagic_camss": {
+      "index": 2,
+      "provider": "qcom,mmcc-msm8996",
+      "symbol": "MMAGIC_CAMSS_GDSC"
+    },
+    "gdsc_mmagic_mdss": {
+      "index": 1,
+      "provider": "qcom,mmcc-msm8996",
+      "symbol": "MMAGIC_MDSS_GDSC"
+    },
+    "gdsc_mmagic_video": {
+      "index": 0,
+      "provider": "qcom,mmcc-msm8996",
+      "symbol": "MMAGIC_VIDEO_GDSC"
+    }
+  },
+  "excluded_properties": "CoreSight trace links only; SPDM clients are outside fabric subtree",
+  "flattened_reference_sha256": {
+    "msm8996-v3-pmi8996-tone-dora_generic.dtb": "9dc1184db75dead2612cd6adcfc5f74dfc97c8c80253cc332ab88dd576480bdd",
+    "msm8996-v3-tone-dora_generic.dtb": "03cfed3f4b4f626dd138f44d9b44ed47136efd1a236f3645ce1c5fa41cd008d7",
+    "msm8996-v3.0-pmi8996-tone-dora_generic.dtb": "b6c92a0ae4eccc79efd9b0de66caa308e3d24324928b252236935b4538469cae",
+    "msm8996-v3.0-tone-dora_generic.dtb": "ba3cb5cac73b3210f5d9ca876b85a0635ac2daa694634dcab556b256408f4eb0"
+  },
+  "source_commit": "0c295b15b6d0fb59a64e13b9e0ef2070818ef2a1",
+  "topology": {
+    "/": {
+      "compatible": "71636f6d2c6d736d2d6275732d64657669636500",
+      "reg": "00520000000400000040000000062000005c0000000030000050000000001000005a000000040000005a00000004000000540000000090000056000000007000005800000000a000",
+      "reg-names": "736e6f632d626173650062696d632d6261736500706e6f632d6261736500636e6f632d62617365006d6d6e6f632d62617365006d6d6e6f632d6168622d626173650061306e6f632d626173650061316e6f632d626173650061326e6f632d6261736500"
+    },
+    "/fab-a0noc": {
+      "aggre0-snoc-axi-no-rate-supply": "gdsc_aggre0_noc",
+      "bus-a-gdsc-supply": "gdsc_aggre0_noc",
+      "bus-gdsc-supply": "gdsc_aggre0_noc",
+      "cell-id": "00001801",
+      "clock-names": "6275735f636c6b006275735f615f636c6b00",
+      "clocks": [
+        "qcom,gcc-msm8996:204",
+        "qcom,gcc-msm8996:204"
+      ],
+      "label": "6661622d61306e6f6300",
+      "qcom,base-name": "61306e6f632d6261736500",
+      "qcom,base-offset": "00003000",
+      "qcom,bus-type": "00000001",
+      "qcom,enable-only-clk": "",
+      "qcom,fab-dev": "",
+      "qcom,qos-off": "00001000"
+    },
+    "/fab-a0noc/qcom,node-qos-clks": {
+      "clock-names": "6167677265302d736e6f632d6178692d6e6f2d72617465006167677265302d636e6f632d6168622d6e6f2d72617465006167677265302d6e6f632d6d70752d6366672d6e6f2d7261746500",
+      "clocks": [
+        "qcom,gcc-msm8996:204",
+        "qcom,gcc-msm8996:205",
+        "qcom,gcc-msm8996:221"
+      ]
+    },
+    "/fab-a1noc": {
+      "cell-id": "00001802",
+      "clock-names": "6275735f636c6b006275735f615f636c6b00",
+      "clocks": [
+        "qcom,rpmcc-msm8996:106",
+        "qcom,rpmcc-msm8996:107"
+      ],
+      "label": "6661622d61316e6f6300",
+      "qcom,base-name": "61316e6f632d6261736500",
+      "qcom,base-offset": "00002000",
+      "qcom,bus-type": "00000001",
+      "qcom,fab-dev": "",
+      "qcom,qos-off": "00001000"
+    },
+    "/fab-a2noc": {
+      "cell-id": "00001803",
+      "clock-names": "6275735f636c6b006275735f615f636c6b00",
+      "clocks": [
+        "qcom,rpmcc-msm8996:108",
+        "qcom,rpmcc-msm8996:109"
+      ],
+      "label": "6661622d61326e6f6300",
+      "qcom,base-name": "61326e6f632d6261736500",
+      "qcom,base-offset": "00003000",
+      "qcom,bus-type": "00000001",
+      "qcom,fab-dev": "",
+      "qcom,qos-off": "00001000"
+    },
+    "/fab-a2noc/qcom,node-qos-clks": {
+      "clock-names": "636c6b2d6167677265322d6e6f632d636c6b2d6e6f2d7261746500636c6b2d6763632d7566732d6178692d636c6b00636c6b2d6167677265322d7566732d6178692d636c6b2d6e6f2d7261746500",
+      "clocks": [
+        "qcom,rpmcc-msm8996:108",
+        "qcom,gcc-msm8996:193",
+        "qcom,gcc-msm8996:209"
+      ]
+    },
+    "/fab-bimc": {
+      "cell-id": "00000000",
+      "clock-names": "6275735f636c6b006275735f615f636c6b00",
+      "clocks": [
+        "qcom,rpmcc-msm8996:6",
+        "qcom,rpmcc-msm8996:7"
+      ],
+      "label": "6661622d62696d6300",
+      "qcom,base-name": "62696d632d6261736500",
+      "qcom,base-offset": "00008000",
+      "qcom,bus-type": "00000002",
+      "qcom,fab-dev": "",
+      "qcom,qos-off": "00004000",
+      "qcom,util-fact": "0000009a"
+    },
+    "/fab-cnoc": {
+      "cell-id": "00001400",
+      "clock-names": "6275735f636c6b006275735f615f636c6b00",
+      "clocks": [
+        "qcom,rpmcc-msm8996:40",
+        "qcom,rpmcc-msm8996:41"
+      ],
+      "label": "6661622d636e6f6300",
+      "qcom,base-name": "636e6f632d6261736500",
+      "qcom,bus-type": "00000001",
+      "qcom,bypass-qos-prg": "",
+      "qcom,fab-dev": ""
+    },
+    "/fab-mnoc": {
+      "cell-id": "00000800",
+      "clock-names": "6275735f636c6b006275735f615f636c6b00",
+      "clocks": [
+        "qcom,rpmcc-msm8996:104",
+        "qcom,rpmcc-msm8996:105"
+      ],
+      "label": "6661622d6d6e6f6300",
+      "mmagic-ahb-no-rate-supply": "gdsc_mmagic_bimc",
+      "mmagic-camss-axi-no-rate-supply": "gdsc_mmagic_camss",
+      "mmagic-mdss-axi-no-rate-supply": "gdsc_mmagic_mdss",
+      "mmagic-video-axi-no-rate-supply": "gdsc_mmagic_video",
+      "qcom,base-name": "6d6d6e6f632d6261736500",
+      "qcom,base-offset": "00004000",
+      "qcom,bus-type": "00000001",
+      "qcom,fab-dev": "",
+      "qcom,qos-off": "00001000",
+      "qcom,util-fact": "0000009a"
+    },
+    "/fab-mnoc-ahb": {
+      "bus-a-gdsc-supply": "gdsc_mmagic_bimc",
+      "bus-gdsc-supply": "gdsc_mmagic_bimc",
+      "cell-id": "00000801",
+      "clock-names": "6275735f636c6b006275735f615f636c6b00",
+      "clocks": [
+        "qcom,mmcc-msm8996:16",
+        "qcom,mmcc-msm8996:16"
+      ],
+      "label": "6661622d6d6e6f632d61686200",
+      "qcom,base-name": "6d6d6e6f632d6168622d6261736500",
+      "qcom,bus-type": "00000001",
+      "qcom,bypass-qos-prg": "",
+      "qcom,fab-dev": "",
+      "qcom,setrate-only-clk": ""
+    },
+    "/fab-mnoc/qcom,node-qos-clks": {
+      "clock-names": "6d6d616769632d6168622d6e6f2d72617465006d6d616769632d6366672d6168622d6e6f2d72617465006d6d616769632d6d6473732d6178692d6e6f2d72617465006d6d616769632d6d6473732d6366672d6e6f632d6168622d6e6f2d72617465006d6d616769632d63616d73732d6178692d6e6f2d72617465006d6d616769632d63616d73732d6366672d6e6f632d6168622d6e6f2d72617465006d6d616769632d766964656f2d6178692d6e6f2d72617465006d6d616769632d766964656f2d6366672d6e6f632d6168622d6e6f2d7261746500",
+      "clocks": [
+        "qcom,mmcc-msm8996:63",
+        "qcom,mmcc-msm8996:64",
+        "qcom,mmcc-msm8996:84",
+        "qcom,mmcc-msm8996:85",
+        "qcom,mmcc-msm8996:73",
+        "qcom,mmcc-msm8996:74",
+        "qcom,mmcc-msm8996:93",
+        "qcom,mmcc-msm8996:94"
+      ]
+    },
+    "/fab-pnoc": {
+      "cell-id": "00001000",
+      "clock-names": "6275735f636c6b006275735f615f636c6b00",
+      "clocks": [
+        "qcom,rpmcc-msm8996:2",
+        "qcom,rpmcc-msm8996:3"
+      ],
+      "label": "6661622d706e6f6300",
+      "qcom,base-name": "706e6f632d6261736500",
+      "qcom,bus-type": "00000001",
+      "qcom,bypass-qos-prg": "",
+      "qcom,fab-dev": ""
+    },
+    "/fab-snoc": {
+      "cell-id": "00000400",
+      "clock-names": "6275735f636c6b006275735f615f636c6b00",
+      "clocks": [
+        "qcom,rpmcc-msm8996:4",
+        "qcom,rpmcc-msm8996:5"
+      ],
+      "label": "6661622d736e6f6300",
+      "qcom,base-name": "736e6f632d6261736500",
+      "qcom,base-offset": "00004000",
+      "qcom,bus-type": "00000001",
+      "qcom,fab-dev": "",
+      "qcom,qos-off": "00001000"
+    },
+    "/mas-a0noc-snoc": {
+      "cell-id": "0000274c",
+      "label": "6d61732d61306e6f632d736e6f6300",
+      "qcom,agg-ports": "00000001",
+      "qcom,ap-owned": "",
+      "qcom,bus-dev": [
+        "/fab-snoc"
+      ],
+      "qcom,buswidth": "00000010",
+      "qcom,connections": [
+        "/slv-snoc-pnoc",
+        "/slv-imem",
+        "/slv-hmss",
+        "/slv-snoc-bimc",
+        "/slv-pimem"
+      ],
+      "qcom,mas-rpm-id": "0000006e"
+    },
+    "/mas-a1noc-snoc": {
+      "cell-id": "0000274f",
+      "label": "6d61732d61316e6f632d736e6f6300",
+      "qcom,agg-ports": "00000001",
+      "qcom,bus-dev": [
+        "/fab-snoc"
+      ],
+      "qcom,buswidth": "00000010",
+      "qcom,connections": [
+        "/slv-snoc-vmem",
+        "/slv-usb3",
+        "/slv-pcie-0",
+        "/slv-pimem",
+        "/slv-pcie-2",
+        "/slv-lpass",
+        "/slv-pcie-1",
+        "/slv-hmss",
+        "/slv-snoc-bimc",
+        "/slv-snoc-cnoc",
+        "/slv-snoc-pnoc",
+        "/slv-imem",
+        "/slv-qdss-stm"
+      ],
+      "qcom,mas-rpm-id": "0000006f"
+    },
+    "/mas-a2noc-snoc": {
+      "cell-id": "00002750",
+      "label": "6d61732d61326e6f632d736e6f6300",
+      "qcom,agg-ports": "00000001",
+      "qcom,bus-dev": [
+        "/fab-snoc"
+      ],
+      "qcom,buswidth": "00000010",
+      "qcom,connections": [
+        "/slv-snoc-vmem",
+        "/slv-usb3",
+        "/slv-pcie-1",
+        "/slv-pimem",
+        "/slv-pcie-2",
+        "/slv-qdss-stm",
+        "/slv-lpass",
+        "/slv-snoc-bimc",
+        "/slv-snoc-cnoc",
+        "/slv-snoc-pnoc",
+        "/slv-imem",
+        "/slv-pcie-0"
+      ],
+      "qcom,mas-rpm-id": "00000070"
+    },
+    "/mas-apps-proc": {
+      "cell-id": "00000001",
+      "label": "6d61732d617070732d70726f6300",
+      "qcom,agg-ports": "00000002",
+      "qcom,ap-owned": "",
+      "qcom,bus-dev": [
+        "/fab-bimc"
+      ],
+      "qcom,buswidth": "00000008",
+      "qcom,connections": [
+        "/slv-bimc-snoc-1",
+        "/slv-ebi",
+        "/slv-bimc-snoc-0"
+      ],
+      "qcom,mas-rpm-id": "00000000",
+      "qcom,prio-lvl": "00000000",
+      "qcom,prio-rd": "00000000",
+      "qcom,prio-wr": "00000000",
+      "qcom,qos-mode": "666978656400",
+      "qcom,qport": "00000000"
+    },
+    "/mas-bimc-snoc-0": {
+      "cell-id": "00002720",
+      "label": "6d61732d62696d632d736e6f632d3000",
+      "qcom,agg-ports": "00000001",
+      "qcom,ap-owned": "",
+      "qcom,bus-dev": [
+        "/fab-snoc"
+      ],
+      "qcom,buswidth": "00000010",
+      "qcom,connections": [
+        "/slv-snoc-vmem",
+        "/slv-usb3",
+        "/slv-pimem",
+        "/slv-lpass",
+        "/slv-hmss",
+        "/slv-snoc-cnoc",
+        "/slv-snoc-pnoc",
+        "/slv-imem",
+        "/slv-qdss-stm"
+      ],
+      "qcom,mas-rpm-id": "00000015"
+    },
+    "/mas-bimc-snoc-1": {
+      "cell-id": "00002747",
+      "label": "6d61732d62696d632d736e6f632d3100",
+      "qcom,agg-ports": "00000001",
+      "qcom,ap-owned": "",
+      "qcom,bus-dev": [
+        "/fab-snoc"
+      ],
+      "qcom,buswidth": "00000010",
+      "qcom,connections": [
+        "/slv-pcie-2",
+        "/slv-pcie-1",
+        "/slv-pcie-0"
+      ],
+      "qcom,mas-rpm-id": "0000006d"
+    },
+    "/mas-blsp-1": {
+      "cell-id": "00000056",
+      "label": "6d61732d626c73702d3100",
+      "qcom,agg-ports": "00000001",
+      "qcom,bus-dev": [
+        "/fab-pnoc"
+      ],
+      "qcom,buswidth": "00000004",
+      "qcom,connections": [
+        "/slv-pnoc-a1noc"
+      ],
+      "qcom,mas-rpm-id": "00000029"
+    },
+    "/mas-blsp-2": {
+      "cell-id": "00000054",
+      "label": "6d61732d626c73702d3200",
+      "qcom,agg-ports": "00000001",
+      "qcom,bus-dev": [
+        "/fab-pnoc"
+      ],
+      "qcom,buswidth": "00000004",
+      "qcom,connections": [
+        "/slv-pnoc-a1noc"
+      ],
+      "qcom,mas-rpm-id": "00000027"
+    },
+    "/mas-cnoc-a1noc": {
+      "cell-id": "0000274b",
+      "label": "6d61732d636e6f632d61316e6f6300",
+      "qcom,agg-ports": "00000001",
+      "qcom,ap-owned": "",
+      "qcom,bus-dev": [
+        "/fab-a1noc"
+      ],
+      "qcom,buswidth": "00000008",
+      "qcom,connections": [
+        "/slv-a1noc-snoc"
+      ],
+      "qcom,mas-rpm-id": "00000074"
+    },
+    "/mas-cnoc-mnoc-cfg": {
+      "cell-id": "00000067",
+      "label": "6d61732d636e6f632d6d6e6f632d63666700",
+      "qcom,agg-ports": "00000001",
+      "qcom,ap-owned": "",
+      "qcom,bus-dev": [
+        "/fab-mnoc"
+      ],
+      "qcom,buswidth": "00000008",
+      "qcom,connections": [
+        "/slv-srvc-mnoc"
+      ],
+      "qcom,mas-rpm-id": "00000005"
+    },
+    "/mas-cnoc-mnoc-mmss-cfg": {
+      "cell-id": "00000066",
+      "label": "6d61732d636e6f632d6d6e6f632d6d6d73732d63666700",
+      "qcom,agg-ports": "00000001",
+      "qcom,ap-owned": "",
+      "qcom,bus-dev": [
+        "/fab-mnoc-ahb"
+      ],
+      "qcom,buswidth": "00000008",
+      "qcom,connections": [
+        "/slv-mmagic-cfg",
+        "/slv-dsa-mpu-cfg",
+        "/slv-mnoc-clocks-cfg",
+        "/slv-camera-throttle-cfg",
+        "/slv-venus-cfg",
+        "/slv-smmu-vfe-cfg",
+        "/slv-misc-cfg",
+        "/slv-smmu-cpp-cfg",
+        "/slv-oxili-cfg",
+        "/slv-display-throttle-cfg",
+        "/slv-venus-throttle-cfg",
+        "/slv-camera-cfg",
+        "/slv-display-cfg",
+        "/slv-cpr-cfg",
+        "/slv-smmu-rot-cfg",
+        "/slv-dsa-cfg",
+        "/slv-smmu-venus-cfg",
+        "/slv-vmem-cfg",
+        "/slv-smmu-jpeg-cfg",
+        "/slv-smmu-mdp-cfg",
+        "/slv-mnoc-mpu-cfg"
+      ],
+      "qcom,mas-rpm-id": "00000004"
+    },
+    "/mas-cpp": {
+      "cell-id": "0000006a",
+      "label": "6d61732d63707000",
+      "qcom,agg-ports": "00000001",
+      "qcom,ap-owned": "",
+      "qcom,bus-dev": [
+        "/fab-mnoc"
+      ],
+      "qcom,buswidth": "00000020",
+      "qcom,connections": [
+        "/slv-mnoc-bimc"
+      ],
+      "qcom,mas-rpm-id": "00000073",
+      "qcom,qos-mode": "62797061737300",
+      "qcom,qport": "00000005"
+    },
+    "/mas-crypto-c0": {
+      "cell-id": "00000037",
+      "label": "6d61732d63727970746f2d633000",
+      "qcom,agg-ports": "00000001",
+      "qcom,ap-owned": "",
+      "qcom,bus-dev": [
+        "/fab-a1noc"
+      ],
+      "qcom,buswidth": "00000008",
+      "qcom,connections": [
+        "/slv-a1noc-snoc"
+      ],
+      "qcom,mas-rpm-id": "00000017",
+      "qcom,prio0": "00000001",
+      "qcom,prio1": "00000001",
+      "qcom,qos-mode": "666978656400",
+      "qcom,qport": "00000000"
+    },
+    "/mas-hmss": {
+      "cell-id": "0000002b",
+      "label": "6d61732d686d737300",
+      "qcom,agg-ports": "00000001",
+      "qcom,ap-owned": "",
+      "qcom,bus-dev": [
+        "/fab-snoc"
+      ],
+      "qcom,buswidth": "00000008",
+      "qcom,connections": [
+        "/slv-pimem",
+        "/slv-imem",
+        "/slv-snoc-bimc"
+      ],
+      "qcom,mas-rpm-id": "00000076",
+      "qcom,prio0": "00000001",
+      "qcom,prio1": "00000001",
+      "qcom,qos-mode": "666978656400",
+      "qcom,qport": "00000004"
+    },
+    "/mas-ipa": {
+      "cell-id": "0000005a",
+      "label": "6d61732d69706100",
+      "qcom,agg-ports": "00000001",
+      "qcom,ap-owned": "",
+      "qcom,bus-dev": [
+        "/fab-a2noc"
+      ],
+      "qcom,buswidth": "00000008",
+      "qcom,connections": [
+        "/slv-a2noc-snoc"
+      ],
+      "qcom,mas-rpm-id": "0000003b",
+      "qcom,qos-mode": "666978656400"
+    },
+    "/mas-jpeg": {
+      "cell-id": "0000003e",
+      "label": "6d61732d6a70656700",
+      "qcom,agg-ports": "00000001",
+      "qcom,ap-owned": "",
+      "qcom,bus-dev": [
+        "/fab-mnoc"
+      ],
+      "qcom,buswidth": "00000020",
+      "qcom,connections": [
+        "/slv-mnoc-bimc"
+      ],
+      "qcom,mas-rpm-id": "00000007",
+      "qcom,qos-mode": "62797061737300",
+      "qcom,qport": "00000007"
+    },
+    "/mas-mdp-p0": {
+      "cell-id": "00000016",
+      "label": "6d61732d6d64702d703000",
+      "qcom,agg-ports": "00000001",
+      "qcom,ap-owned": "",
+      "qcom,bus-dev": [
+        "/fab-mnoc"
+      ],
+      "qcom,buswidth": "00000020",
+      "qcom,connections": [
+        "/slv-mnoc-bimc"
+      ],
+      "qcom,mas-rpm-id": "00000008",
+      "qcom,qos-mode": "62797061737300",
+      "qcom,qport": "00000001",
+      "qcom,vrail-comp": "00000019"
+    },
+    "/mas-mdp-p1": {
+      "cell-id": "00000017",
+      "label": "6d61732d6d64702d703100",
+      "qcom,agg-ports": "00000001",
+      "qcom,ap-owned": "",
+      "qcom,bus-dev": [
+        "/fab-mnoc"
+      ],
+      "qcom,buswidth": "00000020",
+      "qcom,connections": [
+        "/slv-mnoc-bimc"
+      ],
+      "qcom,mas-rpm-id": "0000003d",
+      "qcom,qos-mode": "62797061737300",
+      "qcom,qport": "00000002",
+      "qcom,vrail-comp": "00000019"
+    },
+    "/mas-mnoc-bimc": {
+      "cell-id": "0000272b",
+      "label": "6d61732d6d6e6f632d62696d6300",
+      "qcom,agg-ports": "00000002",
+      "qcom,ap-owned": "",
+      "qcom,bus-dev": [
+        "/fab-bimc"
+      ],
+      "qcom,buswidth": "00000008",
+      "qcom,connections": [
+        "/slv-bimc-snoc-1",
+        "/slv-hmss-l3",
+        "/slv-ebi",
+        "/slv-bimc-snoc-0"
+      ],
+      "qcom,mas-rpm-id": "00000002",
+      "qcom,qos-mode": "62797061737300",
+      "qcom,qport": "00000002"
+    },
+    "/mas-oxili": {
+      "cell-id": "0000001a",
+      "label": "6d61732d6f78696c6900",
+      "qcom,agg-ports": "00000002",
+      "qcom,ap-owned": "",
+      "qcom,bus-dev": [
+        "/fab-bimc"
+      ],
+      "qcom,buswidth": "00000008",
+      "qcom,connections": [
+        "/slv-bimc-snoc-1",
+        "/slv-hmss-l3",
+        "/slv-ebi",
+        "/slv-bimc-snoc-0"
+      ],
+      "qcom,mas-rpm-id": "00000006",
+      "qcom,qos-mode": "62797061737300",
+      "qcom,qport": "00000001"
+    },
+    "/mas-pcie-0": {
+      "cell-id": "0000002d",
+      "label": "6d61732d706369652d3000",
+      "qcom,agg-ports": "00000001",
+      "qcom,ap-owned": "",
+      "qcom,bus-dev": [
+        "/fab-a0noc"
+      ],
+      "qcom,buswidth": "00000008",
+      "qcom,connections": [
+        "/slv-a0noc-snoc"
+      ],
+      "qcom,mas-rpm-id": "00000041",
+      "qcom,prio0": "00000001",
+      "qcom,prio1": "00000001",
+      "qcom,qos-mode": "666978656400",
+      "qcom,qport": "00000000"
+    },
+    "/mas-pcie-1": {
+      "cell-id": "00000064",
+      "label": "6d61732d706369652d3100",
+      "qcom,agg-ports": "00000001",
+      "qcom,ap-owned": "",
+      "qcom,bus-dev": [
+        "/fab-a0noc"
+      ],
+      "qcom,buswidth": "00000008",
+      "qcom,connections": [
+        "/slv-a0noc-snoc"
+      ],
+      "qcom,mas-rpm-id": "00000042",
+      "qcom,prio0": "00000001",
+      "qcom,prio1": "00000001",
+      "qcom,qos-mode": "666978656400",
+      "qcom,qport": "00000001"
+    },
+    "/mas-pcie-2": {
+      "cell-id": "0000006c",
+      "label": "6d61732d706369652d3200",
+      "qcom,agg-ports": "00000001",
+      "qcom,ap-owned": "",
+      "qcom,bus-dev": [
+        "/fab-a0noc"
+      ],
+      "qcom,buswidth": "00000008",
+      "qcom,connections": [
+        "/slv-a0noc-snoc"
+      ],
+      "qcom,mas-rpm-id": "00000077",
+      "qcom,prio0": "00000001",
+      "qcom,prio1": "00000001",
+      "qcom,qos-mode": "666978656400",
+      "qcom,qport": "00000002"
+    },
+    "/mas-pnoc-a1noc": {
+      "cell-id": "00002749",
+      "label": "6d61732d706e6f632d61316e6f6300",
+      "qcom,agg-ports": "00000001",
+      "qcom,bus-dev": [
+        "/fab-a1noc"
+      ],
+      "qcom,buswidth": "00000008",
+      "qcom,connections": [
+        "/slv-a1noc-snoc"
+      ],
+      "qcom,mas-rpm-id": "00000075",
+      "qcom,qos-mode": "666978656400",
+      "qcom,qport": "00000001"
+    },
+    "/mas-qdss-bam": {
+      "cell-id": "00000035",
+      "label": "6d61732d716473732d62616d00",
+      "qcom,agg-ports": "00000001",
+      "qcom,ap-owned": "",
+      "qcom,bus-dev": [
+        "/fab-snoc"
+      ],
+      "qcom,buswidth": "00000010",
+      "qcom,connections": [
+        "/slv-pimem",
+        "/slv-usb3",
+        "/slv-imem",
+        "/slv-snoc-bimc",
+        "/slv-snoc-pnoc"
+      ],
+      "qcom,mas-rpm-id": "00000013",
+      "qcom,prio0": "00000001",
+      "qcom,prio1": "00000001",
+      "qcom,qos-mode": "666978656400",
+      "qcom,qport": "00000002"
+    },
+    "/mas-qdss-dap": {
+      "cell-id": "0000004c",
+      "label": "6d61732d716473732d64617000",
+      "qcom,agg-ports": "00000001",
+      "qcom,ap-owned": "",
+      "qcom,bus-dev": [
+        "/fab-cnoc"
+      ],
+      "qcom,buswidth": "00000008",
+      "qcom,connections": [
+        "/slv-cpr-apu-cfg",
+        "/slv-rbcpr-cx",
+        "/slv-a2noc-smmu-cfg",
+        "/slv-a0noc-mpu-cfg",
+        "/slv-message-ram",
+        "/slv-pcie-0-cfg",
+        "/slv-tlmm",
+        "/slv-mpm",
+        "/slv-a0noc-smmu-cfg",
+        "/slv-ebi1-phy-cfg",
+        "/slv-bimc-cfg",
+        "/slv-pimem-cfg",
+        "/slv-rbcpr-mx",
+        "/slv-clk-ctl",
+        "/slv-prng",
+        "/slv-pcie20-ahb2phy",
+        "/slv-a2noc-mpu-cfg",
+        "/slv-qdss-cfg",
+        "/slv-a2noc-cfg",
+        "/slv-a0noc-cfg",
+        "/slv-ufs-cfg",
+        "/slv-crypto0-cfg",
+        "/slv-cnoc-a1noc",
+        "/slv-pcie-1-cfg",
+        "/slv-snoc-cfg",
+        "/slv-snoc-mpu-cfg",
+        "/slv-a1noc-mpu-cfg",
+        "/slv-a1noc-smmu-cfg",
+        "/slv-pcie-2-cfg",
+        "/slv-cnoc-mnoc-cfg",
+        "/slv-cnoc-mnoc-mmss-cfg",
+        "/slv-pmic-arb",
+        "/slv-imem-cfg",
+        "/slv-a1noc-cfg",
+        "/slv-ssc-cfg",
+        "/slv-tcsr",
+        "/slv-lpass-smmu-cfg",
+        "/slv-dcc-cfg"
+      ],
+      "qcom,mas-rpm-id": "00000031"
+    },
+    "/mas-qdss-etr": {
+      "cell-id": "0000003c",
+      "label": "6d61732d716473732d65747200",
+      "qcom,agg-ports": "00000001",
+      "qcom,ap-owned": "",
+      "qcom,bus-dev": [
+        "/fab-snoc"
+      ],
+      "qcom,buswidth": "00000010",
+      "qcom,connections": [
+        "/slv-pimem",
+        "/slv-usb3",
+        "/slv-imem",
+        "/slv-snoc-bimc",
+        "/slv-snoc-pnoc"
+      ],
+      "qcom,mas-rpm-id": "0000001f",
+      "qcom,prio0": "00000001",
+      "qcom,prio1": "00000001",
+      "qcom,qos-mode": "666978656400",
+      "qcom,qport": "00000003"
+    },
+    "/mas-rotator": {
+      "cell-id": "00000019",
+      "label": "6d61732d726f7461746f7200",
+      "qcom,agg-ports": "00000001",
+      "qcom,ap-owned": "",
+      "qcom,bus-dev": [
+        "/fab-mnoc"
+      ],
+      "qcom,buswidth": "00000020",
+      "qcom,connections": [
+        "/slv-mnoc-bimc"
+      ],
+      "qcom,mas-rpm-id": "00000078",
+      "qcom,qos-mode": "62797061737300",
+      "qcom,qport": "00000000"
+    },
+    "/mas-sdcc-1": {
+      "cell-id": "0000004e",
+      "label": "6d61732d736463632d3100",
+      "qcom,agg-ports": "00000001",
+      "qcom,bus-dev": [
+        "/fab-pnoc"
+      ],
+      "qcom,buswidth": "00000008",
+      "qcom,connections": [
+        "/slv-pnoc-a1noc"
+      ],
+      "qcom,mas-rpm-id": "00000021"
+    },
+    "/mas-sdcc-2": {
+      "cell-id": "00000051",
+      "label": "6d61732d736463632d3200",
+      "qcom,agg-ports": "00000001",
+      "qcom,bus-dev": [
+        "/fab-pnoc"
+      ],
+      "qcom,buswidth": "00000008",
+      "qcom,connections": [
+        "/slv-pnoc-a1noc"
+      ],
+      "qcom,mas-rpm-id": "00000023"
+    },
+    "/mas-sdcc-4": {
+      "cell-id": "00000050",
+      "label": "6d61732d736463632d3400",
+      "qcom,agg-ports": "00000001",
+      "qcom,bus-dev": [
+        "/fab-pnoc"
+      ],
+      "qcom,buswidth": "00000008",
+      "qcom,connections": [
+        "/slv-pnoc-a1noc"
+      ],
+      "qcom,mas-rpm-id": "00000024"
+    },
+    "/mas-snoc-bimc": {
+      "cell-id": "0000272f",
+      "label": "6d61732d736e6f632d62696d6300",
+      "qcom,agg-ports": "00000002",
+      "qcom,bus-dev": [
+        "/fab-bimc"
+      ],
+      "qcom,buswidth": "00000008",
+      "qcom,connections": [
+        "/slv-hmss-l3",
+        "/slv-ebi"
+      ],
+      "qcom,mas-rpm-id": "00000003",
+      "qcom,qos-mode": "62797061737300"
+    },
+    "/mas-snoc-cfg": {
+      "cell-id": "00000036",
+      "label": "6d61732d736e6f632d63666700",
+      "qcom,agg-ports": "00000001",
+      "qcom,ap-owned": "",
+      "qcom,bus-dev": [
+        "/fab-snoc"
+      ],
+      "qcom,buswidth": "00000010",
+      "qcom,connections": [
+        "/slv-srvc-snoc"
+      ],
+      "qcom,mas-rpm-id": "00000014"
+    },
+    "/mas-snoc-cnoc": {
+      "cell-id": "00002733",
+      "label": "6d61732d736e6f632d636e6f6300",
+      "qcom,agg-ports": "00000001",
+      "qcom,bus-dev": [
+        "/fab-cnoc"
+      ],
+      "qcom,buswidth": "00000008",
+      "qcom,connections": [
+        "/slv-clk-ctl",
+        "/slv-rbcpr-cx",
+        "/slv-a2noc-smmu-cfg",
+        "/slv-a0noc-mpu-cfg",
+        "/slv-message-ram",
+        "/slv-cnoc-mnoc-mmss-cfg",
+        "/slv-pcie-0-cfg",
+        "/slv-tlmm",
+        "/slv-mpm",
+        "/slv-a0noc-smmu-cfg",
+        "/slv-ebi1-phy-cfg",
+        "/slv-bimc-cfg",
+        "/slv-pimem-cfg",
+        "/slv-rbcpr-mx",
+        "/slv-prng",
+        "/slv-pcie20-ahb2phy",
+        "/slv-a2noc-mpu-cfg",
+        "/slv-qdss-cfg",
+        "/slv-a2noc-cfg",
+        "/slv-a0noc-cfg",
+        "/slv-ufs-cfg",
+        "/slv-crypto0-cfg",
+        "/slv-pcie-1-cfg",
+        "/slv-snoc-cfg",
+        "/slv-snoc-mpu-cfg",
+        "/slv-a1noc-mpu-cfg",
+        "/slv-a1noc-smmu-cfg",
+        "/slv-pcie-2-cfg",
+        "/slv-cnoc-mnoc-cfg",
+        "/slv-cpr-apu-cfg",
+        "/slv-pmic-arb",
+        "/slv-imem-cfg",
+        "/slv-a1noc-cfg",
+        "/slv-ssc-cfg",
+        "/slv-tcsr",
+        "/slv-lpass-smmu-cfg",
+        "/slv-dcc-cfg"
+      ],
+      "qcom,mas-rpm-id": "00000034"
+    },
+    "/mas-snoc-pnoc": {
+      "cell-id": "00002739",
+      "label": "6d61732d736e6f632d706e6f6300",
+      "qcom,agg-ports": "00000001",
+      "qcom,bus-dev": [
+        "/fab-pnoc"
+      ],
+      "qcom,buswidth": "00000008",
+      "qcom,connections": [
+        "/slv-blsp-1",
+        "/slv-blsp-2",
+        "/slv-usb-hs",
+        "/slv-sdcc-1",
+        "/slv-sdcc-2",
+        "/slv-sdcc-4",
+        "/slv-tsif",
+        "/slv-pdm",
+        "/slv-ahb2phy"
+      ],
+      "qcom,mas-rpm-id": "0000002c"
+    },
+    "/mas-snoc-vmem": {
+      "cell-id": "00000028",
+      "label": "6d61732d736e6f632d766d656d00",
+      "qcom,agg-ports": "00000001",
+      "qcom,ap-owned": "",
+      "qcom,bus-dev": [
+        "/fab-mnoc"
+      ],
+      "qcom,buswidth": "00000020",
+      "qcom,connections": [
+        "/slv-vmem"
+      ],
+      "qcom,mas-rpm-id": "00000072"
+    },
+    "/mas-tsif": {
+      "cell-id": "00000052",
+      "label": "6d61732d7473696600",
+      "qcom,agg-ports": "00000001",
+      "qcom,bus-dev": [
+        "/fab-pnoc"
+      ],
+      "qcom,buswidth": "00000004",
+      "qcom,connections": [
+        "/slv-pnoc-a1noc"
+      ],
+      "qcom,mas-rpm-id": "00000025"
+    },
+    "/mas-ufs": {
+      "cell-id": "0000005f",
+      "label": "6d61732d75667300",
+      "qcom,agg-ports": "00000001",
+      "qcom,ap-owned": "",
+      "qcom,bus-dev": [
+        "/fab-a2noc"
+      ],
+      "qcom,buswidth": "00000008",
+      "qcom,connections": [
+        "/slv-a2noc-snoc"
+      ],
+      "qcom,mas-rpm-id": "00000044",
+      "qcom,prio0": "00000001",
+      "qcom,prio1": "00000001",
+      "qcom,qos-mode": "666978656400",
+      "qcom,qport": "00000002"
+    },
+    "/mas-usb-hs": {
+      "cell-id": "00000057",
+      "label": "6d61732d7573622d687300",
+      "qcom,agg-ports": "00000001",
+      "qcom,bus-dev": [
+        "/fab-pnoc"
+      ],
+      "qcom,buswidth": "00000008",
+      "qcom,connections": [
+        "/slv-pnoc-a1noc"
+      ],
+      "qcom,mas-rpm-id": "0000002a"
+    },
+    "/mas-usb3": {
+      "cell-id": "0000003d",
+      "label": "6d61732d7573623300",
+      "qcom,agg-ports": "00000001",
+      "qcom,ap-owned": "",
+      "qcom,bus-dev": [
+        "/fab-a2noc"
+      ],
+      "qcom,buswidth": "00000008",
+      "qcom,connections": [
+        "/slv-a2noc-snoc"
+      ],
+      "qcom,mas-rpm-id": "00000020",
+      "qcom,prio0": "00000001",
+      "qcom,prio1": "00000001",
+      "qcom,qos-mode": "666978656400",
+      "qcom,qport": "00000003"
+    },
+    "/mas-venus": {
+      "cell-id": "0000003f",
+      "label": "6d61732d76656e757300",
+      "qcom,agg-ports": "00000002",
+      "qcom,ap-owned": "",
+      "qcom,bus-dev": [
+        "/fab-mnoc"
+      ],
+      "qcom,buswidth": "00000020",
+      "qcom,connections": [
+        "/slv-mnoc-bimc"
+      ],
+      "qcom,mas-rpm-id": "00000009",
+      "qcom,qos-mode": "62797061737300",
+      "qcom,qport": "0000000300000004"
+    },
+    "/mas-venus-vmem": {
+      "cell-id": "00000044",
+      "label": "6d61732d76656e75732d766d656d00",
+      "qcom,agg-ports": "00000001",
+      "qcom,ap-owned": "",
+      "qcom,bus-dev": [
+        "/fab-mnoc"
+      ],
+      "qcom,buswidth": "00000020",
+      "qcom,connections": [
+        "/slv-vmem"
+      ],
+      "qcom,mas-rpm-id": "00000079"
+    },
+    "/mas-vfe": {
+      "cell-id": "0000001d",
+      "label": "6d61732d76666500",
+      "qcom,agg-ports": "00000001",
+      "qcom,ap-owned": "",
+      "qcom,bus-dev": [
+        "/fab-mnoc"
+      ],
+      "qcom,buswidth": "00000020",
+      "qcom,connections": [
+        "/slv-mnoc-bimc"
+      ],
+      "qcom,mas-rpm-id": "0000000b",
+      "qcom,qos-mode": "62797061737300",
+      "qcom,qport": "00000006"
+    },
+    "/slv-a0noc-cfg": {
+      "cell-id": "000002ae",
+      "label": "736c762d61306e6f632d63666700",
+      "qcom,agg-ports": "00000001",
+      "qcom,ap-owned": "",
+      "qcom,bus-dev": [
+        "/fab-cnoc"
+      ],
+      "qcom,buswidth": "00000004",
+      "qcom,slv-rpm-id": "00000090"
+    },
+    "/slv-a0noc-mpu-cfg": {
+      "cell-id": "000002c3",
+      "label": "736c762d61306e6f632d6d70752d63666700",
+      "qcom,agg-ports": "00000001",
+      "qcom,ap-owned": "",
+      "qcom,bus-dev": [
+        "/fab-cnoc"
+      ],
+      "qcom,buswidth": "00000004",
+      "qcom,slv-rpm-id": "00000091"
+    },
+    "/slv-a0noc-smmu-cfg": {
+      "cell-id": "000002b3",
+      "label": "736c762d61306e6f632d736d6d752d63666700",
+      "qcom,agg-ports": "00000001",
+      "qcom,ap-owned": "",
+      "qcom,bus-dev": [
+        "/fab-cnoc"
+      ],
+      "qcom,buswidth": "00000008",
+      "qcom,slv-rpm-id": "00000092"
+    },
+    "/slv-a0noc-snoc": {
+      "cell-id": "0000274d",
+      "clock-names": "6e6f64655f636c6b00",
+      "clocks": [
+        "qcom,gcc-msm8996:205"
+      ],
+      "label": "736c762d61306e6f632d736e6f6300",
+      "qcom,agg-ports": "00000001",
+      "qcom,ap-owned": "",
+      "qcom,bus-dev": [
+        "/fab-snoc"
+      ],
+      "qcom,buswidth": "00000008",
+      "qcom,connections": [
+        "/mas-a0noc-snoc"
+      ],
+      "qcom,enable-only-clk": "",
+      "qcom,slv-rpm-id": "0000008d"
+    },
+    "/slv-a1noc-cfg": {
+      "cell-id": "000002af",
+      "label": "736c762d61316e6f632d63666700",
+      "qcom,agg-ports": "00000001",
+      "qcom,ap-owned": "",
+      "qcom,bus-dev": [
+        "/fab-cnoc"
+      ],
+      "qcom,buswidth": "00000004",
+      "qcom,slv-rpm-id": "00000093"
+    },
+    "/slv-a1noc-mpu-cfg": {
+      "cell-id": "000002b1",
+      "label": "736c762d61316e6f632d6d70752d63666700",
+      "qcom,agg-ports": "00000001",
+      "qcom,ap-owned": "",
+      "qcom,bus-dev": [
+        "/fab-cnoc"
+      ],
+      "qcom,buswidth": "00000004",
+      "qcom,slv-rpm-id": "00000094"
+    },
+    "/slv-a1noc-smmu-cfg": {
+      "cell-id": "000002b4",
+      "label": "736c762d61316e6f632d736d6d752d63666700",
+      "qcom,agg-ports": "00000001",
+      "qcom,ap-owned": "",
+      "qcom,bus-dev": [
+        "/fab-cnoc"
+      ],
+      "qcom,buswidth": "00000008",
+      "qcom,slv-rpm-id": "00000095"
+    },
+    "/slv-a1noc-snoc": {
+      "cell-id": "0000274e",
+      "label": "736c762d61316e6f632d736e6f6300",
+      "qcom,agg-ports": "00000001",
+      "qcom,bus-dev": [
+        "/fab-snoc"
+      ],
+      "qcom,buswidth": "00000008",
+      "qcom,connections": [
+        "/mas-a1noc-snoc"
+      ],
+      "qcom,slv-rpm-id": "0000008e"
+    },
+    "/slv-a2noc-cfg": {
+      "cell-id": "000002b0",
+      "label": "736c762d61326e6f632d63666700",
+      "qcom,agg-ports": "00000001",
+      "qcom,ap-owned": "",
+      "qcom,bus-dev": [
+        "/fab-cnoc"
+      ],
+      "qcom,buswidth": "00000004",
+      "qcom,slv-rpm-id": "00000096"
+    },
+    "/slv-a2noc-mpu-cfg": {
+      "cell-id": "000002b2",
+      "label": "736c762d61326e6f632d6d70752d63666700",
+      "qcom,agg-ports": "00000001",
+      "qcom,ap-owned": "",
+      "qcom,bus-dev": [
+        "/fab-cnoc"
+      ],
+      "qcom,buswidth": "00000004",
+      "qcom,slv-rpm-id": "00000097"
+    },
+    "/slv-a2noc-smmu-cfg": {
+      "cell-id": "000002b5",
+      "label": "736c762d61326e6f632d736d6d752d63666700",
+      "qcom,agg-ports": "00000001",
+      "qcom,ap-owned": "",
+      "qcom,bus-dev": [
+        "/fab-cnoc"
+      ],
+      "qcom,buswidth": "00000008",
+      "qcom,slv-rpm-id": "00000098"
+    },
+    "/slv-a2noc-snoc": {
+      "cell-id": "00002751",
+      "label": "736c762d61326e6f632d736e6f6300",
+      "qcom,agg-ports": "00000001",
+      "qcom,bus-dev": [
+        "/fab-snoc"
+      ],
+      "qcom,buswidth": "00000008",
+      "qcom,connections": [
+        "/mas-a2noc-snoc"
+      ],
+      "qcom,slv-rpm-id": "0000008f"
+    },
+    "/slv-ahb2phy": {
+      "cell-id": "000002c7",
+      "label": "736c762d6168623270687900",
+      "qcom,agg-ports": "00000001",
+      "qcom,ap-owned": "",
+      "qcom,bus-dev": [
+        "/fab-pnoc"
+      ],
+      "qcom,buswidth": "00000004",
+      "qcom,slv-rpm-id": "00000099"
+    },
+    "/slv-bimc-cfg": {
+      "cell-id": "00000275",
+      "label": "736c762d62696d632d63666700",
+      "qcom,agg-ports": "00000001",
+      "qcom,ap-owned": "",
+      "qcom,bus-dev": [
+        "/fab-cnoc"
+      ],
+      "qcom,buswidth": "00000004",
+      "qcom,slv-rpm-id": "00000038"
+    },
+    "/slv-bimc-snoc-0": {
+      "cell-id": "00002721",
+      "label": "736c762d62696d632d736e6f632d3000",
+      "qcom,agg-ports": "00000001",
+      "qcom,ap-owned": "",
+      "qcom,bus-dev": [
+        "/fab-bimc"
+      ],
+      "qcom,buswidth": "00000008",
+      "qcom,connections": [
+        "/mas-bimc-snoc-0"
+      ],
+      "qcom,slv-rpm-id": "00000002"
+    },
+    "/slv-bimc-snoc-1": {
+      "cell-id": "00002748",
+      "label": "736c762d62696d632d736e6f632d3100",
+      "qcom,agg-ports": "00000001",
+      "qcom,ap-owned": "",
+      "qcom,bus-dev": [
+        "/fab-bimc"
+      ],
+      "qcom,buswidth": "00000008",
+      "qcom,connections": [
+        "/mas-bimc-snoc-1"
+      ],
+      "qcom,slv-rpm-id": "0000008a"
+    },
+    "/slv-blsp-1": {
+      "cell-id": "00000265",
+      "label": "736c762d626c73702d3100",
+      "qcom,agg-ports": "00000001",
+      "qcom,bus-dev": [
+        "/fab-pnoc"
+      ],
+      "qcom,buswidth": "00000004",
+      "qcom,slv-rpm-id": "00000027"
+    },
+    "/slv-blsp-2": {
+      "cell-id": "00000263",
+      "label": "736c762d626c73702d3200",
+      "qcom,agg-ports": "00000001",
+      "qcom,bus-dev": [
+        "/fab-pnoc"
+      ],
+      "qcom,buswidth": "00000004",
+      "qcom,slv-rpm-id": "00000025"
+    },
+    "/slv-camera-cfg": {
+      "cell-id": "0000024d",
+      "label": "736c762d63616d6572612d63666700",
+      "qcom,agg-ports": "00000001",
+      "qcom,ap-owned": "",
+      "qcom,bus-dev": [
+        "/fab-mnoc-ahb"
+      ],
+      "qcom,buswidth": "00000008",
+      "qcom,slv-rpm-id": "00000003"
+    },
+    "/slv-camera-throttle-cfg": {
+      "cell-id": "000002c5",
+      "label": "736c762d63616d6572612d7468726f74746c652d63666700",
+      "qcom,agg-ports": "00000001",
+      "qcom,ap-owned": "",
+      "qcom,bus-dev": [
+        "/fab-mnoc-ahb"
+      ],
+      "qcom,buswidth": "00000008",
+      "qcom,slv-rpm-id": "0000009a"
+    },
+    "/slv-clk-ctl": {
+      "cell-id": "0000026c",
+      "label": "736c762d636c6b2d63746c00",
+      "qcom,agg-ports": "00000001",
+      "qcom,bus-dev": [
+        "/fab-cnoc"
+      ],
+      "qcom,buswidth": "00000004",
+      "qcom,slv-rpm-id": "0000002f"
+    },
+    "/slv-cnoc-a1noc": {
+      "cell-id": "00002732",
+      "label": "736c762d636e6f632d61316e6f6300",
+      "qcom,agg-ports": "00000001",
+      "qcom,ap-owned": "",
+      "qcom,bus-dev": [
+        "/fab-cnoc"
+      ],
+      "qcom,buswidth": "00000004",
+      "qcom,connections": [
+        "/mas-cnoc-a1noc"
+      ],
+      "qcom,slv-rpm-id": "0000004b"
+    },
+    "/slv-cnoc-mnoc-cfg": {
+      "cell-id": "00000280",
+      "label": "736c762d636e6f632d6d6e6f632d63666700",
+      "qcom,agg-ports": "00000001",
+      "qcom,ap-owned": "",
+      "qcom,bus-dev": [
+        "/fab-cnoc"
+      ],
+      "qcom,buswidth": "00000004",
+      "qcom,connections": [
+        "/mas-cnoc-mnoc-cfg"
+      ],
+      "qcom,slv-rpm-id": "00000042"
+    },
+    "/slv-cnoc-mnoc-mmss-cfg": {
+      "cell-id": "00000277",
+      "label": "736c762d636e6f632d6d6e6f632d6d6d73732d63666700",
+      "qcom,agg-ports": "00000001",
+      "qcom,ap-owned": "",
+      "qcom,bus-dev": [
+        "/fab-cnoc"
+      ],
+      "qcom,buswidth": "00000008",
+      "qcom,connections": [
+        "/mas-cnoc-mnoc-mmss-cfg"
+      ],
+      "qcom,slv-rpm-id": "0000003a"
+    },
+    "/slv-cpr-apu-cfg": {
+      "cell-id": "000002ab",
+      "label": "736c762d6370722d6170752d63666700",
+      "qcom,agg-ports": "00000001",
+      "qcom,ap-owned": "",
+      "qcom,bus-dev": [
+        "/fab-cnoc"
+      ],
+      "qcom,buswidth": "00000004",
+      "qcom,slv-rpm-id": "000000a8"
+    },
+    "/slv-cpr-cfg": {
+      "cell-id": "00000250",
+      "label": "736c762d6370722d63666700",
+      "qcom,agg-ports": "00000001",
+      "qcom,ap-owned": "",
+      "qcom,bus-dev": [
+        "/fab-mnoc-ahb"
+      ],
+      "qcom,buswidth": "00000008",
+      "qcom,slv-rpm-id": "00000006"
+    },
+    "/slv-crypto0-cfg": {
+      "cell-id": "00000271",
+      "label": "736c762d63727970746f302d63666700",
+      "qcom,agg-ports": "00000001",
+      "qcom,ap-owned": "",
+      "qcom,bus-dev": [
+        "/fab-cnoc"
+      ],
+      "qcom,buswidth": "00000004",
+      "qcom,slv-rpm-id": "00000034"
+    },
+    "/slv-dcc-cfg": {
+      "cell-id": "000002aa",
+      "label": "736c762d6463632d63666700",
+      "qcom,agg-ports": "00000001",
+      "qcom,ap-owned": "",
+      "qcom,bus-dev": [
+        "/fab-cnoc"
+      ],
+      "qcom,buswidth": "00000004",
+      "qcom,slv-rpm-id": "0000009b"
+    },
+    "/slv-display-cfg": {
+      "cell-id": "0000024e",
+      "label": "736c762d646973706c61792d63666700",
+      "qcom,agg-ports": "00000001",
+      "qcom,ap-owned": "",
+      "qcom,bus-dev": [
+        "/fab-mnoc-ahb"
+      ],
+      "qcom,buswidth": "00000008",
+      "qcom,slv-rpm-id": "00000004"
+    },
+    "/slv-display-throttle-cfg": {
+      "cell-id": "000002bc",
+      "label": "736c762d646973706c61792d7468726f74746c652d63666700",
+      "qcom,agg-ports": "00000001",
+      "qcom,ap-owned": "",
+      "qcom,bus-dev": [
+        "/fab-mnoc-ahb"
+      ],
+      "qcom,buswidth": "00000008",
+      "qcom,slv-rpm-id": "0000009c"
+    },
+    "/slv-dsa-cfg": {
+      "cell-id": "000002ba",
+      "label": "736c762d6473612d63666700",
+      "qcom,agg-ports": "00000001",
+      "qcom,ap-owned": "",
+      "qcom,bus-dev": [
+        "/fab-mnoc-ahb"
+      ],
+      "qcom,buswidth": "00000008",
+      "qcom,slv-rpm-id": "0000009d"
+    },
+    "/slv-dsa-mpu-cfg": {
+      "cell-id": "000002bb",
+      "label": "736c762d6473612d6d70752d63666700",
+      "qcom,agg-ports": "00000001",
+      "qcom,ap-owned": "",
+      "qcom,bus-dev": [
+        "/fab-mnoc-ahb"
+      ],
+      "qcom,buswidth": "00000008",
+      "qcom,slv-rpm-id": "0000009e"
+    },
+    "/slv-ebi": {
+      "cell-id": "00000200",
+      "label": "736c762d65626900",
+      "qcom,agg-ports": "00000002",
+      "qcom,bus-dev": [
+        "/fab-bimc"
+      ],
+      "qcom,buswidth": "00000008",
+      "qcom,slv-rpm-id": "00000000"
+    },
+    "/slv-ebi1-phy-cfg": {
+      "cell-id": "00000285",
+      "label": "736c762d656269312d7068792d63666700",
+      "qcom,agg-ports": "00000001",
+      "qcom,ap-owned": "",
+      "qcom,bus-dev": [
+        "/fab-cnoc"
+      ],
+      "qcom,buswidth": "00000004",
+      "qcom,slv-rpm-id": "00000049"
+    },
+    "/slv-hmss": {
+      "cell-id": "000002a1",
+      "label": "736c762d686d737300",
+      "qcom,agg-ports": "00000001",
+      "qcom,ap-owned": "",
+      "qcom,bus-dev": [
+        "/fab-snoc"
+      ],
+      "qcom,buswidth": "00000010",
+      "qcom,slv-rpm-id": "00000014"
+    },
+    "/slv-hmss-l3": {
+      "cell-id": "000002a8",
+      "label": "736c762d686d73732d6c3300",
+      "qcom,agg-ports": "00000001",
+      "qcom,bus-dev": [
+        "/fab-bimc"
+      ],
+      "qcom,buswidth": "00000008",
+      "qcom,slv-rpm-id": "000000a0"
+    },
+    "/slv-imem": {
+      "cell-id": "00000249",
+      "label": "736c762d696d656d00",
+      "qcom,agg-ports": "00000001",
+      "qcom,bus-dev": [
+        "/fab-snoc"
+      ],
+      "qcom,buswidth": "00000010",
+      "qcom,slv-rpm-id": "0000001a"
+    },
+    "/slv-imem-cfg": {
+      "cell-id": "00000273",
+      "label": "736c762d696d656d2d63666700",
+      "qcom,agg-ports": "00000001",
+      "qcom,ap-owned": "",
+      "qcom,bus-dev": [
+        "/fab-cnoc"
+      ],
+      "qcom,buswidth": "00000004",
+      "qcom,slv-rpm-id": "00000036"
+    },
+    "/slv-lpass": {
+      "cell-id": "0000020a",
+      "label": "736c762d6c7061737300",
+      "qcom,agg-ports": "00000001",
+      "qcom,ap-owned": "",
+      "qcom,bus-dev": [
+        "/fab-snoc"
+      ],
+      "qcom,buswidth": "00000010",
+      "qcom,slv-rpm-id": "00000015"
+    },
+    "/slv-lpass-smmu-cfg": {
+      "cell-id": "000002b6",
+      "label": "736c762d6c706173732d736d6d752d63666700",
+      "qcom,agg-ports": "00000001",
+      "qcom,ap-owned": "",
+      "qcom,bus-dev": [
+        "/fab-cnoc"
+      ],
+      "qcom,buswidth": "00000008",
+      "qcom,slv-rpm-id": "000000a1"
+    },
+    "/slv-message-ram": {
+      "cell-id": "00000274",
+      "label": "736c762d6d6573736167652d72616d00",
+      "qcom,agg-ports": "00000001",
+      "qcom,bus-dev": [
+        "/fab-cnoc"
+      ],
+      "qcom,buswidth": "00000004",
+      "qcom,slv-rpm-id": "00000037"
+    },
+    "/slv-misc-cfg": {
+      "cell-id": "00000252",
+      "label": "736c762d6d6973632d63666700",
+      "qcom,agg-ports": "00000001",
+      "qcom,ap-owned": "",
+      "qcom,bus-dev": [
+        "/fab-mnoc-ahb"
+      ],
+      "qcom,buswidth": "00000008",
+      "qcom,slv-rpm-id": "00000008"
+    },
+    "/slv-mmagic-cfg": {
+      "cell-id": "000002b7",
+      "label": "736c762d6d6d616769632d63666700",
+      "qcom,agg-ports": "00000001",
+      "qcom,ap-owned": "",
+      "qcom,bus-dev": [
+        "/fab-mnoc-ahb"
+      ],
+      "qcom,buswidth": "00000008",
+      "qcom,slv-rpm-id": "000000a2"
+    },
+    "/slv-mnoc-bimc": {
+      "cell-id": "0000272c",
+      "clock-names": "6e6f64655f636c6b00",
+      "clocks": [
+        "qcom,rpmcc-msm8996:104"
+      ],
+      "label": "736c762d6d6e6f632d62696d6300",
+      "qcom,agg-ports": "00000002",
+      "qcom,ap-owned": "",
+      "qcom,bus-dev": [
+        "/fab-mnoc"
+      ],
+      "qcom,buswidth": "00000020",
+      "qcom,connections": [
+        "/mas-mnoc-bimc"
+      ],
+      "qcom,enable-only-clk": "",
+      "qcom,slv-rpm-id": "00000010"
+    },
+    "/slv-mnoc-clocks-cfg": {
+      "cell-id": "00000257",
+      "label": "736c762d6d6e6f632d636c6f636b732d63666700",
+      "qcom,agg-ports": "00000001",
+      "qcom,ap-owned": "",
+      "qcom,bus-dev": [
+        "/fab-mnoc-ahb"
+      ],
+      "qcom,buswidth": "00000008",
+      "qcom,slv-rpm-id": "0000000c"
+    },
+    "/slv-mnoc-mpu-cfg": {
+      "cell-id": "00000259",
+      "label": "736c762d6d6e6f632d6d70752d63666700",
+      "qcom,agg-ports": "00000001",
+      "qcom,ap-owned": "",
+      "qcom,bus-dev": [
+        "/fab-mnoc-ahb"
+      ],
+      "qcom,buswidth": "00000008",
+      "qcom,slv-rpm-id": "0000000e"
+    },
+    "/slv-mpm": {
+      "cell-id": "00000218",
+      "label": "736c762d6d706d00",
+      "qcom,agg-ports": "00000001",
+      "qcom,ap-owned": "",
+      "qcom,bus-dev": [
+        "/fab-cnoc"
+      ],
+      "qcom,buswidth": "00000004",
+      "qcom,slv-rpm-id": "0000003e"
+    },
+    "/slv-oxili-cfg": {
+      "cell-id": "00000256",
+      "label": "736c762d6f78696c692d63666700",
+      "qcom,agg-ports": "00000001",
+      "qcom,ap-owned": "",
+      "qcom,bus-dev": [
+        "/fab-mnoc-ahb"
+      ],
+      "qcom,buswidth": "00000008",
+      "qcom,slv-rpm-id": "0000000b"
+    },
+    "/slv-pcie-0": {
+      "cell-id": "00000299",
+      "label": "736c762d706369652d3000",
+      "qcom,agg-ports": "00000001",
+      "qcom,ap-owned": "",
+      "qcom,bus-dev": [
+        "/fab-snoc"
+      ],
+      "qcom,buswidth": "00000010",
+      "qcom,slv-rpm-id": "00000054"
+    },
+    "/slv-pcie-0-cfg": {
+      "cell-id": "0000029b",
+      "label": "736c762d706369652d302d63666700",
+      "qcom,agg-ports": "00000001",
+      "qcom,ap-owned": "",
+      "qcom,bus-dev": [
+        "/fab-cnoc"
+      ],
+      "qcom,buswidth": "00000004",
+      "qcom,slv-rpm-id": "00000058"
+    },
+    "/slv-pcie-1": {
+      "cell-id": "0000029a",
+      "label": "736c762d706369652d3100",
+      "qcom,agg-ports": "00000001",
+      "qcom,ap-owned": "",
+      "qcom,bus-dev": [
+        "/fab-snoc"
+      ],
+      "qcom,buswidth": "00000010",
+      "qcom,slv-rpm-id": "00000055"
+    },
+    "/slv-pcie-1-cfg": {
+      "cell-id": "0000029c",
+      "label": "736c762d706369652d312d63666700",
+      "qcom,agg-ports": "00000001",
+      "qcom,ap-owned": "",
+      "qcom,bus-dev": [
+        "/fab-cnoc"
+      ],
+      "qcom,buswidth": "00000004",
+      "qcom,slv-rpm-id": "00000059"
+    },
+    "/slv-pcie-2": {
+      "cell-id": "000002ca",
+      "label": "736c762d706369652d3200",
+      "qcom,agg-ports": "00000001",
+      "qcom,ap-owned": "",
+      "qcom,bus-dev": [
+        "/fab-snoc"
+      ],
+      "qcom,buswidth": "00000010",
+      "qcom,slv-rpm-id": "000000a4"
+    },
+    "/slv-pcie-2-cfg": {
+      "cell-id": "000002ac",
+      "label": "736c762d706369652d322d63666700",
+      "qcom,agg-ports": "00000001",
+      "qcom,ap-owned": "",
+      "qcom,bus-dev": [
+        "/fab-cnoc"
+      ],
+      "qcom,buswidth": "00000004",
+      "qcom,slv-rpm-id": "000000a5"
+    },
+    "/slv-pcie20-ahb2phy": {
+      "cell-id": "000002ad",
+      "label": "736c762d7063696532302d6168623270687900",
+      "qcom,agg-ports": "00000001",
+      "qcom,ap-owned": "",
+      "qcom,bus-dev": [
+        "/fab-cnoc"
+      ],
+      "qcom,buswidth": "00000004",
+      "qcom,slv-rpm-id": "000000a3"
+    },
+    "/slv-pdm": {
+      "cell-id": "00000267",
+      "label": "736c762d70646d00",
+      "qcom,agg-ports": "00000001",
+      "qcom,bus-dev": [
+        "/fab-pnoc"
+      ],
+      "qcom,buswidth": "00000004",
+      "qcom,slv-rpm-id": "00000029"
+    },
+    "/slv-pimem": {
+      "cell-id": "000002c8",
+      "label": "736c762d70696d656d00",
+      "qcom,agg-ports": "00000001",
+      "qcom,bus-dev": [
+        "/fab-snoc"
+      ],
+      "qcom,buswidth": "00000010",
+      "qcom,slv-rpm-id": "000000a6"
+    },
+    "/slv-pimem-cfg": {
+      "cell-id": "000002a9",
+      "label": "736c762d70696d656d2d63666700",
+      "qcom,agg-ports": "00000001",
+      "qcom,ap-owned": "",
+      "qcom,bus-dev": [
+        "/fab-cnoc"
+      ],
+      "qcom,buswidth": "00000004",
+      "qcom,slv-rpm-id": "000000a7"
+    },
+    "/slv-pmic-arb": {
+      "cell-id": "00000278",
+      "label": "736c762d706d69632d61726200",
+      "qcom,agg-ports": "00000001",
+      "qcom,bus-dev": [
+        "/fab-cnoc"
+      ],
+      "qcom,buswidth": "00000004",
+      "qcom,slv-rpm-id": "0000003b"
+    },
+    "/slv-pnoc-a1noc": {
+      "cell-id": "0000274a",
+      "label": "736c762d706e6f632d61316e6f6300",
+      "qcom,agg-ports": "00000001",
+      "qcom,bus-dev": [
+        "/fab-pnoc"
+      ],
+      "qcom,buswidth": "00000008",
+      "qcom,connections": [
+        "/mas-pnoc-a1noc"
+      ],
+      "qcom,slv-rpm-id": "0000008b"
+    },
+    "/slv-prng": {
+      "cell-id": "0000026a",
+      "label": "736c762d70726e6700",
+      "qcom,agg-ports": "00000001",
+      "qcom,ap-owned": "",
+      "qcom,bus-dev": [
+        "/fab-cnoc"
+      ],
+      "qcom,buswidth": "00000004",
+      "qcom,slv-rpm-id": "0000002c"
+    },
+    "/slv-qdss-cfg": {
+      "cell-id": "0000027b",
+      "label": "736c762d716473732d63666700",
+      "qcom,agg-ports": "00000001",
+      "qcom,ap-owned": "",
+      "qcom,bus-dev": [
+        "/fab-cnoc"
+      ],
+      "qcom,buswidth": "00000004",
+      "qcom,slv-rpm-id": "0000003f"
+    },
+    "/slv-qdss-stm": {
+      "cell-id": "0000024c",
+      "label": "736c762d716473732d73746d00",
+      "qcom,agg-ports": "00000001",
+      "qcom,bus-dev": [
+        "/fab-snoc"
+      ],
+      "qcom,buswidth": "00000010",
+      "qcom,slv-rpm-id": "0000001e"
+    },
+    "/slv-rbcpr-cx": {
+      "cell-id": "000002cc",
+      "label": "736c762d72626370722d637800",
+      "qcom,agg-ports": "00000001",
+      "qcom,ap-owned": "",
+      "qcom,bus-dev": [
+        "/fab-cnoc"
+      ],
+      "qcom,buswidth": "00000004",
+      "qcom,slv-rpm-id": "000000a9"
+    },
+    "/slv-rbcpr-mx": {
+      "cell-id": "000002cb",
+      "label": "736c762d72626370722d6d7800",
+      "qcom,agg-ports": "00000001",
+      "qcom,ap-owned": "",
+      "qcom,bus-dev": [
+        "/fab-cnoc"
+      ],
+      "qcom,buswidth": "00000004",
+      "qcom,slv-rpm-id": "000000aa"
+    },
+    "/slv-sdcc-1": {
+      "cell-id": "0000025e",
+      "label": "736c762d736463632d3100",
+      "qcom,agg-ports": "00000001",
+      "qcom,bus-dev": [
+        "/fab-pnoc"
+      ],
+      "qcom,buswidth": "00000004",
+      "qcom,slv-rpm-id": "0000001f"
+    },
+    "/slv-sdcc-2": {
+      "cell-id": "00000260",
+      "label": "736c762d736463632d3200",
+      "qcom,agg-ports": "00000001",
+      "qcom,bus-dev": [
+        "/fab-pnoc"
+      ],
+      "qcom,buswidth": "00000004",
+      "qcom,slv-rpm-id": "00000021"
+    },
+    "/slv-sdcc-4": {
+      "cell-id": "00000261",
+      "label": "736c762d736463632d3400",
+      "qcom,agg-ports": "00000001",
+      "qcom,bus-dev": [
+        "/fab-pnoc"
+      ],
+      "qcom,buswidth": "00000004",
+      "qcom,slv-rpm-id": "00000022"
+    },
+    "/slv-smmu-cpp-cfg": {
+      "cell-id": "000002bd",
+      "label": "736c762d736d6d752d6370702d63666700",
+      "qcom,agg-ports": "00000001",
+      "qcom,ap-owned": "",
+      "qcom,bus-dev": [
+        "/fab-mnoc-ahb"
+      ],
+      "qcom,buswidth": "00000008",
+      "qcom,slv-rpm-id": "000000ab"
+    },
+    "/slv-smmu-jpeg-cfg": {
+      "cell-id": "000002be",
+      "label": "736c762d736d6d752d6a7065672d63666700",
+      "qcom,agg-ports": "00000001",
+      "qcom,ap-owned": "",
+      "qcom,bus-dev": [
+        "/fab-mnoc-ahb"
+      ],
+      "qcom,buswidth": "00000008",
+      "qcom,slv-rpm-id": "000000ac"
+    },
+    "/slv-smmu-mdp-cfg": {
+      "cell-id": "000002bf",
+      "label": "736c762d736d6d752d6d64702d63666700",
+      "qcom,agg-ports": "00000001",
+      "qcom,ap-owned": "",
+      "qcom,bus-dev": [
+        "/fab-mnoc-ahb"
+      ],
+      "qcom,buswidth": "00000008",
+      "qcom,slv-rpm-id": "000000ad"
+    },
+    "/slv-smmu-rot-cfg": {
+      "cell-id": "000002c0",
+      "label": "736c762d736d6d752d726f742d63666700",
+      "qcom,agg-ports": "00000001",
+      "qcom,ap-owned": "",
+      "qcom,bus-dev": [
+        "/fab-mnoc-ahb"
+      ],
+      "qcom,buswidth": "00000008",
+      "qcom,slv-rpm-id": "000000ae"
+    },
+    "/slv-smmu-venus-cfg": {
+      "cell-id": "000002c1",
+      "label": "736c762d736d6d752d76656e75732d63666700",
+      "qcom,agg-ports": "00000001",
+      "qcom,ap-owned": "",
+      "qcom,bus-dev": [
+        "/fab-mnoc-ahb"
+      ],
+      "qcom,buswidth": "00000008",
+      "qcom,slv-rpm-id": "000000af"
+    },
+    "/slv-smmu-vfe-cfg": {
+      "cell-id": "000002c2",
+      "label": "736c762d736d6d752d7666652d63666700",
+      "qcom,agg-ports": "00000001",
+      "qcom,ap-owned": "",
+      "qcom,bus-dev": [
+        "/fab-mnoc-ahb"
+      ],
+      "qcom,buswidth": "00000008",
+      "qcom,slv-rpm-id": "000000b0"
+    },
+    "/slv-snoc-bimc": {
+      "cell-id": "00002730",
+      "label": "736c762d736e6f632d62696d6300",
+      "qcom,agg-ports": "00000002",
+      "qcom,bus-dev": [
+        "/fab-snoc"
+      ],
+      "qcom,buswidth": "00000020",
+      "qcom,connections": [
+        "/mas-snoc-bimc"
+      ],
+      "qcom,slv-rpm-id": "00000018"
+    },
+    "/slv-snoc-cfg": {
+      "cell-id": "00000282",
+      "label": "736c762d736e6f632d63666700",
+      "qcom,agg-ports": "00000001",
+      "qcom,ap-owned": "",
+      "qcom,bus-dev": [
+        "/fab-cnoc"
+      ],
+      "qcom,buswidth": "00000004",
+      "qcom,slv-rpm-id": "00000046"
+    },
+    "/slv-snoc-cnoc": {
+      "cell-id": "00002734",
+      "label": "736c762d736e6f632d636e6f6300",
+      "qcom,agg-ports": "00000001",
+      "qcom,bus-dev": [
+        "/fab-snoc"
+      ],
+      "qcom,buswidth": "00000010",
+      "qcom,connections": [
+        "/mas-snoc-cnoc"
+      ],
+      "qcom,slv-rpm-id": "00000019"
+    },
+    "/slv-snoc-mpu-cfg": {
+      "cell-id": "0000027e",
+      "label": "736c762d736e6f632d6d70752d63666700",
+      "qcom,agg-ports": "00000001",
+      "qcom,ap-owned": "",
+      "qcom,bus-dev": [
+        "/fab-cnoc"
+      ],
+      "qcom,buswidth": "00000004",
+      "qcom,slv-rpm-id": "00000043"
+    },
+    "/slv-snoc-pnoc": {
+      "cell-id": "0000273a",
+      "label": "736c762d736e6f632d706e6f6300",
+      "qcom,agg-ports": "00000001",
+      "qcom,bus-dev": [
+        "/fab-snoc"
+      ],
+      "qcom,buswidth": "00000010",
+      "qcom,connections": [
+        "/mas-snoc-pnoc"
+      ],
+      "qcom,slv-rpm-id": "0000001c"
+    },
+    "/slv-snoc-vmem": {
+      "cell-id": "000002c9",
+      "label": "736c762d736e6f632d766d656d00",
+      "qcom,agg-ports": "00000001",
+      "qcom,ap-owned": "",
+      "qcom,bus-dev": [
+        "/fab-snoc"
+      ],
+      "qcom,buswidth": "00000010",
+      "qcom,connections": [
+        "/mas-snoc-vmem"
+      ],
+      "qcom,slv-rpm-id": "0000008c"
+    },
+    "/slv-srvc-mnoc": {
+      "cell-id": "0000025b",
+      "label": "736c762d737276632d6d6e6f6300",
+      "qcom,agg-ports": "00000001",
+      "qcom,ap-owned": "",
+      "qcom,bus-dev": [
+        "/fab-mnoc"
+      ],
+      "qcom,buswidth": "00000008",
+      "qcom,slv-rpm-id": "00000011"
+    },
+    "/slv-srvc-snoc": {
+      "cell-id": "0000024b",
+      "label": "736c762d737276632d736e6f6300",
+      "qcom,agg-ports": "00000001",
+      "qcom,ap-owned": "",
+      "qcom,bus-dev": [
+        "/fab-snoc"
+      ],
+      "qcom,buswidth": "00000010",
+      "qcom,slv-rpm-id": "0000001d"
+    },
+    "/slv-ssc-cfg": {
+      "cell-id": "000002b9",
+      "label": "736c762d7373632d63666700",
+      "qcom,agg-ports": "00000001",
+      "qcom,ap-owned": "",
+      "qcom,bus-dev": [
+        "/fab-cnoc"
+      ],
+      "qcom,buswidth": "00000004",
+      "qcom,slv-rpm-id": "000000b1"
+    },
+    "/slv-tcsr": {
+      "cell-id": "0000026f",
+      "label": "736c762d7463737200",
+      "qcom,agg-ports": "00000001",
+      "qcom,bus-dev": [
+        "/fab-cnoc"
+      ],
+      "qcom,buswidth": "00000004",
+      "qcom,slv-rpm-id": "00000032"
+    },
+    "/slv-tlmm": {
+      "cell-id": "00000270",
+      "label": "736c762d746c6d6d00",
+      "qcom,agg-ports": "00000001",
+      "qcom,bus-dev": [
+        "/fab-cnoc"
+      ],
+      "qcom,buswidth": "00000004",
+      "qcom,slv-rpm-id": "00000033"
+    },
+    "/slv-tsif": {
+      "cell-id": "0000023f",
+      "label": "736c762d7473696600",
+      "qcom,agg-ports": "00000001",
+      "qcom,bus-dev": [
+        "/fab-pnoc"
+      ],
+      "qcom,buswidth": "00000004",
+      "qcom,slv-rpm-id": "00000023"
+    },
+    "/slv-ufs-cfg": {
+      "cell-id": "0000028a",
+      "label": "736c762d7566732d63666700",
+      "qcom,agg-ports": "00000001",
+      "qcom,ap-owned": "",
+      "qcom,bus-dev": [
+        "/fab-cnoc"
+      ],
+      "qcom,buswidth": "00000004",
+      "qcom,slv-rpm-id": "0000005c"
+    },
+    "/slv-usb-hs": {
+      "cell-id": "00000266",
+      "label": "736c762d7573622d687300",
+      "qcom,agg-ports": "00000001",
+      "qcom,bus-dev": [
+        "/fab-pnoc"
+      ],
+      "qcom,buswidth": "00000004",
+      "qcom,slv-rpm-id": "00000028"
+    },
+    "/slv-usb3": {
+      "cell-id": "00000247",
+      "label": "736c762d7573623300",
+      "qcom,agg-ports": "00000001",
+      "qcom,ap-owned": "",
+      "qcom,bus-dev": [
+        "/fab-snoc"
+      ],
+      "qcom,buswidth": "00000010",
+      "qcom,slv-rpm-id": "00000016"
+    },
+    "/slv-venus-cfg": {
+      "cell-id": "00000254",
+      "label": "736c762d76656e75732d63666700",
+      "qcom,agg-ports": "00000001",
+      "qcom,ap-owned": "",
+      "qcom,bus-dev": [
+        "/fab-mnoc-ahb"
+      ],
+      "qcom,buswidth": "00000008",
+      "qcom,slv-rpm-id": "0000000a"
+    },
+    "/slv-venus-throttle-cfg": {
+      "cell-id": "000002b8",
+      "label": "736c762d76656e75732d7468726f74746c652d63666700",
+      "qcom,agg-ports": "00000001",
+      "qcom,ap-owned": "",
+      "qcom,bus-dev": [
+        "/fab-mnoc-ahb"
+      ],
+      "qcom,buswidth": "00000008",
+      "qcom,slv-rpm-id": "000000b2"
+    },
+    "/slv-vmem": {
+      "cell-id": "000002c6",
+      "clock-names": "6e6f64655f636c6b00",
+      "clocks": [
+        "qcom,mmcc-msm8996:70"
+      ],
+      "label": "736c762d766d656d00",
+      "node-gdsc-supply": "gdsc_mmagic_video",
+      "qcom,agg-ports": "00000001",
+      "qcom,ap-owned": "",
+      "qcom,bus-dev": [
+        "/fab-mnoc"
+      ],
+      "qcom,buswidth": "00000020",
+      "qcom,slv-rpm-id": "000000b3"
+    },
+    "/slv-vmem-cfg": {
+      "cell-id": "000002c4",
+      "clock-names": "6e6f64655f636c6b00",
+      "clocks": [
+        "qcom,mmcc-msm8996:70"
+      ],
+      "label": "736c762d766d656d2d63666700",
+      "node-gdsc-supply": "gdsc_mmagic_video",
+      "qcom,agg-ports": "00000001",
+      "qcom,ap-owned": "",
+      "qcom,bus-dev": [
+        "/fab-mnoc-ahb"
+      ],
+      "qcom,buswidth": "00000008",
+      "qcom,enable-only-clk": "",
+      "qcom,slv-rpm-id": "000000b4"
+    }
+  },
+  "ufs_client": {
+    "qcom,bus-vector-names": "4d494e0050574d5f47315f4c310050574d5f47325f4c310050574d5f47335f4c310050574d5f47345f4c310048535f52415f47315f4c310048535f52415f47325f4c310048535f52415f47335f4c310048535f52425f47315f4c310048535f52425f47325f4c310048535f52425f47335f4c31004d415800",
+    "qcom,msm-bus,name": "7566733100",
+    "qcom,msm-bus,num-cases": "0000000c",
+    "qcom,msm-bus,num-paths": "00000002",
+    "qcom,msm-bus,vectors-KBps": "0000005f000002000000000000000000000000010000028a00000000000000000000005f000002000000039a00000000000000010000028a000003e8000000000000005f000002000000073400000000000000010000028a000003e8000000000000005f0000020000000e6800000000000000010000028a000003e8000000000000005f0000020000001cd000000000000000010000028a000003e8000000000000005f000002000001f33400000000000000010000028a000003e8000000000000005f000002000003e66700000000000000010000028a000003e8000000000000005f000002000007cccd00000000000000010000028a000003e8000000000000005f00000200000247ae00000000000000010000028a000003e8000000000000005f0000020000048ccd00000000000000010000028a000003e8000000000000005f000002000009199a00000000000000010000028a000003e8000000000000005f00000200003e800000000000000000010000028a000003e800000000"
+  },
+  "ufs_host_safety_blocker": "Native GCC UFS AXI/ICE roots lack Sony CX corner votes; see dora-gcc-corners.txt",
+  "ufs_host_safety_status": "disabled"
+}

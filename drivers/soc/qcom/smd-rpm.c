@@ -18,46 +18,32 @@
 #include <linux/io.h>
 #include <linux/interrupt.h>
 #include <linux/slab.h>
-
+#include <linux/kref.h>
 #include <linux/rpmsg.h>
 #include <linux/soc/qcom/smd-rpm.h>
+#include <asm/unaligned.h>
 
-#define RPM_REQUEST_TIMEOUT     (5 * HZ)
+#define RPM_REQUEST_TIMEOUT (5 * HZ)
+#define RPM_SERVICE_TYPE_REQUEST 0x00716572
+#define RPM_MSG_TYPE_ERR 0x00727265
+#define RPM_MSG_TYPE_MSG_ID 0x2367736d
 
-/**
- * struct qcom_smd_rpm - state of the rpm device driver
- * @rpm_channel:	reference to the smd channel
- * @ack:		completion for acks
- * @lock:		mutual exclusion around the send/complete pair
- * @ack_status:		result of the rpm request
- */
 struct qcom_smd_rpm {
 	struct rpmsg_endpoint *rpm_channel;
 	struct device *dev;
-
+	struct kref refs;
 	struct completion ack;
 	struct mutex lock;
+	spinlock_t ack_lock;
+	u32 next_msg_id;
+	u32 waiting_msg_id;
 	int ack_status;
+	bool online;
 };
-
-/**
- * struct qcom_rpm_header - header for all rpm requests and responses
- * @service_type:	identifier of the service
- * @length:		length of the payload
- */
 struct qcom_rpm_header {
 	__le32 service_type;
 	__le32 length;
 };
-
-/**
- * struct qcom_rpm_request - request message to the rpm
- * @msg_id:	identifier of the outgoing message
- * @flags:	active/sleep state flags
- * @type:	resource type
- * @id:		resource id
- * @data_len:	length of the payload following this header
- */
 struct qcom_rpm_request {
 	__le32 msg_id;
 	__le32 flags;
@@ -65,160 +51,272 @@ struct qcom_rpm_request {
 	__le32 id;
 	__le32 data_len;
 };
+static struct rpmsg_driver qcom_smd_rpm_driver;
 
-/**
- * struct qcom_rpm_message - response message from the rpm
- * @msg_type:	indicator of the type of message
- * @length:	the size of this message, including the message header
- * @msg_id:	message id
- * @message:	textual message from the rpm
- *
- * Multiple of these messages can be stacked in an rpm message.
- */
-struct qcom_rpm_message {
-	__le32 msg_type;
-	__le32 length;
-	union {
-		__le32 msg_id;
-		u8 message[0];
-	};
-};
-
-#define RPM_SERVICE_TYPE_REQUEST	0x00716572 /* "req\0" */
-
-#define RPM_MSG_TYPE_ERR		0x00727265 /* "err\0" */
-#define RPM_MSG_TYPE_MSG_ID		0x2367736d /* "msg#" */
-
-/**
- * qcom_rpm_smd_write - write @buf to @type:@id
- * @rpm:	rpm handle
- * @type:	resource type
- * @id:		resource identifier
- * @buf:	the data to be written
- * @count:	number of bytes in @buf
- */
-int qcom_rpm_smd_write(struct qcom_smd_rpm *rpm,
-		       int state,
-		       u32 type, u32 id,
-		       void *buf,
-		       size_t count)
+static void qcom_smd_rpm_release(struct kref *ref)
 {
-	static unsigned msg_id = 1;
-	int left;
+	struct qcom_smd_rpm *rpm = container_of(ref, struct qcom_smd_rpm, refs);
+
+	put_device(rpm->dev);
+	kfree(rpm);
+}
+
+static void qcom_smd_rpm_put(void *data)
+{
+	struct qcom_smd_rpm *rpm = data;
+
+	kref_put(&rpm->refs, qcom_smd_rpm_release);
+}
+
+/* Runs after the RPMSG core has destroyed/drained the endpoint. */
+static void qcom_smd_rpm_put_driver(void *data)
+{
+	struct qcom_smd_rpm *rpm = data;
+
+	dev_set_drvdata(rpm->dev, NULL);
+	qcom_smd_rpm_put(rpm);
+}
+
+static int qcom_smd_rpm_match_node(struct device *dev, void *data)
+{
+	return dev->of_node == data;
+}
+
+struct qcom_smd_rpm *qcom_smd_rpm_get(struct device *consumer)
+{
+	struct qcom_smd_rpm *rpm;
+	struct device_node *np;
+	struct device_link *link;
+	struct device *supplier;
 	int ret;
+
+	if (!consumer || !consumer->of_node)
+		return ERR_PTR(-EINVAL);
+	np = of_parse_phandle(consumer->of_node, "qcom,rpm", 0);
+	if (!np)
+		return ERR_PTR(-ENODEV);
+	supplier = driver_find_device(&qcom_smd_rpm_driver.drv, NULL, np,
+				     qcom_smd_rpm_match_node);
+	of_node_put(np);
+	if (!supplier)
+		return ERR_PTR(-EPROBE_DEFER);
+	device_lock(supplier);
+	rpm = dev_get_drvdata(supplier);
+	if (!device_is_bound(supplier) || !rpm || !READ_ONCE(rpm->online)) {
+		ret = -EPROBE_DEFER;
+		goto unlock;
+	}
+	kref_get(&rpm->refs);
+	link = device_link_add(consumer, supplier, DL_FLAG_AUTOREMOVE_CONSUMER);
+	if (!link) {
+		qcom_smd_rpm_put(rpm);
+		ret = -ENOMEM;
+		goto unlock;
+	}
+	ret = devm_add_action_or_reset(consumer, qcom_smd_rpm_put, rpm);
+	if (ret)
+		goto unlock;
+	device_unlock(supplier);
+	put_device(supplier);
+	return rpm;
+unlock:
+	device_unlock(supplier);
+	put_device(supplier);
+	return ERR_PTR(ret);
+}
+EXPORT_SYMBOL_GPL(qcom_smd_rpm_get);
+
+int qcom_rpm_smd_write(struct qcom_smd_rpm *rpm, int state,
+		       u32 type, u32 id, void *buf, size_t count)
+{
 	struct {
 		struct qcom_rpm_header hdr;
 		struct qcom_rpm_request req;
 		u8 payload[];
 	} *pkt;
-	size_t size = sizeof(*pkt) + count;
+	unsigned long flags, left;
+	size_t size;
+	u32 msg_id;
+	int ret;
 
-	/* SMD packets to the RPM may not exceed 256 bytes */
-	if (WARN_ON(size >= 256))
+	if (!rpm)
+		return -ENODEV;
+	if ((state != QCOM_SMD_RPM_ACTIVE_STATE &&
+	     state != QCOM_SMD_RPM_SLEEP_STATE) ||
+	    count >= 256 - sizeof(*pkt) || (count && !buf))
 		return -EINVAL;
-
+	size = sizeof(*pkt) + count;
 	pkt = kmalloc(size, GFP_KERNEL);
 	if (!pkt)
 		return -ENOMEM;
-
 	mutex_lock(&rpm->lock);
-
+	if (!READ_ONCE(rpm->online)) {
+		ret = -ENODEV;
+		goto out;
+	}
+	msg_id = ++rpm->next_msg_id;
+	if (!msg_id)
+		msg_id = ++rpm->next_msg_id;
 	pkt->hdr.service_type = cpu_to_le32(RPM_SERVICE_TYPE_REQUEST);
-	pkt->hdr.length = cpu_to_le32(sizeof(struct qcom_rpm_request) + count);
-
-	pkt->req.msg_id = cpu_to_le32(msg_id++);
+	pkt->hdr.length = cpu_to_le32(sizeof(pkt->req) + count);
+	pkt->req.msg_id = cpu_to_le32(msg_id);
 	pkt->req.flags = cpu_to_le32(state);
 	pkt->req.type = cpu_to_le32(type);
 	pkt->req.id = cpu_to_le32(id);
 	pkt->req.data_len = cpu_to_le32(count);
-	memcpy(pkt->payload, buf, count);
-
-	ret = rpmsg_send(rpm->rpm_channel, pkt, size);
-	if (ret)
+	if (count)
+		if (count)
+		memcpy(pkt->payload, buf, count);
+	spin_lock_irqsave(&rpm->ack_lock, flags);
+	if (!rpm->online) {
+		spin_unlock_irqrestore(&rpm->ack_lock, flags);
+		ret = -ENODEV;
 		goto out;
-
-	left = wait_for_completion_timeout(&rpm->ack, RPM_REQUEST_TIMEOUT);
-	if (!left)
-		ret = -ETIMEDOUT;
-	else
-		ret = rpm->ack_status;
-
+	}
+	reinit_completion(&rpm->ack);
+	rpm->ack_status = 0;
+	rpm->waiting_msg_id = msg_id;
+	spin_unlock_irqrestore(&rpm->ack_lock, flags);
+	ret = rpmsg_send(rpm->rpm_channel, pkt, size);
+	if (!ret) {
+		left = wait_for_completion_timeout(&rpm->ack, RPM_REQUEST_TIMEOUT);
+		ret = left ? rpm->ack_status : -ETIMEDOUT;
+	}
+	spin_lock_irqsave(&rpm->ack_lock, flags);
+	rpm->waiting_msg_id = 0;
+	spin_unlock_irqrestore(&rpm->ack_lock, flags);
 out:
-	kfree(pkt);
 	mutex_unlock(&rpm->lock);
+	kfree(pkt);
 	return ret;
 }
 EXPORT_SYMBOL(qcom_rpm_smd_write);
 
-static int qcom_smd_rpm_callback(struct rpmsg_device *rpdev,
-				 void *data,
-				 int count,
-				 void *priv,
-				 u32 addr)
+/* Parse only within the received packet, including each padded KVP length. */
+static int qcom_rpm_parse_ack(const void *data, int count, u32 *msg_id,
+			      int *ack_status)
 {
-	const struct qcom_rpm_header *hdr = data;
-	size_t hdr_length = le32_to_cpu(hdr->length);
-	const struct qcom_rpm_message *msg;
-	struct qcom_smd_rpm *rpm = dev_get_drvdata(&rpdev->dev);
-	const u8 *buf = data + sizeof(struct qcom_rpm_header);
-	const u8 *end = buf + hdr_length;
-	char msgbuf[32];
-	int status = 0;
-	u32 len, msg_length;
+	const u8 *buf = data;
+	size_t remaining, length, padded;
+	u32 type;
+	bool have_id = false;
+	char error[32];
 
-	if (le32_to_cpu(hdr->service_type) != RPM_SERVICE_TYPE_REQUEST ||
-	    hdr_length < sizeof(struct qcom_rpm_message)) {
-		dev_err(rpm->dev, "invalid request\n");
-		return 0;
-	}
-
-	while (buf < end) {
-		msg = (struct qcom_rpm_message *)buf;
-		msg_length = le32_to_cpu(msg->length);
-		switch (le32_to_cpu(msg->msg_type)) {
-		case RPM_MSG_TYPE_MSG_ID:
-			break;
-		case RPM_MSG_TYPE_ERR:
-			len = min_t(u32, ALIGN(msg_length, 4), sizeof(msgbuf));
-			memcpy_fromio(msgbuf, msg->message, len);
-			msgbuf[len - 1] = 0;
-
-			if (!strcmp(msgbuf, "resource does not exist"))
-				status = -ENXIO;
-			else
-				status = -EINVAL;
-			break;
+	if (count < (int)sizeof(struct qcom_rpm_header))
+		return -EINVAL;
+	if (get_unaligned_le32(buf) != RPM_SERVICE_TYPE_REQUEST)
+		return -EINVAL;
+	remaining = get_unaligned_le32(buf + sizeof(u32));
+	if (remaining > count - sizeof(struct qcom_rpm_header))
+		return -EINVAL;
+	buf += sizeof(struct qcom_rpm_header);
+	*ack_status = 0;
+	while (remaining) {
+		if (remaining < 2 * sizeof(u32))
+			return -EINVAL;
+		type = get_unaligned_le32(buf);
+		length = get_unaligned_le32(buf + sizeof(u32));
+		if (length > remaining - 2 * sizeof(u32))
+			return -EINVAL;
+		padded = ALIGN(length, sizeof(u32));
+		if (padded > remaining - 2 * sizeof(u32))
+			return -EINVAL;
+		if (type == RPM_MSG_TYPE_MSG_ID) {
+			if (length != sizeof(u32) || have_id)
+				return -EINVAL;
+			*msg_id = get_unaligned_le32(buf + 2 * sizeof(u32));
+			have_id = true;
+		} else if (type == RPM_MSG_TYPE_ERR) {
+			if (!length)
+				return -EINVAL;
+			length = min_t(size_t, length, sizeof(error) - 1);
+			memcpy(error, buf + 2 * sizeof(u32), length);
+			error[length] = '\0';
+			*ack_status = !strcmp(error, "resource does not exist") ?
+				      -ENXIO : -EINVAL;
 		}
-
-		buf = PTR_ALIGN(buf + 2 * sizeof(u32) + msg_length, 4);
+		buf += 2 * sizeof(u32) + padded;
+		remaining -= 2 * sizeof(u32) + padded;
 	}
+	return have_id ? 0 : -EINVAL;
+}
 
-	rpm->ack_status = status;
-	complete(&rpm->ack);
+static int qcom_smd_rpm_callback(struct rpmsg_device *rpdev, void *data,
+				int count, void *priv, u32 addr)
+{
+	struct qcom_smd_rpm *rpm = dev_get_drvdata(&rpdev->dev);
+	unsigned long flags;
+	u32 msg_id;
+	int ret, status;
+
+	if (!rpm)
+		return -ENODEV;
+	ret = qcom_rpm_parse_ack(data, count, &msg_id, &status);
+	if (ret)
+		return ret;
+	spin_lock_irqsave(&rpm->ack_lock, flags);
+	if (rpm->waiting_msg_id && rpm->waiting_msg_id == msg_id) {
+		rpm->ack_status = status;
+		rpm->waiting_msg_id = 0;
+		complete(&rpm->ack);
+	}
+	spin_unlock_irqrestore(&rpm->ack_lock, flags);
 	return 0;
+}
+
+static void qcom_smd_rpm_offline(struct qcom_smd_rpm *rpm)
+{
+	unsigned long flags;
+
+	spin_lock_irqsave(&rpm->ack_lock, flags);
+	WRITE_ONCE(rpm->online, false);
+	if (rpm->waiting_msg_id) {
+		rpm->waiting_msg_id = 0;
+		rpm->ack_status = -ENODEV;
+		complete(&rpm->ack);
+	}
+	spin_unlock_irqrestore(&rpm->ack_lock, flags);
+	/* Do not let the RPMSG core destroy an endpoint still used by a writer. */
+	mutex_lock(&rpm->lock);
+	rpm->rpm_channel = NULL;
+	mutex_unlock(&rpm->lock);
 }
 
 static int qcom_smd_rpm_probe(struct rpmsg_device *rpdev)
 {
 	struct qcom_smd_rpm *rpm;
+	int ret;
 
-	rpm = devm_kzalloc(&rpdev->dev, sizeof(*rpm), GFP_KERNEL);
+	rpm = kzalloc(sizeof(*rpm), GFP_KERNEL);
 	if (!rpm)
 		return -ENOMEM;
-
+	kref_init(&rpm->refs);
+	rpm->dev = get_device(&rpdev->dev);
 	mutex_init(&rpm->lock);
+	spin_lock_init(&rpm->ack_lock);
 	init_completion(&rpm->ack);
-
-	rpm->dev = &rpdev->dev;
 	rpm->rpm_channel = rpdev->ept;
+	rpm->online = true;
+	ret = devm_add_action_or_reset(&rpdev->dev,
+				      qcom_smd_rpm_put_driver, rpm);
+	if (ret)
+		return ret;
+	/* Publish only after callback lifetime is protected by driver devres. */
 	dev_set_drvdata(&rpdev->dev, rpm);
-
-	return of_platform_populate(rpdev->dev.of_node, NULL, NULL, &rpdev->dev);
+	ret = of_platform_populate(rpdev->dev.of_node, NULL, NULL, &rpdev->dev);
+	if (ret) {
+		of_platform_depopulate(&rpdev->dev);
+		qcom_smd_rpm_offline(rpm);
+	}
+	return ret;
 }
 
 static void qcom_smd_rpm_remove(struct rpmsg_device *rpdev)
 {
+	struct qcom_smd_rpm *rpm = dev_get_drvdata(&rpdev->dev);
+
 	of_platform_depopulate(&rpdev->dev);
+	qcom_smd_rpm_offline(rpm);
 }
 
 static const struct of_device_id qcom_smd_rpm_of_match[] = {
@@ -235,8 +333,9 @@ static struct rpmsg_driver qcom_smd_rpm_driver = {
 	.probe = qcom_smd_rpm_probe,
 	.remove = qcom_smd_rpm_remove,
 	.callback = qcom_smd_rpm_callback,
-	.drv  = {
-		.name  = "qcom_smd_rpm",
+	.drv = {
+		.name = "qcom_smd_rpm",
+		.suppress_bind_attrs = true,
 		.of_match_table = qcom_smd_rpm_of_match,
 	},
 };
@@ -252,7 +351,6 @@ static void __exit qcom_smd_rpm_exit(void)
 	unregister_rpmsg_driver(&qcom_smd_rpm_driver);
 }
 module_exit(qcom_smd_rpm_exit);
-
 MODULE_AUTHOR("Bjorn Andersson <bjorn.andersson@sonymobile.com>");
 MODULE_DESCRIPTION("Qualcomm SMD backed RPM driver");
 MODULE_LICENSE("GPL v2");

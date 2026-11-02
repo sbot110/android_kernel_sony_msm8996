@@ -40,7 +40,7 @@ static int get_qos_mode(struct platform_device *pdev,
 			break;
 	}
 	if (i == ARRAY_SIZE(qos_names))
-		dev_err(&pdev->dev, "Cannot match mode qos %s using Bypass\n",
+		dev_err(&pdev->dev, "Invalid QoS mode %s\n",
 				qos_mode);
 	else
 		ret = i;
@@ -57,6 +57,8 @@ static int *get_arr(struct platform_device *pdev,
 	int *arr = NULL;
 
 	if (of_get_property(node, prop, &size)) {
+		if (size <= 0 || size % sizeof(int))
+			return ERR_PTR(-EINVAL);
 		*nports = size / sizeof(int);
 	} else {
 		dev_dbg(&pdev->dev, "Property %s not available\n", prop);
@@ -66,7 +68,7 @@ static int *get_arr(struct platform_device *pdev,
 
 	arr = devm_kzalloc(&pdev->dev, size, GFP_KERNEL);
 	if ((size > 0) && ZERO_OR_NULL_PTR(arr))
-		return NULL;
+		return ERR_PTR(-ENOMEM);
 
 	ret = of_property_read_u32_array(node, prop, (u32 *)arr, *nports);
 	if (ret) {
@@ -77,7 +79,7 @@ static int *get_arr(struct platform_device *pdev,
 	return arr;
 arr_err:
 	devm_kfree(&pdev->dev, arr);
-	return NULL;
+	return ERR_PTR(ret);
 }
 
 static struct msm_bus_fab_device_type *get_fab_device_info(
@@ -85,7 +87,7 @@ static struct msm_bus_fab_device_type *get_fab_device_info(
 		struct platform_device *pdev)
 {
 	struct msm_bus_fab_device_type *fab_dev;
-	unsigned int ret;
+	int ret;
 	struct resource *res;
 	const char *base_name;
 
@@ -93,7 +95,7 @@ static struct msm_bus_fab_device_type *get_fab_device_info(
 			sizeof(struct msm_bus_fab_device_type),
 			GFP_KERNEL);
 	if (!fab_dev)
-		return NULL;
+		return ERR_PTR(-ENOMEM);
 
 	ret = of_property_read_string(dev_node, "qcom,base-name", &base_name);
 	if (ret) {
@@ -105,6 +107,7 @@ static struct msm_bus_fab_device_type *get_fab_device_info(
 	if (!res) {
 		dev_err(&pdev->dev, "Error getting qos base addr %s\n",
 								base_name);
+		ret = -EINVAL;
 		goto fab_dev_err;
 	}
 	fab_dev->pqos_base = res->start;
@@ -141,11 +144,34 @@ static struct msm_bus_fab_device_type *get_fab_device_info(
 
 fab_dev_err:
 	devm_kfree(&pdev->dev, fab_dev);
-	fab_dev = 0;
-	return NULL;
+	return ERR_PTR(ret);
 }
 
-static void get_qos_params(
+static void msm_bus_put_of_clk(void *data)
+{
+	clk_put(data);
+}
+
+/* A named clock may defer; it must never turn into a bypassed QoS port. */
+static struct clk *msm_bus_get_of_clk(struct platform_device *pdev,
+		struct device_node *node, const char *name, bool optional)
+{
+	struct clk *clk;
+	int index, ret;
+
+	if (optional && !of_find_property(node, "clock-names", NULL))
+		return NULL;
+	index = of_property_match_string(node, "clock-names", name);
+	if (index < 0)
+		return optional && index == -ENODATA ? NULL : ERR_PTR(index);
+	clk = of_clk_get(node, index);
+	if (IS_ERR(clk))
+		return clk;
+	ret = devm_add_action_or_reset(&pdev->dev, msm_bus_put_of_clk, clk);
+	return ret ? ERR_PTR(ret) : clk;
+}
+
+static int get_qos_params(
 		struct device_node * const dev_node,
 		struct platform_device * const pdev,
 		struct msm_bus_node_info_type *node_info)
@@ -158,9 +184,12 @@ static void get_qos_params(
 
 	if (ret)
 		node_info->qos_params.mode = -1;
-	else
+	else {
 		node_info->qos_params.mode = get_qos_mode(pdev, dev_node,
 								qos_mode);
+		if (node_info->qos_params.mode < 0)
+			return -EINVAL;
+	}
 
 	of_property_read_u32(dev_node, "qcom,prio-lvl",
 					&node_info->qos_params.prio_lvl);
@@ -204,13 +233,13 @@ static void get_qos_params(
 		node_info->qos_params.bw_buffer = 0;
 	else
 		node_info->qos_params.bw_buffer = KBTOB(temp);
-
+	return 0;
 }
 
 static int msm_bus_of_parse_clk_array(struct device_node *dev_node,
 			struct device_node *gdsc_node,
 			struct platform_device *pdev, struct nodeclk **clk_arr,
-			int *num_clks, int id)
+			u32 *num_clks, int id)
 {
 	int ret = 0;
 	int idx = 0;
@@ -219,9 +248,9 @@ static int msm_bus_of_parse_clk_array(struct device_node *dev_node,
 	int clks = 0;
 
 	clks = of_property_count_strings(dev_node, "clock-names");
-	if (clks < 0) {
+	if (clks <= 0) {
 		dev_err(&pdev->dev, "No qos clks node %d\n", id);
-		ret = clks;
+		ret = clks ? clks : -EINVAL;
 		goto exit_of_parse_clk_array;
 	}
 
@@ -238,13 +267,16 @@ static int msm_bus_of_parse_clk_array(struct device_node *dev_node,
 	of_property_for_each_string(dev_node, "clock-names", prop, clk_name) {
 		char gdsc_string[MAX_REG_NAME];
 
-		(*clk_arr)[idx].clk = of_clk_get_by_name(dev_node, clk_name);
+		(*clk_arr)[idx].clk = msm_bus_get_of_clk(pdev, dev_node,
+							clk_name, false);
 
 		if (IS_ERR_OR_NULL((*clk_arr)[idx].clk)) {
 			dev_err(&pdev->dev,
 				"Failed to get clk %s for bus%d\n", clk_name,
 									id);
-			continue;
+			ret = IS_ERR((*clk_arr)[idx].clk) ?
+				PTR_ERR((*clk_arr)[idx].clk) : -ENODEV;
+			goto exit_of_parse_clk_array;
 		}
 		if (strnstr(clk_name, "no-rate", strlen(clk_name)))
 			(*clk_arr)[idx].enable_only_clk = true;
@@ -264,7 +296,7 @@ exit_of_parse_clk_array:
 	return ret;
 }
 
-static void get_agg_params(
+static int get_agg_params(
 		struct device_node * const dev_node,
 		struct platform_device * const pdev,
 		struct msm_bus_node_info_type *node_info)
@@ -303,14 +335,14 @@ static void get_agg_params(
 	}
 
 	if (node_info->agg_params.agg_scheme == AGG_SCHEME_1) {
-		uint32_t len = 0;
+		int len = 0;
 		const uint32_t *util_levels;
 		int i, index = 0;
 
 		util_levels =
 			of_get_property(dev_node, "qcom,util-levels", &len);
-		if (!util_levels)
-			goto err_get_agg_params;
+		if (!util_levels || len <= 0 || len % (2 * sizeof(u32)))
+			return -EINVAL;
 
 		node_info->agg_params.num_util_levels =
 					len / (sizeof(uint32_t) * 2);
@@ -318,8 +350,8 @@ static void get_agg_params(
 			(node_info->agg_params.num_util_levels *
 			sizeof(struct node_util_levels_type)), GFP_KERNEL);
 
-		if (IS_ERR_OR_NULL(node_info->agg_params.util_levels))
-			goto err_get_agg_params;
+		if (!node_info->agg_params.util_levels)
+			return -ENOMEM;
 
 		for (i = 0; i < node_info->agg_params.num_util_levels; i++) {
 			node_info->agg_params.util_levels[i].threshold =
@@ -350,18 +382,15 @@ static void get_agg_params(
 				(node_info->agg_params.num_util_levels *
 				sizeof(struct node_util_levels_type)),
 				GFP_KERNEL);
-			if (IS_ERR_OR_NULL(node_info->agg_params.util_levels))
-				goto err_get_agg_params;
+			if (!node_info->agg_params.util_levels)
+				return -ENOMEM;
 			node_info->agg_params.util_levels[0].util_fact =
 								util_fact;
 		}
 
 	}
 
-	return;
-err_get_agg_params:
-	node_info->agg_params.num_util_levels = 0;
-	node_info->agg_params.agg_scheme = DEFAULT_AGG_SCHEME;
+	return 0;
 }
 
 static struct msm_bus_node_info_type *get_node_info_data(
@@ -369,116 +398,91 @@ static struct msm_bus_node_info_type *get_node_info_data(
 		struct platform_device * const pdev)
 {
 	struct msm_bus_node_info_type *node_info;
-	unsigned int ret;
-	int size;
-	int i;
-	struct device_node *con_node;
-	struct device_node *bus_dev;
+	struct device_node *target = NULL;
+	const char *props[] = { "qcom,connections", "qcom,blacklist" };
+	unsigned int **arrays[2];
+	unsigned int *counts[2];
+	int ret, size, i, j;
 
-	node_info = devm_kzalloc(&pdev->dev,
-			sizeof(struct msm_bus_node_info_type),
-			GFP_KERNEL);
-	if (!node_info) {
-		dev_err(&pdev->dev,
-			"Error: Unable to allocate memory for node_info\n");
-		return NULL;
-	}
-
+	node_info = devm_kzalloc(&pdev->dev, sizeof(*node_info), GFP_KERNEL);
+	if (!node_info)
+		return ERR_PTR(-ENOMEM);
 	ret = of_property_read_u32(dev_node, "cell-id", &node_info->id);
-	if (ret) {
-		dev_warn(&pdev->dev, "Bus node is missing cell-id\n");
-		goto node_info_err;
-	}
+	if (ret)
+		goto fail;
 	ret = of_property_read_string(dev_node, "label", &node_info->name);
-	if (ret) {
-		dev_warn(&pdev->dev, "Bus node is missing name\n");
-		goto node_info_err;
-	}
-	node_info->qport = get_arr(pdev, dev_node, "qcom,qport",
-			&node_info->num_qports);
-
-	if (of_get_property(dev_node, "qcom,connections", &size)) {
-		node_info->num_connections = size / sizeof(int);
-		node_info->connections = devm_kzalloc(&pdev->dev, size,
-				GFP_KERNEL);
-	} else {
-		node_info->num_connections = 0;
-		node_info->connections = 0;
-	}
-
-	for (i = 0; i < node_info->num_connections; i++) {
-		con_node = of_parse_phandle(dev_node, "qcom,connections", i);
-		if (IS_ERR_OR_NULL(con_node))
-			goto node_info_err;
-
-		if (of_property_read_u32(con_node, "cell-id",
-				&node_info->connections[i]))
-			goto node_info_err;
-		of_node_put(con_node);
-	}
-
-	if (of_get_property(dev_node, "qcom,blacklist", &size)) {
-		node_info->num_blist = size/sizeof(u32);
-		node_info->bl_cons = devm_kzalloc(&pdev->dev,
-		size, GFP_KERNEL);
-	} else {
-		node_info->num_blist = 0;
-		node_info->bl_cons = 0;
-	}
-
-	for (i = 0; i < node_info->num_blist; i++) {
-		con_node = of_parse_phandle(dev_node, "qcom,blacklist", i);
-		if (IS_ERR_OR_NULL(con_node))
-			goto node_info_err;
-
-		if (of_property_read_u32(con_node, "cell-id",
-				&node_info->bl_cons[i]))
-			goto node_info_err;
-		of_node_put(con_node);
-	}
-
-	bus_dev = of_parse_phandle(dev_node, "qcom,bus-dev", 0);
-	if (!IS_ERR_OR_NULL(bus_dev)) {
-		if (of_property_read_u32(bus_dev, "cell-id",
-			&node_info->bus_device_id)) {
-			dev_err(&pdev->dev, "Can't find bus device. Node %d\n",
-					node_info->id);
-			goto node_info_err;
-		}
-
-		of_node_put(bus_dev);
-	} else {
-		dev_dbg(&pdev->dev, "Can't find bdev phandle for %d",
-					node_info->id);
-	}
-
+	if (ret)
+		goto fail;
 	node_info->is_fab_dev = of_property_read_bool(dev_node, "qcom,fab-dev");
 	node_info->virt_dev = of_property_read_bool(dev_node, "qcom,virt-dev");
+	node_info->qport = get_arr(pdev, dev_node, "qcom,qport",
+				  &node_info->num_qports);
+	if (IS_ERR(node_info->qport)) {
+		ret = PTR_ERR(node_info->qport);
+		goto fail;
+	}
 
+	arrays[0] = &node_info->connections;
+	arrays[1] = &node_info->bl_cons;
+	counts[0] = &node_info->num_connections;
+	counts[1] = &node_info->num_blist;
+	for (j = 0; j < ARRAY_SIZE(props); j++) {
+		if (!of_get_property(dev_node, props[j], &size))
+			continue;
+		if (size <= 0 || size % sizeof(u32)) {
+			ret = -EINVAL;
+			goto fail;
+		}
+		*counts[j] = size / sizeof(u32);
+		*arrays[j] = devm_kzalloc(&pdev->dev, size, GFP_KERNEL);
+		if (!*arrays[j]) {
+			ret = -ENOMEM;
+			goto fail;
+		}
+		for (i = 0; i < *counts[j]; i++) {
+			target = of_parse_phandle(dev_node, props[j], i);
+			if (!target) {
+				ret = -EINVAL;
+				goto fail;
+			}
+			ret = of_property_read_u32(target, "cell-id",
+						  &(*arrays[j])[i]);
+			of_node_put(target);
+			target = NULL;
+			if (ret)
+				goto fail;
+		}
+	}
 
-	ret = of_property_read_u32(dev_node, "qcom,mas-rpm-id",
-						&node_info->mas_rpm_id);
-	if (ret) {
-		dev_dbg(&pdev->dev, "mas rpm id is missing\n");
+	target = of_parse_phandle(dev_node, "qcom,bus-dev", 0);
+	if (target) {
+		ret = of_property_read_u32(target, "cell-id",
+					  &node_info->bus_device_id);
+		of_node_put(target);
+		target = NULL;
+		if (ret)
+			goto fail;
+	} else if (!node_info->is_fab_dev) {
+		ret = -EINVAL;
+		goto fail;
+	}
+	if (of_property_read_u32(dev_node, "qcom,mas-rpm-id",
+				&node_info->mas_rpm_id))
 		node_info->mas_rpm_id = -1;
-	}
-
-	ret = of_property_read_u32(dev_node, "qcom,slv-rpm-id",
-						&node_info->slv_rpm_id);
-	if (ret) {
-		dev_dbg(&pdev->dev, "slv rpm id is missing\n");
+	if (of_property_read_u32(dev_node, "qcom,slv-rpm-id",
+				&node_info->slv_rpm_id))
 		node_info->slv_rpm_id = -1;
-	}
-
-	get_agg_params(dev_node, pdev, node_info);
-	get_qos_params(dev_node, pdev, node_info);
-
+	ret = get_agg_params(dev_node, pdev, node_info);
+	if (ret)
+		goto fail;
+	ret = get_qos_params(dev_node, pdev, node_info);
+	if (ret)
+		goto fail;
 	return node_info;
-
-node_info_err:
+fail:
+	of_node_put(target);
 	devm_kfree(&pdev->dev, node_info);
-	node_info = 0;
-	return NULL;
+	return ERR_PTR(ret);
 }
 
 static int get_bus_node_device_data(
@@ -486,204 +490,59 @@ static int get_bus_node_device_data(
 		struct platform_device * const pdev,
 		struct msm_bus_node_device_type * const node_device)
 {
-	bool enable_only;
-	bool setrate_only;
+	const char *clock_names[NUM_CTX];
+	const char *supplies[NUM_CTX];
 	struct device_node *qos_clk_node;
+	bool fabric, enable_only, setrate_only;
+	char property[MAX_REG_NAME + sizeof("-supply")];
+	int ctx, ret;
 
 	node_device->node_info = get_node_info_data(dev_node, pdev);
-	if (IS_ERR_OR_NULL(node_device->node_info)) {
-		dev_err(&pdev->dev, "Error: Node info missing\n");
-		return -ENODATA;
+	if (IS_ERR(node_device->node_info))
+		return PTR_ERR(node_device->node_info);
+	node_device->ap_owned = of_property_read_bool(dev_node, "qcom,ap-owned");
+	fabric = node_device->node_info->is_fab_dev;
+	if (fabric && !node_device->node_info->virt_dev) {
+		node_device->fabdev = get_fab_device_info(dev_node, pdev);
+		if (IS_ERR(node_device->fabdev))
+			return PTR_ERR(node_device->fabdev);
 	}
-	node_device->ap_owned = of_property_read_bool(dev_node,
-							"qcom,ap-owned");
-
-	if (node_device->node_info->is_fab_dev) {
-		dev_dbg(&pdev->dev, "Dev %d\n", node_device->node_info->id);
-
-		if (!node_device->node_info->virt_dev) {
-			node_device->fabdev =
-				get_fab_device_info(dev_node, pdev);
-			if (IS_ERR_OR_NULL(node_device->fabdev)) {
-				dev_err(&pdev->dev,
-					"Error: Fabric device info missing\n");
-				devm_kfree(&pdev->dev, node_device->node_info);
-				return -ENODATA;
-			}
-		}
-
-		enable_only = of_property_read_bool(dev_node,
-							"qcom,enable-only-clk");
-		node_device->clk[DUAL_CTX].enable_only_clk = enable_only;
-		node_device->clk[ACTIVE_CTX].enable_only_clk = enable_only;
-
-		/*
-		 * Doesn't make sense to have a clk handle you can't enable or
-		 * set rate on.
-		 */
-		if (!enable_only) {
-			setrate_only = of_property_read_bool(dev_node,
-						"qcom,setrate-only-clk");
-			node_device->clk[DUAL_CTX].setrate_only_clk =
-								setrate_only;
-			node_device->clk[ACTIVE_CTX].setrate_only_clk =
-								setrate_only;
-		}
-
-		node_device->clk[DUAL_CTX].clk = of_clk_get_by_name(dev_node,
-							"bus_clk");
-
-		if (IS_ERR_OR_NULL(node_device->clk[DUAL_CTX].clk)) {
-			int ret;
-
-			dev_err(&pdev->dev,
-				"%s:Failed to get bus clk for bus%d ctx%d\n",
-				__func__, node_device->node_info->id,
-								DUAL_CTX);
-			ret = (IS_ERR(node_device->clk[DUAL_CTX].clk) ?
-			PTR_ERR(node_device->clk[DUAL_CTX].clk) : -ENXIO);
-			return ret;
-		}
-
-		if (of_find_property(dev_node, "bus-gdsc-supply", NULL))
-			scnprintf(node_device->clk[DUAL_CTX].reg_name,
-				MAX_REG_NAME, "%s", "bus-gdsc");
-		else
-			scnprintf(node_device->clk[DUAL_CTX].reg_name,
-				MAX_REG_NAME, "%c", '\0');
-
-		node_device->clk[ACTIVE_CTX].clk = of_clk_get_by_name(dev_node,
-							"bus_a_clk");
-		if (IS_ERR_OR_NULL(node_device->clk[ACTIVE_CTX].clk)) {
-			int ret;
-
-			dev_err(&pdev->dev,
-				"Failed to get bus clk for bus%d ctx%d\n",
-				 node_device->node_info->id, ACTIVE_CTX);
-			ret = (IS_ERR(node_device->clk[DUAL_CTX].clk) ?
-			PTR_ERR(node_device->clk[DUAL_CTX].clk) : -ENXIO);
-			return ret;
-		}
-
-		if (of_find_property(dev_node, "bus-a-gdsc-supply", NULL))
-			scnprintf(node_device->clk[ACTIVE_CTX].reg_name,
-				MAX_REG_NAME, "%s", "bus-a-gdsc");
-		else
-			scnprintf(node_device->clk[ACTIVE_CTX].reg_name,
-				MAX_REG_NAME, "%c", '\0');
-
-		node_device->bus_qos_clk.clk = of_clk_get_by_name(dev_node,
-							"bus_qos_clk");
-
-		if (IS_ERR_OR_NULL(node_device->bus_qos_clk.clk)) {
-			dev_dbg(&pdev->dev,
-				"%s:Failed to get bus qos clk for %d",
-				__func__, node_device->node_info->id);
-			scnprintf(node_device->bus_qos_clk.reg_name,
-					MAX_REG_NAME, "%c", '\0');
-		} else {
-			if (of_find_property(dev_node, "bus-qos-gdsc-supply",
-								NULL))
-				scnprintf(node_device->bus_qos_clk.reg_name,
-					MAX_REG_NAME, "%s", "bus-qos-gdsc");
-			else
-				scnprintf(node_device->bus_qos_clk.reg_name,
-					MAX_REG_NAME, "%c", '\0');
-		}
-
-		qos_clk_node = of_get_child_by_name(dev_node,
-						"qcom,node-qos-clks");
-
-		if (qos_clk_node) {
-			if (msm_bus_of_parse_clk_array(qos_clk_node, dev_node,
-						pdev,
-						&node_device->node_qos_clks,
-						&node_device->num_node_qos_clks,
-						node_device->node_info->id)) {
-				dev_info(&pdev->dev,
-					"Bypass QoS programming\n");
-				node_device->fabdev->bypass_qos_prg = true;
-			}
-			of_node_put(qos_clk_node);
-		}
-	} else {
-		node_device->bus_qos_clk.clk = of_clk_get_by_name(dev_node,
-							"bus_qos_clk");
-
-		if (IS_ERR_OR_NULL(node_device->bus_qos_clk.clk))
-			dev_dbg(&pdev->dev,
-				"%s:Failed to get bus qos clk for mas%d",
-				__func__, node_device->node_info->id);
-
-		if (of_find_property(dev_node, "bus-qos-gdsc-supply",
-									NULL))
-			scnprintf(node_device->bus_qos_clk.reg_name,
-				MAX_REG_NAME, "%s", "bus-qos-gdsc");
-		else
-			scnprintf(node_device->bus_qos_clk.reg_name,
-				MAX_REG_NAME, "%c", '\0');
-
-		enable_only = of_property_read_bool(dev_node,
-							"qcom,enable-only-clk");
-		node_device->clk[DUAL_CTX].enable_only_clk = enable_only;
-		node_device->bus_qos_clk.enable_only_clk = enable_only;
-
-		/*
-		 * Doesn't make sense to have a clk handle you can't enable or
-		 * set rate on.
-		 */
-		if (!enable_only) {
-			setrate_only = of_property_read_bool(dev_node,
-						"qcom,setrate-only-clk");
-			node_device->clk[DUAL_CTX].setrate_only_clk =
-								setrate_only;
-			node_device->clk[ACTIVE_CTX].setrate_only_clk =
-								setrate_only;
-		}
-
-		qos_clk_node = of_get_child_by_name(dev_node,
-						"qcom,node-qos-clks");
-
-		if (qos_clk_node) {
-			if (msm_bus_of_parse_clk_array(qos_clk_node, dev_node,
-						pdev,
-						&node_device->node_qos_clks,
-						&node_device->num_node_qos_clks,
-						node_device->node_info->id)) {
-				dev_info(&pdev->dev,
-					"Bypass QoS programming\n");
-				node_device->fabdev->bypass_qos_prg = true;
-			}
-			of_node_put(qos_clk_node);
-		}
-
-		node_device->clk[ACTIVE_CTX].clk = of_clk_get_by_name(dev_node,
-							"node_a_clk");
-
-		if (IS_ERR_OR_NULL(node_device->clk[ACTIVE_CTX].clk))
-			dev_dbg(&pdev->dev,
-				 "%s:Failed to get bus clk for bus%d ctx%d",
-				__func__, node_device->node_info->id,
-								ACTIVE_CTX);
-
-		node_device->clk[DUAL_CTX].clk = of_clk_get_by_name(dev_node,
-							"node_clk");
-
-		if (IS_ERR_OR_NULL(node_device->clk[DUAL_CTX].clk))
-			dev_dbg(&pdev->dev,
-				"%s:Failed to get bus clk for bus%d ctx%d",
-				__func__, node_device->node_info->id,
-								DUAL_CTX);
-
-		if (of_find_property(dev_node, "node-gdsc-supply", NULL))
-			scnprintf(node_device->clk[DUAL_CTX].reg_name,
-				MAX_REG_NAME, "%s", "node-gdsc");
-		else
-			scnprintf(node_device->clk[DUAL_CTX].reg_name,
-				MAX_REG_NAME, "%c", '\0');
-
+	clock_names[DUAL_CTX] = fabric ? "bus_clk" : "node_clk";
+	clock_names[ACTIVE_CTX] = fabric ? "bus_a_clk" : "node_a_clk";
+	supplies[DUAL_CTX] = fabric ? "bus-gdsc" : "node-gdsc";
+	supplies[ACTIVE_CTX] = fabric ? "bus-a-gdsc" : "node-a-gdsc";
+	enable_only = of_property_read_bool(dev_node, "qcom,enable-only-clk");
+	setrate_only = !enable_only &&
+		of_property_read_bool(dev_node, "qcom,setrate-only-clk");
+	for (ctx = 0; ctx < NUM_CTX; ctx++) {
+		node_device->clk[ctx].enable_only_clk = enable_only;
+		node_device->clk[ctx].setrate_only_clk = setrate_only;
+		node_device->clk[ctx].clk = msm_bus_get_of_clk(pdev, dev_node,
+							clock_names[ctx], !fabric);
+		if (IS_ERR(node_device->clk[ctx].clk))
+			return PTR_ERR(node_device->clk[ctx].clk);
+		scnprintf(property, sizeof(property), "%s-supply", supplies[ctx]);
+		if (of_find_property(dev_node, property, NULL))
+			strlcpy(node_device->clk[ctx].reg_name, supplies[ctx],
+				MAX_REG_NAME);
 	}
-	return 0;
+	node_device->bus_qos_clk.clk = msm_bus_get_of_clk(pdev, dev_node,
+						       "bus_qos_clk", true);
+	if (IS_ERR(node_device->bus_qos_clk.clk))
+		return PTR_ERR(node_device->bus_qos_clk.clk);
+	node_device->bus_qos_clk.enable_only_clk = enable_only;
+	if (of_find_property(dev_node, "bus-qos-gdsc-supply", NULL))
+		strlcpy(node_device->bus_qos_clk.reg_name, "bus-qos-gdsc",
+			MAX_REG_NAME);
+	qos_clk_node = of_get_child_by_name(dev_node, "qcom,node-qos-clks");
+	if (!qos_clk_node)
+		return 0;
+	ret = msm_bus_of_parse_clk_array(qos_clk_node, dev_node, pdev,
+					 &node_device->node_qos_clks,
+					 &node_device->num_node_qos_clks,
+					 node_device->node_info->id);
+	of_node_put(qos_clk_node);
+	return ret;
 }
 
 struct msm_bus_device_node_registration
@@ -692,11 +551,11 @@ struct msm_bus_device_node_registration
 	struct device_node *of_node, *child_node;
 	struct msm_bus_device_node_registration *pdata;
 	unsigned int i = 0, j;
-	unsigned int ret;
+	int ret;
 
 	if (!pdev) {
 		pr_err("Error: Null platform device\n");
-		return NULL;
+		return ERR_PTR(-EINVAL);
 	}
 
 	of_node = pdev->dev.of_node;
@@ -705,16 +564,22 @@ struct msm_bus_device_node_registration
 			sizeof(struct msm_bus_device_node_registration),
 			GFP_KERNEL);
 	if (!pdata)
-		return NULL;
+		return ERR_PTR(-ENOMEM);
 
 	pdata->num_devices = of_get_child_count(of_node);
+	if (!pdata->num_devices) {
+		ret = -EINVAL;
+		goto node_reg_err;
+	}
 
 	pdata->info = devm_kzalloc(&pdev->dev,
 			sizeof(struct msm_bus_node_device_type) *
 			pdata->num_devices, GFP_KERNEL);
 
-	if (!pdata->info)
+	if (!pdata->info) {
+		ret = -ENOMEM;
 		goto node_reg_err;
+	}
 
 	ret = 0;
 	for_each_child_of_node(of_node, child_node) {
@@ -755,11 +620,11 @@ struct msm_bus_device_node_registration
 	return pdata;
 
 node_reg_err_1:
+	of_node_put(child_node);
 	devm_kfree(&pdev->dev, pdata->info);
 node_reg_err:
 	devm_kfree(&pdev->dev, pdata);
-	pdata = NULL;
-	return NULL;
+	return ERR_PTR(ret);
 }
 
 static int msm_bus_of_get_ids(struct platform_device *pdev,

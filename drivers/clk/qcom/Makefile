@@ -99,3 +99,4 @@ obj-$(CONFIG_SPMI_PMIC_CLKDIV) += clk-spmi-pmic-div.o
 obj-y += mdss/
 
 obj-$(CONFIG_QCOM_MSM8996_BOOT_CLOCK) += clk-cpu-8996.o
+obj-$(CONFIG_QCOM_MSM8996_BOOT_CLOCK) += clk-msm8996-cpu-transaction.o

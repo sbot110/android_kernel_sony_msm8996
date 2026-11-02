@@ -1741,6 +1741,21 @@ static const struct of_device_id qcom_spmi_regulator_match[] = {
 };
 MODULE_DEVICE_TABLE(of, qcom_spmi_regulator_match);
 
+/*
+ * MSM8996 VDD_APCC is the S8/S9/S10/S11 gang, with S11 controlled by SPM.
+ * The native provider must not claim those registers (or disable the rails
+ * as unused) while a separate SPM/HMSS owner is being brought up.
+ */
+static bool spmi_regulator_spm_owned(const struct spmi_regulator_data *reg,
+				     bool spm_owned_apcc)
+{
+	if (!spm_owned_apcc)
+		return false;
+
+	return !strcmp(reg->name, "s8") || !strcmp(reg->name, "s9") ||
+	       !strcmp(reg->name, "s10") || !strcmp(reg->name, "s11");
+}
+
 static int qcom_spmi_regulator_probe(struct platform_device *pdev)
 {
 	const struct spmi_regulator_data *reg;
@@ -1756,6 +1771,7 @@ static int qcom_spmi_regulator_probe(struct platform_device *pdev)
 	struct property *reg_prop;
 	int ret, lenp;
 	struct list_head *vreg_list;
+	bool spm_owned_apcc;
 
 	vreg_list = devm_kzalloc(dev, sizeof(*vreg_list), GFP_KERNEL);
 	if (!vreg_list)
@@ -1771,6 +1787,10 @@ static int qcom_spmi_regulator_probe(struct platform_device *pdev)
 	if (!match)
 		return -ENODEV;
 
+	spm_owned_apcc = of_property_read_bool(node, "qcom,spm-owned-apcc");
+	if (spm_owned_apcc && match->data != pm8994_regulators)
+		return -EINVAL;
+
 	if (of_find_property(node, "qcom,saw-reg", &lenp)) {
 		syscon = of_parse_phandle(node, "qcom,saw-reg", 0);
 		saw_regmap = syscon_node_to_regmap(syscon);
@@ -1780,6 +1800,10 @@ static int qcom_spmi_regulator_probe(struct platform_device *pdev)
 	}
 
 	for (reg = match->data; reg->name; reg++) {
+
+		/* Skip before type probing, per-rail MMIO or core registration. */
+		if (spmi_regulator_spm_owned(reg, spm_owned_apcc))
+			continue;
 
 		if (saw_regmap) {
 			reg_node = of_get_child_by_name(node, reg->name);

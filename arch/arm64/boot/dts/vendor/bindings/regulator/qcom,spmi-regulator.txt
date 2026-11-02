@@ -110,6 +110,17 @@ Qualcomm SPMI Regulators
 	Definition: Reference to regulator supplying the input pin, as
 		    described in the data sheet.
 
+- qcom,spm-owned-apcc:
+	Usage: optional (pm8994 only)
+	Value type: <boolean>
+	Description: PM8994 S8, S9, S10 and S11 form the MSM8996 VDD_APCC gang,
+		with S11 owned by the separate SPM/HMSS regulator controller.
+		Exclude all four from native regulator type probing, registration
+		and unused-rail cleanup. This is an ownership exclusion, not a
+		voltage provider or a request to enable SPM. It does not require
+		the SPM provider to have bound and must not enable CPU DVFS by itself.
+		Do not use on another PMIC or to hide an absent required supply.
+
 - qcom,saw-reg:
 	Usage: optional
 	Value type: <phandle>

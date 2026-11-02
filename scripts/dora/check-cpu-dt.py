@@ -79,6 +79,12 @@ def validate(nodes):
         raise ValueError("incorrect CBF register topology")
     if b"maxcpus=2" not in nodes["/chosen"]["props"].get("bootargs", b""):
         raise ValueError("two-CPU diagnostic limit was removed")
+    # All four phases form one SPM-controlled APCC rail in the final Sony DT.
+    # Native RPM must not register independent clients while that owner is gated.
+    for name in ("s8", "s9", "s10", "s11"):
+        path = "/rpm-glink/rpm_requests/pm8994-regulators/" + name
+        if nodes[path]["props"].get("status") != b"disabled\0":
+            raise ValueError("competing native RPM APCC phase owner: " + name)
 
 
 def selftest(nodes):
@@ -88,6 +94,7 @@ def selftest(nodes):
         ("/soc/cpr3-ctrl@99e8000", "vdd-supply", struct.pack(">I", 0xffffffff)),
         ("/soc/clock-controller@6400000", "qcom,pwrcl-speedbin1-v0", b"\0" * 8),
         ("/chosen", "bootargs", b"\0"),
+        ("/rpm-glink/rpm_requests/pm8994-regulators/s11", "status", b"okay\0"),
     )
     for path, key, replacement in cases:
         bad = copy.deepcopy(nodes)

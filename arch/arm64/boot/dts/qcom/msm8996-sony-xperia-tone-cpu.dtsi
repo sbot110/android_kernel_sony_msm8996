@@ -1272,3 +1272,12 @@
 		};
 	};
 };
+
+/* Sony VDD_APCC = S8+S9+S10+S11, S11 gang leader controlled via SPM.
+ * The live native provider is RPM, not an absent direct-SPMI container.
+ * Do not instantiate competing independent RPM clients for these phases.
+ */
+&pm8994_s8 { status = "disabled"; };
+&pm8994_s9 { status = "disabled"; };
+&pm8994_s10 { status = "disabled"; };
+&pm8994_s11 { status = "disabled"; };

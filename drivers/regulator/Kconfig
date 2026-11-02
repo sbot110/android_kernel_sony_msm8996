@@ -701,6 +701,14 @@ config REGULATOR_QCOM_RPMH
 	  control allows for voting on regulator state between multiple
 	  processors within the SoC.
 
+config REGULATOR_QCOM_GENPD
+	tristate "Regulator API for Qualcomm generic power domains"
+	depends on OF && PM_GENERIC_DOMAINS
+	help
+	  Provide status-only regulator enable/disable operations backed by
+	  real native GCC/MMCC GDSCs. This lets legacy Qualcomm clients use
+	  the domain without a second driver programming its registers.
+
 config REGULATOR_QCOM_SMD_RPM
 	tristate "Qualcomm SMD based RPM regulator driver"
 	depends on QCOM_SMD_RPM
@@ -1094,6 +1102,32 @@ config REGULATOR_CPR3
 	  rails, the CPR3 controller is able to propagate the voltage increase
 	  or decrease requests all the way to the PMIC without software
 	  involvement.
+
+config REGULATOR_KRYO
+	bool "Qualcomm MSM8996 Kryo LDO and retention regulators"
+	depends on OF && ARCH_QCOM && ARM64
+	select MSM_SPM
+	help
+	  Support the original MSM8996 BHS/LDO and retention supply controllers.
+
+config REGULATOR_CPR3_HMSS
+	bool "Qualcomm MSM8996 CPR3 HMSS regulators"
+	depends on OF && ARCH_QCOM && ARM64
+	select REGULATOR_CPR3
+	select REGULATOR_SPM
+	select REGULATOR_MEM_ACC
+	select REGULATOR_KRYO
+	select MSM_APM
+	help
+	  Support the MSM8996 CPU/CBF CPR3 controller with its original fuse,
+	  partial-binning, voltage-corner and aging handling.
+
+config REGULATOR_CPR3_MMSS
+	bool "Qualcomm MSM8996 CPR3 MMSS regulator"
+	depends on OF
+	select REGULATOR_CPR3
+	help
+	  Support the MSM8996 graphics CPR3 controller and its hardware fuses.
 
 config REGULATOR_CPR4_MMSS_LDO
 	bool "RBCPR3 regulator for MMSS LDO"

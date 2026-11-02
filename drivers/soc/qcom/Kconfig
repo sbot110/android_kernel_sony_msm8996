@@ -283,6 +283,13 @@ config MSM_SPM
           driver allows configuring SPM to allow different low power modes for
           both core and L2.
 
+config MSM_APM
+	bool "Qualcomm MSM8996 Array Power Mux"
+	depends on ARCH_QCOM && ARM64
+	select QCOM_SCM
+	help
+	  Support the MSM8996 APCC/MX memory-array supply mux used by CPR3.
+
 config MSM_L2_SPM
         bool "SPM support for L2 cache"
         help

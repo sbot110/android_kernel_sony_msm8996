@@ -14,6 +14,14 @@ config COMMON_CLK_QCOM
 	select REGMAP_MMIO
 	select RESET_CONTROLLER
 
+config QCOM_MSM8996_BOOT_CLOCK
+	bool "MSM8996 firmware CPU/CBF clock observation"
+	depends on COMMON_CLK_QCOM && ARM64
+	help
+	  Expose the rates actually programmed by firmware in APCC and CBF.
+	  This read-only driver never programs a PLL, mux, regulator or ACD.
+	  It does not provide CPU frequency scaling or validate CPU bring-up.
+
 config QCOM_A53PLL
 	tristate "MSM8916 A53 PLL"
 	depends on COMMON_CLK_QCOM

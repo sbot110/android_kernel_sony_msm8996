@@ -53,17 +53,47 @@ electrical calibration, PHY lock, hibern8, storage commands or data integrity.
 The new PHY, common helpers and changed UFS host compile as ARM64 objects;
 the complete kernel/link results are recorded in dora-build-validation.txt.
 
-Remaining controller/bus blocker
---------------------------------
-The port is NOT proof that UFS can probe or mount Android filesystems.
-CONFIG_QCOM_BUS_SCALING is enabled, and ufs_qcom_bus_register() requires
-real msm-bus topology plus matching vectors/names. Sony4.4 has 12 cases
-and two paths (ufs1, MIN through MAX). The current native board DT has
-neither those vectors nor the complete original BIMC/NoC provider topology.
-The host will reject missing bus data; this check was not disabled and no
-fake bandwidth vote/provider was added to create a successful probe.
+Stage 3: bus restored; activation still blocked by GCC voltage corners
+---------------------------------------------------------------------
+The complete original 145-node NoC/BIMC fabric and exact 12-case/two-path
+ufs1 vectors are now present for all four real SoC/PMIC datasets. Native
+GCC/MMCC/RPM clock mappings, real GDSC adapters and the SMD RPM supplier
+are checked. Votes use full LE64 active/sleep bandwidth KVPs and bounded,
+message-correlated ACKs. Disabled legacy RPM no longer returns fake success.
+Provider deferral, graph/route ownership, first-error propagation and failed
+commit retry have actual-function host tests and ARM64 component builds.
 
-ICE/secure firmware and vendor crypto ABI, real regulator/clock probe,
-link startup, configured lanes, hibern8, reset, suspend and storage integrity
-remain physical-device requirements for F8131 and F8132 separately.
-No storage command, partition write or filesystem format was performed.
+Host registration validates vector count and MIN/MAX names, defers on the
+real supplier, unwinds failed sysfs publication and checks initial votes and
+PHY power-on before reporting state. Common PHY failure unwind asserts the
+revision-specific reset before collapsing clocks/rails, releases RPMH and
+restores the active load of an always-on reference pad without double enable.
+Nine injected failure stages and residual resource flags are checked.
+
+A new source-level P0 was identified: Sony GCC couples AXI 200 MHz and ICE
+source 300 MHz to CX NOMINAL; native GCC has the frequencies without the
+required voltage-corner vote. Bus bandwidth is not an equivalent voltage
+provider. The UFS HOST IS DISABLED until real RPM corner aggregation and
+GCC fmax coupling are implemented. The PHY and bus source descriptions are
+retained for validation. See dora-gcc-corners.txt for exact functions, limits,
+logical/wire mapping and required error/rollback semantics. Do not remove
+this gate to make probe succeed or infer safe storage operation from a build.
+
+The original final UFS host has no IOMMU/ICE phandle or stream IDs; no guessed
+ones were added. Inline encryption is disabled in the resolved configuration;
+software fscrypt/dm-crypt interfaces remain enabled. ICE secure firmware,
+DMA behavior and encryption of existing userdata are not proven. Boot.img
+preparation remains blocked; no storage command, partition write or format
+has been performed.
+
+Normal power-off recovery is not fixed: common PHY ignores some resource
+shutdown failures. Simply returning an error after partial shutdown retains
+generic PHY power_count=1 and can skip the next power-on; blind analog
+rollback can lose calibration/PCS context. A coordinated UFS host/PHY state
+and recovery contract with fault injection is required.
+
+Checks: check-bus-dt.py, check-bus-routes.py, check-bus-retry.py,
+check-rpm-bus.py, check-ufs-host.py, check-ufs-power.py and check-ufs-phy.py.
+These are structural/software models, not electrical PHY lock, real RPM
+ACK, link startup, HIBERN8, suspend, storage commands or integrity tests.
+F8131 and F8132 require separate physical validation after source P0 closure.

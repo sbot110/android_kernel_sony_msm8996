@@ -1,76 +1,79 @@
-# F8131 / F8132: совместимость и границы проверки
+# Dora F8131/F8132 — матрица совместимости Linux 4.19
 
-Обе модели являются обязательными целями: F8131 Single SIM и F8132 Dual SIM,
-Sony Xperia X Performance / dora / MSM8996. Нельзя считать эту таблицу
-заявлением о готовом аппаратном порте Linux 4.19 или успешной загрузке LOS21.
+Обновлено: 2026-11-02. Источники этапа 3:
+`799e29584b029fe34b8344a726989d4836d258d5`.
+Итоговый статус: **BUILDABLE**; чистая сборка: **код завершения 0; vmlinux, Image/Image.gz, четыре DTB и Image.gz-dtb проверены**.
+Это не BOOT TEST READY. Физической загрузки 4.19 и подтверждения LOS21 нет
+ни для F8131, ни для F8132. [Протокол сборки](dora-build-validation.txt).
 
-Статусы: **С** — проверено по исходникам; **Б** — проверено компиляцией;
-**Д4.4** — данные пользователя с рабочего Sony 4.4; **Н** — физический тест
-нового 4.19 не выполнен; **О** — необходимый компонент/связка отсутствует.
-Ни одна функция 4.19 пока не имеет статуса физически подтверждённой.
+«Код/DT» ниже означает перенесённую и автоматически проверяемую реализацию
+или набор hardware данных. Это не подтверждение probe или работы телефона.
+«Отключено» означает явный final DT/Kconfig safety gate до завершения
+конкретной реализации, а не поддержанную подсистему.
 
-Общий статус — **BUILDABLE**. В продолжении от HEAD c06cad974 внесены
-реальные исправления USB PHY/ID, выбора панели и Android config.
-Проверки структуры DT и формата образа автоматизированы; это не BOOT TEST READY.
-Точные незавершённые связи: [dora-hardware-blockers.md](dora-hardware-blockers.md).
-Kernel/userspace границы LOS21: [dora-android14-audit.md](dora-android14-audit.md).
+## Четыре SoC/PMIC варианта
 
-## Модели, board-id и варианты DT
+Эталон — окончательно развёрнутые Sony DT из
+[4.4.302 commit 0c295b15](https://github.com/sbot110/android_kernel_sony_msm8996/commit/0c295b15b6d0fb59a64e13b9e0ef2070818ef2a1).
+Все четыре набора перенесены с hardware различиями и проверяются по
+`dora-variant-dt.json`, `dora-cpu-dt.json`, `dora-display-dt.json`.
 
-Эталон: 0c295b15b6d0fb59a64e13b9e0ef2070818ef2a1.
-После препроцессинга оригинальных DTS получены следующие корневые свойства:
+| SoC / PMIC | msm-id revision | pmic-id, первые два слова | GPU CPR corners | BCL derating | Flash ramp |
+| --- | --- | --- | --- | --- | --- |
+| v3.0 / PMI8994 | `0x30000` | `0x20009 0x2000a` | 7 | 550000 uA | 6P7_US |
+| v3.0 / PMI8996 | `0x30000` | `0x20009 0x10013` | 7 | 0 uA | 27_US |
+| v3.1 / PMI8994 | `0x30001` | `0x20009 0x2000a` | 8 | 550000 uA | 6P7_US |
+| v3.1 / PMI8996 | `0x30001` | `0x20009 0x10013` | 8 | 0 uA | 27_US |
 
-| Оригинальный dora DTB | qcom,msm-id | qcom,board-id | qcom,pmic-id |
+Во всех случаях SoC ID 246, board-id `<8 0>`; последние слова pmic-id — 0.
+IBB discharge в **итоговом** оригинальном DT равен 32 для обеих PMIC:
+промежуточное PMI8996 значение 300 заменяется поздним Tone override.
+Сохранены реальные GPU fmax/fuse/voltage/aging отличия v3.0/v3.1; конечные
+CPU/HMSS datasets одинаковы во всех четырёх Sony деревьях. Искусственные
+CPU различия не добавлялись. Flash и GPU voltage chains пока отключены.
+
+Порядок appended DTB — v3.0/PMI8994, v3.0/PMI8996, v3.1/PMI8994,
+v3.1/PMI8996, как в Sony Makefile. Формат/порядок проверяются офлайн;
+правильный выбор загрузчиком ещё не доказан. **F8131/F8132 не определяют
+PMIC, stepping или панель.** Подробнее: [GPU/варианты](dora-gfx-variants.txt).
+
+## Состояние моделей отдельно
+
+| Модель | Проверено в исходниках | Не подтверждено |
+| --- | --- | --- |
+| F8131 — Single SIM | Общая dora платформа; Android userspace выбирает `ss`; нет принудительного SIM режима в ядре | Холодная загрузка 4.19, выбранный DTB/LCD ID, весь hardware; SIM1, звонки/SMS/LTE/data и восстановление модема |
+| F8132 — Dual SIM/DSDS | Общая dora платформа; Android userspace выбирает `dsds`; данные AUO под 4.4 сохранены отдельно | Тот же полный набор тестов 4.19; оба слота, DSDS standby, входящие на оба номера, смена data SIM, voice-call audio/recovery |
+
+Ни модельные скрипты device/vendor, ни LTALabel, ни разделы телефона здесь
+не изменялись. Общая source база не доказывает пригодность одного `boot.img`
+для обоих аппаратов.
+
+## Аппаратная матрица
+
+| Подсистема | F8131 | F8132 | Подтверждённое состояние и следующий blocker |
 | --- | --- | --- | --- |
-| msm8996-v3.0-tone-dora_generic | 246 0x30000 | 8 0 | 0x20009 0x2000a 0 0 |
-| msm8996-v3-tone-dora_generic | 246 0x30001 | 8 0 | 0x20009 0x2000a 0 0 |
-| msm8996-v3.0-pmi8996-tone-dora_generic | 246 0x30000 | 8 0 | 0x20009 0x10013 0 0 |
-| msm8996-v3-pmi8996-tone-dora_generic | 246 0x30001 | 8 0 | 0x20009 0x10013 0 0 |
+| UFS / BIMC/NoC | Код/DT; UFS отключён | Код/DT; UFS отключён | Настоящая topology/RPM bandwidth и 12×2 vectors восстановлены. Нет GCC frequency→CX corner coupling; затем нужны link startup, ICE, suspend и проверка сохранности данных. |
+| CPU / CBF / CPR / SAW | Наблюдение rates; voltage/DVFS отключены | То же | APCC match/decoder, HMSS/Kryo/APM frontends и bin data есть. Требуются ACD/CPR transaction, реальные RPM corners, SPM ownership, thermal/LPM. `maxcpus=2`, cpufreq/cpuidle выключены. |
+| MDSS / DSI / все 5 панелей | Граф/данные; отключено | Граф/данные; отключено | Настоящие clocks/PLL/SMMU/bus/GDSC/LAB/IBB/WLED и GPIO подключены в DT. Требуется MMCC digital-corner voting до любой активации. |
+| Adreno 530 / KGSL | Данные/child clocks; отключено | То же | Реальные variant CPR/fuse/frequency планы и исправлен provider cycle. Нет полного CX/MX/PMI S2/retention/SMMU/secure ABI контракта. |
+| BCM4359 C0 | Код/PCIe DT; runtime нет | То же | Sony BCMDHD и WPA2/AKM/cipher fixes сохранены. Нужны link training, DMA/IOMMU, firmware/NVRAM, CCMP/reconnect/suspend/wakeup. |
+| Clearpad / incell | Код; нет полной touch DT связи | То же | Sony MDSS/incell API есть; I2C12/controller/питание и согласование с panel sequencing ещё не завершены. |
+| VADC / FG / BCL | Код/PMIC данные; runtime нет | То же | Оригинальные каналы/профиль/JEITA и PMIC/BCL overrides сохранены. Требуются измерения, calibration, IRQ и температурные тесты. |
+| SMBcharger / BC1.2 / OTG | Код; зарядная цепь отключена | То же | Нет согласованного настоящего DPDM/USB PHY/VBUS/MicroUSB ID/ADC provider. Защиты не отключены, fixed DPDM отсутствует. |
+| USB / ADB / MTP | Код/peripheral DT; runtime нет | То же | Sony QUSB2 tuning и удаление ложного ID сохранены. Реальные cable/role/VBUS/OTG и charging ownership не завершены. |
+| Tasha / WCD9335 / audio | Драйверы; DT/firmware неполны | То же | Нужны LPASS/PIL/SSR/SLIMbus/clock маршруты и firmware, затем media, mic/headphone/speaker и voice calls. |
+| Modem / радио | Полной цепочки нет | Полной цепочки/DSDS нет | MPSS firmware/PIL/SSR, SMD/GLINK, RMNET/IPA и RIL ABI требуют завершения. Ни calls, ни data не подтверждены. |
+| Камеры | Не интегрированы полностью | То же | Sensor/CCI/ISP/EEPROM/actuator и vendor ABI. |
+| Suspend / thermal / 4 CPU | Не подтверждены; P0 | То же | Source completion CPU/power domains и physical logs; наличие TSENS/SUSPEND не подтверждает throttling или power collapse. |
 
-Машинная копия результата: [dora-original-dtb-ids.json](dora-original-dtb-ids.json).
-Все четыре используют somc,dora-row и qcom,msm8996. Имена обозначают SoC/PMIC,
-а не число SIM. **Нет доказательства**, что F8131 всегда соответствует одному
-PMIC/stepping, а F8132 другому. Назначать DTB по этому предположению нельзя.
+Bluetooth/FM, GNSS, NFC, fingerprint, датчики и вибромотор не прошли полную
+отдельную ревизию driver/DT/firmware. Поддержка по одному наличию исходников
+не заявляется. [CPU](dora-cpu-port.txt), [UFS/GCC](dora-gcc-corners.txt),
+[дисплей](dora-display-port.txt), [USB/DPDM](dora-usb-dpdm-gap.txt).
 
-В оригинальном dora DTS нет отдельного F8131/F8132 GPIO override: используются
-общие tone/dora includes. PMI8996 include меняет не только ID, но и параметры
-IBB discharge, BCL derating и flash ramp. v3.0 имеет собственные clock/CPR
-overrides. Копирование только ID в начальный 4.19 DTS не переносит эти отличия.
-Поэтому фиктивные четыре DTB с одними изменёнными идентификаторами не созданы.
-Повторная компиляция четырёх эталонов уточнила конечные значения: IBB
-discharge равен 32 у всех, поскольку Tone override заменяет 300 из
-PMI8996 include. Различаются BCL derating (550000 против 0), flash ramp
-(6P7_US против 27_US), а также 7/8 GPU CPR corners и их реальные voltage
-и clock mappings для v3.0/v3.1.
+## Панели и контрольные данные 4.4
 
-Текущий начальный 4.19 DT описывает только v3.1 + PM8994/PMI8994 и ограничивает
-bring-up двумя CPU. Полное покрытие четырёх исходных вариантов ещё отсутствует.
-Добавлен supplement REVID/VADC/FG/BCL с исходными каналами, IRQ, JEITA и
-профилем Dora 1300-3513, 330 кОм, диапазоном 17%. Это улучшает одну настоящую
-аппаратную конфигурацию, не заменяя остальные тремя копиями с другими ID.
-
-## SIM / modem / radio
-
-Прочитан android_device_sony_tone-common/rootdir/etc/init.qcom.msim.sh (main).
-Скрипт проверяет строку Model в разделе LTALabel; F8132 входит в список MSIM.
-Для него задаётся persist.vendor.radio.multisim.config=dsds, иначе ss.
-Это источник различия моделей в Android userspace, а не подтверждение,
-что modem/SSR/SMD/GLINK/RMNET/IPA в новом ядре уже работают.
-
-Скрипты определения модели и раздел LTALabel не изменялись. Не добавлены
-принудительные ss/dsds, модемная прошивка другой модели или SIM GPIO наугад.
-Нужны перенос реального firmware/remoteproc/vendor ABI и раздельные тесты:
-F8131 — SIM1, звонки/SMS/LTE/передача данных; F8132 — оба слота, DSDS standby,
-переключение data SIM, входящие звонки на оба номера и восстановление модема.
-
-## Панели: все штатные альтернативы сохранены
-
-Все шесть исходных файлов dsi-panel-dora и AUO/JDI/LGD/Sharp ID3/ID9 сохранены
-побайтово в arch/arm64/boot/dts/qcom/sony/dora/. Лицензии сохранены.
-Команды включения, выключения и power/reset последовательности сравниваются
-по SHA256 с эталоном; это проверка данных, не исполнение на панели.
-
-| Панель | Panel Name | Диапазон somc,lcd-id-adc, включительно |
+| Панель | Panel Name | LCD ADC диапазон, включительно |
 | --- | --- | --- |
 | AUO Synaptics | 4 | 1087000–1231000 |
 | JDI Synaptics | 6 | 353000–653000 |
@@ -78,92 +81,56 @@ F8131 — SIM1, звонки/SMS/LTE/передача данных; F8132 — о
 | Sharp ID3 | 3 | 1236000–1395000 |
 | Sharp ID9 | 9 | 0–57000 |
 
-Диапазоны не пересекаются. Сохранён исходный выбор по lcdid_adc из bootargs,
-somc,lcd-id-adc и somc,dsi-index, а не выбор по номеру модели телефона.
-Нет неявного fallback на preferred panel: отсутствующий/ошибочный/неизвестный
-ID и некорректные/неоднозначные диапазоны завершают выбор с NULL. Host-тест
-реальной функции проверяет эти пути, все штатные диапазоны и OF references.
-Драйвер Sony panel/incell перенесён как исходный код и компилируется отдельно;
-board DT пока не включает эти панели и их полную цепочку providers.
-Clearpad получил backend уведомлений fbdev MDSS/Tone incell; I2C12 и полная
-цепочка питания/панели ещё требуют подключения.
+Исходные panel файлы сохранены побайтово; финальный DT содержит все пять
+панелей с оригинальными 1080p60 командами и PHY timings. Выбор идёт по
+`lcdid_adc`; preferred node служит якорем перечисления, его wildcard ADC
+range удалён. Missing/invalid/unknown/ambiguous ID прекращает выбор.
+ADC=0 является штатным значением Sharp ID9 и не приравнивается к отсутствию
+параметра. Режимы 120 Hz и dynamic FPS/clock/mode switching не включены.
 
-Контрольные данные пользователя **F8132 / рабочее 4.4**:
+Данные пользователя относятся **только к F8132 с рабочим Sony 4.4**:
 
-~~~text
-lcdid_adc=0x11FFEA = physical=1179626
-Panel Name=4; somc,auo_synaptics_cmd_4_panel
+```text
+lcdid_adc=0x11FFEA = 1179626 -> AUO, Panel Name=4
 1080x1920 @ 60 Hz
-bitclk=897039360; pclk=149506560
-byteclk=112129920; escclk=19200000
-~~~
+bitclk=897039360; byteclk=112129920
+pclk=149506560; escclk=19200000
+```
 
-ADC выбирает AUO однозначно. bitclk=8*byteclk=6*pclk; значения согласованы
-с 24 bpp / 4 DSI lanes. Эти частоты не назначены всем панелям и не измерены
-под 4.19. Не добавлены принудительные lcdid_adc или panel_name в bootargs.
-Для JDI/LGD/Sharp сохраняются их собственные PHY timings и init data.
-Сохраняются ограничения 1080p60 из итогового dora override эталона;
-не включается 120 Гц только потому, что базовые файлы содержат такие режимы.
+Соотношения `bitclk=8*byteclk=6*pclk` согласованы. Эти числа не назначены
+остальным панелям и не измерены под 4.19. Автотесты выбора, данных и
+скомпилированного графа не заменяют испытание каждой фактической панели.
 
-Проверка данных: python3 scripts/dora/check-panels.py.
+## Android 14 и границы ABI
 
-## Матрица функций
+Проверка итоговой `.config` охватывает 285 явных назначений и 101
+обязательный built-in, включая Binder/BinderFS, BPF/JIT/cgroup BPF,
+PSI/cgroups, SELinux, seccomp, namespaces, memfd/ashmem, fscrypt,
+ext4/F2FS, dm-verity/FEC, loop, OverlayFS, ION/dma-buf/fences и USB gadget.
+Для обеих моделей runtime LOS21, vendor EGL/gralloc/ION/cache/secure heaps,
+32-bit clients, firmware paths, SELinux policy и FCM остаются непроверенными.
 
-| Функция | F8131 | F8132 | Что ещё требуется в 4.19 |
-| --- | --- | --- | --- |
-| Принадлежность dora/MSM8996 и общая архитектура | С | С | Реальные SoC/PMIC IDs обоих аппаратов |
-| Конфигурация ARM64/COMPAT/Binder/BPF/SELinux/ФС | Б, Н | Б, Н | Userspace LOS21, policy/FCM/bpfloader на обоих |
-| AUO 1080p60 | С, Н | Д4.4, С, Н | Полный MDSS/SMMU/bus/clock/regulator DT и физическая загрузка |
-| JDI/LGD/Sharp ID3/ID9 | С, Н | С, Н | Аппараты с каждой реально установленной панелью |
-| GPU Adreno 530 / ION | Б, О, Н | Б, О, Н | GPU DT, secure firmware/heaps, ioctl/cache ABI и vendor EGL/gralloc |
-| BCM4359 / Wi-Fi | С, Б, Н | С, Б, Н | Vendor host/QMP/GCC DT подключён; проверить DMA/SMMU, link training, firmware/calibration, WPA2 и wakeup |
-| Тачскрин Clearpad | С, Б, О, Н | С, Б, О, Н | Fbdev MDSS/Tone incell код собран; I2C12 DT и PM/reset цепочка ещё не подключены |
-| Звук / DSP / WCD9335 | С, Б, О, Н | С, Б, О, Н | Sony machine/APRv2/Q6/WCD9335 собраны; LPASS/PIL/SSR/SLIMbus DT/firmware и Sony effects ABI ещё не завершены |
-| Камеры | О, Н | О, Н | Sensor/CCI/ISP/EEPROM/actuator DT, drivers и vendor ABI |
-| UFS / SD | С, Б, О, Н | С, Б, О, Н | Sony UFS14nm восстановлен; отсутствие bus vectors/BIMC/NoC блокирует probe. ICE, suspend и filesystem integrity не проверены |
-| USB / ADB / MTP / OTG | С, Б, Н | С, Б, Н | Sony PHY tuning восстановлен; ложный GPIO24 ID удалён; реальный VBUS/role detection и OTG ещё не реализованы |
-| FG / VADC / BCL | С, Б, Н | С, Б, Н | Реальные драйверы и PM8994/PMI8994 DT; проверить PMIC/profile, калибровку, IRQ, SOC, JEITA на каждом аппарате |
-| Зарядка / OTG / BC1.2 | С, Б, О, Н | С, Б, О, Н | Sony SMBcharger собран; отсутствует подключённый DPDM/PHY и полный microUSB ID/MPP provider |
-| Modem / calls / SMS / data | О, Н | О, Н | Firmware/SSR/SMD/GLINK/RMNET/IPA, RIL и регистрация в сети |
-| SIM configuration | С: ss userspace | С: dsds userspace | SIM1 отдельно и оба слота/DSDS отдельно |
-| Suspend/resume / 4 CPU / DVFS | О, Н | О, Н | CPR/SAW/binning/clock/PMIC variants и измерения |
+BPF program-side map flags RDONLY_PROG/WRONLY_PROG не реализованы простым
+добавлением UAPI констант. Старые bpfloader code 1, BoringSSL self-check и
+vold-failed не объявлены устранёнными; для их диагноза нужны конкретные
+binary/verifier/init/fs_mgr/crypto логи нового ядра. Механизмы безопасности
+не отключаются для обхода ошибок. [Аудит LOS21](dora-android14-audit.md).
 
-Разрешённая .config оставляет CPU_FREQ/CPU_IDLE выключенными. Четыре CPU
-узла и NR_CPUS=4 не заменяют отсутствующие CPU clock/OPP/regulator/genpd
-связи; maxcpus=2 сохранён. Наличие thermal sensors не доказывает throttling.
+## Условия следующего этапа
 
-Bluetooth/FM, GNSS, NFC, fingerprint, дополнительные датчики и вибромотор
-не прошли полную отдельную ревизию driver/DT/firmware ABI этого порта.
-Их нельзя считать поддержанными по наличию общих драйверов в базе.
+Сначала завершить настоящую RPM corner aggregation и связь GCC/MMCC/CPU
+clock transitions с питанием, затем последовательно снимать соответствующие
+safety gates и повторять host/DT/component/full-build checks. Подтвердить
+boot header/размер/cmdline/ramdisk и Sony appended-DTB selection по рабочему
+образу; подготовить образ только с реальным LOS21 ramdisk и планом
+восстановления. Пока source P0 остаются, `boot.img` не готовится.
 
-Обязательные физические испытания:
+Будущие испытания требуют отдельных F8131 и F8132: реальные IDs/выбранный DT,
+pstore/early log, UFS/температуры, панели/touch/GPU, Wi-Fi/USB, audio/radio,
+зарядные защиты и suspend. Нужны аппараты с каждой штатной панелью и
+представленные SoC/PMIC варианты. Прошивки, форматирования, записи TA,
+persist, modem или userdata на этом этапе не выполнялось.
 
-- **F8131:** реальные SoC/PMIC/board IDs и выбранный DTB, холодный запуск,
-  установленная панель/LCD ID и 1080p60, touch, GPU, Wi-Fi WPA2/reconnect,
-  звук/микрофоны/гарнитура, камеры, UFS/SD, USB/OTG, батарея/температуры,
-  зарядка/отсечки/JEITA, suspend/resume и четыре CPU; отдельно SIM1,
-  звонки, SMS, LTE/data и восстановление модема.
-- **F8132:** тот же полный аппаратный набор проверяется заново на F8132;
-  дополнительно оба SIM-слота, DSDS standby, входящие на оба номера,
-  смена data SIM, звук во время звонков и восстановление модема.
-  Предоставленные AUO данные доказывают работу панели только под 4.4.
-
-Б означает наличие кода в сборочной проверке, а не привязку к работающему DT.
-В частности, существование KGSL или PCI_MSM в vmlinux не доказывает probe GPU/Wi-Fi.
-
-## Общее ядро и boot.img
-
-Оригинальная Android-конфигурация dora перечисляет F8131/F8132 и выбирает
-tone_dora_defconfig; это свидетельство общей организации исходников 4.4.
-Для 4.19 пригодность одного kernel image — цель, а пригодность одного boot.img
-для обоих аппаратов **не подтверждена**. Сейчас Image.gz-dtb содержит один
-начальный DTB, а не полный набор исходных SoC/PMIC вариантов.
-
-Нужно сверить на каждом устройстве boot header/size, cmdline, ramdisk,
-реальные msm-id/board-id/pmic-id и механизм выбора DTB загрузчиком. Затем
-собрать корректный multi-DTB набор с настоящими аппаратными overrides.
-F8131/F8132 не должны подменять SoC/PMIC IDs; выбор SIM остаётся отдельной задачей.
-
-Ни компиляция, ни эти проверки исходников не завершают универсальный порт.
-До отдельного успешного теста каждой модели нельзя объявлять полную поддержку,
-совместимый общий boot.img или готовность LOS21 к использованию на телефоне.
+SMBcharger не привязан в DT. Это не доказывает, что загрузчик остановил
+физическую зарядку: исходное состояние PMIC и реальные токи не измерялись.
+Безопасная зарядка и обычное использование не подтверждены.

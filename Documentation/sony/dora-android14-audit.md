@@ -126,3 +126,32 @@ boot.img без настоящего Android ramdisk и проверки Sony he
 log/pstore, init/SELinux AVC, bpfloader/NetBpfLoad verifier logs, mountinfo,
 vold/fs_mgr и BoringSSL tombstones. SELinux, dm-verity и crypto checks
 не отключаются для сокрытия ошибки.
+
+
+## Этап 3: сохранение ABI и пределы проверки (2026-11-02)
+
+Изменения этапа 3 не добавляют BPF map flags в UAPI и не подменяют их
+семантику. В проверенном stock LOS21 наборе не найден обязательный DEVMAP
+клиент, который обосновал бы такой backport. Выводы выше о code 1, BoringSSL
+и vold остаются в силе: новых Android runtime logs нет.
+
+Проверка итоговой конфигурации расширена до 285 явных назначений и
+101 необходимых built-ins, включая реальные аппаратные frontends.
+Binder/BinderFS, ARM64 JIT/cgroup BPF, PSI/cgroups, SELinux/seccomp,
+memfd/ashmem, fscrypt/ext4/F2FS, dm-verity/FEC, loop/OverlayFS,
+ION/dma-buf/fences и configfs gadget по-прежнему проверяются по resolved
+.config. Сборка и наличие кода не доказывают vendor ABI или запуск LOS21.
+
+Новые UFS и дисплейные графы намеренно заблокированы до настоящего
+GCC/MMCC RPM-corner coupling. Поэтому ядро сейчас не является кандидатом
+для запуска Android с внутреннего UFS. CPU_FREQ/CPU_IDLE остаются выключены,
+maxcpus=2 сохранён. Это явные исходные блокеры, а не исправление vold.
+SMBcharger/DPDM цепочка не активирована. Никакие SELinux, verity,
+BoringSSL self-test или обработчики vold failure не отключались.
+
+Полного checkout LOS21, настоящего ramdisk и проверенного рабочего boot.img
+в окружении нет. Device/vendor repositories не изменены; внешний enforcing
+cmdline patch остаётся только подготовленным патчем. Экспериментальный
+boot.img не создан. Итоговый build/probe/runtime статус см. в
+[dora-build-validation.txt](dora-build-validation.txt) и
+[dora-hardware-blockers.md](dora-hardware-blockers.md).

@@ -92,3 +92,13 @@ PMI8996 BCL derating/IBB/flash and v3.0 CPR/clock overrides are not claimed
 by changing only root IDs. Both F8131 and F8132 need real PMIC/stepping
 selection, profile/calibration, SOC/temperature/current, JEITA, IRQ and
 suspend/resume tests. No phone has booted this 4.19 port in these checks.
+
+Stage 3 extension (2026-11-02)
+-----------------------------
+All four SoC/PMIC DTBs now use pmic_node_sha256 groups in dora-power-dt.json.
+Each group is generated from the final original Sony DT, including the
+PMI8996 BCL derating override. The 32 selected PMIC/profile nodes and exact
+128-byte Dora battery profile are checked on each compiled DTB. Separate
+check-pin-safety.py verifies 33 selected boot pins; check-variants.py covers
+GPU/PMIC regulator/flash differences and final IBB=32. These tests do not
+prove measurements, PMIC probe, charging or electrical safety.

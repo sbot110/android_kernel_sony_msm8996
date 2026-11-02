@@ -17,3 +17,18 @@ be adapted against this core. Existing 4.4 hardware behavior is available
 in the parent history and reference commit, rather than mixing 4.4 kernel
 core files into 4.19. Upstream COPYING and source license notices retained.
 No successful device boot or vendor userspace ABI compatibility is implied.
+
+Stage 3 hardware imports (2026-11-02)
+-----------------------------------
+The Linux 4.19 core/base was not replaced. Sony hardware reference remains
+0c295b15b6d0fb59a64e13b9e0ef2070818ef2a1. Original copyright/GPL notices,
+register values, fuse arrays and final-DT datasets are retained for:
+- cpr3-hmss-regulator.c, cpr3-mmss-regulator.c, kryo-regulator.c;
+- drivers/power/qcom/apm.c -> drivers/soc/qcom/msm-apm.c;
+- leds-qpnp-wled.c;
+- msm8996-bus topology and final four Dora CPU/GPU/PMIC/display datasets.
+API adaptations and source links are documented in dora-cpu-port.txt,
+dora-gfx-variants.txt, dora-display-port.txt and dora-gcc-corners.txt.
+Native GCC/MMCC/genpd remain actual MMIO owners. No SDM845 operating
+parameters were substituted for MSM8996. The Sony 4.4 reference and its
+history remain reachable; the reference 4.4 branch is unchanged.

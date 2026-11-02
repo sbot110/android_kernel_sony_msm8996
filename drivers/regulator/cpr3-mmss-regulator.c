@@ -1174,8 +1174,10 @@ static int cpr3_mmss_regulator_probe(struct platform_device *pdev)
 	match = of_match_node(cpr_regulator_match_table, dev->of_node);
 	if (match)
 		ctrl->soc_revision = (uintptr_t)match->data;
-	else
+	else {
 		cpr3_err(ctrl, "could not find compatible string match\n");
+		return -EINVAL;
+	}
 
 	rc = cpr3_map_fuse_base(ctrl, pdev);
 	if (rc) {

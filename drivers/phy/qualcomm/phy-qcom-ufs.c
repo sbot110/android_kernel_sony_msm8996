@@ -399,13 +399,23 @@ static int ufs_qcom_phy_enable_vreg(struct device *dev,
 {
 	int ret = 0;
 
-	if (!vreg || vreg->enabled)
+	if (!vreg)
 		goto out;
+	/* An always-on pad rail stays enabled in LPM across PHY power-off. */
+	if (vreg->enabled) {
+		if (vreg->is_always_on) {
+			ret = ufs_qcom_phy_cfg_vreg(dev, vreg, true);
+			if (ret)
+				ufs_qcom_phy_cfg_vreg(dev, vreg, false);
+		}
+		goto out;
+	}
 
 	ret = ufs_qcom_phy_cfg_vreg(dev, vreg, true);
 	if (ret) {
 		dev_err(dev, "%s: ufs_qcom_phy_cfg_vreg() failed, err=%d\n",
 			__func__, ret);
+		ufs_qcom_phy_cfg_vreg(dev, vreg, false);
 		goto out;
 	}
 
@@ -413,6 +423,7 @@ static int ufs_qcom_phy_enable_vreg(struct device *dev,
 	if (ret) {
 		dev_err(dev, "%s: enable failed, err=%d\n",
 				__func__, ret);
+		ufs_qcom_phy_cfg_vreg(dev, vreg, false);
 		goto out;
 	}
 
@@ -779,7 +790,7 @@ int ufs_qcom_phy_power_on(struct phy *generic_phy)
 {
 	struct ufs_qcom_phy *phy_common = get_ufs_qcom_phy(generic_phy);
 	struct device *dev = phy_common->dev;
-	int err;
+	int err, cleanup_err;
 
 	if (phy_common->is_powered_on)
 		return 0;
@@ -795,7 +806,7 @@ int ufs_qcom_phy_power_on(struct phy *generic_phy)
 	if (err) {
 		dev_err(dev, "%s enable vdda_phy failed, err=%d\n",
 			__func__, err);
-		goto out;
+		goto out_drop_rpmh;
 	}
 
 	phy_common->phy_spec_ops->power_control(phy_common, true);
@@ -805,21 +816,21 @@ int ufs_qcom_phy_power_on(struct phy *generic_phy)
 	if (err) {
 		dev_err(dev, "%s enable vdda_pll failed, err=%d\n",
 			__func__, err);
-		goto out_disable_phy;
+		goto out_powerdown;
 	}
 
 	err = ufs_qcom_phy_enable_iface_clk(phy_common);
 	if (err) {
 		dev_err(dev, "%s enable phy iface clock failed, err=%d\n",
 			__func__, err);
-		goto out_disable_pll;
+		goto out_powerdown;
 	}
 
 	err = ufs_qcom_phy_enable_ref_clk(phy_common);
 	if (err) {
 		dev_err(dev, "%s enable phy ref clock failed, err=%d\n",
 			__func__, err);
-		goto out_disable_iface_clk;
+		goto out_powerdown;
 	}
 
 	/* enable device PHY ref_clk pad rail */
@@ -829,21 +840,28 @@ int ufs_qcom_phy_power_on(struct phy *generic_phy)
 		if (err) {
 			dev_err(dev, "%s enable vddp_ref_clk failed, err=%d\n",
 				__func__, err);
-			goto out_disable_ref_clk;
+			goto out_powerdown;
 		}
 	}
 
 	phy_common->is_powered_on = true;
 	goto out;
 
-out_disable_ref_clk:
+out_powerdown:
+	/* Assert the revision-specific reset before clocks or analog rails drop. */
+	phy_common->phy_spec_ops->power_control(phy_common, false);
+	if (phy_common->vddp_ref_clk.reg)
+		ufs_qcom_phy_disable_vreg(dev, &phy_common->vddp_ref_clk);
 	ufs_qcom_phy_disable_ref_clk(phy_common);
-out_disable_iface_clk:
 	ufs_qcom_phy_disable_iface_clk(phy_common);
-out_disable_pll:
 	ufs_qcom_phy_disable_vreg(dev, &phy_common->vdda_pll);
-out_disable_phy:
 	ufs_qcom_phy_disable_vreg(dev, &phy_common->vdda_phy);
+out_drop_rpmh:
+	cleanup_err = ufs_qcom_phy_setup_rpmh_rsc(dev,
+					      &phy_common->rpmh_rsc, 0);
+	if (cleanup_err)
+		dev_err(dev, "%s: failed to release RPMH after error %d: %d\n",
+			__func__, err, cleanup_err);
 out:
 	return err;
 }

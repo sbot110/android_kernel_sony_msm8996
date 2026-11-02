@@ -1,0 +1,80 @@
+Dora Stage 3 GPU and SoC/PMIC source integration
+==============================================
+
+Source: final flattened Sony 4.4.302 DTs from
+0c295b15b6d0fb59a64e13b9e0ef2070818ef2a1. Original driver copyright and GPLv2
+are preserved in the MMSS CPR frontend and copied hardware datasets. The native
+4.19 MMCC driver remains the sole MMIO/GDSC owner.
+
+Implemented
+-----------
+* The original MMSS CPR3 frontend (fuse decoding, adjustments and aging logic)
+  compiles against this tree's common CPR3 core; no voltage data was guessed.
+  An unmatched OF compatible now fails instead of continuing with revision zero.
+* MMCC has a child registration path for the five actual GFX clocks. Base MMCC
+  clocks register first, avoiding the CPR -> MMCC -> CPR probe cycle. GFX source
+  attaches the existing CCF voltage-class mechanism to real GFX/MX suppliers.
+* The child reads the original fuse bin and selected frequency/corner plan. It
+  rejects unsupported/reserved bins or corner values. The v3.1 MinSVS write uses
+  the real native RPM supplier and propagates errors; abort restores the old
+  notification. Parent GFX fallback is suppressed even for a disabled child.
+* Four source DT variants carry real final hardware differences, including all
+  GFX CPR quotient/voltage/aging arrays, fuse-combo/binning arrays and GFX/MX
+  frequency plans. These chains remain disabled; this is source integration,
+  not runtime support for four devices.
+
+Variant differences retained
+----------------------------
+MSM8996 v3.0: msm-id revision 0x30000; seven GFX CPR corners, fmax map 2/3/5/7,
+original system-corner supply/voltage data, non-aging voltage/quotient adjustments,
+and the original bin0 GFX corner mapping.
+MSM8996 v3.1: msm-id revision 0x30001; eight GFX CPR corners, fmax map 2/4/6/8,
+original aging/reference and fuse-adjustment data, and the original bin0 mapping.
+PMI8994: pmic-id 0x20009/0x2000a, BCL inhibit-derating 550000 uA, flash ramps
+6P7_US. PMI8996: pmic-id 0x20009/0x10013, real SPMI PMIC compatibles, BCL inhibit
+0 uA, flash ramps 27_US. The final IBB discharge resistor is 32 for BOTH PMICs;
+the intermediate PMI8996 value 300 is deliberately not used.
+The final CPU/HMSS bin/fuse/corner datasets compare identically in all four
+original DTBs. F8131/F8132 SIM policy remains independent of stepping and PMIC.
+
+Unresolved activation dependencies
+---------------------------------
+* Real RPM corner frontend: CX smpa id1 and MX smpa id2; logical corners 1..7 map
+  to wire 0..6. Keys corn=0x6e726f63 and floor vfc=0x00636676 require per-key
+  max aggregation across BOTH and ACTIVE-only clients, active/sleep handling,
+  enable semantics and ACK. Native microvolt SMD regulators are not substitutes.
+* Physical PMI S2 at 0x1700: original qpnp-regulator frontend is absent. Exact
+  min/max 400000/1015000 uV and 500 us enable time are retained disabled. Merely
+  describing S2 under the native pmi8994 container also registers other rails;
+  unowned rails must not be subjected to late disable_unused as a shortcut.
+* Independent original gpu_mx_clk vote and KGSL GX/CX retention/power sequencing,
+  KGSL/SMMU contexts and secure/vendor GPU ABI remain unvalidated/unintegrated.
+  All separate MX plans remain in the source dataset for that coordinated port.
+* The original v3.0 bin3 inherited plan names corner8 although its CPR table has
+  seven corners. This source combination is preserved, not guessed into a new
+  voltage plan; the child fails if the selected supplier cannot support it.
+* Native MMCC shared CX voltage policy is still incomplete for active display
+  consumers. Native GDSCs alone do not replace RPM corner votes.
+* Original flash driver depends on legacy VADC, charger/battery and boost-bypass
+  policy. Full final flash data stays disabled; FLASH_V2 does not describe it.
+
+Validation and limits
+---------------------
+The component ARM64 builds mmcc-msm8996.o, cpr3-mmss-regulator.o,
+cpr3-regulator.o and cpr3-util.o completed with exit 0 in the Stage 3 toolchain.
+All four compiled DT datasets pass scripts/dora/check-variants.py --require-four
+--selftest. The checker compares raw final data after documented native clock,
+phandle and SPMI-cell transformations, verifies the mandatory suppliers, PMIC
+identities, final IBB/BCL values, fuse location and disabled guards. Negative
+cases cover corrupted corner data, flash ramps, enabled incomplete chains,
+missing clocks, altered fuse cells, IBB=300 and invalid hardware IDs.
+Optional --reference-dir compares the checked-in manifest against all four
+original flattened Sony DTBs again. Source artifact hashes are recorded in
+Documentation/sony/dora-variant-dt.json.
+
+Original Sony arch/arm/boot/dts/qcom/Makefile order is v3.0/PMI8994,
+v3.0/PMI8996, v3.1/PMI8994, v3.1/PMI8996. Reproducing this order does not prove
+bootloader selection: actual Sony boot header/appended-DTB matching still needs
+a real working boot.img and device evidence. No model-to-PMIC mapping is made.
+No GPU, DVFS, suspend, flash, bootloader selection or physical boot success is
+claimed by these checks. This work does not clear the BOOT TEST READY gate.

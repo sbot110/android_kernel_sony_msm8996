@@ -22,6 +22,11 @@
 #include <linux/regmap.h>
 #include <linux/reset-controller.h>
 #include <linux/clk.h>
+#include <linux/slab.h>
+#include <linux/nvmem-consumer.h>
+#include <linux/of_platform.h>
+#include <linux/regulator/consumer.h>
+#include <linux/soc/qcom/smd-rpm.h>
 
 #include <dt-bindings/clock/qcom,mmcc-msm8996.h>
 
@@ -3355,13 +3360,302 @@ static const struct of_device_id mmcc_msm8996_match_table[] = {
 };
 MODULE_DEVICE_TABLE(of, mmcc_msm8996_match_table);
 
+/*
+ * MSM8996 GFX voltage/frequency contract from Sony 4.4.302, commit
+ * 0c295b15b6d0fb59a64e13b9e0ef2070818ef2a1, clock-mmss-8996.c.
+ * Keep one MMIO owner. The child borrows MMCC's regmap and registers only
+ * GFX clocks after base MMCC clocks (needed by CPR) are available.
+ */
+#define MSM8996_GFX_MAX_LEVELS 16
+#define MSM8996_GFX_RPM_STATE_KEY 0x54415453
+#define MSM8996_GFX_RPM_RESOURCE_ID 3
+
+struct msm8996_gfx {
+	struct clk_rcg2 src;
+	struct clk_branch branch[4];
+	struct clk_ops ops;
+	struct clk_init_data src_init;
+	struct clk_vdd_class vdd;
+	struct regulator *supplies[2];
+	struct qcom_smd_rpm *rpm;
+	struct notifier_block rate_nb;
+	struct clk_hw_onecell_data *data;
+	unsigned long *fmax;
+	int *corners;
+	int *votes;
+	unsigned int levels;
+	bool v31;
+};
+
+static const struct of_device_id msm8996_gfx_match_table[] = {
+	{ .compatible = "qcom,msm8996-v3.0-gfxcc" },
+	{ .compatible = "qcom,msm8996-v3.1-gfxcc" },
+	{ }
+};
+
+static const unsigned int msm8996_gfx_ids[] = {
+	GFX3D_CLK_SRC, GPU_GX_GFX3D_CLK, GPU_GX_RBBMTIMER_CLK,
+	GPU_AHB_CLK, GPU_AON_ISENSE_CLK,
+};
+
+static int msm8996_gfx_level(struct msm8996_gfx *gfx, unsigned long rate)
+{
+	unsigned int i;
+
+	for (i = 1; i < gfx->levels; i++)
+		if (DIV_ROUND_CLOSEST(rate, 1000) <=
+			DIV_ROUND_CLOSEST(gfx->fmax[i], 1000))
+			return i;
+	return -EINVAL;
+}
+
+static int msm8996_gfx_determine_rate(struct clk_hw *hw,
+				     struct clk_rate_request *req)
+{
+	struct msm8996_gfx *gfx = container_of(to_clk_rcg2(hw),
+						struct msm8996_gfx, src);
+	int level = msm8996_gfx_level(gfx, req->rate);
+
+	if (level < 0)
+		return level;
+	req->rate = gfx->fmax[level];
+	if (req->rate < req->min_rate || req->rate > req->max_rate)
+		return -EINVAL;
+	return clk_gfx3d_ops.determine_rate(hw, req);
+}
+
+static int msm8996_gfx_notify(struct notifier_block *nb,
+			     unsigned long event, void *data)
+{
+	struct msm8996_gfx *gfx = container_of(nb, struct msm8996_gfx, rate_nb);
+	struct clk_notifier_data *change = data;
+	struct {
+		__le32 key;
+		__le32 nbytes;
+		__le32 value;
+	} request;
+	int old, new, ret;
+
+	if (event != PRE_RATE_CHANGE && event != ABORT_RATE_CHANGE)
+		return NOTIFY_DONE;
+	old = msm8996_gfx_level(gfx, change->old_rate);
+	new = msm8996_gfx_level(gfx, change->new_rate);
+	if (old < 0 || new < 0)
+		return notifier_from_errno(-EINVAL);
+	if (gfx->corners[old * 2] == gfx->corners[new * 2])
+		return NOTIFY_OK;
+	if (event == ABORT_RATE_CHANGE)
+		new = old;
+	request.key = cpu_to_le32(MSM8996_GFX_RPM_STATE_KEY);
+	request.nbytes = cpu_to_le32(sizeof(request.value));
+	request.value = cpu_to_le32(gfx->corners[new * 2] == 2);
+	ret = qcom_rpm_smd_write(gfx->rpm, QCOM_SMD_RPM_ACTIVE_STATE,
+				QCOM_SMD_RPM_MISC_CLK, MSM8996_GFX_RPM_RESOURCE_ID,
+				&request, sizeof(request));
+	return notifier_from_errno(ret);
+}
+
+static void msm8996_gfx_notifier_unregister(void *data)
+{
+	struct msm8996_gfx *gfx = data;
+
+	clk_notifier_unregister(gfx->src.clkr.hw.clk, &gfx->rate_nb);
+}
+
+static int msm8996_gfx_read_plan(struct device *dev, struct msm8996_gfx *gfx)
+{
+	struct nvmem_cell *cell;
+	u8 *fuse;
+	u32 *plan, bin = 0;
+	char property[40];
+	size_t len;
+	int count, ret, i;
+
+	cell = devm_nvmem_cell_get(dev, "speed-bin");
+	if (IS_ERR(cell))
+		return PTR_ERR(cell);
+	fuse = nvmem_cell_read(cell, &len);
+	if (IS_ERR(fuse))
+		return PTR_ERR(fuse);
+	if (!len || len > sizeof(bin)) {
+		kfree(fuse);
+		return -EINVAL;
+	}
+	for (i = 0; i < len; i++)
+		bin |= (u32)fuse[i] << (i * 8);
+	kfree(fuse);
+	/* Reserved/unknown bins must not fall back to the fastest bin zero. */
+	if (bin > 3)
+		return -ENODEV;
+	snprintf(property, sizeof(property), "qcom,gfxfreq-speedbin%u", bin);
+	count = of_property_count_u32_elems(dev->of_node, property);
+	if (count < 6 || count % 3 || count / 3 > MSM8996_GFX_MAX_LEVELS)
+		return -EINVAL;
+	gfx->levels = count / 3;
+	plan = devm_kcalloc(dev, count, sizeof(*plan), GFP_KERNEL);
+	gfx->fmax = devm_kcalloc(dev, gfx->levels, sizeof(*gfx->fmax), GFP_KERNEL);
+	gfx->corners = devm_kcalloc(dev, gfx->levels * 2,
+				  sizeof(*gfx->corners), GFP_KERNEL);
+	gfx->votes = devm_kcalloc(dev, gfx->levels, sizeof(*gfx->votes), GFP_KERNEL);
+	if (!plan || !gfx->fmax || !gfx->corners || !gfx->votes)
+		return -ENOMEM;
+	ret = of_property_read_u32_array(dev->of_node, property, plan, count);
+	if (ret)
+		return ret;
+	if (plan[0] || plan[1] || plan[2])
+		return -EINVAL;
+	for (i = 1; i < gfx->levels; i++) {
+		if (plan[i * 3] <= plan[(i - 1) * 3] ||
+		    !plan[i * 3 + 1] || plan[i * 3 + 1] > INT_MAX ||
+		    !plan[i * 3 + 2] || plan[i * 3 + 2] > INT_MAX)
+			return -EINVAL;
+		gfx->fmax[i] = plan[i * 3];
+		gfx->corners[i * 2] = plan[i * 3 + 1];
+		gfx->corners[i * 2 + 1] = plan[i * 3 + 2];
+		ret = regulator_is_supported_voltage(gfx->supplies[0],
+				gfx->corners[i * 2], gfx->corners[i * 2]);
+		if (ret <= 0)
+			return ret ? ret : -EINVAL;
+		ret = regulator_is_supported_voltage(gfx->supplies[1],
+				gfx->corners[i * 2 + 1], gfx->corners[i * 2 + 1]);
+		if (ret <= 0)
+			return ret ? ret : -EINVAL;
+	}
+	dev_info(dev, "GFX fuse bin %u, %u real frequency/corner levels\n",
+		 bin, gfx->levels - 1);
+	return 0;
+}
+
+static int msm8996_gfx_probe(struct platform_device *pdev)
+{
+	struct device *dev = &pdev->dev;
+	struct msm8996_gfx *gfx;
+	struct regmap *regmap;
+	struct clk_branch *original[] = { &gpu_gx_gfx3d_clk,
+		&gpu_gx_rbbmtimer_clk, &gpu_ahb_clk, &gpu_aon_isense_clk };
+	unsigned int nclks = GPU_AON_ISENSE_CLK + 1;
+	int i, ret;
+
+	if (!dev->parent || !of_device_is_compatible(dev->parent->of_node,
+						   "qcom,mmcc-msm8996"))
+		return -EINVAL;
+	regmap = dev_get_regmap(dev->parent, NULL);
+	if (!regmap)
+		return -EPROBE_DEFER;
+	gfx = devm_kzalloc(dev, sizeof(*gfx), GFP_KERNEL);
+	if (!gfx)
+		return -ENOMEM;
+	gfx->supplies[0] = devm_regulator_get(dev, "vdd-gfx");
+	if (IS_ERR(gfx->supplies[0]))
+		return PTR_ERR(gfx->supplies[0]);
+	gfx->supplies[1] = devm_regulator_get(dev, "vdd-mx");
+	if (IS_ERR(gfx->supplies[1]))
+		return PTR_ERR(gfx->supplies[1]);
+	ret = msm8996_gfx_read_plan(dev, gfx);
+	if (ret)
+		return ret;
+	gfx->v31 = of_device_is_compatible(dev->of_node, "qcom,msm8996-v3.1-gfxcc");
+	if (gfx->v31) {
+		gfx->rpm = qcom_smd_rpm_get(dev);
+		if (IS_ERR(gfx->rpm))
+			return PTR_ERR(gfx->rpm);
+	}
+	gfx->data = devm_kzalloc(dev, sizeof(*gfx->data) +
+				nclks * sizeof(gfx->data->hws[0]), GFP_KERNEL);
+	if (!gfx->data)
+		return -ENOMEM;
+	gfx->data->num = nclks;
+	for (i = 0; i < nclks; i++)
+		gfx->data->hws[i] = ERR_PTR(-ENOENT);
+	gfx->vdd.class_name = "msm8996_gfx";
+	gfx->vdd.regulator = gfx->supplies;
+	gfx->vdd.num_regulators = ARRAY_SIZE(gfx->supplies);
+	gfx->vdd.vdd_uv = gfx->corners;
+	gfx->vdd.level_votes = gfx->votes;
+	gfx->vdd.num_levels = gfx->levels;
+	/* No highest-corner registration vote or unowned handoff-list entry. */
+	gfx->vdd.skip_handoff = true;
+	gfx->vdd.cur_level = 0;
+	mutex_init(&gfx->vdd.lock);
+	gfx->src = gfx3d_clk_src;
+	gfx->src_init = *gfx3d_clk_src.clkr.hw.init;
+	gfx->ops = clk_gfx3d_ops;
+	gfx->ops.determine_rate = msm8996_gfx_determine_rate;
+	gfx->src_init.ops = &gfx->ops;
+	gfx->src_init.vdd_class = &gfx->vdd;
+	gfx->src_init.rate_max = gfx->fmax;
+	gfx->src_init.num_rate_max = gfx->levels;
+	gfx->src.clkr.hw.init = &gfx->src_init;
+	gfx->src.clkr.regmap = regmap;
+	ret = devm_clk_register_regmap(dev, &gfx->src.clkr);
+	if (ret)
+		return ret;
+	gfx->data->hws[GFX3D_CLK_SRC] = &gfx->src.clkr.hw;
+	for (i = 0; i < ARRAY_SIZE(original); i++) {
+		gfx->branch[i] = *original[i];
+		gfx->branch[i].clkr.regmap = regmap;
+		ret = devm_clk_register_regmap(dev, &gfx->branch[i].clkr);
+		if (ret)
+			return ret;
+		gfx->data->hws[msm8996_gfx_ids[i + 1]] = &gfx->branch[i].clkr.hw;
+	}
+	if (gfx->v31) {
+		gfx->rate_nb.notifier_call = msm8996_gfx_notify;
+		ret = clk_notifier_register(gfx->src.clkr.hw.clk, &gfx->rate_nb);
+		if (ret)
+			return ret;
+		ret = devm_add_action_or_reset(dev,
+				msm8996_gfx_notifier_unregister, gfx);
+		if (ret)
+			return ret;
+	}
+	platform_set_drvdata(pdev, gfx);
+	return devm_of_clk_add_hw_provider(dev, of_clk_hw_onecell_get, gfx->data);
+}
+
+static struct platform_driver msm8996_gfx_driver = {
+	.probe = msm8996_gfx_probe,
+	.driver = {
+		.name = "msm8996-gfxcc",
+		.of_match_table = msm8996_gfx_match_table,
+		.suppress_bind_attrs = true,
+	},
+};
+
+static void msm8996_mmcc_depopulate(void *data)
+{
+	of_platform_depopulate(data);
+}
+
 static int mmcc_msm8996_probe(struct platform_device *pdev)
 {
 	struct device *dev = &pdev->dev;
 	int i, ret;
 	struct regmap *regmap;
+	struct qcom_cc_desc desc = mmcc_msm8996_desc;
+	struct device_node *child;
+	bool split_gfx = false;
 
-	regmap = qcom_cc_map(pdev, &mmcc_msm8996_desc);
+	/* A disabled regulated child must not expose the parent's unregulated
+	 * GFX clocks as a fallback. Base MMCC still provides the CPR bus clocks.
+	 */
+	for_each_child_of_node(dev->of_node, child) {
+		if (of_match_node(msm8996_gfx_match_table, child)) {
+			split_gfx = true;
+			of_node_put(child);
+			break;
+		}
+	}
+	if (split_gfx) {
+		desc.clks = devm_kmemdup(dev, desc.clks,
+				desc.num_clks * sizeof(*desc.clks), GFP_KERNEL);
+		if (!desc.clks)
+			return -ENOMEM;
+		for (i = 0; i < ARRAY_SIZE(msm8996_gfx_ids); i++)
+			desc.clks[msm8996_gfx_ids[i]] = NULL;
+	}
+
+	regmap = qcom_cc_map(pdev, &desc);
 	if (IS_ERR(regmap))
 		return PTR_ERR(regmap);
 
@@ -3376,17 +3670,42 @@ static int mmcc_msm8996_probe(struct platform_device *pdev)
 			return ret;
 	}
 
-	return qcom_cc_really_probe(pdev, &mmcc_msm8996_desc, regmap);
+	ret = qcom_cc_really_probe(pdev, &desc, regmap);
+	if (ret || !split_gfx)
+		return ret;
+	ret = of_platform_populate(dev->of_node, NULL, NULL, dev);
+	if (ret) {
+		of_platform_depopulate(dev);
+		return ret;
+	}
+	return devm_add_action_or_reset(dev, msm8996_mmcc_depopulate, dev);
 }
 
 static struct platform_driver mmcc_msm8996_driver = {
 	.probe		= mmcc_msm8996_probe,
 	.driver		= {
 		.name	= "mmcc-msm8996",
+		.suppress_bind_attrs = true,
 		.of_match_table = mmcc_msm8996_match_table,
 	},
 };
-module_platform_driver(mmcc_msm8996_driver);
+static struct platform_driver * const msm8996_mmcc_drivers[] = {
+	&msm8996_gfx_driver, &mmcc_msm8996_driver,
+};
+
+static int __init mmcc_msm8996_init(void)
+{
+	return platform_register_drivers(msm8996_mmcc_drivers,
+					ARRAY_SIZE(msm8996_mmcc_drivers));
+}
+module_init(mmcc_msm8996_init);
+
+static void __exit mmcc_msm8996_exit(void)
+{
+	platform_unregister_drivers(msm8996_mmcc_drivers,
+				  ARRAY_SIZE(msm8996_mmcc_drivers));
+}
+module_exit(mmcc_msm8996_exit);
 
 MODULE_DESCRIPTION("QCOM MMCC MSM8996 Driver");
 MODULE_LICENSE("GPL v2");

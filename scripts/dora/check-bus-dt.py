@@ -113,7 +113,7 @@ def validate(nodes, expected):
     if not enabled(nodes, bus):
         raise ValueError('bus provider disabled')
     if host['props'].get('status') != expected['ufs_host_safety_status'].encode() + b'\0':
-        raise ValueError('UFS activated before GCC CX corner coupling is implemented')
+        raise ValueError('UFS activated on eMMC Dora')
     for name, domain in expected['domain_migration'].items():
         proxy = one(nodes, lambda n: n['props'].get('regulator-name') == name.encode() + b'\0')
         spec = cells(proxy['props']['power-domains'])
@@ -132,7 +132,7 @@ def validate(nodes, expected):
         if index in ids:
             raise ValueError('duplicate bus cell-id')
         ids[index] = child
-    for source, destination in ((95, 512), (1, 650)):
+    for source, destination in ((95, 512), (1, 650), (78, 512), (81, 512)):
         queue, seen = [ids[source]], set()
         while queue:
             node = queue.pop()
@@ -142,7 +142,7 @@ def validate(nodes, expected):
             seen.add(index)
             queue.extend(h[v] for v in cells(node['props'].get('qcom,connections', b'')))
         if destination not in seen:
-            raise ValueError('unreachable UFS bandwidth route')
+            raise ValueError('unreachable real MSM8996 storage bandwidth route')
     # IDs must be populated for this SoC, not merely declared in a shared header.
     for mapping in expected['clock_migration']:
         source = (ROOT / mapping['driver']).read_text()
@@ -177,11 +177,11 @@ def main():
     except (ValueError, KeyError, IndexError, struct.error) as error:
         print('FAIL:', error)
         return 1
-    print('PASS: %d original MSM8996 fabric/master/slave nodes, native clocks/domains, RPM and both UFS routes' % count)
+    print('PASS: %d original MSM8996 fabric/master/slave nodes, native clocks/domains, RPM and eMMC/SD routes (legacy UFS fixtures retained)' % count)
     if args.selftest:
         print('PASS: six missing-provider/vector/safety-gate negative tests')
-    print('UFS host safety-gated: native GCC CX voltage-corner coupling is missing.')
-    print('DT structure only; RPM votes and UFS I/O require device tests.')
+    print('Dora internal storage is eMMC; unused UFS host remains disabled.')
+    print('DT structure only; RPM votes and eMMC/SD I/O require device tests.')
     return 0
 
 

@@ -1,0 +1,226 @@
+{
+  "adaptations": [
+    "Legacy clock hashes -> populated native GCC SDCC IDs",
+    "Legacy vdd/vdd-io supplies -> actual native RPM PM8994 providers",
+    "Pin states retain group/bias/drive; obsolete num-grp-pins removed",
+    "sdhc-msm-crypto omitted: removed legacy ICE API, inline crypto remains unvalidated",
+    "mmc0/mmc1 aliases added to preserve actual userspace numeric paths; sdhc1/sdhc2 driver aliases retained",
+    "Controller safety gates remain until GCC CX coupling is validated"
+  ],
+  "controllers": {
+    "/soc/sdhci@7464900": {
+      "clock-names": "69666163655f636c6b00636f72655f636c6b006963655f636f72655f636c6b00",
+      "clocks": [
+        "GCC_SDCC1_AHB_CLK",
+        "GCC_SDCC1_APPS_CLK",
+        "GCC_SDCC1_ICE_CORE_CLK"
+      ],
+      "compatible": "71636f6d2c73646863692d6d736d00",
+      "interrupt-names": "68635f697271007077725f69727100",
+      "interrupts": "000000000000008d00000000000000000000008600000000",
+      "non-removable": "",
+      "pinctrl-0": [
+        "sdc1_clk_on",
+        "sdc1_cmd_on",
+        "sdc1_data_on",
+        "sdc1_rclk_on"
+      ],
+      "pinctrl-1": [
+        "sdc1_clk_off",
+        "sdc1_cmd_off",
+        "sdc1_data_off",
+        "sdc1_rclk_off"
+      ],
+      "pinctrl-names": "61637469766500736c65657000",
+      "qcom,bus-bw-vectors-bps": "0000000000061a8001312d00017d784002faf08005f5e1000bebc20017d78400ffffffff",
+      "qcom,bus-speed-mode": "48533430305f317038760048533230305f31703876004444525f3170387600",
+      "qcom,bus-width": "00000008",
+      "qcom,clk-rates": "00061a8001312d00017d784002faf08005b8d8000b71b00016e36000",
+      "qcom,devfreq,freq-table": "01312d000bebc200",
+      "qcom,ice-clk-rates": "11e1a30008f0d180",
+      "qcom,large-address-bus": "",
+      "qcom,msm-bus,name": "736468633100",
+      "qcom,msm-bus,num-cases": "00000009",
+      "qcom,msm-bus,num-paths": "00000001",
+      "qcom,msm-bus,vectors-KBps": "0000004e0000020000000000000000000000004e000002000000064000000c800000004e0000020000013880000271000000004e00000200000186a000030d400000004e0000020000030d4000061a800000004e0000020000061a80000c35000000004e0000020000061a80000c35000000004e0000020000061a80000c35000000004e00000200001f4000003e8000",
+      "qcom,nonremovable": "",
+      "qcom,pm-qos-cmdq-latency-us": "00000046000000460000004600000046",
+      "qcom,pm-qos-cpu-groups": "000000030000000c",
+      "qcom,pm-qos-irq-cpu": "00000000",
+      "qcom,pm-qos-irq-latency": "0000004600000046",
+      "qcom,pm-qos-irq-type": "616666696e655f636f72657300",
+      "qcom,pm-qos-legacy-latency-us": "00000046000000460000004600000046",
+      "qcom,vdd-current-level": "000000c80008b290",
+      "qcom,vdd-io-always-on": "",
+      "qcom,vdd-io-current-level": "0000006e0004f588",
+      "qcom,vdd-io-voltage-level": "001b7740001b7740",
+      "qcom,vdd-voltage-level": "002d0370002d0370",
+      "reg": "0746490000000500074640000000080007464e000000019c",
+      "reg-names": "68635f6d656d00636f72655f6d656d00636d64715f6d656d00",
+      "status": "6f6b00",
+      "vdd-io-supply": "pm8994_s4",
+      "vdd-supply": "pm8994_l20"
+    },
+    "/soc/sdhci@74a4900": {
+      "cd-gpios": [
+        "msmgpio",
+        40,
+        0
+      ],
+      "clock-names": "69666163655f636c6b00636f72655f636c6b00",
+      "clocks": [
+        "GCC_SDCC2_AHB_CLK",
+        "GCC_SDCC2_APPS_CLK"
+      ],
+      "compatible": "71636f6d2c73646863692d6d736d00",
+      "interrupt-map-mask": "00000003",
+      "interrupt-names": "68635f697271007077725f69727100",
+      "interrupts": "000000000000007d0000000000000000000000dd00000000",
+      "pinctrl-0": [
+        "sdc2_clk_on",
+        "sdc2_cmd_on",
+        "sdc2_data_on"
+      ],
+      "pinctrl-1": [
+        "sdc2_clk_off",
+        "sdc2_cmd_off",
+        "sdc2_data_off"
+      ],
+      "pinctrl-names": "61637469766500736c65657000",
+      "qcom,bus-bw-vectors-bps": "0000000000061a8001312d00017d784002625a0002faf08004c4b40005f5e1000bebc200ffffffff",
+      "qcom,bus-speed-mode": "53445231320053445232350053445235300044445235300053445231303400",
+      "qcom,bus-width": "00000004",
+      "qcom,clk-rates": "00061a80017d784002625a0002faf08004c4b40005f5e1000bebc200",
+      "qcom,devfreq,freq-table": "01312d000bebc200",
+      "qcom,large-address-bus": "",
+      "qcom,msm-bus,name": "736468633200",
+      "qcom,msm-bus,num-cases": "0000000a",
+      "qcom,msm-bus,num-paths": "00000001",
+      "qcom,msm-bus,vectors-KBps": "0000005100000200000000000000000000000051000002000000041600000c8000000051000002000000cc3e0002710000000051000002000000ff5000030d4000000051000002000001987c0004e20000000051000002000001fe9e00061a800000005100000200000330f80009c40000000051000002000003fd3e000c350000000051000002000003fd3e000c3500000000510000020000146cc2003e8000",
+      "qcom,pm-qos-cpu-groups": "000000030000000c",
+      "qcom,pm-qos-irq-cpu": "00000000",
+      "qcom,pm-qos-irq-latency": "0000004600000046",
+      "qcom,pm-qos-irq-type": "616666696e655f636f72657300",
+      "qcom,pm-qos-legacy-latency-us": "00000046000000460000004600000046",
+      "qcom,vdd-current-level": "000000c8000c3500",
+      "qcom,vdd-io-current-level": "000000c8000055f0",
+      "qcom,vdd-io-voltage-level": "001b7740002d0370",
+      "qcom,vdd-voltage-level": "002d0370002d0370",
+      "reg": "074a490000000314074a400000000800",
+      "reg-names": "68635f6d656d00636f72655f6d656d00",
+      "status": "6f6b00",
+      "uim2-gpios": [
+        "msmgpio",
+        29,
+        0
+      ],
+      "vdd-io-supply": "pm8994_l13",
+      "vdd-supply": "pm8994_l21"
+    }
+  },
+  "fstab": {
+    "/firmware/android": {
+      "compatible": "616e64726f69642c6669726d7761726500"
+    },
+    "/firmware/android/fstab": {
+      "compatible": "616e64726f69642c667374616200"
+    },
+    "/firmware/android/fstab/system": {
+      "compatible": "616e64726f69642c73797374656d00",
+      "dev": "2f6465762f626c6f636b2f706c6174666f726d2f736f632f373436343930302e73646863692f62792d6e616d652f73797374656d00",
+      "fsmgr_flags": "7761697400",
+      "mnt_flags": "726f2c626172726965723d3100",
+      "status": "6f6b00",
+      "type": "6578743400"
+    },
+    "/firmware/android/fstab/vendor": {
+      "compatible": "616e64726f69642c76656e646f7200",
+      "dev": "2f6465762f626c6f636b2f706c6174666f726d2f736f632f373436343930302e73646863692f62792d6e616d652f6f656d00",
+      "fsmgr_flags": "7761697400",
+      "mnt_flags": "726f2c626172726965723d3100",
+      "status": "6f6b00",
+      "type": "737175617368667300"
+    },
+    "/firmware/android/vbmeta": {
+      "compatible": "616e64726f69642c76626d65746100",
+      "parts": "76626d6574612c626f6f742c73797374656d2c76656e646f722c6474626f2c7265636f7665727900"
+    }
+  },
+  "pins": {
+    "sdc1_clk_off": {
+      "bias-disable": "",
+      "drive-strength": "00000002",
+      "pins": "736463315f636c6b00"
+    },
+    "sdc1_clk_on": {
+      "bias-disable": "",
+      "drive-strength": "00000010",
+      "pins": "736463315f636c6b00"
+    },
+    "sdc1_cmd_off": {
+      "bias-pull-up": "",
+      "drive-strength": "00000002",
+      "pins": "736463315f636d6400"
+    },
+    "sdc1_cmd_on": {
+      "bias-pull-up": "",
+      "drive-strength": "0000000a",
+      "pins": "736463315f636d6400"
+    },
+    "sdc1_data_off": {
+      "bias-pull-up": "",
+      "drive-strength": "00000002",
+      "pins": "736463315f6461746100"
+    },
+    "sdc1_data_on": {
+      "bias-pull-up": "",
+      "drive-strength": "0000000a",
+      "pins": "736463315f6461746100"
+    },
+    "sdc1_rclk_off": {
+      "bias-pull-down": "",
+      "pins": "736463315f72636c6b00"
+    },
+    "sdc1_rclk_on": {
+      "bias-pull-down": "",
+      "pins": "736463315f72636c6b00"
+    },
+    "sdc2_clk_off": {
+      "bias-disable": "",
+      "drive-strength": "00000002",
+      "pins": "736463325f636c6b00"
+    },
+    "sdc2_clk_on": {
+      "bias-disable": "",
+      "drive-strength": "00000010",
+      "pins": "736463325f636c6b00"
+    },
+    "sdc2_cmd_off": {
+      "bias-pull-up": "",
+      "drive-strength": "00000002",
+      "pins": "736463325f636d6400"
+    },
+    "sdc2_cmd_on": {
+      "bias-pull-up": "",
+      "drive-strength": "0000000a",
+      "pins": "736463325f636d6400"
+    },
+    "sdc2_data_off": {
+      "bias-pull-up": "",
+      "drive-strength": "00000002",
+      "pins": "736463325f6461746100"
+    },
+    "sdc2_data_on": {
+      "bias-pull-up": "",
+      "drive-strength": "0000000a",
+      "pins": "736463325f6461746100"
+    }
+  },
+  "reference_sha256": {
+    "msm8996-v3-pmi8996-tone-dora_generic.dtb": "9dc1184db75dead2612cd6adcfc5f74dfc97c8c80253cc332ab88dd576480bdd",
+    "msm8996-v3-tone-dora_generic.dtb": "03cfed3f4b4f626dd138f44d9b44ed47136efd1a236f3645ce1c5fa41cd008d7",
+    "msm8996-v3.0-pmi8996-tone-dora_generic.dtb": "b6c92a0ae4eccc79efd9b0de66caa308e3d24324928b252236935b4538469cae",
+    "msm8996-v3.0-tone-dora_generic.dtb": "ba3cb5cac73b3210f5d9ca876b85a0635ac2daa694634dcab556b256408f4eb0"
+  },
+  "source_commit": "0c295b15b6d0fb59a64e13b9e0ef2070818ef2a1"
+}

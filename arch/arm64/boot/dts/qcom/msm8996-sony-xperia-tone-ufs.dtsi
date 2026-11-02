@@ -7,9 +7,9 @@
 #include <dt-bindings/msm/msm-bus-ids.h>
 
 &{/soc/ufshc@624000} {
-	/* Native GCC lacks Sony's CX corner vote for 200/300 MHz roots.
-	 * Retain and validate the entire chain, but do not program it until
-	 * real RPM corner aggregation and GCC fmax coupling are implemented.
+	/* Retained MSM8996 UFS regression data, not Dora's installed storage.
+	 * All available Dora evidence selects SDHC1 eMMC. Keep UFS disabled
+	 * even after GCC corner coupling is implemented.
 	 */
 	status = "disabled";
 	qcom,msm-bus-provider = <&ad_hoc_bus>;

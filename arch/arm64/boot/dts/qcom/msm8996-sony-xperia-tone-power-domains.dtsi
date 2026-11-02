@@ -1,0 +1,37 @@
+// SPDX-License-Identifier: GPL-2.0-only
+/* Native GCC/MMCC remain the sole owners of the physical MSM8996 GDSCs. */
+#include <dt-bindings/clock/qcom,gcc-msm8996.h>
+#include <dt-bindings/clock/qcom,mmcc-msm8996.h>
+
+/ {
+	gdsc_aggre0_noc: power-domain-aggre0-noc {
+		compatible = "qcom,genpd-regulator";
+		regulator-name = "gdsc_aggre0_noc";
+		power-domains = <&gcc AGGRE0_NOC_GDSC>;
+	};
+	gdsc_mmagic_bimc: power-domain-mmagic-bimc {
+		compatible = "qcom,genpd-regulator";
+		regulator-name = "gdsc_mmagic_bimc";
+		power-domains = <&mmcc MMAGIC_BIMC_GDSC>;
+	};
+	tone_mmagic_mdss: gdsc_mmagic_mdss: power-domain-mmagic-mdss {
+		compatible = "qcom,genpd-regulator";
+		regulator-name = "gdsc_mmagic_mdss";
+		power-domains = <&mmcc MMAGIC_MDSS_GDSC>;
+	};
+	gdsc_mmagic_camss: power-domain-mmagic-camss {
+		compatible = "qcom,genpd-regulator";
+		regulator-name = "gdsc_mmagic_camss";
+		power-domains = <&mmcc MMAGIC_CAMSS_GDSC>;
+	};
+	gdsc_mmagic_video: power-domain-mmagic-video {
+		compatible = "qcom,genpd-regulator";
+		regulator-name = "gdsc_mmagic_video";
+		power-domains = <&mmcc MMAGIC_VIDEO_GDSC>;
+	};
+	gdsc_mdss: power-domain-mdss {
+		compatible = "qcom,genpd-regulator";
+		regulator-name = "gdsc_mdss";
+		power-domains = <&mmcc MDSS_GDSC>;
+	};
+};

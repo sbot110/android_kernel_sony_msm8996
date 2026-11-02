@@ -1,0 +1,150 @@
+/* Copyright (c) 2014-2017, 2019, The Linux Foundation. All rights reserved.
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License version 2 and
+ * only version 2 as published by the Free Software Foundation.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ */
+
+/*
+ * Sony dora hardware from 0c295b15b6d0fb59a64e13b9e0ef2070818ef2a1.
+ * Adapted to native 4.19 MMCC/genpd and the retained Sony panel/PLL drivers.
+ * Raw panel command/timing datasets are included unchanged below; final board
+ * overrides expose only the established 1080p60 operating mode.
+ */
+#include <dt-bindings/interrupt-controller/irq.h>
+
+&{/soc/qcom,spmi@400f000/pmic@3} {
+	labibb: qpnp-labibb-regulator {
+			status = "okay";
+			compatible = "qcom,qpnp-labibb-regulator";
+			#address-cells = <1>;
+			#size-cells = <1>;
+			qcom,pmic-revid = <&pmi8994_revid>;
+			qcom,qpnp-labibb-mode = "lcd";
+
+			ibb_regulator: qcom,ibb@dc00 {
+				reg = <0xdc00 0x100>;
+				reg-names = "ibb_reg";
+				regulator-name = "ibb_reg";
+
+				regulator-min-microvolt = <4600000>;
+				regulator-max-microvolt = <6000000>;
+
+				qcom,qpnp-ibb-min-voltage = <1400000>;
+				qcom,qpnp-ibb-step-size = <100000>;
+				qcom,qpnp-ibb-slew-rate = <2000000>;
+				qcom,qpnp-ibb-use-default-voltage;
+				qcom,qpnp-ibb-init-voltage = <5500000>;
+				qcom,qpnp-ibb-init-amoled-voltage = <4000000>;
+				qcom,qpnp-ibb-init-lcd-voltage = <5500000>;
+
+				qcom,qpnp-ibb-soft-start = <1000>;
+
+				qcom,qpnp-ibb-discharge-resistor = <32>;
+				qcom,qpnp-ibb-lab-pwrup-delay = <8000>;
+				qcom,qpnp-ibb-lab-pwrdn-delay = <8000>;
+				qcom,qpnp-ibb-en-discharge;
+
+				qcom,qpnp-ibb-full-pull-down;
+				qcom,qpnp-ibb-pull-down-enable;
+				qcom,qpnp-ibb-switching-clock-frequency = <1480>;
+				qcom,qpnp-ibb-limit-maximum-current = <1550>;
+				qcom,qpnp-ibb-debounce-cycle = <16>;
+				qcom,qpnp-ibb-limit-max-current-enable;
+				qcom,qpnp-ibb-ps-enable;
+			};
+
+			lab_regulator: qcom,lab@de00 {
+				reg = <0xde00 0x100>;
+				reg-names = "lab";
+				regulator-name = "lab_reg";
+
+				regulator-min-microvolt = <4600000>;
+				regulator-max-microvolt = <6000000>;
+
+				qcom,qpnp-lab-min-voltage = <4600000>;
+				qcom,qpnp-lab-step-size = <100000>;
+				qcom,qpnp-lab-slew-rate = <5000>;
+				qcom,qpnp-lab-use-default-voltage;
+				qcom,qpnp-lab-init-voltage = <5500000>;
+				qcom,qpnp-lab-init-amoled-voltage = <4600000>;
+				qcom,qpnp-lab-init-lcd-voltage = <5500000>;
+
+				qcom,qpnp-lab-soft-start = <800>;
+
+				qcom,qpnp-lab-full-pull-down;
+				qcom,qpnp-lab-pull-down-enable;
+				qcom,qpnp-lab-switching-clock-frequency =
+									<1600>;
+				qcom,qpnp-lab-limit-maximum-current = <1600>;
+				qcom,qpnp-lab-limit-max-current-enable;
+				qcom,qpnp-lab-ps-threshold = <20>;
+				qcom,qpnp-lab-ps-enable;
+				qcom,qpnp-lab-nfet-size = <100>;
+				qcom,qpnp-lab-pfet-size = <100>;
+				qcom,qpnp-lab-max-precharge-time = <500>;
+			};
+		};
+
+	pmi8994_wled: qcom,leds@d800 {
+			compatible = "qcom,qpnp-wled";
+			reg = <0xd800>, <0xd900>;
+			reg-names = "qpnp-wled-ctrl-base",
+					"qpnp-wled-sink-base";
+			interrupts = <0x3 0xd8 0x2 IRQ_TYPE_EDGE_RISING>;
+			interrupt-names = "sc-irq";
+			status = "okay";
+			linux,name = "wled";
+			linux,default-trigger = "bkl-trigger";
+			qcom,fdbk-output = "auto";
+			qcom,vref-uv = <350000>;
+			qcom,switch-freq-khz = <800>;
+			qcom,ovp-mv = <29500>;
+			qcom,ilim-ma = <660>;
+			qcom,boost-duty-ns = <26>;
+			qcom,mod-freq-khz = <9600>;
+			qcom,dim-mode = "hybrid";
+			qcom,hyb-thres = <625>;
+			qcom,sync-dly-us = <800>;
+			qcom,fs-curr-ua = <20000>;
+			qcom,cons-sync-write-delay-us = <1000>;
+			qcom,led-strings-list = [00 01 02];
+			qcom,en-ext-pfet-sc-pro;
+			qcom,pmic-revid = <&pmi8994_revid>;
+		};
+};
+
+&labibb {
+	qcom,lab@de00 {
+		qcom,qpnp-lab-init-voltage = <5700000>;
+		qcom,qpnp-lab-init-lcd-voltage = <5700000>;
+		qcom,qpnp-lab-soft-start = <800>;
+		qcom,qpnp-lab-max-precharge-time = <300>;
+		qcom,qpnp-lab-pull-down-enable;
+		qcom,qpnp-lab-full-pull-down-enable;
+		interrupts = <0x3 0xde 0x0 IRQ_TYPE_NONE>;
+		interrupt-names = "lab_vreg_not_ok_interrupt";
+	};
+	qcom,ibb@dc00 {
+		qcom,qpnp-ibb-init-voltage = <5700000>;
+		qcom,qpnp-ibb-init-lcd-voltage = <5700000>;
+		qcom,qpnp-ibb-pull-down-enable;
+		qcom,qpnp-ibb-full-pull-down-enable;
+		interrupts = <0x3 0xdc 0x0 IRQ_TYPE_NONE>;
+		interrupt-names = "ibb_vreg_not_ok_interrupt";
+	};
+};
+
+&pmi8994_wled {
+	somc,init-br-ua = <10000>;
+	somc-s1,br-power-save-ua = <800>;
+	somc,area_count_table_size = <21>;
+	somc,area_count_table = <0 137 273 410 546 683
+		819 956 1092 1229 1365 1638 1911 2184 2457 2730
+		3003 3276 3549 3822 4095>;
+};

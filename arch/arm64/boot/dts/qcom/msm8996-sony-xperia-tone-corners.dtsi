@@ -1,0 +1,97 @@
+/* Copyright (c) 2014-2017, The Linux Foundation. All rights reserved.
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License version 2 and
+ * only version 2 as published by the Free Software Foundation.
+ */
+/* Hardware data from the final Sony dora DT at
+ * 0c295b15b6d0fb59a64e13b9e0ef2070818ef2a1, not intermediate includes.
+ * Source data is retained while unsupported power chains remain disabled.
+ */
+
+#ifndef _SONY_TONE_CORNERS_DTSI
+#define _SONY_TONE_CORNERS_DTSI
+/* These are original RPM logical corners, NOT microvolts. The legacy frontend
+ * needs BOTH/ACTIVE aggregation, corn/vfc keys and the logical-1 wire offset.
+ * Native qcom_smd-regulator cannot supply those semantics. No resource is
+ * instantiated until a genuine corner frontend is ported and validated.
+ */
+&{/rpm-glink/rpm_requests} {
+	rpm-regulator-smpa1 {
+		compatible = "qcom,rpm-smd-regulator-resource";
+		qcom,resource-name = "smpa";
+		qcom,resource-id = <0x1>;
+		qcom,regulator-type = <0x1>;
+		status = "disabled";
+
+		regulator-s1 {
+			compatible = "qcom,rpm-smd-regulator";
+			regulator-name = "pm8994_s1";
+			qcom,set = <0x3>;
+			status = "disabled";
+		};
+
+		pm8994_s1_corner: regulator-s1-corner {
+			compatible = "qcom,rpm-smd-regulator";
+			regulator-name = "pm8994_s1_corner";
+			qcom,set = <0x3>;
+			regulator-min-microvolt = <0x1>;
+			regulator-max-microvolt = <0x7>;
+			qcom,use-voltage-corner;
+		};
+
+		pm8994_s1_floor_corner: regulator-s1-floor-corner {
+			compatible = "qcom,rpm-smd-regulator";
+			regulator-name = "pm8994_s1_floor_corner";
+			qcom,set = <0x3>;
+			regulator-min-microvolt = <0x1>;
+			regulator-max-microvolt = <0x7>;
+			qcom,use-voltage-floor-corner;
+			qcom,always-send-voltage;
+		};
+
+		pm8994_s1_corner_ao: regulator-s1-corner-ao {
+			compatible = "qcom,rpm-smd-regulator";
+			regulator-name = "pm8994_s1_corner_ao";
+			qcom,set = <0x1>;
+			regulator-min-microvolt = <0x1>;
+			regulator-max-microvolt = <0x7>;
+			qcom,use-voltage-corner;
+		};
+	};
+
+	rpm-regulator-smpa2 {
+		compatible = "qcom,rpm-smd-regulator-resource";
+		qcom,resource-name = "smpa";
+		qcom,resource-id = <0x2>;
+		qcom,regulator-type = <0x1>;
+		status = "disabled";
+
+		regulator-s2 {
+			compatible = "qcom,rpm-smd-regulator";
+			regulator-name = "pm8994_s2";
+			qcom,set = <0x3>;
+			status = "disabled";
+		};
+
+		pm8994_s2_corner: regulator-s2-corner {
+			compatible = "qcom,rpm-smd-regulator";
+			regulator-name = "pm8994_s2_corner";
+			qcom,set = <0x3>;
+			regulator-min-microvolt = <0x1>;
+			regulator-max-microvolt = <0x7>;
+			qcom,use-voltage-corner;
+		};
+
+		pm8994_s2_corner_ao: regulator-s2-corner-ao {
+			compatible = "qcom,rpm-smd-regulator";
+			regulator-name = "pm8994_s2_corner_ao";
+			qcom,set = <0x1>;
+			regulator-min-microvolt = <0x1>;
+			regulator-max-microvolt = <0x7>;
+			qcom,use-voltage-corner;
+		};
+	};
+
+};
+#endif

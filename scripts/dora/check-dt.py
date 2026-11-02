@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
-"""Check the compiled, single-variant Dora bring-up DT and provider references.
+"""Check compiled Dora identity and enabled provider references.
 
-This is a structural regression check, not driver probe or bootloader validation.
-It intentionally rejects advertising unported SoC/PMIC variants with new IDs.
+The separate variant checker verifies actual Sony hardware differences and
+mandatory activation guards. Neither checker proves device/bootloader support.
 """
 import argparse
 import importlib.util
@@ -59,11 +59,12 @@ def validate(nodes):
 
     root = nodes["/"]["props"]
     manifest = json.loads((ROOT / "Documentation/sony/dora-original-dtb-ids.json").read_text())
-    expected = next(row for row in manifest if row["file"] == "msm8996-v3-tone-dora_generic.dts")
-    for name in ("qcom,msm-id", "qcom,board-id", "qcom,pmic-id"):
-        reference = tuple(int(item, 0) for item in expected[name].split())
-        if cells(root[name]) != reference:
-            raise ValueError("unsupported stepping/PMIC tuple: " + name)
+    keys = ("qcom,msm-id", "qcom,board-id", "qcom,pmic-id")
+    identity = tuple(cells(root[key]) for key in keys)
+    known = {tuple(tuple(int(item, 0) for item in row[key].split())
+                   for key in keys) for row in manifest}
+    if identity not in known:
+        raise ValueError("unknown Sony stepping/board/PMIC tuple")
     if "somc,dora-row" not in strings(root["compatible"]):
         raise ValueError("missing Sony Dora compatible")
     bootargs = strings(nodes["/chosen"]["props"]["bootargs"])[0].split()
@@ -158,8 +159,8 @@ def main():
         count = validate(power.parse_fdt(args.dtb))
     except (KeyError, ValueError, OSError, struct.error) as exc:
         parser.exit(1, "Dora DT check failed: %s\n" % exc)
-    print("Dora DT: v3.1/PM8994/PMI8994, four CPU nodes/maxcpus=2, %d provider references checked" % count)
-    print("LIMIT: structural check only; three variants, DVFS, display/GPU, DSP/modem and charging remain unported")
+    print("Dora DT: original SoC/PMIC tuple, four CPU nodes/maxcpus=2, %d provider references checked" % count)
+    print("LIMIT: provider references only; run variant/CPU/display/bus checks; hardware activation remains gated")
 
 
 if __name__ == "__main__":

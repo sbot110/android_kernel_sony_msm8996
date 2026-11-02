@@ -1,0 +1,45 @@
+// SPDX-License-Identifier: GPL-2.0-only
+/* UFS client data from final Sony Dora DT, commit
+ * 0c295b15b6d0fb59a64e13b9e0ef2070818ef2a1.
+ * Copyright (c) 2014-2015, The Linux Foundation. All rights reserved.
+ * Registers/clocks/PHY/supplies remain the native MSM8996 bindings.
+ */
+#include <dt-bindings/msm/msm-bus-ids.h>
+
+&{/soc/ufshc@624000} {
+	/* Native GCC lacks Sony's CX corner vote for 200/300 MHz roots.
+	 * Retain and validate the entire chain, but do not program it until
+	 * real RPM corner aggregation and GCC fmax coupling are implemented.
+	 */
+	status = "disabled";
+	qcom,msm-bus-provider = <&ad_hoc_bus>;
+	qcom,msm-bus,name = "ufs1";
+	qcom,msm-bus,num-cases = <12>;
+	qcom,msm-bus,num-paths = <2>;
+	qcom,msm-bus,vectors-KBps =
+		<95 512 0 0>,
+		<1 650 0 0>,
+		<95 512 922 0>,
+		<1 650 1000 0>,
+		<95 512 1844 0>,
+		<1 650 1000 0>,
+		<95 512 3688 0>,
+		<1 650 1000 0>,
+		<95 512 7376 0>,
+		<1 650 1000 0>,
+		<95 512 127796 0>,
+		<1 650 1000 0>,
+		<95 512 255591 0>,
+		<1 650 1000 0>,
+		<95 512 511181 0>,
+		<1 650 1000 0>,
+		<95 512 149422 0>,
+		<1 650 1000 0>,
+		<95 512 298189 0>,
+		<1 650 1000 0>,
+		<95 512 596378 0>,
+		<1 650 1000 0>,
+		<95 512 4096000 0>,
+		<1 650 1000 0>;
+	qcom,bus-vector-names = "MIN", "PWM_G1_L1", "PWM_G2_L1", "PWM_G3_L1", "PWM_G4_L1", "HS_RA_G1_L1", "HS_RA_G2_L1", "HS_RA_G3_L1", "HS_RB_G1_L1", "HS_RB_G2_L1", "HS_RB_G3_L1", "MAX";
+};

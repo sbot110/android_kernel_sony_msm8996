@@ -130,7 +130,8 @@ def main():
     try:
         nodes = parse_fdt(args.dtb)
         actual = digests(nodes)
-        wanted = expected["node_sha256"]
+        pmic_id = struct.unpack(">4I", nodes["/"]["props"]["qcom,pmic-id"])[1]
+        wanted = expected["pmic_node_sha256"][hex(pmic_id)]
         bad = sorted(key for key in set(actual) | set(wanted)
                      if actual.get(key) != wanted.get(key))
         if bad:

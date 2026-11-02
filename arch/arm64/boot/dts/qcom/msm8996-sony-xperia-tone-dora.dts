@@ -10,6 +10,16 @@
 #include "msm8996-sony-xperia-tone.dtsi"
 #include "msm8996-sony-xperia-tone-pcie.dtsi"
 #include "msm8996-sony-xperia-tone-power.dtsi"
+#include "msm8996-sony-xperia-tone-safety.dtsi"
+#include "msm8996-sony-xperia-tone-power-domains.dtsi"
+#include "msm8996-sony-xperia-tone-bus.dtsi"
+#include "msm8996-sony-xperia-tone-ufs.dtsi"
+#include "msm8996-sony-xperia-tone-cpu.dtsi"
+#include "msm8996-sony-xperia-tone-display-pmic.dtsi"
+#include "msm8996-sony-xperia-tone-smmu.dtsi"
+#include "msm8996-sony-xperia-tone-display.dtsi"
+#include "msm8996-sony-xperia-tone-display-safety.dtsi"
+#include "msm8996-sony-xperia-tone-gfx.dtsi"
 
 / {
 	model = "Sony Xperia X Performance";

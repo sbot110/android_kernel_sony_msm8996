@@ -1,9 +1,9 @@
 # Dora: проверка интерфейсов LineageOS 21 / Android 14
 
-Дата: 2026-11-01. Это аудит исходников и разрешённой конфигурации, а не
+Обновлено: 2026-11-02. Это аудит исходников и разрешённой конфигурации, а не
 подтверждение запуска Android. F8131 и F8132 требуют отдельных тестов.
 
-## Исправления конфигурации
+## Конфигурация и результаты предыдущих этапов
 
 `tone_dora_defconfig` теперь явно включает `BPF_JIT_ALWAYS_ON`: ARM64 JIT
 присутствует в `arch/arm64/net/bpf_jit_comp.c`, а `HAVE_EBPF_JIT=y` разрешён
@@ -18,13 +18,13 @@ LSM. Возможность permissive policy в userdebug сама по себ�
 подтверждением enforcing: окончательные cmdline/init/policy проверяются
 отдельно в Android.
 
-`scripts/dora/check-config.py` проверяет 87 обязательных built-ins по итоговой
+`scripts/dora/check-config.py` проверяет обязательные built-ins по итоговой
 `.config`, включая скрытые зависимости, а также стандартный ARM64 Binder
 ABI, default SELinux и отсутствие отключения PSI. Наличие имён в defconfig
 больше не является единственным свидетельством для memfd/ashmem, cgroup BPF,
 fscrypt, loop, OverlayFS, ION/fences и configfs USB.
 
-Команда генерации `make O=/workspace/work/dora-verified-out ARCH=arm64
+Исторический результат этапа 2: команда генерации `make O=/workspace/work/dora-verified-out ARCH=arm64
 CROSS_COMPILE=aarch64-linux-gnu- CROSS_COMPILE_COMPAT=arm-linux-gnueabi-
 tone_dora_defconfig` завершилась с кодом 0. Проверка разрешённой `.config`
 завершилась с кодом 0: 277 explicit assignments, 87 required built-ins.
@@ -98,7 +98,7 @@ errors, результат getrandom и auxv/HWCAP. Наличие CONFIG_CRYPTO
 `vold-failed` требует первого сообщения об ошибке vold/fs_mgr и errno.
 Проверены реальные fscrypt v2/ioctl implementations, встроенные ФС, quota,
 loop и device mapper. Но причиной всё ещё могут быть неподдерживаемые
-fstab options, старый disk layout, недоступный UFS, TEE/keymaster ABI,
+fstab options, старый disk layout, недоступный внутренний eMMC, TEE/keymaster ABI,
 SELinux policy или несовместимая версия userspace. Внешний tone-common
 fstab не задаёт fileencryption/metadata_encryption для userdata, поэтому
 его нельзя считать проверенной конфигурацией современного LOS21 FBE.
@@ -142,10 +142,12 @@ memfd/ashmem, fscrypt/ext4/F2FS, dm-verity/FEC, loop/OverlayFS,
 ION/dma-buf/fences и configfs gadget по-прежнему проверяются по resolved
 .config. Сборка и наличие кода не доказывают vendor ABI или запуск LOS21.
 
-Новые UFS и дисплейные графы намеренно заблокированы до настоящего
-GCC/MMCC RPM-corner coupling. Поэтому ядро сейчас не является кандидатом
-для запуска Android с внутреннего UFS. CPU_FREQ/CPU_IDLE остаются выключены,
-maxcpus=2 сохранён. Это явные исходные блокеры, а не исправление vold.
+На этапе 3 UFS и дисплейные графы были заблокированы до настоящего
+GCC/MMCC RPM-corner coupling. Предположение о внутреннем UFS было ошибочным:
+для dora эталонные firmware/fstab и предоставленные пользователем журналы
+указывают на eMMC SDHC1 `7464900.sdhci` (исправление архитектуры — этап 4).
+CPU_FREQ/CPU_IDLE и `maxcpus=2` остаются отдельными ограничениями. Наличие
+либо блокировка UFS не являются исправлением `vold` для внутренней eMMC.
 SMBcharger/DPDM цепочка не активирована. Никакие SELinux, verity,
 BoringSSL self-test или обработчики vold failure не отключались.
 
@@ -155,3 +157,82 @@ cmdline patch остаётся только подготовленным пат�
 boot.img не создан. Итоговый build/probe/runtime статус см. в
 [dora-build-validation.txt](dora-build-validation.txt) и
 [dora-hardware-blockers.md](dora-hardware-blockers.md).
+
+
+## Этап 4: eMMC, vendor SquashFS и firmware VFAT (2026-11-02)
+
+Независимо перечитаны текущие внешние источники без изменений их репозиториев:
+
+- Tone common: `2701d2aecab52b30c3672ecebbad6ae1910cc212`,
+  `rootdir/etc/fstab.qcom`, `BoardConfigCommon.mk`, `init.qcom.rc`, `ueventd.qcom.rc`.
+- Dora device: `5e9385a65257a28f9a3974342331644a3bbcdd49`.
+- Sony vendor: `bb8c352c8da4942f6189fd08d0c1ec947f25e8ef`.
+
+Рабочий Sony DT задаёт `/system` из `7464900.sdhci/by-name/system`, а
+`/vendor` из `7464900.sdhci/by-name/oem`. Внешний fstab дублирует эти
+early-mount entries для recovery через `/dev/block/bootdevice`; init создаёт
+этот symlink из `ro.boot.bootdevice`. Прямое ожидание `mmcblk0p1` и обращение
+к removable `mmc_host/mmc1` доказывают, что стабильные MMC aliases нужны
+существующему userspace. Строки UFS в общем ueventd относятся к общему списку
+платформ и не доказывают наличие UFS у dora. Полные аппаратные доказательства
+и контроллеры описаны отдельно в `dora-storage-audit.md`.
+
+| Mount / partition | Формат в закреплённых device sources | Реальный kernel contract |
+| --- | --- | --- |
+| `/system` / system | ext4 | Встроенный ext4 и security labels |
+| `/vendor` / oem | SquashFS; `BOARD_VENDORIMAGE_SQUASHFS_COMPRESSOR := lz4` | SquashFS + LZ4 decompressor + xattr security namespace |
+| `/data` / userdata | f2fs, затем ext4 fallback | Обе ФС, quota, fscrypt; существующие данные/политика шифрования не проверены |
+| `/cache` | f2fs/ext4 | Обе ФС; никакого форматирования не выполнялось |
+| persist / dsp | ext4 | Ext4 и точные by-name paths |
+| modem / bluetooth firmware | vfat, без explicit codepage/iocharset | FAT/VFAT и таблицы CP437 + ISO-8859-1 для текущих defaults |
+
+В `.config` проверенной сборки этапа 3 SquashFS/LZ4 уже включены. Но
+`SQUASHFS_XATTR=n` убирает `squashfs_xattr_handlers` в `fs/squashfs/xattr.h`:
+ядро не читает `security.selinux`/`security.capability` xattrs такого vendor
+образа. Требуется `CONFIG_SQUASHFS_XATTR=y`, а не permissive SELinux. Это не
+доказывает, что установленный образ содержит правильные labels: самого
+образа здесь нет, его label/contents тесты ещё нужны.
+
+Также выявлен конкретный mount blocker: при `FAT_DEFAULT_CODEPAGE=437` и
+`FAT_DEFAULT_IOCHARSET="iso8859-1"` отсутствовали `NLS_CODEPAGE_437` и
+`NLS_ISO8859_1`. `fs/fat/inode.c:fat_fill_super()` загружает `cp437` и
+iocharset и возвращает ошибку при отсутствии любой таблицы. Поэтому
+`VFAT_FS=y` само по себе не обеспечивает modem/bluetooth firmware mounts.
+Нужны оба builtin NLS providers. `NLS_UTF8` не объявляется обязательным без
+соответствующего mount option. Ни kernel status, ни наличие firmware paths
+не подтверждают модем, радио или голосовые вызовы.
+
+Новая проверка `scripts/dora/check-android-abi.py OUT/.config --selftest`
+связывает resolved config с этим filesystem contract и отклоняет пять
+намеренных нарушений compression/xattrs/NLS/Binder wire format. Она:
+
+- компилирует настоящие Binder/ION/fscrypt headers и проверяет стабильные
+  ioctl/layout числа; базовые Binder/legacy ION значения отдельно сверены
+  компиляцией неизменённых Sony 4.4 headers обоими target toolchains;
+- исполняет настоящую `ion_legacy_cmd()` для old allocation/handle/fd
+  dispatch и отличает новый fd allocation ioctl;
+- исполняет настоящие SquashFS descriptor table/lookup с выбранным и
+  отсутствующим LZ4, не подменяя decompression физическим mount test;
+- при заданных CROSS_COMPILE/CROSS_COMPILE_COMPAT компилирует layout
+  assertions настоящими AArch64 и ARM32 GCC, не исполняя target binaries.
+
+Проверка двух Binder wire layouts — регрессия UAPI headers, а не включение
+32-bit Binder protocol в этом ARM64 ядре. Реальная dora конфигурация должна
+оставлять protocol 8 (`ANDROID_BINDER_IPC_32BIT=n`), в том числе для Android
+32-bit vendor clients, использующих тот же wire ABI.
+
+Этот тест не проверяет Binder services, выделение ION, secure heaps,
+cache-maintenance/CUSTOM ioctls, EGL/gralloc, dma-buf synchronization, реальные
+ключи fscrypt/TEE, mount/data integrity, SELinux policy или BPF verifier на
+телефоне. Старые `bpfloader` exit 1, `boringssl-self-check-failed` и
+`vold-failed` не объявляются устранёнными. Ни BPF UAPI-only flags, ни отключение
+BoringSSL/SELinux/dm-verity не добавлены. Требуемые config исправления,
+полная сборка и фактические результаты фиксируются родительским этапом в
+`dora-build-validation.txt`; тест старой `.config` закономерно отклоняется
+из-за трёх отсутствующих filesystem options.
+
+Внешний fstab всё ещё содержит `formattable` для ext4 fallback userdata/cache;
+это свойство Android userspace, а не разрешение менять разделы. На этом
+этапе не создаётся boot.img и не запускается Android, ни одна такая операция
+не выполнялась. F8131 и F8132 требуют отдельных новых kernel/init/fs_mgr,
+SELinux/BPF/BoringSSL логов и аппаратных тестов.

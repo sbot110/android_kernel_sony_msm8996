@@ -287,3 +287,6 @@ CONFIG_DEBUG_FS=y
 # Coordinated ACD/CPR DVFS and deep idle remain gated for hardware bring-up.
 # CONFIG_CPU_FREQ is not set
 # CONFIG_CPU_IDLE is not set
+CONFIG_SQUASHFS_XATTR=y
+CONFIG_NLS_CODEPAGE_437=y
+CONFIG_NLS_ISO8859_1=y

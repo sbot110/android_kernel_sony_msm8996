@@ -709,6 +709,14 @@ config REGULATOR_QCOM_GENPD
 	  real native GCC/MMCC GDSCs. This lets legacy Qualcomm clients use
 	  the domain without a second driver programming its registers.
 
+config REGULATOR_QCOM_RPM_CORNER
+	tristate "Qualcomm MSM8996 native SMD RPM logical corners"
+	depends on OF && ARCH_QCOM && QCOM_SMD_RPM
+	help
+	  Provide real CX/MX logical-corner and floor votes with independent
+	  active/sleep aggregation, acknowledged transport and failure recovery.
+	  These typed corner resources are not physical microvolt regulators.
+
 config REGULATOR_QCOM_SMD_RPM
 	tristate "Qualcomm SMD based RPM regulator driver"
 	depends on QCOM_SMD_RPM

@@ -13,12 +13,13 @@
 #define _SONY_TONE_CORNERS_DTSI
 /* These are original RPM logical corners, NOT microvolts. The legacy frontend
  * needs BOTH/ACTIVE aggregation, corn/vfc keys and the logical-1 wire offset.
- * Native qcom_smd-regulator cannot supply those semantics. No resource is
- * instantiated until a genuine corner frontend is ported and validated.
+ * Native qcom_smd-regulator cannot supply those semantics. The typed frontend
+ * implements them; board activation is coupled to validated clock ownership.
  */
 &{/rpm-glink/rpm_requests} {
-	rpm-regulator-smpa1 {
-		compatible = "qcom,rpm-smd-regulator-resource";
+	dora_rpm_cx: rpm-regulator-smpa1 {
+		compatible = "qcom,msm8996-rpm-corner-resource";
+		qcom,rpm = <&{/rpm-glink/rpm_requests}>;
 		qcom,resource-name = "smpa";
 		qcom,resource-id = <0x1>;
 		qcom,regulator-type = <0x1>;
@@ -61,7 +62,8 @@
 	};
 
 	rpm-regulator-smpa2 {
-		compatible = "qcom,rpm-smd-regulator-resource";
+		compatible = "qcom,msm8996-rpm-corner-resource";
+		qcom,rpm = <&{/rpm-glink/rpm_requests}>;
 		qcom,resource-name = "smpa";
 		qcom,resource-id = <0x2>;
 		qcom,regulator-type = <0x1>;
@@ -94,4 +96,10 @@
 	};
 
 };
+
+/* CX/MX use typed corn/vfc votes; their original UV-only clients were
+ * disabled too. Never expose a second microvolt owner for these resources.
+ */
+&pm8994_s1 { status = "disabled"; };
+&pm8994_s2 { status = "disabled"; };
 #endif

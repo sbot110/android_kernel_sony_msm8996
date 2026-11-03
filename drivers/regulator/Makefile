@@ -81,6 +81,7 @@ obj-$(CONFIG_REGULATOR_MT6397)	+= mt6397-regulator.o
 obj-$(CONFIG_REGULATOR_QCOM_RPM) += qcom_rpm-regulator.o
 obj-$(CONFIG_REGULATOR_QCOM_RPMH) += qcom-rpmh-regulator.o
 obj-$(CONFIG_REGULATOR_QCOM_SMD_RPM) += qcom_smd-regulator.o
+obj-$(CONFIG_REGULATOR_QCOM_RPM_CORNER) += qcom-rpm-corner.o
 obj-$(CONFIG_REGULATOR_QCOM_GENPD) += qcom-genpd-regulator.o
 obj-$(CONFIG_REGULATOR_RPM_SMD) += rpm-smd-regulator.o
 obj-$(CONFIG_REGULATOR_PM8008) += qcom_pm8008-regulator.o

@@ -236,3 +236,25 @@ BoringSSL/SELinux/dm-verity не добавлены. Требуемые config �
 этапе не создаётся boot.img и не запускается Android, ни одна такая операция
 не выполнялась. F8131 и F8132 требуют отдельных новых kernel/init/fs_mgr,
 SELinux/BPF/BoringSSL логов и аппаратных тестов.
+
+## Внешняя cmdline: точное неподанное изменение
+
+В закреплённом tone-common `2701d2aecab52b30c3672ecebbad6ae1910cc212`,
+`BoardConfigCommon.mk:52` уже присутствует
+`BOARD_KERNEL_CMDLINE += androidboot.selinux=permissive`. Это найденная
+внешняя настройка, не изменение данного kernel-порта. Kernel default SELinux
+и отсутствие SECURITY_SELINUX_DISABLE не отменяют такую userspace cmdline.
+
+Подготовлен `patches/tone-common-remove-permissive-cmdline.patch`: он удаляет
+ровно эту строку из указанного pinned source. git apply --check и применение
+к отдельной scratch-копии прошли кодом 0. **Device/vendor репозитории не
+изменены; патч НЕ применён к ним.** Перед будущим Android build необходимо
+отдельно применить/согласовать его и проверить реальную cmdline, policy и
+getenforce на устройстве; удаление одной строки не доказывает enforcing.
+Никакой permissive обход в новые kernel исходники не добавлен.
+
+Pinned BoardConfig также задаёт Image.gz-dtb, ARM64, base 0x80000000,
+pagesize 4096, tags offset 0x01e00000 и boot partition 67108864 байт.
+Это build metadata, не разбор фактического boot header, ramdisk, bootloader
+selection или установленной таблицы разделов. boot.img на этом этапе не
+собирается. Текущий kernel OUT и DTB формат не заменяют эти проверки.

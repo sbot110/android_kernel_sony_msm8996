@@ -3,15 +3,17 @@
  * Sony Xperia X Performance (dora: F8131 Single SIM / F8132 Dual SIM)
  * Platform, Remoteproc, Clearpad & FPC1145 TEE Fingerprint Driver for Linux 5.15
  *
- * Ported and modernized from Sony Linux 4.4.302 (0c295b15b6d0):
+ * Ported and audited against Sony Linux 4.4.302 (0c295b15b6d0):
  *  - SIM1 (TLMM GPIO 112) & hybrid UIM2 tray (TLMM GPIO 29) presence/IRQ
- *  - FPC1145 / FPC1020 TrustZone fingerprint /dev/fingerprint miscdevice
- *    (poll + ioctls) & fpc1020 sysfs interface (power/reset/IRQ/wakeup)
- *  - Real Synaptics RMI4 wakeup control via /sys/devices/virtual/input/clearpad/<attr>
- *  - Real Qualcomm Q6V5 remoteproc control via /sys/kernel/boot_adsp/boot and
- *    /sys/kernel/boot_slpi/boot (rproc_get_by_phandle / rproc_boot / rproc_shutdown)
- *  - Native built-in /sys/module/bcmdhd/parameters/{firmware_path,nvram_path,op_mode}
- *    via MODULE_PARAM_PREFIX (safe when built-in with CONFIG_SOMC_DORA_PLATFORM=y)
+ *  - FPC1145 TrustZone /dev/fingerprint miscdevice implementing exact Sony 4.4
+ *    0x1145 ioctl ABI (FPC_IOCWPREPARE, FPC_IOCWRESET, FPC_IOCWAWAKE,
+ *    FPC_IOCRPREPARE, FPC_IOCRIRQ, FPC_IOCRIRQPOLL) + exclusive open & sysfs
+ *  - Verified Synaptics RMI4 wakeup control via /sys/devices/virtual/input/clearpad/<attr>
+ *    (returns real error if RMI4 controller is absent or not wakeup-capable)
+ *  - Strict refcounted Qualcomm Q6V5 remoteproc control via /sys/kernel/boot_adsp/boot
+ *    and /sys/kernel/boot_slpi/boot (rproc_get_by_phandle / rproc_boot / rproc_shutdown)
+ *  - Thread-safe built-in /sys/module/bcmdhd/parameters/{firmware_path,nvram_path,op_mode}
+ *    via MODULE_PARAM_PREFIX + module_param_cb consumed by brcmfmac firmware loader
  */
 
 #include <linux/atomic.h>
@@ -26,6 +28,7 @@
 #include <linux/input.h>
 #include <linux/interrupt.h>
 #include <linux/ioctl.h>
+#include <linux/jiffies.h>
 #include <linux/kernel.h>
 #include <linux/kobject.h>
 #include <linux/miscdevice.h>
@@ -40,6 +43,8 @@
 #include <linux/regulator/consumer.h>
 #include <linux/remoteproc.h>
 #include <linux/slab.h>
+#include <linux/spinlock.h>
+#include <linux/string.h>
 #include <linux/sysfs.h>
 #include <linux/uaccess.h>
 #include <linux/wait.h>
@@ -48,31 +53,115 @@
 #define MODULE_PARAM_PREFIX "bcmdhd."
 
 #define FPC_TTW_HOLD_MS			1500
+#define FPC_MAX_HAL_PROCESSING_TIME	400
+#define FPC_IRQPOLL_TIMEOUT_MS		500
 #define FPC_RESET_LOW_US		1300
 #define FPC_RESET_HIGH1_US		1250
 
-/* FPC1145 / Sony TrustZone /dev/fingerprint ioctl interface */
-#define FPC_IOC_MAGIC			'f'
-#define FPC_IOC_HW_RESET		_IO(FPC_IOC_MAGIC, 0x01)
-#define FPC_IOC_WAKELOCK		_IOW(FPC_IOC_MAGIC, 0x02, int)
-#define FPC_IOC_ENABLE_IRQ		_IOW(FPC_IOC_MAGIC, 0x03, int)
-#define FPC_IOC_ENABLE_POWER		_IOW(FPC_IOC_MAGIC, 0x04, int)
-#define FPC_IOC_CLK_STATE		_IOW(FPC_IOC_MAGIC, 0x05, int)
-#define FPC_IOC_GET_IRQ_STATE		_IOR(FPC_IOC_MAGIC, 0x06, int)
+/*
+ * Exact Sony Linux 4.4 (0c295b15b6d0) drivers/input/misc/fpc1145_platform.c
+ * ioctl ABI expected by Sony TrustZone fingerprint.msm8996.so HAL.
+ * Note: _IOW/_IOR masks magic to 8 bits (0x1145 & 0xff == 0x45).
+ */
+#define FPC_SONY_IOC_MAGIC		0x45
+#define FPC_IOCWPREPARE			_IOW(FPC_SONY_IOC_MAGIC, 0x01, int)
+#define FPC_IOCWDEVWAKE			_IOW(FPC_SONY_IOC_MAGIC, 0x02, int)
+#define FPC_IOCWRESET			_IOW(FPC_SONY_IOC_MAGIC, 0x03, int)
+#define FPC_IOCWAWAKE			_IOW(FPC_SONY_IOC_MAGIC, 0x04, int)
+#define FPC_IOCRPREPARE			_IOR(FPC_SONY_IOC_MAGIC, 0x81, int)
+#define FPC_IOCRDEVWAKE			_IOR(FPC_SONY_IOC_MAGIC, 0x82, int)
+#define FPC_IOCRIRQ			_IOR(FPC_SONY_IOC_MAGIC, 0x83, int)
+#define FPC_IOCRIRQPOLL			_IOR(FPC_SONY_IOC_MAGIC, 0x84, int)
+
+struct fpc1145_awake_args {
+	int awake;
+	unsigned int timeout;
+};
+
+/* Secondary generic FPC ioctl block ('f' = 0x66, non-overlapping magic) */
+#define FPC_ALT_IOC_MAGIC		'f'
+#define FPC_IOC_HW_RESET		_IO(FPC_ALT_IOC_MAGIC, 0x01)
+#define FPC_IOC_WAKELOCK		_IOW(FPC_ALT_IOC_MAGIC, 0x02, int)
+#define FPC_IOC_ENABLE_IRQ		_IOW(FPC_ALT_IOC_MAGIC, 0x03, int)
+#define FPC_IOC_ENABLE_POWER		_IOW(FPC_ALT_IOC_MAGIC, 0x04, int)
+#define FPC_IOC_CLK_STATE		_IOW(FPC_ALT_IOC_MAGIC, 0x05, int)
+#define FPC_IOC_GET_IRQ_STATE		_IOR(FPC_ALT_IOC_MAGIC, 0x06, int)
 
 /*
- * BCMDHD userspace parameter compatibility bridge:
- * Exported cleanly through kernel/params.c at:
- *   /sys/module/bcmdhd/parameters/{firmware_path,nvram_path,op_mode}
- * without dereferencing THIS_MODULE (which is NULL when built-in).
+ * Thread-safe BCMDHD userspace parameter compatibility bridge:
+ * Exposed at /sys/module/bcmdhd/parameters/{firmware_path,nvram_path,op_mode}
+ * via kernel/params.c without touching THIS_MODULE, and actively queried by
+ * brcmfmac firmware loader so Wi-Fi HAL STA/SoftAP firmware switching works.
  */
+static DEFINE_SPINLOCK(bcmdhd_param_lock);
 static char bcmdhd_fw_path[256] = "/vendor/etc/firmware/wlan/bcmdhd/fw_bcmdhd.bin";
 static char bcmdhd_nvram_path[256] = "/vendor/etc/wifi/bcmdhd.cal";
 static int bcmdhd_op_mode;
 
-module_param_string(firmware_path, bcmdhd_fw_path, sizeof(bcmdhd_fw_path), 0660);
-module_param_string(nvram_path, bcmdhd_nvram_path, sizeof(bcmdhd_nvram_path), 0660);
+static int bcmdhd_path_param_set(const char *val, const struct kernel_param *kp)
+{
+	char *dst = kp->arg;
+	unsigned long flags;
+	size_t len;
+
+	if (!val)
+		return -EINVAL;
+
+	len = strcspn(val, "\r\n");
+	if (len >= 256)
+		return -ENOSPC;
+
+	spin_lock_irqsave(&bcmdhd_param_lock, flags);
+	memcpy(dst, val, len);
+	dst[len] = '\0';
+	spin_unlock_irqrestore(&bcmdhd_param_lock, flags);
+	return 0;
+}
+
+static int bcmdhd_path_param_get(char *buffer, const struct kernel_param *kp)
+{
+	const char *src = kp->arg;
+	unsigned long flags;
+	int ret;
+
+	spin_lock_irqsave(&bcmdhd_param_lock, flags);
+	ret = scnprintf(buffer, PAGE_SIZE, "%s\n", src);
+	spin_unlock_irqrestore(&bcmdhd_param_lock, flags);
+	return ret;
+}
+
+static const struct kernel_param_ops bcmdhd_path_param_ops = {
+	.set = bcmdhd_path_param_set,
+	.get = bcmdhd_path_param_get,
+};
+
+module_param_cb(firmware_path, &bcmdhd_path_param_ops, bcmdhd_fw_path, 0660);
+module_param_cb(nvram_path, &bcmdhd_path_param_ops, bcmdhd_nvram_path, 0660);
 module_param_named(op_mode, bcmdhd_op_mode, int, 0660);
+
+void somc_dora_get_bcmdhd_fw_path(char *buf, size_t size)
+{
+	unsigned long flags;
+
+	if (!buf || !size)
+		return;
+	spin_lock_irqsave(&bcmdhd_param_lock, flags);
+	strscpy(buf, bcmdhd_fw_path, size);
+	spin_unlock_irqrestore(&bcmdhd_param_lock, flags);
+}
+EXPORT_SYMBOL_GPL(somc_dora_get_bcmdhd_fw_path);
+
+void somc_dora_get_bcmdhd_nvram_path(char *buf, size_t size)
+{
+	unsigned long flags;
+
+	if (!buf || !size)
+		return;
+	spin_lock_irqsave(&bcmdhd_param_lock, flags);
+	strscpy(buf, bcmdhd_nvram_path, size);
+	spin_unlock_irqrestore(&bcmdhd_param_lock, flags);
+}
+EXPORT_SYMBOL_GPL(somc_dora_get_bcmdhd_nvram_path);
 
 struct somc_dora_plat {
 	struct device *dev;
@@ -80,10 +169,14 @@ struct somc_dora_plat {
 	struct gpio_desc *uim2_gpiod;
 	int sim1_irq;
 	int uim2_irq;
+	bool sim1_wake_enabled;
+	bool uim2_wake_enabled;
 
 	struct device *clearpad_compat_dev;
 	struct kobject *boot_adsp_kobj;
 	struct kobject *boot_slpi_kobj;
+	bool boot_adsp_attr_created;
+	bool boot_slpi_attr_created;
 
 	struct mutex lock;
 	bool wakeup_gesture;
@@ -91,8 +184,6 @@ struct somc_dora_plat {
 	bool cover_mode_enabled;
 	bool glove_mode;
 	u32 cover_win[4]; /* left, top, right, bottom */
-	bool boot_adsp_state;
-	bool boot_slpi_state;
 	bool adsp_ref_held;
 	bool slpi_ref_held;
 };
@@ -157,28 +248,39 @@ static irqreturn_t dora_sim_det_isr(int irq, void *data)
 
 /* --- Clearpad userspace gesture & smart-cover sysfs (/sys/devices/virtual/input/clearpad) --- */
 
-static void somc_dora_sync_touch_wakeup(struct somc_dora_plat *plat, bool enable)
+static int somc_dora_sync_touch_wakeup(struct somc_dora_plat *plat, bool enable)
 {
 #if IS_ENABLED(CONFIG_I2C)
 	struct device_node *ts_np;
 	struct i2c_client *ts_client;
+	int ret;
 
 	if (!plat || !plat->dev || !plat->dev->of_node)
-		return;
+		return -ENODEV;
 
 	ts_np = of_parse_phandle(plat->dev->of_node, "somc,touch-i2c", 0);
 	if (!ts_np)
-		return;
+		return -ENODEV;
 
 	ts_client = of_find_i2c_device_by_node(ts_np);
 	of_node_put(ts_np);
 	if (!ts_client)
-		return;
+		return -EAGAIN;
 
-	if (device_can_wakeup(&ts_client->dev))
-		device_set_wakeup_enable(&ts_client->dev, enable);
+	device_lock(&ts_client->dev);
+	if (!ts_client->dev.driver) {
+		ret = -EAGAIN;
+	} else if (!device_can_wakeup(&ts_client->dev)) {
+		ret = -EOPNOTSUPP;
+	} else {
+		ret = device_set_wakeup_enable(&ts_client->dev, enable);
+	}
+	device_unlock(&ts_client->dev);
 
 	put_device(&ts_client->dev);
+	return ret;
+#else
+	return -ENODEV;
 #endif
 }
 
@@ -186,8 +288,13 @@ static ssize_t wakeup_gesture_show(struct device *dev,
 				   struct device_attribute *attr, char *buf)
 {
 	struct somc_dora_plat *p = dev_get_drvdata(dev);
+	bool enabled;
 
-	return sysfs_emit(buf, "%u\n", p->wakeup_gesture ? 1 : 0);
+	mutex_lock(&p->lock);
+	enabled = p->wakeup_gesture;
+	mutex_unlock(&p->lock);
+
+	return sysfs_emit(buf, "%u\n", enabled ? 1 : 0);
 }
 
 static ssize_t wakeup_gesture_store(struct device *dev,
@@ -196,15 +303,19 @@ static ssize_t wakeup_gesture_store(struct device *dev,
 {
 	struct somc_dora_plat *p = dev_get_drvdata(dev);
 	bool v;
+	int ret;
 
 	if (kstrtobool(buf, &v))
 		return -EINVAL;
+
+	ret = somc_dora_sync_touch_wakeup(p, v);
+	if (ret)
+		return ret;
 
 	mutex_lock(&p->lock);
 	p->wakeup_gesture = v;
 	mutex_unlock(&p->lock);
 
-	somc_dora_sync_touch_wakeup(p, v);
 	return count;
 }
 static DEVICE_ATTR_RW(wakeup_gesture);
@@ -214,7 +325,11 @@ static ssize_t _name##_show(struct device *dev,					\
 			    struct device_attribute *attr, char *buf)		\
 {										\
 	struct somc_dora_plat *p = dev_get_drvdata(dev);			\
-	return sysfs_emit(buf, "%u\n", p->_field ? 1 : 0);			\
+	bool val;								\
+	mutex_lock(&p->lock);							\
+	val = p->_field;							\
+	mutex_unlock(&p->lock);							\
+	return sysfs_emit(buf, "%u\n", val ? 1 : 0);				\
 }										\
 static ssize_t _name##_store(struct device *dev,				\
 			     struct device_attribute *attr,			\
@@ -240,7 +355,11 @@ static ssize_t _name##_show(struct device *dev,					\
 			    struct device_attribute *attr, char *buf)		\
 {										\
 	struct somc_dora_plat *p = dev_get_drvdata(dev);			\
-	return sysfs_emit(buf, "%u\n", p->cover_win[_idx]);			\
+	u32 val;								\
+	mutex_lock(&p->lock);							\
+	val = p->cover_win[_idx];						\
+	mutex_unlock(&p->lock);							\
+	return sysfs_emit(buf, "%u\n", val);					\
 }										\
 static ssize_t _name##_store(struct device *dev,				\
 			     struct device_attribute *attr,			\
@@ -288,17 +407,25 @@ static int somc_dora_rproc_control(struct somc_dora_plat *plat,
 	int ret = 0;
 
 	if (!plat || !plat->dev || !plat->dev->of_node)
-		return 0;
+		return -ENODEV;
 
 	if (of_property_read_u32(plat->dev->of_node, prop_name, &ph))
-		return 0;
+		return -ENOENT;
 
 	rproc = rproc_get_by_phandle(ph);
 	if (!rproc)
-		return 0;
+		return -EAGAIN;
 
 	if (enable) {
-		if (!*ref_held && rproc->state != RPROC_RUNNING) {
+		if (!*ref_held) {
+			ret = rproc_boot(rproc);
+			if (!ret)
+				*ref_held = true;
+		} else if (rproc->state == RPROC_CRASHED ||
+			   rproc->state == RPROC_OFFLINE) {
+			/* Re-balance reference and attempt clean recovery boot */
+			rproc_shutdown(rproc);
+			*ref_held = false;
 			ret = rproc_boot(rproc);
 			if (!ret)
 				*ref_held = true;
@@ -313,13 +440,12 @@ static int somc_dora_rproc_control(struct somc_dora_plat *plat,
 	rproc_put(rproc);
 	return ret;
 #else
-	return 0;
+	return -ENODEV;
 #endif
 }
 
 static bool somc_dora_rproc_is_running(struct somc_dora_plat *plat,
-				       const char *prop_name,
-				       bool fallback_state)
+				       const char *prop_name)
 {
 #if IS_ENABLED(CONFIG_REMOTEPROC)
 	phandle ph;
@@ -327,38 +453,36 @@ static bool somc_dora_rproc_is_running(struct somc_dora_plat *plat,
 	bool running;
 
 	if (!plat || !plat->dev || !plat->dev->of_node)
-		return fallback_state;
+		return false;
 
 	if (of_property_read_u32(plat->dev->of_node, prop_name, &ph))
-		return fallback_state;
+		return false;
 
 	rproc = rproc_get_by_phandle(ph);
 	if (!rproc)
-		return fallback_state;
+		return false;
 
 	running = (rproc->state == RPROC_RUNNING);
 	rproc_put(rproc);
-	return running || fallback_state;
+	return running;
 #else
-	return fallback_state;
+	return false;
 #endif
 }
 
 static ssize_t boot_subsys_show(struct kobject *kobj,
 				struct kobj_attribute *attr, char *buf)
 {
-	struct somc_dora_plat *plat = g_dora_plat;
+	struct somc_dora_plat *plat = READ_ONCE(g_dora_plat);
 	bool running;
 
 	if (!plat)
-		return sysfs_emit(buf, "1\n");
+		return sysfs_emit(buf, "0\n");
 
 	if (kobj == plat->boot_adsp_kobj)
-		running = somc_dora_rproc_is_running(plat, "somc,adsp-rproc",
-						     plat->boot_adsp_state);
+		running = somc_dora_rproc_is_running(plat, "somc,adsp-rproc");
 	else
-		running = somc_dora_rproc_is_running(plat, "somc,slpi-rproc",
-						     plat->boot_slpi_state);
+		running = somc_dora_rproc_is_running(plat, "somc,slpi-rproc");
 
 	return sysfs_emit(buf, "%u\n", running ? 1 : 0);
 }
@@ -367,33 +491,30 @@ static ssize_t boot_subsys_store(struct kobject *kobj,
 				 struct kobj_attribute *attr,
 				 const char *buf, size_t count)
 {
-	struct somc_dora_plat *plat = g_dora_plat;
+	struct somc_dora_plat *plat = READ_ONCE(g_dora_plat);
 	bool val;
-	int ret = 0;
+	int ret;
 
 	if (kstrtobool(buf, &val))
 		return -EINVAL;
 
 	if (!plat)
-		return count;
+		return -ENODEV;
 
 	mutex_lock(&plat->lock);
-	if (kobj == plat->boot_adsp_kobj) {
+	if (kobj == plat->boot_adsp_kobj)
 		ret = somc_dora_rproc_control(plat, "somc,adsp-rproc", val,
 					      &plat->adsp_ref_held);
-		if (!ret)
-			plat->boot_adsp_state = val;
-	} else {
+	else
 		ret = somc_dora_rproc_control(plat, "somc,slpi-rproc", val,
 					      &plat->slpi_ref_held);
-		if (!ret)
-			plat->boot_slpi_state = val;
-	}
 	mutex_unlock(&plat->lock);
 
-	if (ret)
-		dev_warn(plat->dev, "remoteproc transition (%s=%d) returned %d\n",
-			 kobj == plat->boot_adsp_kobj ? "adsp" : "slpi", val, ret);
+	if (ret) {
+		dev_err(plat->dev, "remoteproc transition (%s=%d) failed: %d\n",
+			kobj == plat->boot_adsp_kobj ? "adsp" : "slpi", val, ret);
+		return ret;
+	}
 
 	return count;
 }
@@ -415,12 +536,9 @@ static int somc_dora_plat_probe(struct platform_device *pdev)
 
 	plat->dev = dev;
 	mutex_init(&plat->lock);
-	plat->boot_adsp_state = true;
-	plat->boot_slpi_state = true;
 	plat->cover_win[2] = 1080;
 	plat->cover_win[3] = 1920;
 	platform_set_drvdata(pdev, plat);
-	g_dora_plat = plat;
 
 	plat->sim1_gpiod = devm_gpiod_get_optional(dev, "sim1-det", GPIOD_IN);
 	if (IS_ERR(plat->sim1_gpiod))
@@ -433,6 +551,7 @@ static int somc_dora_plat_probe(struct platform_device *pdev)
 				     "failed to get uim2-det gpio\n");
 
 	device_init_wakeup(dev, true);
+	WRITE_ONCE(g_dora_plat, plat);
 
 	if (plat->sim1_gpiod) {
 		plat->sim1_irq = gpiod_to_irq(plat->sim1_gpiod);
@@ -441,8 +560,8 @@ static int somc_dora_plat_probe(struct platform_device *pdev)
 				NULL, dora_sim_det_isr,
 				IRQF_TRIGGER_RISING | IRQF_TRIGGER_FALLING | IRQF_ONESHOT,
 				"dora-sim1-det", plat);
-			if (!ret)
-				enable_irq_wake(plat->sim1_irq);
+			if (!ret && !enable_irq_wake(plat->sim1_irq))
+				plat->sim1_wake_enabled = true;
 		}
 	}
 
@@ -453,8 +572,8 @@ static int somc_dora_plat_probe(struct platform_device *pdev)
 				NULL, dora_sim_det_isr,
 				IRQF_TRIGGER_RISING | IRQF_TRIGGER_FALLING | IRQF_ONESHOT,
 				"dora-uim2-det", plat);
-			if (!ret)
-				enable_irq_wake(plat->uim2_irq);
+			if (!ret && !enable_irq_wake(plat->uim2_irq))
+				plat->uim2_wake_enabled = true;
 		}
 	}
 
@@ -475,12 +594,26 @@ static int somc_dora_plat_probe(struct platform_device *pdev)
 	/* Create /sys/kernel/boot_adsp/boot and /sys/kernel/boot_slpi/boot */
 	if (kernel_kobj) {
 		plat->boot_adsp_kobj = kobject_create_and_add("boot_adsp", kernel_kobj);
-		if (plat->boot_adsp_kobj)
+		if (plat->boot_adsp_kobj) {
 			ret = sysfs_create_file(plat->boot_adsp_kobj, &boot_adsp_attr.attr);
+			if (ret) {
+				kobject_put(plat->boot_adsp_kobj);
+				plat->boot_adsp_kobj = NULL;
+			} else {
+				plat->boot_adsp_attr_created = true;
+			}
+		}
 
 		plat->boot_slpi_kobj = kobject_create_and_add("boot_slpi", kernel_kobj);
-		if (plat->boot_slpi_kobj)
+		if (plat->boot_slpi_kobj) {
 			ret = sysfs_create_file(plat->boot_slpi_kobj, &boot_slpi_attr.attr);
+			if (ret) {
+				kobject_put(plat->boot_slpi_kobj);
+				plat->boot_slpi_kobj = NULL;
+			} else {
+				plat->boot_slpi_attr_created = true;
+			}
+		}
 	}
 
 	dev_info(dev, "Sony Dora platform ready (sim1=%d, uim2_hybrid=%d)\n",
@@ -493,6 +626,19 @@ static int somc_dora_plat_remove(struct platform_device *pdev)
 {
 	struct somc_dora_plat *plat = platform_get_drvdata(pdev);
 
+	if (plat->boot_slpi_kobj) {
+		if (plat->boot_slpi_attr_created)
+			sysfs_remove_file(plat->boot_slpi_kobj, &boot_slpi_attr.attr);
+		kobject_put(plat->boot_slpi_kobj);
+	}
+	if (plat->boot_adsp_kobj) {
+		if (plat->boot_adsp_attr_created)
+			sysfs_remove_file(plat->boot_adsp_kobj, &boot_adsp_attr.attr);
+		kobject_put(plat->boot_adsp_kobj);
+	}
+	if (plat->clearpad_compat_dev)
+		device_unregister(plat->clearpad_compat_dev);
+
 	mutex_lock(&plat->lock);
 	if (plat->slpi_ref_held)
 		somc_dora_rproc_control(plat, "somc,slpi-rproc", false,
@@ -502,18 +648,13 @@ static int somc_dora_plat_remove(struct platform_device *pdev)
 					&plat->adsp_ref_held);
 	mutex_unlock(&plat->lock);
 
-	if (plat->boot_slpi_kobj) {
-		sysfs_remove_file(plat->boot_slpi_kobj, &boot_slpi_attr.attr);
-		kobject_put(plat->boot_slpi_kobj);
-	}
-	if (plat->boot_adsp_kobj) {
-		sysfs_remove_file(plat->boot_adsp_kobj, &boot_adsp_attr.attr);
-		kobject_put(plat->boot_adsp_kobj);
-	}
-	if (plat->clearpad_compat_dev)
-		device_unregister(plat->clearpad_compat_dev);
+	if (plat->uim2_wake_enabled)
+		disable_irq_wake(plat->uim2_irq);
+	if (plat->sim1_wake_enabled)
+		disable_irq_wake(plat->sim1_irq);
 
-	g_dora_plat = NULL;
+	WRITE_ONCE(g_dora_plat, NULL);
+	device_init_wakeup(&pdev->dev, false);
 	return 0;
 }
 
@@ -544,11 +685,13 @@ struct fpc1145_tee_data {
 	int irq;
 	wait_queue_head_t irq_wq;
 	atomic_t irq_pending;
+	atomic_t open_excl;
 	struct mutex lock;
 	bool wakeup_enabled;
 	bool clocks_enabled;
 	bool power_enabled;
 	bool irq_enabled;
+	bool wake_irq_active;
 	bool misc_registered;
 };
 
@@ -561,11 +704,16 @@ static int fpc1145_power_set(struct fpc1145_tee_data *fpc, bool enable)
 
 	if (enable) {
 		ret = regulator_bulk_enable(ARRAY_SIZE(fpc->supplies), fpc->supplies);
-		if (!ret)
+		if (!ret) {
 			fpc->power_enabled = true;
+			usleep_range(100, 900);
+		}
 	} else {
+		if (fpc->rst_gpiod)
+			gpiod_set_value_cansleep(fpc->rst_gpiod, 1);
 		ret = regulator_bulk_disable(ARRAY_SIZE(fpc->supplies), fpc->supplies);
-		fpc->power_enabled = false;
+		if (!ret)
+			fpc->power_enabled = false;
 	}
 	return ret;
 }
@@ -599,14 +747,72 @@ static int fpc1145_hw_reset(struct fpc1145_tee_data *fpc)
 	return 0;
 }
 
+static int fpc1145_device_prepare(struct fpc1145_tee_data *fpc, bool enable)
+{
+	int ret;
+
+	if (enable) {
+		ret = fpc1145_power_set(fpc, true);
+		if (ret)
+			return ret;
+		fpc->clocks_enabled = true;
+		ret = fpc1145_hw_reset(fpc);
+		if (ret) {
+			fpc1145_power_set(fpc, false);
+			return ret;
+		}
+		fpc1145_irq_set(fpc, true);
+	} else {
+		fpc1145_irq_set(fpc, false);
+		fpc->clocks_enabled = false;
+		ret = fpc1145_power_set(fpc, false);
+	}
+	return ret;
+}
+
+static int fpc1145_dev_open(struct inode *inode, struct file *filp)
+{
+	struct fpc1145_tee_data *fpc = container_of(filp->private_data,
+						    struct fpc1145_tee_data,
+						    miscdev);
+
+	if (atomic_cmpxchg(&fpc->open_excl, 0, 1) != 0)
+		return -EBUSY;
+
+	atomic_set(&fpc->irq_pending, 0);
+	return 0;
+}
+
+static int fpc1145_dev_release(struct inode *inode, struct file *filp)
+{
+	struct fpc1145_tee_data *fpc = container_of(filp->private_data,
+						    struct fpc1145_tee_data,
+						    miscdev);
+
+	mutex_lock(&fpc->lock);
+	if (fpc->power_enabled)
+		fpc1145_irq_set(fpc, true);
+	mutex_unlock(&fpc->lock);
+
+	pm_relax(fpc->dev);
+	atomic_set(&fpc->open_excl, 0);
+	return 0;
+}
+
 static __poll_t fpc1145_dev_poll(struct file *filp, poll_table *wait)
 {
 	struct fpc1145_tee_data *fpc = container_of(filp->private_data,
 						    struct fpc1145_tee_data,
 						    miscdev);
 
+	mutex_lock(&fpc->lock);
+	if (fpc->power_enabled)
+		fpc1145_irq_set(fpc, true);
+	mutex_unlock(&fpc->lock);
+
 	poll_wait(filp, &fpc->irq_wq, wait);
-	if (atomic_xchg(&fpc->irq_pending, 0) > 0)
+	if (atomic_xchg(&fpc->irq_pending, 0) > 0 ||
+	    gpiod_get_value_cansleep(fpc->irq_gpiod) > 0)
 		return EPOLLIN | EPOLLRDNORM;
 
 	return 0;
@@ -628,6 +834,11 @@ static ssize_t fpc1145_dev_read(struct file *filp, char __user *buf,
 		    gpiod_get_value_cansleep(fpc->irq_gpiod) <= 0)
 			return -EAGAIN;
 	} else {
+		mutex_lock(&fpc->lock);
+		if (fpc->power_enabled)
+			fpc1145_irq_set(fpc, true);
+		mutex_unlock(&fpc->lock);
+
 		if (wait_event_interruptible(fpc->irq_wq,
 					     atomic_read(&fpc->irq_pending) > 0))
 			return -ERESTARTSYS;
@@ -647,28 +858,112 @@ static long fpc1145_dev_ioctl(struct file *filp, unsigned int cmd,
 	struct fpc1145_tee_data *fpc = container_of(filp->private_data,
 						    struct fpc1145_tee_data,
 						    miscdev);
+	struct fpc1145_awake_args awake_args;
+	void __user *usr = (void __user *)arg;
 	int state = 0;
+	long wait_rc;
 	int ret = 0;
 
 	switch (cmd) {
+	/* --- Primary Sony 4.4 0x1145 (0x45) ioctl ABI --- */
+	case FPC_IOCWPREPARE:
+		if (arg <= 1)
+			state = (int)arg;
+		else if (get_user(state, (int __user *)usr))
+			return -EFAULT;
+		mutex_lock(&fpc->lock);
+		ret = fpc1145_device_prepare(fpc, !!state);
+		mutex_unlock(&fpc->lock);
+		break;
+
+	case FPC_IOCWDEVWAKE:
+	case FPC_IOCRDEVWAKE:
+		ret = 0;
+		break;
+
+	case FPC_IOCWRESET:
 	case FPC_IOC_HW_RESET:
 		mutex_lock(&fpc->lock);
 		ret = fpc1145_hw_reset(fpc);
 		mutex_unlock(&fpc->lock);
 		break;
 
+	case FPC_IOCWAWAKE:
+		if (copy_from_user(&awake_args, usr, sizeof(awake_args)))
+			return -EFAULT;
+		if (awake_args.awake) {
+			unsigned int timeout = min_t(unsigned int,
+						     awake_args.timeout,
+						     FPC_MAX_HAL_PROCESSING_TIME);
+			pm_wakeup_dev_event(fpc->dev, timeout, true);
+		} else {
+			pm_relax(fpc->dev);
+		}
+		break;
+
+	case FPC_IOCRPREPARE:
+		mutex_lock(&fpc->lock);
+		state = fpc->power_enabled ? 1 : 0;
+		mutex_unlock(&fpc->lock);
+		if (put_user(state, (int __user *)usr))
+			return -EFAULT;
+		break;
+
+	case FPC_IOCRIRQ:
+	case FPC_IOC_GET_IRQ_STATE:
+		state = gpiod_get_value_cansleep(fpc->irq_gpiod);
+		if (state < 0)
+			return state;
+		if (put_user(state, (int __user *)usr))
+			return -EFAULT;
+		break;
+
+	case FPC_IOCRIRQPOLL:
+		state = gpiod_get_value_cansleep(fpc->irq_gpiod);
+		if (state < 0)
+			return state;
+		if (state > 0) {
+			if (put_user(state, (int __user *)usr))
+				return -EFAULT;
+			return 0;
+		}
+		mutex_lock(&fpc->lock);
+		if (fpc->power_enabled)
+			fpc1145_irq_set(fpc, true);
+		mutex_unlock(&fpc->lock);
+
+		wait_rc = wait_event_interruptible_timeout(
+			fpc->irq_wq,
+			atomic_read(&fpc->irq_pending) > 0,
+			msecs_to_jiffies(FPC_IRQPOLL_TIMEOUT_MS));
+		if (wait_rc == -ERESTARTSYS)
+			return -ERESTARTSYS;
+
+		atomic_set(&fpc->irq_pending, 0);
+		state = gpiod_get_value_cansleep(fpc->irq_gpiod);
+		if (state < 0)
+			return state;
+		if (state > 0)
+			pm_wakeup_dev_event(fpc->dev, FPC_MAX_HAL_PROCESSING_TIME, true);
+		if (put_user(state, (int __user *)usr))
+			return -EFAULT;
+		break;
+
+	/* --- Secondary generic FPC ('f') ioctl fallback --- */
 	case FPC_IOC_WAKELOCK:
-		if (get_user(state, (int __user *)arg))
+		if (get_user(state, (int __user *)usr))
 			return -EFAULT;
 		mutex_lock(&fpc->lock);
 		fpc->wakeup_enabled = !!state;
 		mutex_unlock(&fpc->lock);
 		if (state)
 			pm_wakeup_dev_event(fpc->dev, FPC_TTW_HOLD_MS, true);
+		else
+			pm_relax(fpc->dev);
 		break;
 
 	case FPC_IOC_ENABLE_IRQ:
-		if (get_user(state, (int __user *)arg))
+		if (get_user(state, (int __user *)usr))
 			return -EFAULT;
 		mutex_lock(&fpc->lock);
 		ret = fpc1145_irq_set(fpc, !!state);
@@ -676,7 +971,7 @@ static long fpc1145_dev_ioctl(struct file *filp, unsigned int cmd,
 		break;
 
 	case FPC_IOC_ENABLE_POWER:
-		if (get_user(state, (int __user *)arg))
+		if (get_user(state, (int __user *)usr))
 			return -EFAULT;
 		mutex_lock(&fpc->lock);
 		ret = fpc1145_power_set(fpc, !!state);
@@ -684,19 +979,11 @@ static long fpc1145_dev_ioctl(struct file *filp, unsigned int cmd,
 		break;
 
 	case FPC_IOC_CLK_STATE:
-		if (get_user(state, (int __user *)arg))
+		if (get_user(state, (int __user *)usr))
 			return -EFAULT;
 		mutex_lock(&fpc->lock);
 		fpc->clocks_enabled = !!state;
 		mutex_unlock(&fpc->lock);
-		break;
-
-	case FPC_IOC_GET_IRQ_STATE:
-		state = gpiod_get_value_cansleep(fpc->irq_gpiod);
-		if (state < 0)
-			return state;
-		if (put_user(state, (int __user *)arg))
-			return -EFAULT;
 		break;
 
 	default:
@@ -708,6 +995,8 @@ static long fpc1145_dev_ioctl(struct file *filp, unsigned int cmd,
 
 static const struct file_operations fpc1145_fops = {
 	.owner = THIS_MODULE,
+	.open = fpc1145_dev_open,
+	.release = fpc1145_dev_release,
 	.poll = fpc1145_dev_poll,
 	.read = fpc1145_dev_read,
 	.unlocked_ioctl = fpc1145_dev_ioctl,
@@ -747,6 +1036,10 @@ static ssize_t irq_store(struct device *dev,
 	struct fpc1145_tee_data *fpc = dev_get_drvdata(dev);
 
 	atomic_set(&fpc->irq_pending, 0);
+	mutex_lock(&fpc->lock);
+	if (fpc->power_enabled)
+		fpc1145_irq_set(fpc, true);
+	mutex_unlock(&fpc->lock);
 	return count;
 }
 static DEVICE_ATTR_RW(irq);
@@ -825,7 +1118,14 @@ static irqreturn_t fpc1145_irq_handler(int irq, void *handle)
 	struct fpc1145_tee_data *fpc = handle;
 
 	if (READ_ONCE(fpc->wakeup_enabled))
-		pm_wakeup_dev_event(fpc->dev, FPC_TTW_HOLD_MS, true);
+		pm_wakeup_dev_event(fpc->dev, FPC_MAX_HAL_PROCESSING_TIME, true);
+
+	mutex_lock(&fpc->lock);
+	if (fpc->irq_enabled) {
+		disable_irq_nosync(fpc->irq);
+		fpc->irq_enabled = false;
+	}
+	mutex_unlock(&fpc->lock);
 
 	atomic_inc(&fpc->irq_pending);
 	wake_up_interruptible(&fpc->irq_wq);
@@ -847,6 +1147,7 @@ static int fpc1145_tee_probe(struct platform_device *pdev)
 	mutex_init(&fpc->lock);
 	init_waitqueue_head(&fpc->irq_wq);
 	atomic_set(&fpc->irq_pending, 0);
+	atomic_set(&fpc->open_excl, 0);
 	fpc->wakeup_enabled = true;
 	platform_set_drvdata(pdev, fpc);
 
@@ -868,14 +1169,17 @@ static int fpc1145_tee_probe(struct platform_device *pdev)
 				     "failed to get FPC1145 irq gpio\n");
 
 	fpc->irq = gpiod_to_irq(fpc->irq_gpiod);
-	if (fpc->irq < 0)
-		return dev_err_probe(dev, fpc->irq, "failed to map FPC1145 irq\n");
+	if (fpc->irq <= 0)
+		return dev_err_probe(dev, fpc->irq ? fpc->irq : -EINVAL,
+				     "failed to map FPC1145 irq\n");
 
 	device_init_wakeup(dev, true);
 
 	ret = fpc1145_power_set(fpc, true);
-	if (ret)
+	if (ret) {
+		device_init_wakeup(dev, false);
 		return ret;
+	}
 
 	fpc1145_hw_reset(fpc);
 
@@ -884,10 +1188,10 @@ static int fpc1145_tee_probe(struct platform_device *pdev)
 					dev_name(dev), fpc);
 	if (ret) {
 		fpc1145_power_set(fpc, false);
+		device_init_wakeup(dev, false);
 		return dev_err_probe(dev, ret, "failed to request FPC1145 irq\n");
 	}
 	fpc->irq_enabled = true;
-	enable_irq_wake(fpc->irq);
 
 	fpc->miscdev.minor = MISC_DYNAMIC_MINOR;
 	fpc->miscdev.name = "fingerprint";
@@ -901,7 +1205,7 @@ static int fpc1145_tee_probe(struct platform_device *pdev)
 		fpc->misc_registered = true;
 	}
 
-	dev_info(dev, "Sony Dora FPC1145 TEE fingerprint sensor ready (irq=%d, misc=%d)\n",
+	dev_info(dev, "Sony Dora FPC1145 TEE fingerprint interface ready (irq=%d, misc=%d)\n",
 		 fpc->irq, fpc->misc_registered);
 	return 0;
 }
@@ -913,10 +1217,50 @@ static int fpc1145_tee_remove(struct platform_device *pdev)
 	if (fpc->misc_registered)
 		misc_deregister(&fpc->miscdev);
 
-	disable_irq_wake(fpc->irq);
+	mutex_lock(&fpc->lock);
+	if (fpc->wake_irq_active) {
+		disable_irq_wake(fpc->irq);
+		fpc->wake_irq_active = false;
+	}
+	if (!fpc->irq_enabled)
+		fpc1145_irq_set(fpc, true);
 	fpc1145_power_set(fpc, false);
+	mutex_unlock(&fpc->lock);
+
+	device_init_wakeup(&pdev->dev, false);
 	return 0;
 }
+
+#ifdef CONFIG_PM_SLEEP
+static int fpc1145_tee_suspend(struct device *dev)
+{
+	struct fpc1145_tee_data *fpc = dev_get_drvdata(dev);
+
+	mutex_lock(&fpc->lock);
+	if (device_may_wakeup(dev) && fpc->wakeup_enabled &&
+	    fpc->power_enabled && !fpc->wake_irq_active) {
+		if (!enable_irq_wake(fpc->irq))
+			fpc->wake_irq_active = true;
+	}
+	mutex_unlock(&fpc->lock);
+	return 0;
+}
+
+static int fpc1145_tee_resume(struct device *dev)
+{
+	struct fpc1145_tee_data *fpc = dev_get_drvdata(dev);
+
+	mutex_lock(&fpc->lock);
+	if (fpc->wake_irq_active) {
+		disable_irq_wake(fpc->irq);
+		fpc->wake_irq_active = false;
+	}
+	mutex_unlock(&fpc->lock);
+	return 0;
+}
+#endif
+
+static SIMPLE_DEV_PM_OPS(fpc1145_tee_pm_ops, fpc1145_tee_suspend, fpc1145_tee_resume);
 
 static const struct of_device_id fpc1145_tee_of_match[] = {
 	{ .compatible = "fpc,fpc1145" },
@@ -932,6 +1276,7 @@ static struct platform_driver fpc1145_tee_driver = {
 		.name = "fpc1020",
 		.of_match_table = fpc1145_tee_of_match,
 		.dev_groups = fpc1145_groups,
+		.pm = &fpc1145_tee_pm_ops,
 	},
 };
 

@@ -5,6 +5,8 @@
  * to Linux 5.15.
  */
 
+#include <dt-bindings/clock/qcom,gcc-msm8996.h>
+#include <dt-bindings/clock/qcom,rpmcc.h>
 #include <dt-bindings/iio/qcom,spmi-vadc.h>
 #include <dt-bindings/input/linux-event-codes.h>
 #include <dt-bindings/sound/qcom,q6afe.h>
@@ -161,9 +163,23 @@
 	};
 };
 
-/* Dora uses eMMC 5.1 on sdhc1 (7464900.sdhci), not UFS */
+/*
+ * Dora uses eMMC 5.1 on sdhc1 (7464900.sdhci), not UFS:
+ *  - Expand hc_mem window from 0x11c to 0x314 so sdhci_msm_v4 vendor registers
+ *    (0x11c..0x1bc: core_vendor_spec_capabilities0..core_ddr_config) are mapped.
+ *  - Wire GCC_SDCC1_BCR hardware reset so sdhci_msm_gcc_reset() clears S1
+ *    bootloader PIO state prior to ADMA/HS400 initialization.
+ *  - Use RPM_SMD_XO_CLK_SRC for 19.2 MHz XO calibration clock.
+ */
 &sdhc1 {
 	status = "okay";
+	reg = <0x07464900 0x314>, <0x07464000 0x800>;
+	reg-names = "hc_mem", "core_mem";
+	clocks = <&gcc GCC_SDCC1_AHB_CLK>,
+		 <&gcc GCC_SDCC1_APPS_CLK>,
+		 <&rpmcc RPM_SMD_XO_CLK_SRC>;
+	clock-names = "iface", "core", "xo";
+	resets = <&gcc GCC_SDCC1_BCR>;
 	vmmc-supply = <&pm8994_l20>;
 	vqmmc-supply = <&pm8994_s4>;
 	bus-width = <8>;
@@ -181,6 +197,11 @@
  */
 &sdhc2 {
 	status = "okay";
+	clocks = <&gcc GCC_SDCC2_AHB_CLK>,
+		 <&gcc GCC_SDCC2_APPS_CLK>,
+		 <&rpmcc RPM_SMD_XO_CLK_SRC>;
+	clock-names = "iface", "core", "xo";
+	resets = <&gcc GCC_SDCC2_BCR>;
 	pinctrl-names = "default", "sleep";
 	pinctrl-0 = <&sdc2_state_on &tray_det_pin &uim_detect_en>;
 	pinctrl-1 = <&sdc2_state_off &tray_det_pin &uim_detect_en>;
@@ -255,6 +276,13 @@
 	};
 };
 
+/* Touch I/O 1.8V load switch on GPIO 50 (tp_vddio_en) fed by pm8994_s4 */
+&panel_tvdd {
+	vin-supply = <&pm8994_s4>;
+	regulator-min-microvolt = <1800000>;
+	regulator-max-microvolt = <1800000>;
+};
+
 /* Synaptics Clearpad S3320 In-Cell Touchscreen on BLSP2 I2C6 (0x75ba000 @ 0x2c) */
 &blsp2_i2c6 {
 	status = "okay";
@@ -263,6 +291,8 @@
 	clearpad_ts: synaptics@2c {
 		compatible = "syna,rmi4-i2c";
 		reg = <0x2c>;
+		#address-cells = <1>;
+		#size-cells = <0>;
 		interrupt-parent = <&tlmm>;
 		interrupts = <125 IRQ_TYPE_EDGE_FALLING>;
 		pinctrl-names = "default", "sleep";
@@ -270,10 +300,12 @@
 		pinctrl-1 = <&touch_int_sleep &ts_reset_n>;
 		reset-gpios = <&tlmm 89 GPIO_ACTIVE_LOW>;
 		vdd-supply = <&pm8994_l22>;
-		vio-supply = <&pm8994_s4>;
+		vio-supply = <&panel_tvdd>;
 		syna,reset-delay-ms = <60>;
 		syna,startup-delay-ms = <100>;
 		wakeup-source;
+
+		/delete-node/ rmi4-f11@11;
 
 		rmi4-f12@12 {
 			reg = <0x12>;
@@ -399,9 +431,23 @@
 	};
 };
 
-/* Display subsystem: MDP5 + SMMU + DSI0 + 14nm PHY + LAB/IBB + WLED + LCD ID multi-panel */
+/* Dora-specific PM8994 regulator limits from Sony 4.4 msm8996-tone-dora-common.dtsi */
 &pm8994_l2 {
 	regulator-allow-set-load;
+};
+
+&pm8994_l17 {
+	regulator-min-microvolt = <2200000>;
+	regulator-max-microvolt = <2200000>;
+};
+
+&pm8994_l18 {
+	regulator-allow-set-load;
+};
+
+&pm8994_l27 {
+	regulator-min-microvolt = <1000000>;
+	regulator-max-microvolt = <1000000>;
 };
 
 &pm8994_s4 {
@@ -421,8 +467,13 @@
 	regulator-active-discharge = <1>;
 };
 
+/*
+ * Disable pmi8994.dtsi default qcom,cabc: Dora panels disable CABC PWM (0x55 0x00),
+ * so leaving qcom,cabc enabled gates all 3 WLED strings to 0% duty cycle.
+ */
 &pmi8994_wled {
 	status = "okay";
+	/delete-property/ qcom,cabc;
 	default-brightness = <512>;
 	qcom,current-limit-microamp = <20000>;
 	qcom,num-strings = <3>;

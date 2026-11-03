@@ -614,6 +614,106 @@ static char *brcm_alt_fw_path(const char *path, const char *board_type)
 	return kstrdup(alt_path, GFP_KERNEL);
 }
 
+#if IS_ENABLED(CONFIG_SOMC_DORA_PLATFORM)
+extern void somc_dora_get_bcmdhd_fw_path(char *buf, size_t len);
+extern void somc_dora_get_bcmdhd_nvram_path(char *buf, size_t len);
+
+/*
+ * Strip Android /vendor or /oem firmware root prefixes so request_firmware_direct()
+ * receives a clean relative subpath without '..' parent traversal.
+ */
+static const char *brcmf_sony_rel_fw_path(const char *raw, char *buf, size_t len)
+{
+	static const char * const prefixes[] = {
+		"/vendor/firmware/",
+		"/vendor/etc/firmware/",
+		"/vendor/etc/",
+		"/oem/firmware/",
+		"/oem/etc/firmware/",
+		"/etc/firmware/",
+		"/system/etc/firmware/",
+	};
+	size_t i;
+
+	if (!raw || !raw[0] || strstr(raw, ".."))
+		return NULL;
+
+	for (i = 0; i < ARRAY_SIZE(prefixes); i++) {
+		size_t plen = strlen(prefixes[i]);
+
+		if (!strncmp(raw, prefixes[i], plen) && raw[plen] != '\0') {
+			strscpy(buf, raw + plen, len);
+			return buf;
+		}
+	}
+
+	while (*raw == '/')
+		raw++;
+	if (!*raw)
+		return NULL;
+
+	strscpy(buf, raw, len);
+	return buf;
+}
+#endif
+
+static int brcmf_fw_request_sony_binary(const struct firmware **fw,
+					struct device *dev)
+{
+	int ret = -ENOENT;
+
+#if IS_ENABLED(CONFIG_SOMC_DORA_PLATFORM)
+	{
+		char raw_path[256];
+		char rel_path[256];
+		const char *cand;
+
+		somc_dora_get_bcmdhd_fw_path(raw_path, sizeof(raw_path));
+		cand = brcmf_sony_rel_fw_path(raw_path, rel_path, sizeof(rel_path));
+		if (cand) {
+			ret = request_firmware_direct(fw, cand, dev);
+			if (ret == 0)
+				return 0;
+		}
+	}
+#endif
+
+	return request_firmware_direct(fw, "wlan/bcmdhd/fw_bcmdhd.bin", dev);
+}
+
+static int brcmf_fw_request_sony_nvram(const struct firmware **fw,
+				       struct device *dev)
+{
+	static const char * const sony_nvram_paths[] = {
+		"wlan/bcmdhd/bcmdhd.cal",
+		"wifi/bcmdhd.cal",
+		"bcmdhd.cal",
+	};
+	size_t i;
+	int ret = -ENOENT;
+
+#if IS_ENABLED(CONFIG_SOMC_DORA_PLATFORM)
+	{
+		char raw_path[256];
+		char rel_path[256];
+		const char *cand;
+
+		somc_dora_get_bcmdhd_nvram_path(raw_path, sizeof(raw_path));
+		cand = brcmf_sony_rel_fw_path(raw_path, rel_path, sizeof(rel_path));
+		if (cand) {
+			ret = request_firmware_direct(fw, cand, dev);
+			if (ret == 0)
+				return 0;
+		}
+	}
+#endif
+
+	for (i = 0; i < ARRAY_SIZE(sony_nvram_paths) && ret; i++)
+		ret = request_firmware_direct(fw, sony_nvram_paths[i], dev);
+
+	return ret;
+}
+
 static int brcmf_fw_request_firmware(const struct firmware **fw,
 				     struct brcmf_fw *fwctx)
 {
@@ -638,25 +738,15 @@ fallback:
 	ret = request_firmware(fw, cur->path, fwctx->dev);
 	/*
 	 * Sony Xperia Tone/Dora BCM4359 C0 stock SquashFS /oem (/vendor) fallback:
-	 * Use request_firmware_direct() on clean loader-relative paths (without
-	 * parent-directory '..' traversal or 60s usermodehelper delays).
+	 * Honor Android Wi-Fi HAL /sys/module/bcmdhd/parameters/{firmware_path,nvram_path}
+	 * (e.g. STA fw_bcmdhd.bin vs SoftAP fw_bcmdhd_apsta.bin) and fall back to
+	 * clean loader-relative paths via request_firmware_direct() without 60s delays.
 	 */
 	if (ret && strstr(cur->path, "brcmfmac4359-pcie")) {
-		if (cur->type == BRCMF_FW_TYPE_NVRAM) {
-			static const char * const sony_nvram_paths[] = {
-				"wlan/bcmdhd/bcmdhd.cal",
-				"wifi/bcmdhd.cal",
-				"bcmdhd.cal",
-			};
-			size_t i;
-
-			for (i = 0; i < ARRAY_SIZE(sony_nvram_paths) && ret; i++)
-				ret = request_firmware_direct(fw, sony_nvram_paths[i],
-							      fwctx->dev);
-		} else if (cur->type == BRCMF_FW_TYPE_BINARY) {
-			ret = request_firmware_direct(fw, "wlan/bcmdhd/fw_bcmdhd.bin",
-						      fwctx->dev);
-		}
+		if (cur->type == BRCMF_FW_TYPE_NVRAM)
+			ret = brcmf_fw_request_sony_nvram(fw, fwctx->dev);
+		else if (cur->type == BRCMF_FW_TYPE_BINARY)
+			ret = brcmf_fw_request_sony_binary(fw, fwctx->dev);
 	}
 	return ret;
 }
@@ -669,8 +759,7 @@ static void brcmf_fw_request_done(const struct firmware *fw, void *ctx)
 
 	if (!fw && fwctx->curpos == 0 &&
 	    strstr(fwctx->req->items[0].path, "brcmfmac4359-pcie.bin") &&
-	    request_firmware_direct(&sony_fw, "wlan/bcmdhd/fw_bcmdhd.bin",
-				    fwctx->dev) == 0) {
+	    brcmf_fw_request_sony_binary(&sony_fw, fwctx->dev) == 0) {
 		fw = sony_fw;
 	}
 

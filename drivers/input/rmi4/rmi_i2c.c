@@ -275,7 +275,7 @@ static int rmi_i2c_probe(struct i2c_client *client,
 	msleep(rmi_i2c->startup_delay);
 
 	if (of_property_read_bool(client->dev.of_node, "wakeup-source"))
-		device_init_wakeup(&client->dev, true);
+		device_set_wakeup_capable(&client->dev, true);
 
 	rmi_i2c->client = client;
 	mutex_init(&rmi_i2c->page_mutex);
@@ -321,19 +321,28 @@ static int rmi_i2c_suspend(struct device *dev)
 	int ret;
 
 	ret = rmi_driver_suspend(rmi_i2c->xport.rmi_dev, true);
-	if (ret)
+	if (ret) {
 		dev_warn(dev, "Failed to suspend device: %d\n", ret);
-
-	if (device_may_wakeup(dev) && client->irq > 0) {
-		if (!enable_irq_wake(client->irq))
-			rmi_i2c->irq_wake_active = true;
 		return ret;
 	}
+
+	if (device_may_wakeup(dev) && client->irq > 0) {
+		ret = enable_irq_wake(client->irq);
+		if (!ret) {
+			rmi_i2c->irq_wake_active = true;
+			return 0;
+		}
+		dev_warn(dev, "Failed to enable wake IRQ %d: %d\n",
+			 client->irq, ret);
+	}
+
+	if (rmi_i2c->reset_gpio)
+		gpiod_set_value_cansleep(rmi_i2c->reset_gpio, 1);
 
 	regulator_bulk_disable(ARRAY_SIZE(rmi_i2c->supplies),
 			       rmi_i2c->supplies);
 
-	return ret;
+	return 0;
 }
 
 static int rmi_i2c_resume(struct device *dev)
@@ -352,6 +361,8 @@ static int rmi_i2c_resume(struct device *dev)
 			return ret;
 
 		if (rmi_i2c->reset_gpio) {
+			gpiod_set_value_cansleep(rmi_i2c->reset_gpio, 1);
+			usleep_range(10000, 12000);
 			gpiod_set_value_cansleep(rmi_i2c->reset_gpio, 0);
 			if (rmi_i2c->reset_delay)
 				msleep(rmi_i2c->reset_delay);
@@ -375,8 +386,13 @@ static int rmi_i2c_runtime_suspend(struct device *dev)
 	int ret;
 
 	ret = rmi_driver_suspend(rmi_i2c->xport.rmi_dev, false);
-	if (ret)
-		dev_warn(dev, "Failed to resume device: %d\n", ret);
+	if (ret) {
+		dev_warn(dev, "Failed to runtime suspend device: %d\n", ret);
+		return ret;
+	}
+
+	if (rmi_i2c->reset_gpio)
+		gpiod_set_value_cansleep(rmi_i2c->reset_gpio, 1);
 
 	regulator_bulk_disable(ARRAY_SIZE(rmi_i2c->supplies),
 			       rmi_i2c->supplies);
@@ -395,11 +411,17 @@ static int rmi_i2c_runtime_resume(struct device *dev)
 	if (ret)
 		return ret;
 
+	if (rmi_i2c->reset_gpio) {
+		gpiod_set_value_cansleep(rmi_i2c->reset_gpio, 0);
+		if (rmi_i2c->reset_delay)
+			msleep(rmi_i2c->reset_delay);
+	}
+
 	msleep(rmi_i2c->startup_delay);
 
 	ret = rmi_driver_resume(rmi_i2c->xport.rmi_dev, false);
 	if (ret)
-		dev_warn(dev, "Failed to resume device: %d\n", ret);
+		dev_warn(dev, "Failed to runtime resume device: %d\n", ret);
 
 	return 0;
 }

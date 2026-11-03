@@ -204,8 +204,8 @@ static const struct somc_dsi_cmd sharp_id3_on_cmds[] = {
 		 0x01, 0x00, 0xFD, 0x01, 0xFF, 0xFC, 0x00, 0x00,
 		 0xFD, 0x01, 0xFF, 0xFC, 0x00, 0x00, 0xFD, 0x01,
 		 0xFF, 0xFC, 0x00),
-	SOMC_CMD(0x05, 0, 0x29),
 	SOMC_CMD(0x05, 120, 0x11),
+	SOMC_CMD(0x05, 20, 0x29),
 };
 
 /* Panel 9: Sharp ID9 + Synaptics Full In-Cell */
@@ -247,8 +247,8 @@ static const struct somc_dsi_cmd sharp_id9_on_cmds[] = {
 		 0x01, 0x00, 0xFD, 0x01, 0xFF, 0xFC, 0x00, 0x00,
 		 0xFD, 0x01, 0xFF, 0xFC, 0x00, 0x00, 0xFD, 0x01,
 		 0xFF, 0xFC, 0x00),
-	SOMC_CMD(0x05, 0, 0x29),
 	SOMC_CMD(0x05, 120, 0x11),
+	SOMC_CMD(0x05, 20, 0x29),
 };
 
 /* Default Safe Fallback 1080p60 Panel */
@@ -432,11 +432,19 @@ static int somc_dora_panel_prepare(struct drm_panel *panel)
 
 	msleep(20);
 
-	/* Sony 4.4 pw-on-rst-seq: low 10ms -> high 10ms */
+	/*
+	 * Exact Sony 4.4 dsi-panel-dora.dtsi reset sequence:
+	 * somc,pw-on-rst-seq = <0 10>, <1 16>, <0 7>, <1 16>;
+	 * Note: reset_gpio is GPIO_ACTIVE_LOW (logical 1 = physical LOW).
+	 */
 	gpiod_set_value_cansleep(ctx->reset_gpio, 1);
 	msleep(10);
 	gpiod_set_value_cansleep(ctx->reset_gpio, 0);
-	msleep(10);
+	msleep(16);
+	gpiod_set_value_cansleep(ctx->reset_gpio, 1);
+	usleep_range(7000, 8000);
+	gpiod_set_value_cansleep(ctx->reset_gpio, 0);
+	msleep(16);
 
 	ret = somc_dsi_send_table(ctx->dsi, ctx->desc->on_cmds,
 				  ctx->desc->num_on_cmds, MIPI_DSI_MSG_USE_LPM);
@@ -576,17 +584,24 @@ static int somc_dora_detect_adc_uv(struct device *dev, u32 *out_uv)
 	if (IS_ERR(chan)) {
 		if (PTR_ERR(chan) == -EPROBE_DEFER)
 			return -EPROBE_DEFER;
+		dev_warn(dev, "PM8994 VADC lcd-id unavailable (%ld), using safe default fallback\n",
+			 PTR_ERR(chan));
 		*out_uv = (u32)somc_lcdid_adc_uv;
 		return 0;
 	}
 
+	/* qcom-spmi-vadc IIO_CHAN_INFO_PROCESSED returns microvolts (uV) */
 	ret = iio_read_channel_processed(chan, &val_uv);
 	iio_channel_release(chan);
+	if (ret == -EPROBE_DEFER)
+		return -EPROBE_DEFER;
 	if (ret >= 0 && val_uv >= 0) {
 		*out_uv = (u32)val_uv;
 		return 0;
 	}
 
+	dev_warn(dev, "PM8994 VADC lcd-id read failed (ret=%d, val=%d), using safe default fallback\n",
+		 ret, val_uv);
 	*out_uv = (u32)somc_lcdid_adc_uv;
 	return 0;
 }

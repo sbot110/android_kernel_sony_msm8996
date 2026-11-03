@@ -1,45 +1,35 @@
-# Dora Linux 4.19: блокеры после этапа 3
+# Dora Linux 4.19: блокеры после этапа 4
 
-Дата: 2026-11-02. Начальный HEAD этапа:
-`1b2d146ae22ee973750a2ca3151f1496badc4867`.
-Аппаратный эталон Sony 4.4.302:
-`0c295b15b6d0fb59a64e13b9e0ef2070818ef2a1`.
+Обновлено: 2026-11-03. Начальный HEAD этапа:
+`8d7ab8a3baeb73cfaea264f3f7758e32cffce097`.
+Эталон Sony 4.4.302: `0c295b15b6d0fb59a64e13b9e0ef2070818ef2a1`.
 
-Первая безопасная диагностическая загрузка пока не подготовлена.
-F8131 и F8132 не загружались с этим ядром. Текущие результаты сборки,
-точный проверенный SHA и артефакты перечислены в
-[dora-build-validation.txt](dora-build-validation.txt).
+Ни F8131, ни F8132 не загружались с этим ядром. Первая диагностическая
+загрузка не подготовлена; boot.img на этом этапе не создаётся.
+Фактическая сборка/проверенные SHA: [dora-build-validation.txt](dora-build-validation.txt).
 
-## Реальные исправления
+## Реальные изменения
 
-Восстановлены все 145 fabric/master/slave узлов исходного MSM8996 NoC/BIMC,
-12 UFS usecases и два настоящих маршрута. Старые hashed clock IDs переведены
-на реально заполненные native GCC/MMCC/RPM clock IDs. Возвращён физический
-AGGRE0 MPU configuration gate. Сопоставление с четырьмя итоговыми Sony DT
-сохраняет QoS, MMIO, ширины шин, RPM IDs, aggregation и ненулевые рабочие votes.
-Исключены только CoreSight trace links и отдельные SPDM clients вне графа.
+Подтверждён SDHC1 eMMC `7464900.sdhci`, восстановлены оба SDHCI hardware
+описания и исходные clocks/rails/pads/HS400/NoC vectors. SDHC2 — MicroSD/
+hybrid UIM2; aliases и GPIO ownership не зависят от probe order. UFS host
+и PHY отключены: предыдущая гипотеза о загрузке Dora с UFS была ошибочной.
+[Доказательства и пределы](dora-storage-audit.md).
 
-Bus backend теперь отправляет настоящие 64-bit active/sleep requests через
-native SMD RPM: отключённый legacy RPM больше не может имитировать успех.
-Исправлены ACK bounds/correlation, deferred probe, lifetime, маршрутизация,
-ошибки clocks/regulators, кеширование и повторные commits. Host-тесты
-проверяют реальные функции, включая отказы выделения памяти и cleanup.
-Они не являются измерением bandwidth или ответов firmware телефона.
+Добавлены настоящий logical RPM corner frontend, 56 GCC/49 MMCC исходных
+Sony fmax maps и forced ACTIVE/SLEEP ACK перед clock operations. Обработаны
+ошибки CCF prepare/rate/parent, частичное применение, удержание voltage
+leases, bootstrap/handoff и teardown. Host-тесты исполняют production code;
+они не измеряют напряжение или работу firmware телефона.
 
-Восстановлены 33 исходных PMIC GPIO/MPP состояния; аналоговые inputs больше
-не наследуют выходной драйвер. Исправлены UFS host registration/power errors,
-reset-before-collapse при ошибке power-on и always-on pad load при повторе.
+CPU transaction engine проверяет ACD/lease/PLL/readback/rollback и исходные
+12 fuse plans, но hardware adapter не подключён. Native RPM S8–S11
+отключены, чтобы не конкурировать с четырёхфазным SPM-controlled APCC.
+maxcpus=2 и выключенные CPU_FREQ/CPU_IDLE сохранены.
 
-APCC/CBF теперь имеют реальный read-only provider и читают PLL/mux/divider
-firmware без изменения частот. HMSS/MMSS CPR3, Kryo LDO/retention и APM
-перенесены с сохранением исходных fuse/binning tables и лицензий.
-
-MDSS/DSI/PLL/SMMU/LAB/IBB/WLED граф и пять LCD-ID панелей описаны полностью
-в проверяемых supplements. Использован настоящий Sony WLED, а не WLED4
-другого PMIC. Итоговые Sony overrides дают WLED 660 mA, 20 mA и три strings;
-промежуточные 980 mA/25 mA/четыре strings не использованы. Сохранены
-1080p60, автоматический LCD-ID выбор и fail-closed поведение для неизвестного
-ID. AUO120 и dynamic switching отключены.
+Сохранены 145-node NoC/BIMC, 33 PMIC boot pin states, пять LCD-ID панелей
+1080p60, GPU/PMIC variant data и предыдущие BCMDHD WPA2/ION/USB/UFS fixes.
+Не включены AUO120, dynamic switching, GPU или незавершённая зарядка.
 
 ## Четыре варианта данных
 
@@ -58,44 +48,38 @@ GPU floor/ceiling/fuse/aging/corner mapping и PMIC overrides сверены п�
 activation guards, не подтверждение runtime поддержки или выбора загрузчиком.
 F8131/F8132 не связаны жёстко с stepping, PMIC или панелью.
 
-## Нерешённые P0 и следующие реализации
+## Нерешённые P0
 
-| Блокер | Точная причина и необходимое действие |
+| Зависимость | Точная граница и следующее действие |
 | --- | --- |
-| RPM logical corners | Native `qcom_smd-regulator.c` передаёт µV и ACTIVE requests; Sony нужны logical 1..7 → wire 0..6, corn/vfc, BOTH/AO/floor max aggregation и ACK/rollback. Нельзя направить corner consumers на обычные s1/s2 µV providers. Требуется полноценный общий frontend; исходные запросы сохранены disabled. |
-| UFS GCC/CX | Sony UFS AXI 200 MHz и ICE source 300 MHz требуют CX NOMINAL. Native GCC имеет rates, но не voltage-corner coupling. UFS host поэтому disabled. Восстановленная NoC цепочка не заменяет CX vote. См. [точный аудит GCC](dora-gcc-corners.txt). |
-| CPU DVFS / четыре CPU | CCF поднимает напряжение раньше PRE notifier, тогда как Sony сначала переводит ACD на safe source. Нужна согласованная ACD→CPR/RPM→PLL транзакция с rollback и fuse plans. Read-only APCC не является DVFS. CPU_FREQ/CPU_IDLE выключены, maxcpus=2 сохранён; SPM и native S8..S11 ownership ещё нужно согласовать. См. [CPU port](dora-cpu-port.txt). |
-| Дисплей | Native MMCC не голосует Sony vdd_dig corners для MDP/DSI. MDP probe может запросить 412.5 MHz/HIGH. MDP/DSI/PLL/SMMU/LAB/IBB/WLED поэтому disabled до корректного coupling. См. [display port](dora-display-port.txt). |
-| GPU | Не завершены общий corner frontend, оригинальный physical S2 regulator backend, независимый MX vote, KGSL retention/SMMU/secure-firmware контракт. GFX child/CPR/buck остаются disabled, unregulated fallback исключён. См. [GPU/variants](dora-gfx-variants.txt). |
-| UFS power-off recovery | Common PHY игнорирует часть ошибок отключения ресурсов. Возврат ошибки после частичного collapse оставляет generic PHY power_count=1; простой rollback может потерять calibration/PCS state. Требуется совместная host/PHY recovery state machine и fault tests; это не исправлено предположением. |
-| Зарядка / USB | Реальные DPDM/BC1.2/ID-ADC/VBUS/OTG и ownership PHY не завершены. SMBcharger DT не активирован, fake fixed DPDM отсутствует. JEITA/temperature/current protections не отключались. См. [DPDM gap](dora-usb-dpdm-gap.txt). |
-| Bootloader / Android image | Нет проверенного рабочего boot.img и настоящего LOS21 ramdisk для сравнения Sony header/signature/offsets/DT selection. Наличие четырёх FDT в Image.gz-dtb этого не доказывает. boot.img не создавался. |
+| eMMC / physical rails | `sdhci-msm.c` power_error и bus vote quarantine запрещают продолжение после uncertain ACK. `qcom_smd-regulator.c:rpm_reg_write_active` не даёт consumer API для полного UV/SWEN/load replay и SLEEP. Нужен настоящий provider contract, затем проверка интегрированной цепочки и снятие CX/SDHC gates. Cached rollback не является восстановлением PMIC. |
+| GCC/MMCC bootstrap | `clk-msm8996-voltage.h:msm8996_voltage_ownership` сохраняет HIGH, если работающий PLL/parent не имеет доказанного counted owner/rate. Нужно подтвердить реальный boot handoff и поведение late/deferred probe; не угадывать idle состояние. CX пока disabled в final DT. |
+| CPU DVFS / четыре CPU | `clk-cpu-8996.c` остаётся observational provider. Новый `clk-msm8996-cpu-transaction.c` не имеет MMIO/CPR/SPM adapter. Нужны native ACD/CBF/PLL callbacks, fuse/binning, S8–S11/SPM ownership, HMSS/Kryo/APM и thermal/hotplug/LPM. |
+| MDSS / MMCC analog | `msm8996_voltage_apply` permanently quarantines uncertain L12 operation: digital ACK не подтверждает physical SWEN. Нужны L12/SLEEP replay, DSI PHY analog/panel/incell ownership, затем display activation и реальные измерения. |
+| GPU Adreno 530 | Gated child provider/MMSS CPR/PMI S2, независимый MX и CX, retention/SMMU/secure firmware и userspace ABI остаются неполными. Нельзя применять SDM845 планы. |
+| USB / зарядка | Не завершены DPDM/PHY ownership, BC1.2/VBUS, MicroUSB ID/ADC и SMBcharger safety paths. Нет fake fixed DPDM; JEITA/thermal/current protections не отключены. |
+| Android boot | Не предоставлены фактический рабочий boot.img, LOS21 ramdisk и новые runtime логи. Требуются boot header/partition size/cmdline/DTB-selection/vendor checks. Сохранённая DT bootargs сама не доказывает итоговую cmdline загрузчика. |
 
-Audio/DSP/modem/firmware/vendor ABI, Wi-Fi/PCIe DMA и остальные аппаратные
-подсистемы также требуют дальнейшей интеграции и физической проверки.
-Их прежние исходники и WPA2 исправления сохранены; завершение этих цепочек
-на этапе 3 не заявляется.
+Generic UFS host/PHY recovery остаётся отдельной задачей общей MSM8996 базы,
+но UFS не является установленным Dora storage и не используется для обхода
+неполной eMMC. Обе MMC цепочки, CX/MX, GPU/CPR/PMI S2 и display power chain
+остаются явно gated. Это не BOOT TEST READY.
 
-## Условия дальнейшего теста
+## Независимые проверки и физические пределы
 
-Сначала реализовать общий RPM corner frontend и coupling GCC/MMCC, затем
-согласовать CPU ACD/CPR и остальные указанные контракты. Не снимать guards
-ради успешного probe. Повторить clean build и fault/provider checks.
+32 check-*.py включены в build.sh; сохранены исходные 20 проверок. Новые
+тесты выполняют MMC alias/UIM2/provider/power helpers, physical/cache ACK
+расхождения, RPM corner aggregation/rollback/lifetime/concurrency, CCF
+transactions, CPU transaction engine и реальные Android ABI/filesystem
+functions. Отрицательные DT fixtures отвергают снятые gates, duplicate
+owners, неверные supplies/endpoint/corners и обход maxcpus.
 
-Для каждой модели отдельно нужны read-only снимки рабочего 4.4: реальные
-msm/board/PMIC/LCD IDs, выбранный DT, cmdline, clock/regulator summaries и
-pstore. Требуется офлайн разобранный рабочий boot.img и реальный LOS21
-ramdisk, проверка размера/подписи/header и наличие проверенного пути TWRP
-recovery с копией рабочего boot. Только после закрытия P0 обсуждать отдельный
-диагностический boot test и способ сбора логов. При восстановлении затрагивать
-только заранее согласованный boot; userdata, modem, TA, persist не менять.
-Никаких операций прошивки, загрузки на телефон или форматирования не выполнено.
+Без отдельных F8131/F8132 нельзя подтвердить выбранный DTB, раннюю загрузку,
+напряжение/температуры, eMMC/SD tuning и data integrity, encrypted userdata,
+каждую панель/touch/GPU, WPA2/reconnect, USB/charging, suspend, audio/voice,
+модем/DSDS или vendor runtime. Старые bpfloader/BoringSSL/vold ошибки не
+объявлены устранёнными. Механизмы безопасности не отключались.
 
-Runtime минимум: UFS link/I/O/integrity и suspend, реальные RPM ACK/rails,
-все четыре CPU/thermal, пять панелей/touch/ESD, GPU firmware/ABI, Wi-Fi WPA2,
-зарядные отсечки и firmware/DSP/modem. Для F8131 проверить Single SIM, для
-F8132 оба слота и DSDS; принудительные ss/dsds в ядро не добавлены.
-
-SMBcharger не привязан в DT. Это не доказывает, что загрузчик остановил
-физическую зарядку: исходное состояние PMIC и реальные токи не измерялись.
-Безопасная зарядка и обычное использование не подтверждены.
+SMBcharger не привязан в DT. Это не доказывает, что загрузчик прекратил
+физическую зарядку: исходное PMIC состояние и токи не измерены. Разделы
+userdata/modem/TA/persist не менялись; прошивки и форматирования не было.

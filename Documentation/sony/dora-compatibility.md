@@ -1,10 +1,10 @@
 # Dora F8131/F8132 — матрица совместимости Linux 4.19
 
-Обновлено: 2026-11-02. Источники этапа 3:
-`799e29584b029fe34b8344a726989d4836d258d5`.
-Итоговый статус: **BUILDABLE**; чистая сборка: **код завершения 0; vmlinux, Image/Image.gz, четыре DTB и Image.gz-dtb проверены**.
-Это не BOOT TEST READY. Физической загрузки 4.19 и подтверждения LOS21 нет
-ни для F8131, ни для F8132. [Протокол сборки](dora-build-validation.txt).
+Обновлено: 2026-11-03. Этап 4 начат от
+`8d7ab8a3baeb73cfaea264f3f7758e32cffce097`.
+Точные проверенные SHA и результат чистой сборки:
+[протокол](dora-build-validation.txt). BOOT TEST READY: **NO**;
+RUNTIME VERIFIED: **NO** для обеих моделей.
 
 «Код/DT» ниже означает перенесённую и автоматически проверяемую реализацию
 или набор hardware данных. Это не подтверждение probe или работы телефона.
@@ -52,9 +52,9 @@ PMIC, stepping или панель.** Подробнее: [GPU/варианты]
 
 | Подсистема | F8131 | F8132 | Подтверждённое состояние и следующий blocker |
 | --- | --- | --- | --- |
-| UFS / BIMC/NoC | Код/DT; UFS отключён | Код/DT; UFS отключён | Настоящая topology/RPM bandwidth и 12×2 vectors восстановлены. Нет GCC frequency→CX corner coupling; затем нужны link startup, ICE, suspend и проверка сохранности данных. |
-| CPU / CBF / CPR / SAW | Наблюдение rates; voltage/DVFS отключены | То же | APCC match/decoder, HMSS/Kryo/APM frontends и bin data есть. Требуются ACD/CPR transaction, реальные RPM corners, SPM ownership, thermal/LPM. `maxcpus=2`, cpufreq/cpuidle выключены. |
-| MDSS / DSI / все 5 панелей | Граф/данные; отключено | Граф/данные; отключено | Настоящие clocks/PLL/SMMU/bus/GDSC/LAB/IBB/WLED и GPIO подключены в DT. Требуется MMCC digital-corner voting до любой активации. |
+| SDHC1 eMMC / SDHC2 | Hardware/driver tests; gated | То же + host-local hybrid UIM2 | Internal 7464900.sdhci, removable 74a4900.sdhci; реальные clocks/rails/pads/vectors. Требуются physical RPM replay/SLEEP и gated activation, GPT/HS400/encryption tests. UFS host/PHY отключены. |
+| CPU / CBF / CPR / SAW | Read-only provider; transaction engine tests | То же | ACD/lease/PLL engine добавлен, MMIO/CPR/SPM adapter не подключён; S8–S11 native RPM owners исключены. maxcpus=2, cpufreq/cpuidle выключены. |
+| MDSS / DSI / все 5 панелей | Граф/данные; gated | То же | MMCC fmax/CX contract добавлен; physical L12/SLEEP/recovery и incell ownership требуют завершения до activation. |
 | Adreno 530 / KGSL | Данные/child clocks; отключено | То же | Реальные variant CPR/fuse/frequency планы и исправлен provider cycle. Нет полного CX/MX/PMI S2/retention/SMMU/secure ABI контракта. |
 | BCM4359 C0 | Код/PCIe DT; runtime нет | То же | Sony BCMDHD и WPA2/AKM/cipher fixes сохранены. Нужны link training, DMA/IOMMU, firmware/NVRAM, CCMP/reconnect/suspend/wakeup. |
 | Clearpad / incell | Код; нет полной touch DT связи | То же | Sony MDSS/incell API есть; I2C12/controller/питание и согласование с panel sequencing ещё не завершены. |
@@ -68,7 +68,7 @@ PMIC, stepping или панель.** Подробнее: [GPU/варианты]
 
 Bluetooth/FM, GNSS, NFC, fingerprint, датчики и вибромотор не прошли полную
 отдельную ревизию driver/DT/firmware. Поддержка по одному наличию исходников
-не заявляется. [CPU](dora-cpu-port.txt), [UFS/GCC](dora-gcc-corners.txt),
+не заявляется. [CPU](dora-cpu-port.txt), [eMMC](dora-storage-audit.md), [GCC/MMCC](dora-clock-voltage.md),
 [дисплей](dora-display-port.txt), [USB/DPDM](dora-usb-dpdm-gap.txt).
 
 ## Панели и контрольные данные 4.4
@@ -103,8 +103,8 @@ pclk=149506560; escclk=19200000
 
 ## Android 14 и границы ABI
 
-Проверка итоговой `.config` охватывает 285 явных назначений и 101
-обязательный built-in, включая Binder/BinderFS, BPF/JIT/cgroup BPF,
+Проверка итоговой `.config` охватывает 290 явных назначений и 114
+обязательных built-in, включая Binder/BinderFS, BPF/JIT/cgroup BPF,
 PSI/cgroups, SELinux, seccomp, namespaces, memfd/ashmem, fscrypt,
 ext4/F2FS, dm-verity/FEC, loop, OverlayFS, ION/dma-buf/fences и USB gadget.
 Для обеих моделей runtime LOS21, vendor EGL/gralloc/ION/cache/secure heaps,
@@ -118,15 +118,15 @@ binary/verifier/init/fs_mgr/crypto логи нового ядра. Механи�
 
 ## Условия следующего этапа
 
-Сначала завершить настоящую RPM corner aggregation и связь GCC/MMCC/CPU
-clock transitions с питанием, затем последовательно снимать соответствующие
-safety gates и повторять host/DT/component/full-build checks. Подтвердить
-boot header/размер/cmdline/ramdisk и Sony appended-DTB selection по рабочему
-образу; подготовить образ только с реальным LOS21 ramdisk и планом
-восстановления. Пока source P0 остаются, `boot.img` не готовится.
+Сначала завершить physical RPM UV/SWEN/load/SLEEP replay и аппаратный
+CPU adapter, проверить интегрированный boot clock handoff; затем отдельно
+снимать соответствующие safety gates и повторять все проверки. Logical RPM
+corner frontend и GCC/MMCC fmax contracts уже реализованы и тестируются.
+Boot format/ramdisk/DTB selection проверяются по настоящим образам, без
+подмены их предположениями. boot.img на этом этапе не создаётся.
 
 Будущие испытания требуют отдельных F8131 и F8132: реальные IDs/выбранный DT,
-pstore/early log, UFS/температуры, панели/touch/GPU, Wi-Fi/USB, audio/radio,
+pstore/early log, eMMC/SD/температуры, панели/touch/GPU, Wi-Fi/USB, audio/radio,
 зарядные защиты и suspend. Нужны аппараты с каждой штатной панелью и
 представленные SoC/PMIC варианты. Прошивки, форматирования, записи TA,
 persist, modem или userdata на этом этапе не выполнялось.

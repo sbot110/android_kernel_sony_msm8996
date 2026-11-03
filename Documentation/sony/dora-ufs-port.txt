@@ -1,3 +1,12 @@
+Storage correction, stage 4 (2026-11-03)
+---------------------------------------
+Dora internal storage is SDHC1 eMMC at 7464900.sdhci, NOT UFS. All four final
+Sony DTs and pinned Android fstab/init paths establish this. No supported
+F8131/F8132 UFS variant is evidenced. Both UFS host and PHY stay disabled in
+Dora DTs. The implementation and tests described below are retained as generic
+MSM8996 regression work; they do not validate Dora boot storage. See
+Documentation/sony/dora-storage-audit.md for the actual storage chain.
+
 Sony Dora MSM8996 UFS QMP 14nm port
 ==================================
 

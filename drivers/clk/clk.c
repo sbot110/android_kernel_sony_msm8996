@@ -47,6 +47,7 @@ static LIST_HEAD(clk_notifier_list);
 struct clk_handoff_vdd {
 	struct list_head list;
 	struct clk_vdd_class *vdd_class;
+	bool vote_held;
 };
 
 static LIST_HEAD(clk_handoff_vdd_list);
@@ -62,6 +63,9 @@ static DEFINE_MUTEX(vdd_class_list_lock);
  * returning from clk_core_set_rate_nolock().
  */
 static LIST_HEAD(clk_rate_change_list);
+static unsigned int set_rate_nesting_count;
+static u64 clk_vdd_transaction_id;
+static int clk_vdd_hardware_error;
 
 /***    private data structures    ***/
 
@@ -86,6 +90,11 @@ struct clk_core {
 	bool			rpm_enabled;
 	bool			need_sync;
 	bool			boot_enabled;
+	bool			rate_change_failed;
+	bool			parent_state_uncertain;
+	struct clk_core		*held_old_parent;
+	bool			uncertain_rate_prepared;
+	bool			uncertain_rate_enabled;
 	unsigned int		enable_count;
 	unsigned int		prepare_count;
 	unsigned int		protect_count;
@@ -108,6 +117,12 @@ struct clk_core {
 	struct clk_vdd_class	*vdd_class;
 	int			vdd_class_vote;
 	int			new_vdd_class_vote;
+	bool			vdd_class_vote_held;
+	bool			new_vdd_class_vote_held;
+	bool			vdd_safety_lease;
+	bool			vdd_class_registered;
+	int			pending_vdd_action;
+	u64			vdd_transaction;
 	struct list_head	rate_change_node;
 	unsigned long		*rate_max;
 	int			num_rate_max;
@@ -661,64 +676,120 @@ static int clk_find_vdd_level(struct clk_core *clk, unsigned long rate)
 /*
  * Update voltage level given the current votes.
  */
-static int clk_update_vdd(struct clk_vdd_class *vdd_class)
+/* Apply one class level; track only enable references owned by this class. */
+static int clk_apply_vdd_level(struct clk_vdd_class *vdd, int level)
 {
-	int level, rc = 0, i, ignore;
-	struct regulator **r = vdd_class->regulator;
-	int *uv = vdd_class->vdd_uv;
-	int n_reg = vdd_class->num_regulators;
-	int cur_lvl = vdd_class->cur_level;
-	int max_lvl = vdd_class->num_levels - 1;
-	int cur_base = cur_lvl * n_reg;
-	int new_base;
+	int i, ret, n = vdd->num_regulators;
 
-	/* aggregate votes */
-	for (level = max_lvl; level > 0; level--)
-		if (vdd_class->level_votes[level])
+	if (!n)
+		return vdd->set_vdd ? vdd->set_vdd(vdd, level) : 0;
+	for (i = 0; i < n; i++) {
+		ret = regulator_set_voltage(vdd->regulator[i],
+			vdd->vdd_uv[level * n + i], INT_MAX);
+		if (ret)
+			return ret;
+		if (level && (unsigned int)i >= vdd->num_enabled) {
+			ret = regulator_enable(vdd->regulator[i]);
+			if (ret) {
+				vdd->enable_uncertain = true;
+				return ret;
+			}
+			vdd->num_enabled++;
+		}
+	}
+	if (!level) {
+		while (vdd->num_enabled) {
+			i = vdd->num_enabled - 1;
+			ret = regulator_disable(vdd->regulator[i]);
+			if (ret) {
+				vdd->enable_uncertain = true;
+				return ret;
+			}
+			vdd->num_enabled--;
+		}
+	}
+	return 0;
+}
+
+/* A repeated consumer request can be cached by regulator core. Force the
+ * provider operation before trusting a recovered/cached voltage state.
+ */
+static int clk_sync_vdd(struct clk_vdd_class *vdd, int level)
+{
+	int i, ret;
+
+	if (vdd->orphaned)
+		return -ESHUTDOWN;
+	if (vdd->sync_vdd) {
+		ret = vdd->sync_vdd(vdd, level);
+		if (!ret)
+			vdd->enable_uncertain = false;
+		return ret;
+	}
+	if (vdd->enable_uncertain)
+		return -EIO;
+	for (i = 0; i < vdd->num_regulators; i++) {
+		ret = regulator_sync_voltage(vdd->regulator[i]);
+		if (ret)
+			return ret;
+	}
+	return 0;
+}
+
+static int clk_update_vdd(struct clk_vdd_class *vdd)
+{
+	int level, ret, rollback, target;
+	bool old_known;
+
+	if (vdd->orphaned)
+		return -ESHUTDOWN;
+	if (vdd->num_levels <= 0 || vdd->num_regulators < 0 ||
+	    (vdd->num_regulators && (!vdd->regulator || !vdd->vdd_uv)))
+		return -EINVAL;
+	for (level = vdd->num_levels - 1; level > 0; level--)
+		if (vdd->level_votes[level])
 			break;
-
-	if (level == cur_lvl)
+	old_known = vdd->cur_level < (unsigned long)vdd->num_levels;
+	if (vdd->error) {
+		/* Unknown initial firmware state must first acquire the complete
+		 * explicit bootstrap level, never a fabricated zero baseline.
+		 */
+		if (!old_known && level < vdd->recovery_level)
+			return vdd->error;
+		if (!vdd->num_regulators && !vdd->sync_vdd)
+			return vdd->error;
+		target = max(level, vdd->recovery_level);
+		ret = clk_apply_vdd_level(vdd, target);
+		if (!ret)
+			ret = clk_sync_vdd(vdd, target);
+		if (ret)
+			return ret;
+		vdd->cur_level = target;
+		vdd->error = 0;
+		old_known = true;
+	}
+	if ((unsigned long)level == vdd->cur_level)
 		return 0;
 
-	max_lvl = max_lvl * n_reg;
-	new_base = level * n_reg;
-
-	for (i = 0; i < vdd_class->num_regulators; i++) {
-		pr_debug("Set Voltage level Min %d, Max %d\n", uv[new_base + i],
-				uv[max_lvl + i]);
-		rc = regulator_set_voltage(r[i], uv[new_base + i], INT_MAX);
-		if (rc)
-			goto set_voltage_fail;
-
-		if (cur_lvl == 0 || cur_lvl == vdd_class->num_levels)
-			rc = regulator_enable(r[i]);
-		else if (level == 0)
-			rc = regulator_disable(r[i]);
-		if (rc)
-			goto enable_disable_fail;
+	ret = clk_apply_vdd_level(vdd, level);
+	if (!ret)
+		ret = clk_sync_vdd(vdd, level);
+	if (!ret) {
+		vdd->cur_level = level;
+		return 0;
 	}
-
-	if (vdd_class->set_vdd && !vdd_class->num_regulators)
-		rc = vdd_class->set_vdd(vdd_class, level);
-
-	if (!rc)
-		vdd_class->cur_level = level;
-
-	return rc;
-
-enable_disable_fail:
-	regulator_set_voltage(r[i], uv[cur_base + i], INT_MAX);
-
-set_voltage_fail:
-	for (i--; i >= 0; i--) {
-		regulator_set_voltage(r[i], uv[cur_base + i], INT_MAX);
-		if (cur_lvl == 0 || cur_lvl == vdd_class->num_levels)
-			regulator_disable(r[i]);
-		else if (level == 0)
-			ignore = regulator_enable(r[i]);
+	/* Preserve the original errno. Failed rollback quarantines this class
+	 * until an explicit replay and acknowledgement establish its state.
+	 */
+	rollback = old_known ? clk_apply_vdd_level(vdd, vdd->cur_level) : -EIO;
+	if (!rollback)
+		rollback = clk_sync_vdd(vdd, vdd->cur_level);
+	if (rollback) {
+		vdd->error = ret;
+		vdd->recovery_level = old_known ?
+			max(level, (int)vdd->cur_level) : level;
 	}
-
-	return rc;
+	return ret;
 }
 
 /*
@@ -728,7 +799,7 @@ static int clk_vote_vdd_level(struct clk_vdd_class *vdd_class, int level)
 {
 	int rc = 0;
 
-	if (level >= vdd_class->num_levels)
+	if (level < 0 || level >= vdd_class->num_levels)
 		return -EINVAL;
 
 	mutex_lock(&vdd_class->lock);
@@ -736,8 +807,17 @@ static int clk_vote_vdd_level(struct clk_vdd_class *vdd_class, int level)
 	vdd_class->level_votes[level]++;
 
 	rc = clk_update_vdd(vdd_class);
-	if (rc)
+	if (!rc)
+		rc = clk_sync_vdd(vdd_class, vdd_class->cur_level);
+	if (rc) {
 		vdd_class->level_votes[level]--;
+		if (!vdd_class->error) {
+			vdd_class->error = rc;
+			vdd_class->recovery_level = max(level,
+				(int)min_t(unsigned long, vdd_class->cur_level,
+					vdd_class->num_levels - 1));
+		}
+	}
 
 	mutex_unlock(&vdd_class->lock);
 
@@ -751,7 +831,7 @@ static int clk_unvote_vdd_level(struct clk_vdd_class *vdd_class, int level)
 {
 	int rc = 0;
 
-	if (level >= vdd_class->num_levels)
+	if (level < 0 || level >= vdd_class->num_levels)
 		return -EINVAL;
 
 	mutex_lock(&vdd_class->lock);
@@ -827,41 +907,278 @@ static int clk_vdd_class_init(struct clk_vdd_class *vdd)
 	struct clk_handoff_vdd *v;
 	int ret = 0;
 
-	if (vdd->skip_handoff)
-		return 0;
-
 	mutex_lock(&vdd_class_list_lock);
-
-	list_for_each_entry(v, &clk_handoff_vdd_list, list) {
+	if (vdd->orphaned) {
+		ret = -ESHUTDOWN;
+		goto done;
+	}
+	if (vdd->skip_handoff)
+		goto account;
+	list_for_each_entry(v, &clk_handoff_vdd_list, list)
 		if (v->vdd_class == vdd)
-			goto done;
-	}
-
-	if (!vdd_class_handoff_completed) {
-		pr_debug("voting for vdd_class %s\n", vdd->class_name);
-
-		ret = clk_vote_vdd_level(vdd, vdd->num_levels - 1);
-		if (ret) {
-			pr_err("failed to vote for %s, ret=%d\n",
-				vdd->class_name, ret);
-			goto done;
-		}
-	}
-
-	v = kmalloc(sizeof(*v), GFP_KERNEL);
+			goto account;
+	/* Allocate ownership before acquiring a voltage reference. */
+	v = kzalloc(sizeof(*v), GFP_KERNEL);
 	if (!v) {
 		ret = -ENOMEM;
 		goto done;
 	}
-
+	if (!vdd_class_handoff_completed || vdd->require_handoff) {
+		ret = clk_vote_vdd_level(vdd, vdd->num_levels - 1);
+		if (ret) {
+			kfree(v);
+			goto done;
+		}
+		v->vote_held = true;
+	}
 	v->vdd_class = vdd;
-
 	list_add_tail(&v->list, &clk_handoff_vdd_list);
-
+account:
+	vdd->num_clocks++;
 done:
 	mutex_unlock(&vdd_class_list_lock);
-
 	return ret;
+}
+
+static void clk_vdd_class_deinit(struct clk_vdd_class *vdd)
+{
+	struct clk_handoff_vdd *v, *tmp;
+
+	mutex_lock(&vdd_class_list_lock);
+	if (WARN_ON(!vdd->num_clocks))
+		goto out;
+	if (--vdd->num_clocks)
+		goto out;
+	list_for_each_entry_safe(v, tmp, &clk_handoff_vdd_list, list) {
+		if (v->vdd_class != vdd)
+			continue;
+		if (v->vote_held) {
+			/* There is no surviving clock owner to prove boot-state
+			 * coverage. Keep the explicit high lease; provider teardown
+			 * must not guess that firmware hardware is now inactive.
+			 */
+			vdd->orphaned = true;
+			vdd->error = -ESHUTDOWN;
+			pr_err("%s: orphaned handoff voltage lease\n", vdd->class_name);
+		}
+		/* No global pointer may outlive the provider-owned class. */
+		list_del(&v->list);
+		kfree(v);
+	}
+out:
+	mutex_unlock(&vdd_class_list_lock);
+}
+
+int clk_vdd_class_release_handoff(struct clk_vdd_class *vdd)
+{
+	struct clk_handoff_vdd *v, *tmp;
+	int ret = 0;
+
+	if (!vdd)
+		return -EINVAL;
+	clk_prepare_lock();
+	mutex_lock(&vdd_class_list_lock);
+	if (!vdd_class_handoff_completed)
+		goto out;
+	list_for_each_entry_safe(v, tmp, &clk_handoff_vdd_list, list) {
+		if (v->vdd_class != vdd)
+			continue;
+		if (v->vote_held) {
+			ret = clk_unvote_vdd_level(vdd, vdd->num_levels - 1);
+			if (ret)
+				break;
+			v->vote_held = false;
+		}
+		list_del(&v->list);
+		kfree(v);
+		break;
+	}
+out:
+	mutex_unlock(&vdd_class_list_lock);
+	clk_prepare_unlock();
+	return ret;
+}
+EXPORT_SYMBOL_GPL(clk_vdd_class_release_handoff);
+
+static int clk_reconcile_parent(struct clk_core *core);
+
+static int clk_sync_core_vdd(struct clk_core *core)
+{
+	struct clk_vdd_class *vdd = core->vdd_class;
+	int ret;
+
+	if (!vdd)
+		return 0;
+	mutex_lock(&vdd->lock);
+	ret = clk_update_vdd(vdd);
+	if (!ret)
+		ret = clk_sync_vdd(vdd, vdd->cur_level);
+	if (ret) {
+		vdd->error = ret;
+		vdd->recovery_level = max(vdd->recovery_level,
+			(int)min_t(unsigned long, vdd->cur_level,
+				vdd->num_levels - 1));
+	}
+	mutex_unlock(&vdd->lock);
+	return ret;
+}
+
+enum clk_vdd_action {
+	CLK_VDD_ABORT = 1,
+	CLK_VDD_COMMIT,
+	CLK_VDD_KEEP_SAFE,
+};
+
+/* A failed regulator release still owns its vote. Never clear bookkeeping
+ * until that release succeeds, including after clk_unprepare() (void API).
+ */
+static int clk_drop_vdd_vote(struct clk_core *core, bool pending)
+{
+	bool *held = pending ? &core->new_vdd_class_vote_held :
+			      &core->vdd_class_vote_held;
+	int level = pending ? core->new_vdd_class_vote : core->vdd_class_vote;
+	int ret;
+
+	if (!*held)
+		return 0;
+	ret = clk_unvote_vdd_level(core->vdd_class, level);
+	if (!ret)
+		*held = false;
+	return ret;
+}
+
+static void clk_promote_vdd_vote(struct clk_core *core)
+{
+	core->vdd_class_vote = core->new_vdd_class_vote;
+	core->vdd_class_vote_held = core->new_vdd_class_vote_held;
+	core->new_vdd_class_vote_held = false;
+}
+
+static int clk_finish_vdd_vote(struct clk_core *core, int action)
+{
+	int ret;
+
+	core->pending_vdd_action = action;
+	if (action == CLK_VDD_ABORT) {
+		ret = clk_drop_vdd_vote(core, true);
+		if (ret)
+			return ret;
+	} else if (action == CLK_VDD_KEEP_SAFE) {
+		/* An unprepared clock is not proof that a failed hardware write
+		 * left it gated. Retain one conservative lease until a successful
+		 * programming transaction establishes its state.
+		 */
+		if (core->vdd_class_vote_held && core->new_vdd_class_vote_held) {
+			if (core->vdd_class_vote >= core->new_vdd_class_vote)
+				ret = clk_drop_vdd_vote(core, true);
+			else {
+				ret = clk_drop_vdd_vote(core, false);
+				if (!ret)
+					clk_promote_vdd_vote(core);
+			}
+			if (ret)
+				return ret;
+		} else if (core->new_vdd_class_vote_held) {
+			clk_promote_vdd_vote(core);
+		}
+		core->vdd_safety_lease = true;
+	} else {
+		if (core->new_vdd_class_vote_held) {
+			ret = clk_drop_vdd_vote(core, false);
+			if (ret)
+				return ret;
+			if (core->prepare_count)
+				clk_promote_vdd_vote(core);
+			else {
+				ret = clk_drop_vdd_vote(core, true);
+				if (ret)
+					return ret;
+			}
+		} else if (!core->prepare_count) {
+			ret = clk_drop_vdd_vote(core, false);
+			if (ret)
+				return ret;
+		}
+		core->vdd_safety_lease = false;
+	}
+	core->new_vdd_class_vote = core->vdd_class_vote;
+	core->pending_vdd_action = 0;
+	if (!list_empty(&core->rate_change_node))
+		list_del_init(&core->rate_change_node);
+	return 0;
+}
+
+/* Provider teardown cannot leave a node pointing into a freed clk_core.
+ * An unreleasable vote is explicitly quarantined as a class safety floor;
+ * no regulator reference is falsely declared released.
+ */
+static void clk_detach_vdd_core(struct clk_core *core)
+{
+	struct clk_vdd_class *vdd = core->vdd_class;
+
+	if (!vdd)
+		return;
+	if (core->vdd_class_vote_held || core->new_vdd_class_vote_held) {
+		mutex_lock(&vdd->lock);
+		vdd->error = -ESHUTDOWN;
+		vdd->orphaned = true;
+		vdd->recovery_level = max(core->vdd_class_vote_held ?
+			core->vdd_class_vote : 0, core->new_vdd_class_vote_held ?
+			core->new_vdd_class_vote : 0);
+		mutex_unlock(&vdd->lock);
+		pr_err("%s: orphaned safety voltage lease on unregister\n", core->name);
+	}
+	if (!list_empty(&core->rate_change_node))
+		list_del_init(&core->rate_change_node);
+	core->vdd_class = NULL;
+	if (core->vdd_class_registered) {
+		core->vdd_class_registered = false;
+		clk_vdd_class_deinit(vdd);
+	}
+}
+
+static int clk_retry_vdd_votes(struct clk_core *core)
+{
+	int ret;
+
+	for (; core; core = core->parent) {
+		ret = clk_reconcile_parent(core);
+		if (ret)
+			return ret;
+		if (!core->pending_vdd_action)
+			continue;
+		ret = clk_finish_vdd_vote(core, core->pending_vdd_action);
+		if (ret)
+			return ret;
+	}
+	return 0;
+}
+
+static int clk_release_unprepared_vdd(struct clk_core *core)
+{
+	int ret;
+
+	if (!core->vdd_class)
+		return 0;
+	if (core->vdd_safety_lease)
+		return 0;
+	/* The clock is gated now; retained votes from a failed unprepare or
+	 * transaction can be released, with failures retained for later retry.
+	 */
+	ret = clk_drop_vdd_vote(core, true);
+	if (!ret)
+		ret = clk_drop_vdd_vote(core, false);
+	if (ret) {
+		core->pending_vdd_action = CLK_VDD_COMMIT;
+		if (list_empty(&core->rate_change_node))
+			list_add(&core->rate_change_node, &clk_rate_change_list);
+		return ret;
+	}
+	core->pending_vdd_action = 0;
+	core->vdd_class_vote = core->new_vdd_class_vote = 0;
+	if (!list_empty(&core->rate_change_node))
+		list_del_init(&core->rate_change_node);
+	return 0;
 }
 
 /***        clk api        ***/
@@ -1007,6 +1324,12 @@ static void clk_core_unprepare(struct clk_core *core)
 	if (!core)
 		return;
 
+	if (core->parent_state_uncertain && clk_reconcile_parent(core)) {
+		pr_err("%s: retaining clock/voltage references for uncertain parent\n",
+		       core->name);
+		return;
+	}
+
 	if (WARN(core->prepare_count == 0,
 	    "%s already unprepared\n", core->name))
 		return;
@@ -1030,11 +1353,8 @@ static void clk_core_unprepare(struct clk_core *core)
 
 	trace_clk_unprepare_complete(core);
 
-	if (core->vdd_class) {
-		clk_unvote_vdd_level(core->vdd_class, core->vdd_class_vote);
-		core->vdd_class_vote = 0;
-		core->new_vdd_class_vote = 0;
-	}
+	if (clk_release_unprepared_vdd(core))
+		pr_err("%s: retained voltage vote after unprepare failure\n", core->name);
 
 	clk_core_unprepare(core->parent);
 	clk_pm_runtime_put(core);
@@ -1075,8 +1395,19 @@ static int clk_core_prepare(struct clk_core *core)
 
 	if (!core)
 		return 0;
+	ret = clk_reconcile_parent(core);
+	if (ret)
+		return ret;
+	if (core->prepare_count) {
+		ret = clk_sync_core_vdd(core);
+		if (ret)
+			return ret;
+	}
 
 	if (core->prepare_count == 0) {
+		ret = clk_release_unprepared_vdd(core);
+		if (ret)
+			return ret;
 		ret = clk_pm_runtime_get(core);
 		if (ret)
 			return ret;
@@ -1087,15 +1418,15 @@ static int clk_core_prepare(struct clk_core *core)
 
 		trace_clk_prepare(core);
 
-		ret = clk_vote_rate_vdd(core, core->rate);
-		if (ret) {
-			clk_core_unprepare(core->parent);
-			return ret;
-		}
-		if (core->vdd_class) {
+		ret = core->vdd_class_vote_held ? clk_sync_core_vdd(core) :
+			clk_vote_rate_vdd(core, core->rate);
+		if (ret)
+			goto unprepare;
+		if (core->vdd_class && !core->vdd_class_vote_held) {
 			core->vdd_class_vote
 				= clk_find_vdd_level(core, core->rate);
 			core->new_vdd_class_vote = core->vdd_class_vote;
+			core->vdd_class_vote_held = true;
 		}
 
 		if (core->ops->prepare)
@@ -1104,9 +1435,7 @@ static int clk_core_prepare(struct clk_core *core)
 		trace_clk_prepare_complete(core);
 
 		if (ret) {
-			clk_unvote_rate_vdd(core, core->rate);
-			core->vdd_class_vote = 0;
-			core->new_vdd_class_vote = 0;
+			clk_release_unprepared_vdd(core);
 			goto unprepare;
 		}
 	}
@@ -1228,6 +1557,8 @@ static int clk_core_enable(struct clk_core *core)
 
 	if (!core)
 		return 0;
+	if (core->parent_state_uncertain)
+		return -EIO;
 
 	if (WARN(core->prepare_count == 0,
 	    "Enabling unprepared %s\n", core->name))
@@ -1457,8 +1788,12 @@ static int clk_disable_unused(void)
 
 	mutex_lock(&vdd_class_list_lock);
 	list_for_each_entry_safe(v, v_temp, &clk_handoff_vdd_list, list) {
-		clk_unvote_vdd_level(v->vdd_class,
-				v->vdd_class->num_levels - 1);
+		if (v->vote_held && clk_unvote_vdd_level(v->vdd_class,
+				v->vdd_class->num_levels - 1)) {
+			pr_err("%s: retaining failed handoff voltage release\n",
+			       v->vdd_class->class_name);
+			continue;
+		}
 		list_del(&v->list);
 		kfree(v);
 	}
@@ -1923,45 +2258,40 @@ static struct clk_core *__clk_set_parent_before(struct clk_core *core,
 {
 	unsigned long flags;
 	struct clk_core *old_parent = core->parent;
+	int ret;
 
-	/*
-	 * 1. enable parents for CLK_OPS_PARENT_ENABLE clock
-	 *
-	 * 2. Migrate prepare state between parents and prevent race with
-	 * clk_enable().
-	 *
-	 * If the clock is not prepared, then a race with
-	 * clk_enable/disable() is impossible since we already have the
-	 * prepare lock (future calls to clk_enable() need to be preceded by
-	 * a clk_prepare()).
-	 *
-	 * If the clock is prepared, migrate the prepared state to the new
-	 * parent and also protect against a race with clk_enable() by
-	 * forcing the clock and the new parent on.  This ensures that all
-	 * future calls to clk_enable() are practically NOPs with respect to
-	 * hardware and software states.
-	 *
-	 * See also: Comment for clk_set_parent() below.
-	 */
-
-	/* enable old_parent & parent if CLK_OPS_PARENT_ENABLE is set */
 	if (core->flags & CLK_OPS_PARENT_ENABLE) {
-		clk_core_prepare_enable(old_parent);
-		clk_core_prepare_enable(parent);
+		ret = clk_core_prepare_enable(old_parent);
+		if (ret)
+			return ERR_PTR(ret);
+		ret = clk_core_prepare_enable(parent);
+		if (ret)
+			goto disable_old;
 	}
 
-	/* migrate prepare count if > 0 */
 	if (core->prepare_count) {
-		clk_core_prepare_enable(parent);
-		clk_core_enable_lock(core);
+		ret = clk_core_prepare_enable(parent);
+		if (ret)
+			goto disable_parents;
+		ret = clk_core_enable_lock(core);
+		if (ret) {
+			clk_core_disable_unprepare(parent);
+			goto disable_parents;
+		}
 	}
 
-	/* update the clk tree topology */
 	flags = clk_enable_lock();
 	clk_reparent(core, parent);
 	clk_enable_unlock(flags);
-
 	return old_parent;
+
+disable_parents:
+	if (core->flags & CLK_OPS_PARENT_ENABLE)
+		clk_core_disable_unprepare(parent);
+disable_old:
+	if (core->flags & CLK_OPS_PARENT_ENABLE)
+		clk_core_disable_unprepare(old_parent);
+	return ERR_PTR(ret);
 }
 
 static void __clk_set_parent_after(struct clk_core *core,
@@ -1984,14 +2314,82 @@ static void __clk_set_parent_after(struct clk_core *core,
 	}
 }
 
+/* A failed mux callback may have changed hardware. Read its selector before
+ * releasing either parent; absence of trustworthy readback quarantines the
+ * clock with both sources and its voltage leases retained.
+ */
+static int clk_reconcile_parent(struct clk_core *core)
+{
+	struct clk_core *actual, *old_parent;
+	unsigned long flags;
+	u8 index;
+	int ret;
+
+	if (!core || !core->parent_state_uncertain)
+		return 0;
+	if (!core->ops->get_parent)
+		return -EIO;
+	ret = clk_pm_runtime_get(core);
+	if (ret)
+		return ret;
+	ret = -EIO;
+	index = core->ops->get_parent(core->hw);
+	if (index >= core->num_parents)
+		goto runtime_put;
+	actual = clk_core_get_parent_by_index(core, index);
+	if (!actual)
+		goto runtime_put;
+	old_parent = core->held_old_parent;
+	if (actual != core->parent && actual != old_parent)
+		goto runtime_put;
+	if (actual == old_parent) {
+		struct clk_core *failed_parent = core->parent;
+
+		flags = clk_enable_lock();
+		clk_reparent(core, old_parent);
+		clk_enable_unlock(flags);
+		__clk_set_parent_after(core, old_parent, failed_parent);
+	} else {
+		__clk_set_parent_after(core, core->parent, old_parent);
+	}
+	core->parent_state_uncertain = false;
+	core->held_old_parent = NULL;
+	if (core->uncertain_rate_enabled) {
+		core->uncertain_rate_enabled = false;
+		clk_core_disable_lock(core);
+	}
+	if (core->uncertain_rate_prepared) {
+		core->uncertain_rate_prepared = false;
+		clk_core_unprepare(core);
+	}
+	ret = 0;
+runtime_put:
+	clk_pm_runtime_put(core);
+	return ret;
+}
+
+static void clk_parent_failed(struct clk_core *core, struct clk_core *old_parent)
+{
+	core->held_old_parent = old_parent;
+	core->parent_state_uncertain = true;
+	core->rate_change_failed = true;
+	core->vdd_safety_lease = true;
+	/* Reconcile only when hardware itself confirms the actual source. */
+	clk_reconcile_parent(core);
+}
+
 static int __clk_set_parent(struct clk_core *core, struct clk_core *parent,
 			    u8 p_index)
 {
-	unsigned long flags;
 	int ret = 0;
 	struct clk_core *old_parent;
 
+	ret = clk_reconcile_parent(core);
+	if (ret)
+		return ret;
 	old_parent = __clk_set_parent_before(core, parent);
+	if (IS_ERR(old_parent))
+		return PTR_ERR(old_parent);
 
 	trace_clk_set_parent(core, parent);
 
@@ -2002,11 +2400,7 @@ static int __clk_set_parent(struct clk_core *core, struct clk_core *parent,
 	trace_clk_set_parent_complete(core, parent);
 
 	if (ret) {
-		flags = clk_enable_lock();
-		clk_reparent(core, old_parent);
-		clk_enable_unlock(flags);
-		__clk_set_parent_after(core, old_parent, parent);
-
+		clk_parent_failed(core, old_parent);
 		return ret;
 	}
 
@@ -2066,39 +2460,60 @@ out:
  */
 static int clk_vote_new_rate_vdd(struct clk_core *core)
 {
-	int cur_level, next_level;
-	int ret;
+	int next_level, ret;
 
 	if (IS_ERR_OR_NULL(core) || !core->vdd_class)
 		return 0;
-
-	if (!clk_core_is_prepared(core))
-		return 0;
-
-	cur_level = core->new_vdd_class_vote;
-	next_level = clk_find_vdd_level(core, core->new_rate);
-	if (cur_level == next_level)
-		return 0;
-
-	ret = clk_vote_vdd_level(core->vdd_class, next_level);
-	if (ret)
-		return ret;
-
-	core->new_vdd_class_vote = next_level;
-
-	if (list_empty(&core->rate_change_node)) {
-		list_add(&core->rate_change_node, &clk_rate_change_list);
-	} else {
-		/*
-		 * A different new_rate has been determined for a clock that
-		 * was already encountered in the clock tree traversal so the
-		 * level that was previously voted for it should be removed.
-		 */
-		ret = clk_unvote_vdd_level(core->vdd_class, cur_level);
+	if (core->pending_vdd_action) {
+		ret = clk_finish_vdd_vote(core, core->pending_vdd_action);
 		if (ret)
 			return ret;
 	}
-
+	next_level = clk_find_vdd_level(core, core->new_rate);
+	if (next_level < 0)
+		return next_level;
+	/* A nested recalculation may only need a lower level. Keep the existing
+	 * higher lease through the transaction instead of dropping voltage.
+	 */
+	if ((core->new_vdd_class_vote_held &&
+	     core->new_vdd_class_vote >= next_level) ||
+	    (!core->new_vdd_class_vote_held && core->vdd_class_vote_held &&
+	     core->vdd_class_vote == next_level)) {
+		mutex_lock(&core->vdd_class->lock);
+		ret = clk_update_vdd(core->vdd_class);
+		if (!ret)
+			ret = clk_sync_vdd(core->vdd_class, core->vdd_class->cur_level);
+		if (ret) {
+			core->vdd_class->error = ret;
+			core->vdd_class->recovery_level = max(core->vdd_class->recovery_level,
+				max(next_level, (int)core->vdd_class->cur_level));
+		}
+		mutex_unlock(&core->vdd_class->lock);
+		if (!ret && core->vdd_safety_lease) {
+			core->vdd_transaction = clk_vdd_transaction_id;
+			if (list_empty(&core->rate_change_node))
+				list_add(&core->rate_change_node, &clk_rate_change_list);
+		}
+		return ret;
+	}
+	ret = clk_vote_vdd_level(core->vdd_class, next_level);
+	if (ret)
+		return ret;
+	if (core->new_vdd_class_vote_held) {
+		/* Removing the lower old lease cannot reduce the aggregate: the
+		 * newly acknowledged higher lease is already present.
+		 */
+		ret = clk_drop_vdd_vote(core, true);
+		if (ret) {
+			clk_unvote_vdd_level(core->vdd_class, next_level);
+			return ret;
+		}
+	}
+	core->new_vdd_class_vote = next_level;
+	core->new_vdd_class_vote_held = true;
+	core->vdd_transaction = clk_vdd_transaction_id;
+	if (list_empty(&core->rate_change_node))
+		list_add(&core->rate_change_node, &clk_rate_change_list);
 	return 0;
 }
 
@@ -2169,7 +2584,7 @@ static struct clk_core *clk_calc_new_rates(struct clk_core *core,
 
 		ret = clk_core_determine_round_nolock(core, &req);
 		if (ret < 0)
-			return NULL;
+			return ERR_PTR(ret);
 
 		best_parent_rate = req.best_parent_rate;
 		new_rate = req.rate;
@@ -2184,6 +2599,8 @@ static struct clk_core *clk_calc_new_rates(struct clk_core *core,
 	} else {
 		/* pass-through clock with adjustable parent */
 		top = clk_calc_new_rates(parent, rate);
+		if (IS_ERR_OR_NULL(top))
+			return top;
 		new_rate = parent->new_rate;
 		goto out;
 	}
@@ -2215,6 +2632,8 @@ static struct clk_core *clk_calc_new_rates(struct clk_core *core,
 		(DIV_ROUND_CLOSEST(best_parent_rate, 1000) !=
 			DIV_ROUND_CLOSEST(parent->rate, 1000)))
 		top = clk_calc_new_rates(parent, best_parent_rate);
+	if (IS_ERR_OR_NULL(top))
+		return top;
 
 out:
 	if (!clk_is_rate_level_valid(core, rate))
@@ -2222,7 +2641,7 @@ out:
 
 	ret = clk_calc_subtree(core, new_rate, parent, p_index);
 	if (ret)
-		return NULL;
+		return ERR_PTR(ret);
 
 	return top;
 }
@@ -2272,111 +2691,113 @@ static struct clk_core *clk_propagate_rate_change(struct clk_core *core,
  */
 static int clk_change_rate(struct clk_core *core)
 {
-	struct clk_core *child;
+	struct clk_core *child, *old_parent;
 	struct hlist_node *tmp;
-	unsigned long old_rate;
+	unsigned long old_rate = core->rate;
 	unsigned long best_parent_rate = 0;
-	bool skip_set_rate = false;
-	struct clk_core *old_parent;
-	struct clk_core *parent = NULL;
-	int rc = 0;
+	struct clk_core *parent = core->new_parent ?: core->parent;
+	bool skip_set_rate = false, prepared = false, enabled = false;
+	bool parent_enabled = false;
+	int rc;
 
-	old_rate = core->rate;
-
-	if (core->new_parent) {
-		parent = core->new_parent;
-		best_parent_rate = core->new_parent->rate;
-	} else if (core->parent) {
-		parent = core->parent;
-		best_parent_rate = core->parent->rate;
-	}
-
+	if (parent)
+		best_parent_rate = parent->rate;
 	rc = clk_pm_runtime_get(core);
 	if (rc)
 		return rc;
 
 	if (core->flags & CLK_SET_RATE_UNGATE) {
-		unsigned long flags;
-
-		clk_core_prepare(core);
-		flags = clk_enable_lock();
-		clk_core_enable(core);
-		clk_enable_unlock(flags);
+		rc = clk_core_prepare(core);
+		if (rc)
+			goto out;
+		prepared = true;
+		rc = clk_core_enable_lock(core);
+		if (rc)
+			goto out;
+		enabled = true;
+		/* A temporarily prepared clock was not voted during calculation. */
+		rc = clk_vote_new_rate_vdd(core);
+		if (rc)
+			goto out;
 	}
 
 	trace_clk_set_rate(core, core->new_rate);
-
 	if (core->new_parent && core->new_parent != core->parent) {
 		old_parent = __clk_set_parent_before(core, core->new_parent);
+		if (IS_ERR(old_parent)) {
+			rc = PTR_ERR(old_parent);
+			goto out;
+		}
 		trace_clk_set_parent(core, core->new_parent);
-
 		if (core->ops->set_rate_and_parent) {
 			skip_set_rate = true;
-			core->ops->set_rate_and_parent(core->hw, core->new_rate,
-					best_parent_rate,
-					core->new_parent_index);
+			rc = core->ops->set_rate_and_parent(core->hw, core->new_rate,
+				best_parent_rate, core->new_parent_index);
 		} else if (core->ops->set_parent) {
-			core->ops->set_parent(core->hw, core->new_parent_index);
+			rc = core->ops->set_parent(core->hw, core->new_parent_index);
 		}
-
 		trace_clk_set_parent_complete(core, core->new_parent);
+		if (rc) {
+			clk_parent_failed(core, old_parent);
+			goto out;
+		}
 		__clk_set_parent_after(core, core->new_parent, old_parent);
 	}
 
-	if (core->flags & CLK_OPS_PARENT_ENABLE)
-		clk_core_prepare_enable(parent);
-
+	if (core->flags & CLK_OPS_PARENT_ENABLE) {
+		rc = clk_core_prepare_enable(parent);
+		if (rc)
+			goto out;
+		parent_enabled = true;
+	}
 	if (!skip_set_rate && core->ops->set_rate) {
-		rc = core->ops->set_rate(core->hw, core->new_rate,
-						best_parent_rate);
+		rc = core->ops->set_rate(core->hw, core->new_rate, best_parent_rate);
 		if (rc) {
-			trace_clk_set_rate_complete(core, core->new_rate);
-			goto err_set_rate;
+			core->rate_change_failed = true;
+			goto out;
 		}
 	}
-
 	trace_clk_set_rate_complete(core, core->new_rate);
-
 	core->rate = clk_recalc(core, best_parent_rate);
-
-	if (core->flags & CLK_SET_RATE_UNGATE) {
-		unsigned long flags;
-
-		flags = clk_enable_lock();
-		clk_core_disable(core);
-		clk_enable_unlock(flags);
-		clk_core_unprepare(core);
-	}
-
-	if (core->flags & CLK_OPS_PARENT_ENABLE)
-		clk_core_disable_unprepare(parent);
+	core->rate_change_failed = false;
 
 	if (core->notifier_count && old_rate != core->rate)
 		__clk_notify(core, POST_RATE_CHANGE, old_rate, core->rate);
+	if (core->flags & CLK_RECALC_NEW_RATES) {
+		struct clk_core *top = clk_calc_new_rates(core, core->new_rate);
 
-	if (core->flags & CLK_RECALC_NEW_RATES)
-		(void)clk_calc_new_rates(core, core->new_rate);
-
-	if (core->flags & CLK_CHILD_NO_RATE_PROP)
-		return rc;
-	/*
-	 * Use safe iteration, as change_rate can actually swap parents
-	 * for certain clock types.
-	 */
-	hlist_for_each_entry_safe(child, tmp, &core->children, child_node) {
-		/* Skip children who will be reparented to another clock */
-		if (child->new_parent && child->new_parent != core)
-			continue;
-		rc = clk_change_rate(child);
-		if (rc)
-			goto err_set_rate;
+		if (IS_ERR_OR_NULL(top)) {
+			rc = top ? PTR_ERR(top) : -EINVAL;
+			goto out;
+		}
 	}
-
-	/* handle the new child who might not be in core->children yet */
-	if (core->new_child)
-		rc = clk_change_rate(core->new_child);
-
-err_set_rate:
+	if (!(core->flags & CLK_CHILD_NO_RATE_PROP)) {
+		hlist_for_each_entry_safe(child, tmp, &core->children, child_node) {
+			if (child->new_parent && child->new_parent != core)
+				continue;
+			rc = clk_change_rate(child);
+			if (rc)
+				goto out;
+		}
+		if (core->new_child)
+			rc = clk_change_rate(core->new_child);
+	}
+out:
+	if (rc) {
+		core->rate_change_failed = true;
+		core->vdd_safety_lease = true;
+	}
+	if (parent_enabled)
+		clk_core_disable_unprepare(parent);
+	if (!core->parent_state_uncertain) {
+		if (enabled)
+			clk_core_disable_lock(core);
+		if (prepared)
+			clk_core_unprepare(core);
+	} else {
+		core->uncertain_rate_enabled |= enabled;
+		core->uncertain_rate_prepared |= prepared;
+	}
 	clk_pm_runtime_put(core);
 	return rc;
 }
@@ -2408,68 +2829,44 @@ static unsigned long clk_core_req_round_rate_nolock(struct clk_core *core,
 	return ret ? 0 : req.rate;
 }
 
-/*
- * Unvote for the voltage level required for each core->new_vdd_class_vote in
- * clk_rate_change_list.  This is used when undoing voltage requests after an
- * error is encountered before any physical rate changing.
+/* Only retire votes from this transaction. Failed releases from unrelated
+ * clocks remain tracked and are retried when that clock is next touched.
  */
-static void clk_unvote_new_rate_vdd(void)
+static int clk_finish_rate_vdd_votes(int action)
 {
-	struct clk_core *core;
+	struct clk_core *core, *tmp;
+	int ret, first_error = 0;
 
-	list_for_each_entry(core, &clk_rate_change_list, rate_change_node) {
-		clk_unvote_vdd_level(core->vdd_class, core->new_vdd_class_vote);
-		core->new_vdd_class_vote = core->vdd_class_vote;
+	list_for_each_entry_safe(core, tmp, &clk_rate_change_list, rate_change_node) {
+		if (core->vdd_transaction != clk_vdd_transaction_id)
+			continue;
+		ret = clk_finish_vdd_vote(core, action);
+		if (ret && !first_error)
+			first_error = ret;
 	}
+	return first_error;
 }
 
-/*
- * Unvote for the voltage level required for each core->vdd_class_vote in
- * clk_rate_change_list.
- */
-static int clk_unvote_old_rate_vdd(void)
+static bool clk_subtree_rate_failed(struct clk_core *core)
 {
-	struct clk_core *core;
-	int ret;
+	struct clk_core *child;
 
-	list_for_each_entry(core, &clk_rate_change_list, rate_change_node) {
-		ret = clk_unvote_vdd_level(core->vdd_class,
-					   core->vdd_class_vote);
-		if (ret)
-			return ret;
-	}
-
-	return 0;
+	if (core->rate_change_failed || core->vdd_safety_lease)
+		return true;
+	hlist_for_each_entry(child, &core->children, child_node)
+		if (clk_subtree_rate_failed(child))
+			return true;
+	return false;
 }
 
-/*
- * In the case that rate setting fails, apply the max voltage level needed
- * by either the old or new rate for each changed clock.
- */
-static void clk_vote_safe_vdd(void)
+static bool clk_tree_rate_failed(struct clk_core *core)
 {
-	struct clk_core *core;
+	struct clk_core *parent;
 
-	list_for_each_entry(core, &clk_rate_change_list, rate_change_node) {
-		if (core->vdd_class_vote > core->new_vdd_class_vote) {
-			clk_vote_vdd_level(core->vdd_class,
-						core->vdd_class_vote);
-			clk_unvote_vdd_level(core->vdd_class,
-						core->new_vdd_class_vote);
-			core->new_vdd_class_vote = core->vdd_class_vote;
-		}
-	}
-}
-
-static void clk_cleanup_vdd_votes(void)
-{
-	struct clk_core *core, *temp;
-
-	list_for_each_entry_safe(core, temp, &clk_rate_change_list,
-				 rate_change_node) {
-		core->vdd_class_vote = core->new_vdd_class_vote;
-		list_del_init(&core->rate_change_node);
-	}
+	for (parent = core->parent; parent; parent = parent->parent)
+		if (parent->rate_change_failed)
+			return true;
+	return clk_subtree_rate_failed(core);
 }
 
 static int clk_core_set_rate_nolock(struct clk_core *core,
@@ -2477,88 +2874,63 @@ static int clk_core_set_rate_nolock(struct clk_core *core,
 {
 	struct clk_core *top, *fail_clk;
 	unsigned long rate;
-	int ret = 0;
-	/*
-	 * The prepare lock ensures mutual exclusion with other tasks.
-	 * set_rate_nesting_count is a static so that it can be incremented in
-	 * the case of reentrancy caused by a set_rate() ops callback itself
-	 * calling clk_set_rate().  That way, the voltage level votes for the
-	 * old rates are safely removed when the original invocation of this
-	 * function completes.
-	 */
-	static unsigned int set_rate_nesting_count;
+	int ret, cleanup;
+	bool hardware_phase = false;
 
 	if (!core)
 		return 0;
-
+	ret = clk_retry_vdd_votes(core);
+	if (ret)
+		return ret;
 	rate = clk_core_req_round_rate_nolock(core, req_rate);
-
-	/* bail early if nothing to do */
-	if (rate == clk_core_get_rate_nolock(core))
+	if (rate == clk_core_get_rate_nolock(core) && !clk_tree_rate_failed(core))
 		return 0;
-
-	/* fail on a direct rate set of a protected provider */
 	if (clk_core_rate_is_protected(core))
 		return -EBUSY;
-
-	set_rate_nesting_count++;
-
-	/* calculate new rates and get the topmost changed clock */
-	top = clk_calc_new_rates(core, req_rate);
-	if (!top) {
-		ret = -EINVAL;
-		goto pre_rate_change_err;
+	if (!set_rate_nesting_count) {
+		clk_vdd_transaction_id++;
+		clk_vdd_hardware_error = 0;
 	}
-
+	set_rate_nesting_count++;
+	top = clk_calc_new_rates(core, req_rate);
+	if (IS_ERR_OR_NULL(top)) {
+		ret = top ? PTR_ERR(top) : -EINVAL;
+		goto finish;
+	}
 	ret = clk_pm_runtime_get(core);
 	if (ret)
-		goto pre_rate_change_err;
-
-	/* notify that we are about to change rates */
+		goto finish;
 	fail_clk = clk_propagate_rate_change(top, PRE_RATE_CHANGE);
 	if (fail_clk) {
-		pr_debug("%s: failed to set %s clock to run at %lu\n", __func__,
-				fail_clk->name, req_rate);
 		clk_propagate_rate_change(top, ABORT_RATE_CHANGE);
 		ret = -EBUSY;
-		clk_pm_runtime_put(core);
-		goto pre_rate_change_err;
+		goto runtime_put;
 	}
-
-	/* change the rates */
+	hardware_phase = true;
 	ret = clk_change_rate(top);
-	set_rate_nesting_count--;
 	if (ret) {
-		pr_err("%s: failed to set %s clock to run at %lu\n", __func__,
-				top->name, req_rate);
+		if (!clk_vdd_hardware_error)
+			clk_vdd_hardware_error = ret;
 		clk_propagate_rate_change(top, ABORT_RATE_CHANGE);
-		clk_vote_safe_vdd();
-		goto post_rate_change_err;
+	} else {
+		core->req_rate = req_rate;
 	}
-
-	core->req_rate = req_rate;
-
-post_rate_change_err:
-	/*
-	 * Only remove vdd_class level votes for old clock rates after all
-	 * nested clk_set_rate() calls have completed.
-	 */
-	if (set_rate_nesting_count == 0) {
-		ret |= clk_unvote_old_rate_vdd();
-		clk_cleanup_vdd_votes();
-	}
-
+runtime_put:
 	clk_pm_runtime_put(core);
-
-	return ret;
-
-pre_rate_change_err:
+finish:
 	set_rate_nesting_count--;
-	if (set_rate_nesting_count == 0) {
-		clk_unvote_new_rate_vdd();
-		clk_cleanup_vdd_votes();
+	if (!set_rate_nesting_count) {
+		if (clk_vdd_hardware_error) {
+			cleanup = clk_finish_rate_vdd_votes(CLK_VDD_KEEP_SAFE);
+			if (!ret)
+				ret = clk_vdd_hardware_error;
+		} else {
+			cleanup = clk_finish_rate_vdd_votes(ret && !hardware_phase ?
+					CLK_VDD_ABORT : CLK_VDD_COMMIT);
+		}
+		if (!ret)
+			ret = cleanup;
 	}
-
 	return ret;
 }
 
@@ -4229,11 +4601,14 @@ static int __clk_core_init(struct clk_core *core)
 	if (core->flags & CLK_IS_CRITICAL) {
 		unsigned long flags;
 
-		clk_core_prepare(core);
-
+		ret = clk_core_prepare(core);
+		if (ret)
+			goto out;
 		flags = clk_enable_lock();
-		clk_core_enable(core);
+		ret = clk_core_enable(core);
 		clk_enable_unlock(flags);
+		if (ret)
+			goto out;
 	}
 
 	clk_core_hold_state(core);
@@ -4253,7 +4628,8 @@ static int __clk_core_init(struct clk_core *core)
 		 */
 		if (parent) {
 			/* update the clk tree topology */
-			__clk_set_parent_before(orphan, parent);
+			if (IS_ERR(__clk_set_parent_before(orphan, parent)))
+				continue;
 			__clk_set_parent_after(orphan, parent, NULL);
 			__clk_recalc_accuracies(orphan);
 			__clk_recalc_rates(orphan, 0);
@@ -4261,26 +4637,6 @@ static int __clk_core_init(struct clk_core *core)
 		}
 	}
 
-	/*
-	 * optional platform-specific magic
-	 *
-	 * The .init callback is not used by any of the basic clock types, but
-	 * exists for weird hardware that must perform initialization magic.
-	 * Please consider other ways of solving initialization problems before
-	 * using this callback, as its use is discouraged.
-	 */
-	if (core->ops->init)
-		core->ops->init(core->hw);
-
-	if (core->flags & CLK_IS_CRITICAL) {
-		unsigned long flags;
-
-		clk_core_prepare(core);
-
-		flags = clk_enable_lock();
-		clk_core_enable(core);
-		clk_enable_unlock(flags);
-	}
 
 	/*
 	 * enable clocks with the CLK_ENABLE_HAND_OFF flag set
@@ -4302,14 +4658,16 @@ static int __clk_core_init(struct clk_core *core)
 		 * prepare/enable those clocks.
 		 */
 		if (clk_core_is_enabled(core)) {
-			core->need_handoff_prepare = true;
-			core->need_handoff_enable = true;
 			ret = clk_core_prepare(core);
 			if (ret)
 				goto out;
 			flags = clk_enable_lock();
-			clk_core_enable(core);
+			ret = clk_core_enable(core);
 			clk_enable_unlock(flags);
+			if (ret)
+				goto out;
+			core->need_handoff_prepare = true;
+			core->need_handoff_enable = true;
 		}
 	}
 
@@ -4386,6 +4744,7 @@ struct clk *clk_register(struct device *dev, struct clk_hw *hw)
 		goto fail_out;
 	}
 
+	INIT_LIST_HEAD(&core->rate_change_node);
 	core->name = kstrdup_const(hw->init->name, GFP_KERNEL);
 	if (!core->name) {
 		ret = -ENOMEM;
@@ -4419,6 +4778,7 @@ struct clk *clk_register(struct device *dev, struct clk_hw *hw)
 			pr_err("Failed to initialize vdd class\n");
 			goto fail_parent_names;
 		}
+		core->vdd_class_registered = true;
 	}
 
 	/* allocate local copy in case parent_names is __initdata */
@@ -4450,7 +4810,6 @@ struct clk *clk_register(struct device *dev, struct clk_hw *hw)
 	};
 
 	INIT_HLIST_HEAD(&core->clks);
-	INIT_LIST_HEAD(&core->rate_change_node);
 
 	hw->clk = __clk_create_clk(hw, NULL, NULL);
 	if (IS_ERR(hw->clk)) {
@@ -4472,6 +4831,11 @@ fail_parent_names_copy:
 		kfree_const(core->parent_names[i]);
 	kfree(core->parent_names);
 fail_parent_names:
+	if (core->vdd_class_registered) {
+		clk_prepare_lock();
+		clk_detach_vdd_core(core);
+		clk_prepare_unlock();
+	}
 fail_ops:
 	kfree_const(core->name);
 fail_name:
@@ -4569,6 +4933,9 @@ void clk_unregister(struct clk *clk)
 		       clk->core->name);
 		goto unlock;
 	}
+	if (!clk->core->prepare_count)
+		clk_release_unprepared_vdd(clk->core);
+	clk_detach_vdd_core(clk->core);
 	/*
 	 * Assign empty clock ops for consumers that might still hold
 	 * a reference to this clock.

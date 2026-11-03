@@ -316,7 +316,15 @@ struct regulator;
  * @level_votes: array of votes for each level
  * @num_levels: specifies the size of level_votes array
  * @skip_handoff: do not vote for the max possible voltage during init
- * @cur_level: the currently set voltage level
+ * @require_handoff: acquire a tracked bootstrap HIGH even for late providers
+ * @cur_level: the last acknowledged voltage level (num_levels if unknown)
+ * @sync_vdd: force provider reconciliation/acknowledgement for the given level
+ * @num_enabled: number of regulator enables owned by this class (prefix)
+ * @error: quarantined failure; clock programming requires reconciliation
+ * @recovery_level: conservative level required before clearing quarantine
+ * @enable_uncertain: generic enable state requires provider-qualified replay
+ * @orphaned: unreleasable lease lost its provider; no automatic recovery
+ * @num_clocks: registered clocks keeping the class handoff record alive
  * @lock: lock to protect this struct
  */
 struct clk_vdd_class {
@@ -324,13 +332,26 @@ struct clk_vdd_class {
 	struct regulator **regulator;
 	int num_regulators;
 	int (*set_vdd)(struct clk_vdd_class *v_class, int level);
+	int (*sync_vdd)(struct clk_vdd_class *v_class, int level);
 	int *vdd_uv;
 	int *level_votes;
 	int num_levels;
 	bool skip_handoff;
+	bool require_handoff;
 	unsigned long cur_level;
+	unsigned int num_enabled;
+	int error;
+	int recovery_level;
+	bool enable_uncertain;
+	bool orphaned;
+	unsigned int num_clocks;
 	struct mutex lock;
 };
+
+/* Caller must establish complete firmware-clock ownership before releasing a
+ * late bootstrap lease. Before global handoff this retains the ordinary lease.
+ */
+int clk_vdd_class_release_handoff(struct clk_vdd_class *vdd);
 
 #define DEFINE_VDD_CLASS(_name, _set_vdd, _num_levels) \
 	struct clk_vdd_class _name = { \

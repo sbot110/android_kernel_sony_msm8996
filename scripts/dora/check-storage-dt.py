@@ -108,9 +108,13 @@ def selftest(nodes,config):
            (SD1,'clock-names',b'iface\0core\0'),(SD1,'qcom,clk-rates',struct.pack('>I',400000000)),
            (SD2,'uim2-gpios',b'\0'*12),('/aliases','mmc0',(SD2+'\0').encode()),
            ('/soc/ufshc@624000','status',b'okay\0'),(SD1,'status',b'okay\0'),
-           ('/firmware/android/fstab/vendor','dev',b'/dev/block/sda1\0')]
+           ('/firmware/android/fstab/vendor','dev',b'/dev/block/sda1\0'),
+           ('/rpm-glink/rpm_requests/pm8994-regulators/s4','regulator-system-load',struct.pack('>I',325000)),
+           ('/rpm-glink/rpm_requests/pm8994-regulators/l20','regulator-allow-set-load',None)]
     for path,prop,value in cases:
-        bad=copy.deepcopy(nodes);bad[path]['props'][prop]=value
+        bad=copy.deepcopy(nodes)
+        if value is None:del bad[path]['props'][prop]
+        else:bad[path]['props'][prop]=value
         try:validate(bad,config)
         except (ValueError,KeyError,StopIteration,IndexError,struct.error):continue
         raise ValueError('accepted invalid storage fixture: '+prop)
@@ -124,7 +128,7 @@ def main():
     except (ValueError,KeyError,StopIteration,IndexError,struct.error,OSError)as e:
         print('FAIL:',e);return 1
     print('PASS: Sony SDHC1 eMMC/SDHC2 hybrid SD-UIM2 data, native GCC/rails/pads, aliases and Android system/oem paths')
-    if a.selftest:print('PASS: nine bad-controller/clock/GPIO/path/activation fixtures rejected')
+    if a.selftest:print('PASS: eleven bad-controller/clock/GPIO/path/load/activation fixtures rejected')
     print('Controllers safety-gated pending GCC CX proof; GPT partitions/HS200/HS400/suspend require device tests.')
     return 0
 

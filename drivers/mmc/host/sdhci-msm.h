@@ -8,6 +8,7 @@
 #define __SDHCI_MSM_H__
 
 #include <linux/mmc/mmc.h>
+#include <linux/mutex.h>
 #include <linux/pm_qos.h>
 #include <linux/reset.h>
 #include "sdhci-pltfm.h"
@@ -85,6 +86,12 @@ struct sdhci_msm_reg_data {
 	/* Load values for low power and high power mode */
 	u32 lpm_uA;
 	u32 hpm_uA;
+	/* Last successfully applied consumer load, for failed-vote rollback. */
+	int load_uA;
+	int min_uV;
+	int max_uV;
+	/* Generic regulator caches cannot reconcile a delivered, lost RPM ACK. */
+	int power_error;
 
 	/* is this regulator enabled? */
 	bool is_enabled;
@@ -216,6 +223,9 @@ struct sdhci_msm_pltfm_data {
 };
 
 struct sdhci_msm_bus_vote {
+	/* Serialize the sleeping RPM transaction and its acknowledged cache. */
+	struct mutex lock;
+	int error;
 	uint32_t client_handle;
 	uint32_t curr_vote;
 	int min_bw_vote;
@@ -269,6 +279,9 @@ struct sdhci_msm_host {
 	struct platform_device	*pdev;
 	void __iomem *core_mem;    /* MSM SDCC mapped address */
 	int	pwr_irq;	/* power irq */
+	bool pwr_irq_requested;
+	bool sdiowakeup_irq_requested;
+	bool testbus_irq_requested;
 	struct clk	 *clk;     /* main SD/MMC bus clock */
 	struct clk	 *pclk;    /* SDHC peripheral bus clock */
 	struct clk	 *bus_aggr_clk; /* Axi clock shared with UFS */

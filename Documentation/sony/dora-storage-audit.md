@@ -1,6 +1,6 @@
 # Dora: аудит внутреннего накопителя, eMMC и UFS
 
-Дата: 2026-11-02. Начальный HEAD этапа:
+Обновлено: 2026-11-03. Начальный HEAD этапа:
 `8d7ab8a3baeb73cfaea264f3f7758e32cffce097`.
 Рабочий аппаратный эталон Sony 4.4:
 `0c295b15b6d0fb59a64e13b9e0ef2070818ef2a1`.
@@ -79,11 +79,22 @@ Legacy `sdhc-msm-crypto` phandle не скопирован: текущий CQHCI
   provider references, firmware paths, UIM2/CD и отрицательные fixtures.
 - `check-android-abi.py`: реальные Binder/ION/fscrypt layouts и dispatch,
   SquashFS/LZ4/xattrs и обязательные VFAT NLS dependencies.
-- MMC driver/core дорабатываются отдельным тематическим изменением:
-  host-local UIM2, alias reservation, корректный deferred probe, clock/pdata
-  errors и отсутствие преждевременной публикации слота. Их точные результаты
-  должны подтверждаться итоговым журналом сборки, не одним наличием DTS.
+- MMC core/driver: host-local UIM2, alias reservation, настоящий deferred
+  probe и provider acquisition до clock MMIO, точный bootdevice token,
+  IRQ/work cleanup и публикация слота только после успешного probe.
+- `check-mmc-alias.py`, `check-mmc-uim2.py`, `check-mmc-providers.py`,
+  `check-mmc-power.py`: actual allocation/scan/stop/helpers, concurrent bus
+  votes, ошибки clocks/rails, применённая запись с потерянным ACK и cache
+  divergence. Все четыре host tests и финальная ARM64 объектная сборка
+  core/host/slot-gpio/sdhci-msm завершились кодом 0. Полная сборка записывается
+  отдельно в `dora-build-validation.txt`.
 
+Physical power_error и bus quarantine сохраняют первый errno. После любой
+неопределённой physical regulator transaction повторные power/clock enables
+блокируются; best-effort shutdown не снимает latch. Generic cached rollback
+не объявляется восстановлением реального PMIC. Для recovery нужен настоящий
+provider-specific UV/SWEN/load replay/ACK и SLEEP contract. Такая возможность
+не имитируется, gates сохраняются.
 SDHC1/2 пока safety-gated до проверки настоящего GCC CX coupling, включая
 родительский GPLL4, подготовку clocks, ACK и ошибки voltage transactions.
 UFS остаётся отключённым независимо от этого. Не включается DVFS, четыре

@@ -37,7 +37,7 @@ bool mmc_can_gpio_cd(struct mmc_host *host);
 bool mmc_can_gpio_ro(struct mmc_host *host);
 void mmc_register_extcon(struct mmc_host *host);
 void mmc_unregister_extcon(struct mmc_host *host);
- #ifdef CONFIG_SONY_EXT_UIM_CTRL
- void mmc_gpio_tray_close_set_uim2(struct mmc_host *host, int value);
- #endif
+int mmc_gpiod_request_uim2(struct mmc_host *host);
+void mmc_gpio_set_uim2_en(struct mmc_host *host, int value);
+void mmc_gpio_tray_close_set_uim2(struct mmc_host *host, int value);
 #endif

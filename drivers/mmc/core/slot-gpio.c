@@ -16,6 +16,8 @@
 #include <linux/mmc/host.h>
 #include <linux/mmc/slot-gpio.h>
 #include <linux/module.h>
+#include <linux/mutex.h>
+#include <linux/property.h>
 #include <linux/slab.h>
 #include <linux/extcon.h>
 #ifndef CONFIG_SONY_MMC_EXTENSION
@@ -28,6 +30,10 @@
 struct mmc_gpio {
 	struct gpio_desc *ro_gpio;
 	struct gpio_desc *cd_gpio;
+	/* Sony Tone's GPIO29 belongs to this removable slot, not a global mux. */
+	struct gpio_desc *uim2_gpio;
+	bool uim2_local;
+	struct mutex uim2_lock;
 	bool override_ro_active_level;
 	bool override_cd_active_level;
 	irqreturn_t (*cd_gpio_isr)(int irq, void *dev_id);
@@ -63,7 +69,13 @@ static irqreturn_t mmc_gpio_cd_irqt(int irq, void *dev_id)
 #ifdef CONFIG_SONY_MMC_EXTENSION
 	int status;
 #endif
-	int present = host->ops->get_cd(host);
+	int present;
+
+	if (!host->ops || !host->ops->get_cd)
+		return IRQ_HANDLED;
+	present = host->ops->get_cd(host);
+	if (present <= 0)
+		mmc_gpio_set_uim2_en(host, 0);
 
 	pr_debug("%s: cd gpio irq, gpio state %d (CARD_%s)\n",
 		mmc_hostname(host), present, present?"INSERT":"REMOVAL");
@@ -81,7 +93,7 @@ static irqreturn_t mmc_gpio_cd_irqt(int irq, void *dev_id)
 
 #ifdef CONFIG_SONY_EXT_UIM_CTRL
 	if (status == 0)
-		sony_ext_uim_ctrl_set_uim2_detect_en(0);
+		mmc_gpio_tray_close_set_uim2(host, 0);
 #endif /* CONFIG_SONY_EXT_UIM_CTRL */
 
 	if (status ^ ctx->status) {
@@ -109,6 +121,7 @@ int mmc_gpio_alloc(struct mmc_host *host)
 				sizeof(*ctx) + 2 * len,	GFP_KERNEL);
 
 	if (ctx) {
+		mutex_init(&ctx->uim2_lock);
 		ctx->ro_label = ctx->cd_label + len;
 		ctx->cd_debounce_delay_ms = 200;
 		snprintf(ctx->cd_label, len, "%s cd", dev_name(host->parent));
@@ -156,6 +169,8 @@ int mmc_gpio_get_cd(struct mmc_host *host)
 		int value = cansleep ?
 				gpiod_get_raw_value_cansleep(ctx->cd_gpio) :
 				gpiod_get_raw_value(ctx->cd_gpio);
+		if (value < 0)
+			return value;
 		return !value ^ !!(host->caps2 & MMC_CAP2_CD_ACTIVE_HIGH);
 	}
 
@@ -470,15 +485,73 @@ bool mmc_can_gpio_ro(struct mmc_host *host)
 	return ctx->ro_gpio ? true : false;
 }
 EXPORT_SYMBOL(mmc_can_gpio_ro);
-#ifdef CONFIG_SONY_MMC_EXTENSION
+/* Release the host-local line before devres releases its GPIO descriptor. */
+static void mmc_gpio_uim2_release(void *data)
+{
+	struct mmc_gpio *ctx = data;
+
+	mutex_lock(&ctx->uim2_lock);
+	if (ctx->uim2_gpio)
+		gpiod_set_value_cansleep(ctx->uim2_gpio, 0);
+	ctx->uim2_gpio = NULL;
+	mutex_unlock(&ctx->uim2_lock);
+}
+
+int mmc_gpiod_request_uim2(struct mmc_host *host)
+{
+	struct mmc_gpio *ctx = host->slot.handler_priv;
+	struct gpio_desc *gpio;
+
+	if (!ctx)
+		return -EINVAL;
+	/* No property means no change to other MMC platforms. */
+	if (!device_property_present(host->parent, "uim2-gpios"))
+		return 0;
+	ctx->uim2_local = true;
+	if ((host->caps & MMC_CAP_NONREMOVABLE) || !ctx->cd_gpio)
+		return -EINVAL;
+	if (ctx->uim2_gpio)
+		return -EBUSY;
+	gpio = devm_gpiod_get(host->parent, "uim2", GPIOD_OUT_LOW);
+	if (IS_ERR(gpio))
+		return PTR_ERR(gpio);
+	ctx->uim2_gpio = gpio;
+	return devm_add_action_or_reset(host->parent, mmc_gpio_uim2_release, ctx);
+}
+EXPORT_SYMBOL_GPL(mmc_gpiod_request_uim2);
+
+void mmc_gpio_set_uim2_en(struct mmc_host *host, int value)
+{
+	struct mmc_gpio *ctx = host->slot.handler_priv;
+
+	if (!ctx)
+		return;
+	mutex_lock(&ctx->uim2_lock);
+	if (ctx->uim2_gpio) {
+		/* A removal IRQ must not be undone by a delayed failed SD scan. */
+		if (value && mmc_gpio_get_cd(host) <= 0)
+			value = 0;
+		gpiod_set_value_cansleep(ctx->uim2_gpio, !!value);
+	}
+	mutex_unlock(&ctx->uim2_lock);
+}
+EXPORT_SYMBOL_GPL(mmc_gpio_set_uim2_en);
 
 void mmc_gpio_tray_close_set_uim2(struct mmc_host *host, int value)
 {
 	struct mmc_gpio *ctx = host->slot.handler_priv;
 
-	if (ctx && ctx->status)
-		sony_ext_uim_ctrl_set_uim2_detect_en(value);
+	if (!ctx)
+		return;
+	if (ctx->uim2_local) {
+		mmc_gpio_set_uim2_en(host, value);
+		return;
+	}
 
+#ifdef CONFIG_SONY_MMC_EXTENSION
+	/* Keep the separate external-controller implementation for its boards. */
+	if (ctx->status || !value)
+		sony_ext_uim_ctrl_set_uim2_detect_en(value);
+#endif
 }
 EXPORT_SYMBOL(mmc_gpio_tray_close_set_uim2);
-#endif

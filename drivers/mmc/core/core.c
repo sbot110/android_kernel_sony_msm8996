@@ -3546,10 +3546,8 @@ static int mmc_rescan_try_freq(struct mmc_host *host, unsigned freq)
 	if (!(host->caps2 & MMC_CAP2_NO_SD)) {
 		if (!mmc_attach_sd(host))
 			return 0;
-#ifdef CONFIG_SONY_EXT_UIM_CTRL
 		else
 			mmc_gpio_tray_close_set_uim2(host, 1);
-#endif /* CONFIG_SONY_EXT_UIM_CTRL */
 	}
 
 	if (!(host->caps2 & MMC_CAP2_NO_MMC))
@@ -3738,10 +3736,7 @@ void mmc_stop_host(struct mmc_host *host)
 
 	host->rescan_disable = 1;
 	cancel_delayed_work_sync(&host->detect);
-
-#ifdef CONFIG_SONY_EXT_UIM_CTRL
-	sony_ext_uim_ctrl_set_uim2_detect_en(0);
-#endif /* CONFIG_SONY_EXT_UIM_CTRL */
+	mmc_gpio_tray_close_set_uim2(host, 0);
 
 	/* clear pm flags now and let card drivers set them as needed */
 	host->pm_flags = 0;

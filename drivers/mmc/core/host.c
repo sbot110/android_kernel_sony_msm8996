@@ -41,6 +41,31 @@
 
 static DEFINE_IDA(mmc_host_ida);
 
+/*
+ * Keep firmware-named hosts stable across deferred or reversed probe order.
+ * Unnamed hosts must not consume indices reserved by an mmcN OF alias,
+ * including aliases whose controllers have not probed yet.
+ */
+static int mmc_host_alloc_index(struct device *dev)
+{
+	int alias = -ENODEV;
+	unsigned int first = 0, end = 0;
+
+	if (dev && dev->of_node)
+		alias = of_alias_get_id(dev->of_node, "mmc");
+	if (alias >= 0) {
+		first = alias;
+		/* Cast before adding: a malformed INT_MAX alias must not wrap. */
+		end = (unsigned int)alias + 1;
+	} else {
+		alias = of_alias_get_highest_id("mmc");
+		if (alias >= 0)
+			first = (unsigned int)alias + 1;
+	}
+
+	return ida_simple_get(&mmc_host_ida, first, end, GFP_KERNEL);
+}
+
 static void mmc_host_classdev_release(struct device *dev)
 {
 	struct mmc_host *host = cls_dev_to_mmc_host(dev);
@@ -430,7 +455,7 @@ struct mmc_host *mmc_alloc_host(int extra, struct device *dev)
 	/* scanning will be enabled when we're ready */
 	host->rescan_disable = 1;
 
-	err = ida_simple_get(&mmc_host_ida, 0, 0, GFP_KERNEL);
+	err = mmc_host_alloc_index(dev);
 	if (err < 0) {
 		kfree(host);
 		return NULL;

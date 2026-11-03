@@ -834,7 +834,9 @@
 	snps,hird-threshold = /bits/ 8 <0>;
 };
 
-/* The Xperia X Performance uses UFS, not the upstream board's disabled eMMC. */
+/* Generic UFS topology is retained here. Dora's storage supplement disables
+ * this host and PHY: its installed boot storage is SDHC1 eMMC.
+ */
 &ufsphy {
 	status = "okay";
 };

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Check the four final Sony SoC/PMIC datasets and their disabled power guards.
+"""Check the four final Sony SoC/PMIC datasets and explicit power guards.
 
 This verifies compiled DT data and links, not runtime support or Sony bootloader
 selection. RPM logical corners must not be supplied by a microvolt regulator.
@@ -15,6 +15,9 @@ ROOT = Path(__file__).resolve().parents[2]
 SPEC = importlib.util.spec_from_file_location("dora_power", ROOT / "scripts/dora/check-power-dt.py")
 POWER = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(POWER)
+SPEC = importlib.util.spec_from_file_location("dora_voltage_dt", ROOT / "scripts/dora/check-clock-voltage-dt.py")
+VOLTAGE = importlib.util.module_from_spec(SPEC)
+SPEC.loader.exec_module(VOLTAGE)
 MANIFEST = ROOT / "Documentation/sony/dora-variant-dt.json"
 PATHS = {
     "gfx-cpr": "/soc/cpr3-ctrl@838000",
@@ -46,7 +49,17 @@ def handles(nodes):
             for path, node in nodes.items() if "phandle" in node["props"]}
 
 
-def selected(nodes, reference=False):
+def selected(nodes, reference=False, mode="gated"):
+    if not reference:
+        for key in ("cx-resource", "mx-resource"):
+            VOLTAGE.verify_corner_endpoint(nodes, PATHS[key])
+        if mode not in ("gated", "active"):
+            raise ValueError("explicit gated/active projection policy is required")
+        if mode == "gated":
+            VOLTAGE.disabled(nodes, PATHS["cx-resource"])
+        elif not VOLTAGE.available(nodes, PATHS["cx-resource"]):
+            raise ValueError("active policy requires an available typed CX resource")
+        VOLTAGE.disabled(nodes, PATHS["mx-resource"])
     paths = REFERENCE_PATHS if reference else PATHS
     aliases = {}
     for key, prefix in paths.items():
@@ -65,6 +78,18 @@ def selected(nodes, reference=False):
         for name, value in node["props"].items():
             if name in ("phandle", "linux,phandle", "clocks"):
                 continue
+            # These two properties adapt the frontend and transport only. The
+            # exact typed match/real RPM endpoint were checked before projection;
+            # all original corner payload remains subject to the Sony golden.
+            if not reference and key in ("cx-resource", "mx-resource"):
+                if name == "qcom,rpm":
+                    continue
+                if name == "compatible":
+                    props[name] = VOLTAGE.LEGACY.hex()
+                    continue
+                if name == "status":
+                    props[name] = b"disabled\0".hex()
+                    continue
             if name.endswith("-supply") or name == "qcom,pmic-revid":
                 if len(value) != 4:
                     raise ValueError("malformed supply/revid phandle: " + key)
@@ -111,7 +136,7 @@ def check_reference(directory):
     print("PASS: all four fixtures match the flattened Sony 4.4 reference data")
 
 
-def validate(nodes, expected=None):
+def validate(nodes, expected=None, mode="gated"):
     if expected is None:
         expected = json.loads(MANIFEST.read_text())
     root = nodes["/"]["props"]
@@ -123,7 +148,7 @@ def validate(nodes, expected=None):
     variant, wanted = matches[0]
     if root["qcom,board-id"].hex() != wanted["board_id"]:
         raise ValueError("board ID is not Sony Tone")
-    actual = selected(nodes)
+    actual = selected(nodes, mode=mode)
     bad = []
     for key in sorted(set(actual) | set(wanted["nodes"])):
         a = actual.get(key, {})
@@ -137,6 +162,8 @@ def validate(nodes, expected=None):
         raise ValueError("final Sony hardware data differs: " + ", ".join(bad))
     refs = handles(nodes)
     for key, path in PATHS.items():
+        if key == "cx-resource" and mode == "active":
+            continue
         if nodes[path]["props"].get("status") != b"disabled\0":
             raise ValueError("incomplete power chain enabled: " + key)
     cpr = nodes[PATHS["gfx-cpr"]]["props"]
@@ -173,17 +200,28 @@ def validate(nodes, expected=None):
     if ibb["qcom,qpnp-ibb-discharge-resistor"].hex() != wanted["ibb_discharge"]:
         raise ValueError("final IBB discharge differs (Sony dora requires 32)")
     # This stage deliberately retains maxcpus=2 independently of model or PMIC.
-    if b"maxcpus=2" not in nodes["/chosen"]["props"]["bootargs"].rstrip(b"\0").split():
-        raise ValueError("CPU safety limit was removed")
+    VOLTAGE.verify_cpu_limit(nodes)
     return variant
 
 
-def selftest(nodes):
+def selftest(nodes, mode="gated"):
+    fixture = copy.deepcopy(nodes)
+    other = "active" if mode == "gated" else "gated"
+    fixture[PATHS["cx-resource"]]["props"]["status"] = (
+        b"okay\0" if other == "active" else b"disabled\0")
+    if validate(fixture, mode=other) != validate(nodes, mode=mode):
+        raise ValueError("explicit CX policy changed the original variant identity")
     cases = [
         (PATHS["gfx-cpr"] + "/thread@0/regulator", "qcom,cpr-corners", struct.pack(">I", 99)),
         (PATHS["flash"], "qcom,ramp_up_step", b"BAD\0"),
         (PATHS["gfx-clock"], "status", b"okay\0"),
-        (PATHS["cx-resource"], "status", b"okay\0"),
+        (PATHS["cx-resource"], "status", b"okay\0" if mode == "gated" else b"disabled\0"),
+        (PATHS["cx-resource"], "compatible", VOLTAGE.LEGACY),
+        (PATHS["mx-resource"], "compatible", b"qcom,unverified-corner-resource\0"),
+        (PATHS["cx-resource"], "qcom,rpm", nodes["/soc/clock-controller@300000"]["props"]["phandle"]),
+        ("/rpm-glink/rpm_requests", "status", b"disabled\0"),
+        ("/chosen", "bootargs", b"maxcpus=2 maxcpus=4\0"),
+        ("/chosen", "bootargs", b"maxcpus=2 boot_cpus=2-3\0"),
         (PATHS["gfx-cpr"], "clocks", b"\0" * 24),
         ("/soc/qfprom@74000/cpu-speedbin@130", "bits", struct.pack(">II", 0, 3)),
         ("/soc/qcom,spmi@400f000/pmic@3/qpnp-labibb-regulator/qcom,ibb@dc00",
@@ -194,7 +232,7 @@ def selftest(nodes):
         bad = copy.deepcopy(nodes)
         bad[path]["props"][prop] = replacement
         try:
-            validate(bad)
+            validate(bad, mode=mode)
         except (ValueError, KeyError, IndexError, struct.error):
             continue
         raise ValueError("checker accepted corrupt/unsafe fixture: " + prop)
@@ -205,22 +243,28 @@ def main():
     parser.add_argument("dtb", type=Path, nargs="+")
     parser.add_argument("--require-four", action="store_true")
     parser.add_argument("--selftest", action="store_true")
+    policy = parser.add_mutually_exclusive_group()
+    policy.add_argument("--require-gated", action="store_true",
+                        help="require all incomplete power chains gated (the default)")
+    policy.add_argument("--require-active", action="store_true",
+                        help="allow only the explicitly available typed CX resource")
     parser.add_argument("--reference-dir", type=Path,
                         help="also verify fixtures against all four original Sony DTBs")
     args = parser.parse_args()
+    mode = "active" if args.require_active else "gated"
     seen = []
     try:
         if args.reference_dir:
             check_reference(args.reference_dir)
         for path in args.dtb:
             nodes = POWER.parse_fdt(path)
-            variant = validate(nodes)
+            variant = validate(nodes, mode=mode)
             if variant in seen:
                 raise ValueError("duplicate variant: " + variant)
             seen.append(variant)
             if args.selftest:
-                selftest(nodes)
-            print("PASS: %s final Sony GPU/PMIC data, native links and disabled guards" % variant)
+                selftest(nodes, mode=mode)
+            print("PASS: %s final Sony GPU/PMIC data, native links and %s CX policy" % (variant, mode))
         if args.require_four and set(seen) != set(json.loads(MANIFEST.read_text())["variants"]):
             raise ValueError("all four real SoC/PMIC variants are required")
     except (ValueError, KeyError, IndexError, struct.error) as error:

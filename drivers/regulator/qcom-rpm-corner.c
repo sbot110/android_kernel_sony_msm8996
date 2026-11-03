@@ -4,7 +4,7 @@
  *
  * Resource, key, logical offset and aggregation semantics are adapted from
  * Sony 4.4 rpm-smd-regulator.c at 0c295b15b6d0fb59a64e13b9e0ef2070818ef2a1,
- * Copyright (c) 2012-2018, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2012-2017, The Linux Foundation. All rights reserved.
  *
  * Unlike the old asynchronous implementation, both owned sets are explicitly
  * acknowledged. Failed transactions restore the acknowledged snapshot or

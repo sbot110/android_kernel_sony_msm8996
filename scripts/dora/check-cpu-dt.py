@@ -77,7 +77,8 @@ def validate(nodes):
     cbf = nodes["/soc/clock-controller@9a11000"]["props"]
     if cbf.get("compatible") != b"qcom,msm8996-cbf\0" or cells(cbf.get("reg", b"")) != (0x9a11000, 0x10000):
         raise ValueError("incorrect CBF register topology")
-    if b"maxcpus=2" not in nodes["/chosen"]["props"].get("bootargs", b""):
+    bootargs = nodes["/chosen"]["props"].get("bootargs", b"").rstrip(b"\0").split()
+    if [arg for arg in bootargs if arg.startswith(b"maxcpus=")] != [b"maxcpus=2"]:
         raise ValueError("two-CPU diagnostic limit was removed")
     # All four phases form one SPM-controlled APCC rail in the final Sony DT.
     # Native RPM must not register independent clients while that owner is gated.
@@ -94,6 +95,8 @@ def selftest(nodes):
         ("/soc/cpr3-ctrl@99e8000", "vdd-supply", struct.pack(">I", 0xffffffff)),
         ("/soc/clock-controller@6400000", "qcom,pwrcl-speedbin1-v0", b"\0" * 8),
         ("/chosen", "bootargs", b"\0"),
+        ("/chosen", "bootargs", b"maxcpus=2 maxcpus=4\0"),
+        ("/chosen", "bootargs", b"maxcpus=20\0"),
         ("/rpm-glink/rpm_requests/pm8994-regulators/s11", "status", b"okay\0"),
     )
     for path, key, replacement in cases:

@@ -37,7 +37,17 @@ done
 } > "$out/toolchain.txt"
 make -C "$root" O="$out" tone_dora_defconfig 2>&1 | tee "$out/config.log"
 python3 "$root/scripts/dora/check-config.py" "$out/.config"
+python3 "$root/scripts/dora/check-android-abi.py" "$out/.config" --selftest
 python3 "$root/scripts/dora/check-cpu-clocks.py" --config "$out/.config"
+python3 "$root/scripts/dora/check-cpu-transactions.py"
+python3 "$root/scripts/dora/check-spmi-ownership.py"
+python3 "$root/scripts/dora/check-mmc-alias.py"
+python3 "$root/scripts/dora/check-mmc-uim2.py"
+python3 "$root/scripts/dora/check-mmc-providers.py"
+python3 "$root/scripts/dora/check-mmc-power.py"
+python3 "$root/scripts/dora/check-rpm-corners.py"
+python3 "$root/scripts/dora/check-clock-voltage.py"
+python3 "$root/scripts/dora/check-clk-vdd.py"
 python3 "$root/scripts/dora/check-panels.py"
 python3 "$root/scripts/dora/check-panel-selection.py"
 python3 "$root/scripts/dora/check-ufs-phy.py"
@@ -68,9 +78,11 @@ for dtb in "${dtbs[@]}"; do
     python3 "$root/scripts/dora/check-power-dt.py" "$tree"
     python3 "$root/scripts/dora/check-pin-safety.py" "$tree" --self-test
     python3 "$root/scripts/dora/check-bus-dt.py" "$tree" --selftest
+    python3 "$root/scripts/dora/check-storage-dt.py" "$tree" --config "$out/.config" --selftest
+    python3 "$root/scripts/dora/check-clock-voltage-dt.py" "$tree" --config "$out/.config" --require-gated --selftest
     python3 "$root/scripts/dora/check-display-dt.py" "$tree" --config "$out/.config" --require-gated --self-test
 done
-python3 "$root/scripts/dora/check-variants.py" "${trees[@]}" --require-four --selftest
+python3 "$root/scripts/dora/check-variants.py" "${trees[@]}" --require-four --require-gated --selftest
 # An explicit list excludes stale or unrelated DTBs in O=.
 image="$out/arch/arm64/boot/Image.gz"
 cat -- "$image" "${trees[@]}" > "$out/arch/arm64/boot/Image.gz-dtb"

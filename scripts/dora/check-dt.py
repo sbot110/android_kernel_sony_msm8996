@@ -68,7 +68,7 @@ def validate(nodes):
     if "somc,dora-row" not in strings(root["compatible"]):
         raise ValueError("missing Sony Dora compatible")
     bootargs = strings(nodes["/chosen"]["props"]["bootargs"])[0].split()
-    if "maxcpus=2" not in bootargs:
+    if [arg for arg in bootargs if arg.startswith("maxcpus=")] != ["maxcpus=2"]:
         raise ValueError("CPU safety limit removed before bring-up validation")
     if any(arg.startswith(("lcdid_adc=", "panel_name=")) for arg in bootargs):
         raise ValueError("panel selection must not be forced")

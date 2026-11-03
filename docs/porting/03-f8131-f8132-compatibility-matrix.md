@@ -12,16 +12,16 @@
 | Лоток MicroSD и SIM (`sdhc2` + SIM) | MicroSD (`CD GPIO 40`) + `SIM1 GPIO 112` (`ss`) | Гибридный `MicroSD / UIM2` (`CD GPIO 40` + `UIM2 GPIO 29`, `dsds`) | `mmc/core/slot-gpio.c` + `somc-dora-platform.c` | Скомпилировано (перенесена логика UIM2 4.4) |
 | Дисплей 1080p60 + Автовыбор LCD ID | Автовыбор Panel 3/4/6/8/9 по `lcdid_adc`/VADC | Автовыбор (подтверждён Panel 4 AUO `0x11FFEA`) | `drm/msm` + `panel-sony-dora-incell.c` + `labibb` + `wled` | Скомпилировано (AUO 120Hz заблокирован) |
 | GPU Adreno 530 + SMMU | `gpu@b00000` + `a530_zap.mdt` | `gpu@b00000` + `a530_zap.mdt` | `drm/msm/adreno` + `arm-smmu-qcom` | Ядро собрано; нужен Freedreno/Mesa в ROM |
-| Тачскрин Synaptics Clearpad + жесты | `blsp2_i2c6 @ 0x2c`, `IRQ 125`, `RST 89` | `blsp2_i2c6 @ 0x2c`, `IRQ 125`, `RST 89` | `rmi4-i2c` (`F01/F11/F12`) + `clearpad` sysfs мост | Скомпилировано |
+| Тачскрин Synaptics Clearpad + жесты | `blsp2_i2c6 @ 0x2c`, `IRQ 125`, `RST 89` | `blsp2_i2c6 @ 0x2c`, `IRQ 125`, `RST 89` | `rmi4-i2c` (`reset-gpios` + `irq_wake`) + `&input_class` `clearpad` | Скомпилировано |
 | Кнопки и датчик чехла Hall | Громкость, Камера 2 ступени, `SW_LID GPIO 78` | Громкость, Камера 2 ступени, `SW_LID GPIO 78` | `gpio-keys` + `pm8941-pwrkey` | Скомпилировано |
 | Вибромотор | `PMI8994 GPIO 1` | `PMI8994 GPIO 1` | `gpio-vibrator` (`INPUT_GPIO_VIBRA`) | Скомпилировано |
-| Отпечаток пальца FPC1145 (TEE) | `RST GPIO 21`, `IRQ GPIO 132`, QSEE SPI0 | `RST GPIO 21`, `IRQ GPIO 132`, QSEE SPI0 | `somc-dora-platform.c` (`fpc1020`) | Скомпилировано |
-| Wi-Fi Broadcom BCM4359 C0 | PCIe0 (`WL_REG_ON 84`, `WAKE 79`) | PCIe0 (`WL_REG_ON 84`, `WAKE 79`) | `brcmfmac` + fallback `fw_bcmdhd.bin` / `bcmdhd.cal` | Скомпилировано |
+| Отпечаток пальца FPC1145 (TEE) | `RST GPIO 21`, `IRQ GPIO 132`, QSEE SPI0 | `RST GPIO 21`, `IRQ GPIO 132`, QSEE SPI0 | `somc-dora-platform.c` (`/dev/fingerprint` + `fpc1020`) | Скомпилировано |
+| Wi-Fi Broadcom BCM4359 C0 | PCIe0 (`0x43ef`/`0x4359`, `WL_REG_ON 84`, `WAKE 79`) | PCIe0 (`0x43ef`/`0x4359`, `WL_REG_ON 84`, `WAKE 79`) | `brcmfmac` (`request_firmware_direct`) + `MODULE_PARAM_PREFIX` | Скомпилировано |
 | Bluetooth BCM4359 | `blsp1_uart2` (`REG_ON 83`, `WAKE 81/82`) | `blsp1_uart2` (`REG_ON 83`, `WAKE 81/82`) | `hci_bcm` (`brcm,bcm4359-bt` serdev) | Скомпилировано |
 | NFC NXP PN547 / PN548 | `blsp2_i2c2 @ 0x28` (`IRQ 9`, `FW 12`, `VEN PM7`) | `blsp2_i2c2 @ 0x28` (`IRQ 9`, `FW 12`, `VEN PM7`) | `nxp-nci-i2c` | Скомпилировано |
 | USB 2.0 Micro-B OTG + Gadget | `usb3` HS-only (`ID GPIO 24`), ConfigFS | `usb3` HS-only (`ID GPIO 24`), ConfigFS | `dwc3-qcom` + `usb_f_fs` / `rndis` / `ncm` / `mtp` | Скомпилировано |
 | Аудио WCD9335 + WSA881x + Q6DSP | SLIMbus + `div1_mclk` (`PM GPIO 15`) | SLIMbus + `div1_mclk` (`PM GPIO 15`) | `wcd9335`, `wsa881x`, `qdsp6`, `apq8096-sndcard` | Скомпилировано |
-| Модем / ADSP / SLPI / Видео Venus | `mss_pil`, `adsp_pil`, `slpi_pil`, `venus` | `mss_pil`, `adsp_pil`, `slpi_pil`, `venus` | `qcom_q6v5_mss`, `qcom_q6v5_pas`, `qrtr`, `venus` | Скомпилировано |
+| Модем / ADSP / SLPI / Видео Venus | `mss_pil`, `adsp_pil`, `slpi_pil`, `venus` | `mss_pil`, `adsp_pil`, `slpi_pil`, `venus` | `qcom_q6v5_mss`, `qcom_q6v5_pas`, `rproc_boot(adsp/slpi)`, `venus` | Скомпилировано |
 | Камеры IMX300 / IMX240 | Ограничение проприетарного `mm-camera2` | Ограничение проприетарного `mm-camera2` | Нет открытого драйвера IMX300 для `camss` | Заблокировано userspace/sensor blobs |
 | Ramoops / pstore | `0xa7f00000` (1 МБ: console, pmsg, ftrace) | `0xa7f00000` (1 МБ: console, pmsg, ftrace) | `pstore` + `ramoops` | Скомпилировано |
 

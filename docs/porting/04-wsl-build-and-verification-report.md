@@ -16,24 +16,31 @@
    - *Симптом:* в базовом `gki_defconfig` опция `CONFIG_RFKILL=m` принудительно переключала `CFG80211`, `BRCMFMAC`, `BT_HCIUART` и `NFC_NXP_NCI_I2C` в модули `.ko`, что на Xperia X Performance с read-only SquashFS разделом `/oem` (`/vendor`) создаёт риск несовпадения модулей при прошивке только `boot.img`.
    - *Исправление:* в `dora_defconfig` включены `CONFIG_RFKILL=y` и `CONFIG_VIDEO_QCOM_VENUS=y`, благодаря чему Wi-Fi (`brcmfmac`), Bluetooth (`hci_bcm`), NFC (`nxp-nci-i2c`) и все платформенные драйверы `dora` собираются встроенно (`=y`) непосредственно внутрь `Image.gz-dtb`.
 
-### Подтверждённые скомпилированные целевые объекты ARM64 (`O=/tmp/dora-build`)
+4. **Распаковка S1 `ramdisk.cpio.xz`, `PSI` для `lmkd` и отключение `KASAN_HW_TAGS` на ARMv8.0-A Kryo (`dora_defconfig`):**
+   - *Симптом:* при `CONFIG_EMBEDDED=y` отсутствовала явная строка `CONFIG_BLK_DEV_INITRD=y`, из-за чего отключались `CONFIG_RD_XZ` / `CONFIG_RD_LZ4`; в `CONFIG_CMDLINE` присутствовали `cgroup_disable=pressure` (блокирующий `lmkd` Android 14), `bootconfig` и `kvm-arm.mode=protected`; был активен `CONFIG_KASAN_HW_TAGS=y` (требующий ARMv8.5-A MTE, отсутствующего на ядрах Qualcomm Kryo ARMv8.0-A).
+   - *Исправление:* включены `CONFIG_BLK_DEV_INITRD=y`, `CONFIG_RD_XZ=y`, `CONFIG_RD_LZ4=y`, `CONFIG_RD_GZIP=y`; очищен `CONFIG_CMDLINE` с сохранением активного `CONFIG_PSI=y`; отключён `CONFIG_KASAN`.
+5. **Устранение NULL-dereference `THIS_MODULE` при `=y`, `/dev/fingerprint`, `rproc_boot` и `&input_class` (`somc-dora-platform.c`, `rmi_i2c.c`, `brcmfmac`):**
+   - *Исправление:* удалено обращение к `THIS_MODULE->mkobj.kobj.kset` (дававшее `NULL` при встроенной сборке `=y`), параметры `/sys/module/bcmdhd/parameters/*` переведены на штатный `MODULE_PARAM_PREFIX = "bcmdhd."`; узел `/sys/devices/virtual/input/clearpad/*` переведён на `&input_class` с прямой привязкой `wakeup_gesture` к `rmi_i2c` (`reset-gpios` GPIO 89 + `enable_irq_wake`); добавлен символьный узел `/dev/fingerprint` (`poll` + `FPC_IOC_*`); `boot_adsp`/`boot_slpi` подключены к `rproc_boot()`/`rproc_shutdown()`; в `brcmfmac/firmware.c` убран `..` traversal и применён `request_firmware_direct()`.
+
+### Подтверждённые скомпилированные целевые объекты ARM64 (`O=/tmp/dora-build`, `KCFLAGS=-Werror`)
 
 - **Device Tree Blobs (4 варианта для Sony S1 Bootloader):**
   - `arch/arm64/boot/dts/qcom/msm8996-sony-xperia-tone-dora.dtb`
   - `arch/arm64/boot/dts/qcom/msm8996-pmi8996-sony-xperia-tone-dora.dtb`
   - `arch/arm64/boot/dts/qcom/msm8996-v3.0-sony-xperia-tone-dora.dtb`
   - `arch/arm64/boot/dts/qcom/msm8996-v3.0-pmi8996-sony-xperia-tone-dora.dtb`
-- **Портированные и платформенные драйверы MSM8996 / Dora / Android 14:**
-  - `drivers/gpu/drm/panel/panel-sony-dora-incell.o` (автовыбор LCD ID Panel 3/4/6/8/9, AUO 1080p60)
-  - `drivers/platform/somc/somc-dora-platform.o` (SIM1, FPC1145 TEE, Clearpad/ADSP/SLPI/bcmdhd sysfs)
+- **Портированные и платформенные драйверы MSM8996 / Dora / Android 14 (26 объектов ARM64):**
+  - `drivers/gpu/drm/panel/panel-sony-dora-incell.o` (автовыбор LCD ID Panel 3/4/6/8/9, AUO 1080p60, `-EPROBE_DEFER` VADC)
+  - `drivers/platform/somc/somc-dora-platform.o` (`/dev/fingerprint` + `fpc1020`, `rproc_boot`, `&input_class` clearpad, `MODULE_PARAM_PREFIX` bcmdhd)
+  - `drivers/input/rmi4/rmi_i2c.o`, `drivers/input/rmi4/rmi_f12.o` (Synaptics Clearpad `reset-gpios` GPIO 89 + `irq_wake`)
   - `drivers/regulator/qcom-labibb-regulator.o` (`pmi8994-lab-ibb` / `pmi8996-lab-ibb`)
   - `drivers/video/backlight/qcom-wled.o` (`pmi8994_wled`)
   - `drivers/mmc/core/slot-gpio.o`, `drivers/mmc/core/host.o`, `drivers/mmc/core/core.o`, `drivers/mmc/host/sdhci-msm.o` (eMMC HS400 + F8132 гибридный лоток `uim2-gpios`)
   - `drivers/bluetooth/hci_bcm.o` (`brcm,bcm4359-bt` serdev)
-  - `drivers/net/wireless/broadcom/brcm80211/brcmfmac/firmware.o`, `pcie.o` (BCM4359 PCIe + Sony `/oem` fallback)
+  - `drivers/net/wireless/broadcom/brcm80211/brcmfmac/firmware.o`, `pcie.o` (BCM4359 `0x43ef`/`0x4359` + `request_firmware_direct`)
   - `drivers/nfc/nxp-nci/i2c.o` (PN547/PN548 NFC)
   - `drivers/remoteproc/qcom_q6v5_mss.o`, `qcom_q6v5_pas.o` (Hexagon Modem, ADSP, SLPI)
-  - `drivers/clk/qcom/gcc-msm8996.o`, `mmcc-msm8996.o`, `apcc-msm8996.o`
+  - `drivers/clk/qcom/gcc-msm8996.o`, `mmcc-msm8996.o`, `clk-cpu-8996.o`
   - `drivers/pinctrl/qcom/pinctrl-msm8996.o`, `drivers/cpufreq/qcom-cpufreq-nvmem.o`
   - `sound/soc/codecs/wcd9335.o`, `wsa881x.o`, `sound/soc/qcom/apq8096.o`
   - `drivers/android/binder.o`, `drivers/android/binderfs.o`
@@ -142,15 +149,18 @@ mkbootimg \
 ## 4. Контрольные суммы SHA-256 скомпилированных артефактов ARM64 (Linux 5.15.220)
 
 ```text
-fb9ff2c771bdb55b5e37f090b2c7b21f5381e9b87102768323d08dc6b9d8e3b4  arch/arm64/boot/dts/qcom/msm8996-sony-xperia-tone-dora.dtb
-a6ca32cdfb073d4ac217fa4a06ce0893a20993857fe762cb8f169f18d8b21be9  arch/arm64/boot/dts/qcom/msm8996-pmi8996-sony-xperia-tone-dora.dtb
-4cdca676669641fd0ae9745e80aa4ae4fb7675ad914fb68d1fd60b027b2cc88d  arch/arm64/boot/dts/qcom/msm8996-v3.0-sony-xperia-tone-dora.dtb
-9c91336e38897d6e4b550d5dc06396aaca2994ce45605768f8c9d5b53930c5ff  arch/arm64/boot/dts/qcom/msm8996-v3.0-pmi8996-sony-xperia-tone-dora.dtb
-6e3c5d673ebf620d12d033652f8516a605c009a72a04d636e6e4112b3fb77e08  drivers/gpu/drm/panel/panel-sony-dora-incell.o
-eaaca8fb16b1ce7baa859ebefae5fd5c03caf76c3efbc76be591ccc6c2b25b82  drivers/platform/somc/somc-dora-platform.o
-d1fe4bc6e3496959e338eb4a403c1d8de393dd04e688f6032378e1b14f2591c0  drivers/regulator/qcom-labibb-regulator.o
-a168fbf83355cd4f261dd93023720d0cef673caefa8fc1288bab5d8e90c68ef3  drivers/mmc/core/slot-gpio.o
-7601b51df876494f9de34e7a9c174eea688ca47bdae693cdb0a780ddd0ff9dcc  drivers/bluetooth/hci_bcm.o
-c3a1ec0fcd186575226516c3f543236e2ce15645654163ac7ff2de7717c805f5  drivers/nfc/nxp-nci/i2c.o
-9868e3b2ae487229fe35471ecb7b99811b58abaf1f40a18b9ee918ff8a9872ed  drivers/net/wireless/broadcom/brcm80211/brcmfmac/firmware.o
+ac9ba7f8eafa9e43bab9ebe9b9d00f6ed07f44341f5203bf0bf5640e48a8380d  arch/arm64/boot/dts/qcom/msm8996-sony-xperia-tone-dora.dtb
+d494fba2e417079addb475f83b0778bfe4e917f0a881c9b61514a0721a2c55c6  arch/arm64/boot/dts/qcom/msm8996-pmi8996-sony-xperia-tone-dora.dtb
+6d2108e36a648045355c928c512c80c5304c8b3016a50babd842bcd837bf39eb  arch/arm64/boot/dts/qcom/msm8996-v3.0-sony-xperia-tone-dora.dtb
+ad5e41d24dcde839ade68ec3dc70e27ec4475a118e92b652f123a34cda304b0d  arch/arm64/boot/dts/qcom/msm8996-v3.0-pmi8996-sony-xperia-tone-dora.dtb
+1b1e2428af55547da5822ffe41be69bddcb2da9e696b2dc023419cbcaffcfeaf  drivers/gpu/drm/panel/panel-sony-dora-incell.o
+6d5b6a9632c91eea69baa87ee80acb2340dafeed236dbaf55937a0a825202ac2  drivers/platform/somc/somc-dora-platform.o
+4f909b718c71941000fa314b538f2cbe976ba36d861196e3b0d352bc0b48f4bd  drivers/input/rmi4/rmi_i2c.o
+63817ceacaa80ffd0b2fce16e88e70d38848c1f53cf4c845adc9c2f6b28f0599  drivers/net/wireless/broadcom/brcm80211/brcmfmac/firmware.o
+ea5fc75f83f04f394cf1643fed42deb32a8ab15226940b5737e65ede53b73320  drivers/net/wireless/broadcom/brcm80211/brcmfmac/pcie.o
+d13ea4e1fa97fd5f9a603f904c49197dd47174f9319306949d5971ce0f69b80d  drivers/mmc/core/slot-gpio.o
+a042edd4a62fd0cd734b112cefe24c3f28cbd4bb188c8adc97e6330798a99a05  drivers/bluetooth/hci_bcm.o
+9c8e790b002e4cdb24efdd11d0817bc39acd618261b95e48b3f045f68ae0e9a0  drivers/nfc/nxp-nci/i2c.o
+725a0e9c623bce3b538c54c4ac9b32cb4c1b95d8b65d5f326d482b70ff31cce1  drivers/regulator/qcom-labibb-regulator.o
+76c592c4d606d56cd972941974677b4704808578a5cd7331584a106a3bcbdc96  drivers/clk/qcom/clk-cpu-8996.o
 ```

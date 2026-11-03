@@ -1,78 +1,45 @@
-Dora MSM8996: UFS GCC/CX voltage-corner blocker
-===========================================
+Dora MSM8996: eMMC and GCC/MMCC voltage corners (stage4)
+======================================================
 
-Reference: Sony 4.4 commit 0c295b15b6d0fb59a64e13b9e0ef2070818ef2a1.
-This is a source/flattened-DT audit, not a runtime voltage measurement.
+Hardware source: final Sony4.4 dora DTs and clock sources at
+0c295b15b6d0fb59a64e13b9e0ef2070818ef2a1, after all v3 overrides.
+Dora internal storage is SDHC1 eMMC, NOT UFS. See dora-storage-audit.md.
+Old UFS frequency data is retained only for generic MSM8996 regressions.
 
-P0: restored UFS bus topology does not complete safe UFS clock/power support.
-The native GCC implementation can program the original UFS frequencies but
-does not make the Sony digital voltage-corner votes required at those rates.
-The Dora UFS host must remain disabled until that dependency is implemented.
-Successful NoC registration or a host probe would not prove safe operation.
+The original vdd_dig contract is now implemented by a typed native SMD RPM
+frontend and source clock fmax classes. Logical NONE/LOWER/LOW/NOMINAL/HIGH
+map to 1/3/4/5/7; wire corners are logical minus1. corn/vfc and BOTH/AO/floor
+aggregation use real correlated ACTIVE/SLEEP ACKs. Logical corners are not
+physical microvolts. Native S1/S2 microvolt clients are explicitly disabled.
 
-Original Sony contract
-----------------------
+Final source contracts:
+ source              LOWER       LOW          NOMINAL       HIGH
+ SDCC1 apps          19.2MHz      50MHz        400MHz        --
+ SDCC1 ICE           19.2MHz     150MHz        300MHz        --
+ SDCC2 apps          19.2MHz      50MHz        200MHz        --
+ GPLL4 main          --          --           384MHz        --
+ UFS AXI (unused)    19.2MHz     100MHz        200MHz       240MHz
+ USB30 master        60MHz     133.333MHz     200MHz       240MHz
+ MMCC MDP          171.43MHz    275MHz        330MHz       412.5MHz
 
-drivers/clk/msm/clock-gcc-8996.c defines vdd_dig with
-DEFINE_VDD_REGULATORS. msm_gcc_8996_probe() obtains the mandatory vdd_dig regulator;
-an unavailable provider returns its error, including -EPROBE_DEFER.
-The original clock framework attaches these FMAX maps to the source clocks:
+SDCC1 actual frequency table still tops out at 384 MHz (DDR root), not 400 MHz.
+SDCC2 original 40/80 MHz entries are restored. GPLL0 remains fixed/read-only
+at its source 600 MHz and critical for uncounted CPU/CBF auxiliary consumers;
+no probe retune is performed. Raw EARLY PLL numeric IDs cannot bypass the
+regulated main/source outputs on coupled Dora.
 
- source                 LOWER      LOW         NOMINAL     HIGH
- ufs_axi_clk_src         19.2 MHz   100 MHz     200 MHz     240 MHz
- ufs_ice_core_clk_src    19.2 MHz   150 MHz     300 MHz     --
+All 56 GCC / 49 MMCC maps and final override line provenance are in
+ dora-clock-voltage.json
+ dora-clock-voltage.md
+Check-clock-voltage.py --reference-commit independently reparses those Sony
+Git sources, executes the production adapter and readonly PLL callbacks,
+and rejects changed map data. CCF and RPM tests exercise their actual code
+separately, including ACK loss, rollback, bootstrap and lifetime failures.
 
-These are voltage thresholds, not an additional list of programmable rates.
-The actual source frequency tables are 100/200/240 MHz for AXI and
-19.2/150/300 MHz for ICE. No UFS rate increase beyond Sony is needed.
-
-drivers/clk/msm/vdd-level-8996.h maps LOW to
-RPM_REGULATOR_CORNER_SVS_SOC (logical 4), NOMINAL to CORNER_NORMAL (5), and
-HIGH to CORNER_SUPER_TURBO (7). GCC probe remaps LOWER to SVS_KRAIT (3).
-These regulator-API integers are corners, not microvolts. The original RPM
-regulator subtracts CORNER_NONE (1) before sending the "corn" wire value.
-Thus AXI 200 MHz / ICE 300 MHz require logical corner 5, wire corner 4;
-the 100 MHz / 150 MHz pair still requires logical corner 4, wire corner 3.
-
-All four final Sony Dora DTBs (v3.0/v3.1, PMI8994/PMI8996) resolve GCC's
-vdd_dig-supply to /soc/qcom,rpm-smd/rpm-regulator-smpa1/regulator-s1-corner:
-pm8994_s1_corner, qcom,set=3 (ACTIVE+SLEEP), min=1, max=7,
-qcom,use-voltage-corner. All four final UFS nodes have the same nonzero
-freq-table-hz pairs: core_clk_src=100000000/200000000 and
-core_clk_unipro_src=150000000/300000000. Their other nine pairs are zero.
-
-GCC_UFS_AXI_CLK, GCC_SYS_NOC_UFS_AXI_CLK and GCC_AGGRE2_UFS_AXI_CLK inherit
-ufs_axi_clk_src. GCC_UFS_ICE_CORE_CLK inherits the ICE source;
-GCC_UFS_UNIPRO_CORE_CLK uses its divide-by-two output (150 MHz at source
-300 MHz). The voltage vote belongs to the source and follows its consumers.
-
-Neither the final Sony UFS host nor the native QMP14nm PHY DT has a UFS AUX
-clock. ref_aux_clk in ufs_qcom_phy_init_clks() is an optional facility for
-other PHY versions. Dora PHY references are LN_BB_CLK and GCC_UFS_CLKREF_CLK;
-PCIe AUX clocks must not be substituted for an absent UFS clock.
-
-Native 4.19 gap and required work
---------------------------------
-
-drivers/clk/qcom/gcc-msm8996.c keeps the correct frequency tables in
-ftbl_ufs_axi_clk_src and ftbl_ufs_ice_core_clk_src. Its clk_rcg2 source
-definitions use clk_rcg2_ops without a regulator, FMAX map, or voltage
-transition hook. gcc_msm8996_probe() only maps/registers the GCC clocks and
-power domains; it neither acquires vdd_dig nor implements corner voting.
-Native ufshcd_init_clocks() in drivers/scsi/ufs/ufshcd.c sets the DT maximum
-rates during initialization. Therefore the missing vote affects initial
-bring-up, not only later frequency scaling or suspend.
-
-Implement a coherent corner regulator frontend on the native RPM transport
-and couple source-clock prepare/rate/unprepare transitions to it. Preserve
-Sony corner encoding, aggregation across consumers, ACTIVE/SLEEP semantics,
-ACK/error handling, voltage-before-clock increases, clock-before-voltage
-decreases, and failed-transition rollback. Account for other clients of the
-same CX RPM resource; separate raw-voltage and corner requests cannot race
-or overwrite one another. Verify gates, initialization, scaling and resume
-with failure injection before enabling the host; then measure on a device.
-
-The native qcom_smd-regulator UV key does not implement a corner frontend.
-An analog PHY supply, UFS_GDSC, a bandwidth vote, a fixed voltage/corner, or
-an assumed bootloader vote does not replace this clock-dependent contract.
-No experimental voltage, fabricated provider, or fixed vote was introduced.
+GCC/MMCC supplies reference the typed CX child; MMPLL4/9 additionally use
+physical L12 at exactly 1.8 V. Unknown boot-active parent ownership retains a
+real acknowledged HIGH lease. Native physical regulator errors cannot be
+recovered by cached UV/SWEN success: L12 and MMC uncertainty remain latched.
+Physical replay/SLEEP, integrated handoff and hardware validation remain P0.
+CX/MX, MMC and display/GPU activation gates are retained in all four DTBs.
+No fixed fake regulator or bootloader-voltage assumption replaces this work.

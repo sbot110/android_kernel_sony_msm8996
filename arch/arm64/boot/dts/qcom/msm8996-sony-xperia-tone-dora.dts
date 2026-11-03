@@ -21,6 +21,7 @@
 #include "msm8996-sony-xperia-tone-display-safety.dtsi"
 #include "msm8996-sony-xperia-tone-gfx.dtsi"
 #include "msm8996-sony-xperia-tone-storage.dtsi"
+#include "msm8996-sony-xperia-tone-clock-voltage.dtsi"
 
 / {
 	model = "Sony Xperia X Performance";

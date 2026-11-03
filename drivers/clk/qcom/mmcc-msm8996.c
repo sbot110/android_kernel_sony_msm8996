@@ -32,6 +32,7 @@
 
 #include "common.h"
 #include "clk-regmap.h"
+#include "clk-msm8996-voltage.h"
 #include "clk-regmap-divider.h"
 #include "clk-alpha-pll.h"
 #include "clk-rcg.h"
@@ -3354,6 +3355,60 @@ static const struct qcom_cc_desc mmcc_msm8996_desc = {
 	.num_gdscs = ARRAY_SIZE(mmcc_msm8996_gdscs),
 };
 
+
+/* Final Sony v3 limits: all four Dora SoC/PMIC variants use this clock revision. */
+static struct msm8996_voltage_clock mmcc_msm8996_voltage_clocks[] = {
+	{ .hw = &mmpll0.clkr.hw, .fmax = { 0UL, 400000000UL, 0UL, 800000000UL, 0UL }, .pll = true, },
+	{ .hw = &mmpll1.clkr.hw, .fmax = { 0UL, 405000000UL, 405000000UL, 810000000UL, 810000000UL }, .pll = true, },
+	{ .hw = &mmpll4.clkr.hw, .fmax = { 0UL, 480000000UL, 0UL, 960000000UL, 0UL }, .analog = true, .pll = true, },
+	{ .hw = &mmpll3.clkr.hw, .fmax = { 0UL, 520000000UL, 520000000UL, 1040000000UL, 1040000000UL }, .pll = true, },
+	{ .hw = &ahb_clk_src.clkr.hw, .fmax = { 0UL, 40000000UL, 0UL, 80000000UL, 0UL }, },
+	{ .hw = &mmpll2.clkr.hw, .fmax = { 0UL, 1000000000UL, 1000000000UL, 1000000000UL, 1000000000UL }, .pll = true, },
+	{ .hw = &mmpll8.clkr.hw, .fmax = { 0UL, 1000000000UL, 1000000000UL, 1000000000UL, 1000000000UL }, .pll = true, },
+	{ .hw = &mmpll9.clkr.hw, .fmax = { 0UL, 624000000UL, 624000000UL, 1248000000UL, 1248000000UL }, .analog = true, .pll = true, },
+	{ .hw = &mmpll5.clkr.hw, .fmax = { 0UL, 412500000UL, 825000000UL, 825000000UL, 825000000UL }, .pll = true, },
+	{ .hw = &csi0_clk_src.clkr.hw, .fmax = { 0UL, 100000000UL, 200000000UL, 480000000UL, 600000000UL }, },
+	{ .hw = &vfe0_clk_src.clkr.hw, .fmax = { 0UL, 100000000UL, 300000000UL, 480000000UL, 600000000UL }, },
+	{ .hw = &vfe1_clk_src.clkr.hw, .fmax = { 0UL, 100000000UL, 300000000UL, 480000000UL, 600000000UL }, },
+	{ .hw = &csi1_clk_src.clkr.hw, .fmax = { 0UL, 100000000UL, 200000000UL, 480000000UL, 600000000UL }, },
+	{ .hw = &csi2_clk_src.clkr.hw, .fmax = { 0UL, 100000000UL, 200000000UL, 480000000UL, 600000000UL }, },
+	{ .hw = &csi3_clk_src.clkr.hw, .fmax = { 0UL, 100000000UL, 200000000UL, 480000000UL, 600000000UL }, },
+	{ .hw = &maxi_clk_src.clkr.hw, .fmax = { 0UL, 75000000UL, 171430000UL, 320000000UL, 405000000UL }, },
+	{ .hw = &cpp_clk_src.clkr.hw, .fmax = { 0UL, 100000000UL, 200000000UL, 480000000UL, 640000000UL }, },
+	{ .hw = &jpeg0_clk_src.clkr.hw, .fmax = { 0UL, 75000000UL, 150000000UL, 320000000UL, 480000000UL }, },
+	{ .hw = &jpeg2_clk_src.clkr.hw, .fmax = { 0UL, 75000000UL, 150000000UL, 266670000UL, 320000000UL }, },
+	{ .hw = &jpeg_dma_clk_src.clkr.hw, .fmax = { 0UL, 75000000UL, 150000000UL, 320000000UL, 480000000UL }, },
+	{ .hw = &mdp_clk_src.clkr.hw, .fmax = { 0UL, 171430000UL, 275000000UL, 330000000UL, 412500000UL }, },
+	{ .hw = &pclk0_clk_src.clkr.hw, .fmax = { 0UL, 175000000UL, 280000000UL, 350000000UL, 0UL }, },
+	{ .hw = &pclk1_clk_src.clkr.hw, .fmax = { 0UL, 175000000UL, 280000000UL, 350000000UL, 0UL }, },
+	{ .hw = &video_core_clk_src.clkr.hw, .fmax = { 0UL, 75000000UL, 150000000UL, 346666667UL, 520000000UL }, },
+	{ .hw = &fd_core_clk_src.clkr.hw, .fmax = { 0UL, 100000000UL, 200000000UL, 400000000UL, 0UL }, },
+	{ .hw = &cci_clk_src.clkr.hw, .fmax = { 0UL, 19200000UL, 50000000UL, 100000000UL, 0UL }, },
+	{ .hw = &csiphy0_3p_clk_src.clkr.hw, .fmax = { 0UL, 100000000UL, 200000000UL, 320000000UL, 384000000UL }, },
+	{ .hw = &csiphy1_3p_clk_src.clkr.hw, .fmax = { 0UL, 100000000UL, 200000000UL, 320000000UL, 384000000UL }, },
+	{ .hw = &csiphy2_3p_clk_src.clkr.hw, .fmax = { 0UL, 100000000UL, 200000000UL, 320000000UL, 384000000UL }, },
+	{ .hw = &camss_gp0_clk_src.clkr.hw, .fmax = { 0UL, 50000000UL, 100000000UL, 200000000UL, 0UL }, },
+	{ .hw = &camss_gp1_clk_src.clkr.hw, .fmax = { 0UL, 50000000UL, 100000000UL, 200000000UL, 0UL }, },
+	{ .hw = &mclk0_clk_src.clkr.hw, .fmax = { 0UL, 33330000UL, 66670000UL, 68570000UL, 0UL }, },
+	{ .hw = &mclk1_clk_src.clkr.hw, .fmax = { 0UL, 33330000UL, 66670000UL, 68570000UL, 0UL }, },
+	{ .hw = &mclk2_clk_src.clkr.hw, .fmax = { 0UL, 33330000UL, 66670000UL, 68570000UL, 0UL }, },
+	{ .hw = &mclk3_clk_src.clkr.hw, .fmax = { 0UL, 33330000UL, 66670000UL, 68570000UL, 0UL }, },
+	{ .hw = &csi0phytimer_clk_src.clkr.hw, .fmax = { 0UL, 100000000UL, 200000000UL, 266670000UL, 0UL }, },
+	{ .hw = &csi1phytimer_clk_src.clkr.hw, .fmax = { 0UL, 100000000UL, 200000000UL, 266670000UL, 0UL }, },
+	{ .hw = &csi2phytimer_clk_src.clkr.hw, .fmax = { 0UL, 100000000UL, 200000000UL, 266670000UL, 0UL }, },
+	{ .hw = &rbbmtimer_clk_src.clkr.hw, .fmax = { 0UL, 19200000UL, 0UL, 0UL, 0UL }, },
+	{ .hw = &byte0_clk_src.clkr.hw, .fmax = { 0UL, 131250000UL, 210000000UL, 262500000UL, 0UL }, },
+	{ .hw = &byte1_clk_src.clkr.hw, .fmax = { 0UL, 131250000UL, 210000000UL, 262500000UL, 0UL }, },
+	{ .hw = &esc0_clk_src.clkr.hw, .fmax = { 0UL, 19200000UL, 0UL, 0UL, 0UL }, },
+	{ .hw = &esc1_clk_src.clkr.hw, .fmax = { 0UL, 19200000UL, 0UL, 0UL, 0UL }, },
+	{ .hw = &extpclk_clk_src.clkr.hw, .fmax = { 0UL, 150000000UL, 300000000UL, 600000000UL, 0UL }, },
+	{ .hw = &hdmi_clk_src.clkr.hw, .fmax = { 0UL, 19200000UL, 0UL, 0UL, 0UL }, },
+	{ .hw = &vsync_clk_src.clkr.hw, .fmax = { 0UL, 19200000UL, 0UL, 0UL, 0UL }, },
+	{ .hw = &rbcpr_clk_src.clkr.hw, .fmax = { 0UL, 19200000UL, 0UL, 50000000UL, 50000000UL }, },
+	{ .hw = &video_subcore0_clk_src.clkr.hw, .fmax = { 0UL, 75000000UL, 150000000UL, 346666667UL, 520000000UL }, },
+	{ .hw = &video_subcore1_clk_src.clkr.hw, .fmax = { 0UL, 75000000UL, 150000000UL, 346666667UL, 520000000UL }, },
+};
+
 static const struct of_device_id mmcc_msm8996_match_table[] = {
 	{ .compatible = "qcom,mmcc-msm8996" },
 	{ }
@@ -3627,6 +3682,16 @@ static void msm8996_mmcc_depopulate(void *data)
 	of_platform_depopulate(data);
 }
 
+static struct msm8996_voltage mmcc_msm8996_digital =
+	MSM8996_VOLTAGE_CLASS("msm8996-mmcc-cx");
+static struct msm8996_voltage mmcc_msm8996_analog =
+	MSM8996_VOLTAGE_CLASS("msm8996-mmpll4-cx-analog");
+
+static const unsigned int mmcc_msm8996_internal_plls[] = {
+	MMPLL0_EARLY, MMPLL1_EARLY, MMPLL2_EARLY, MMPLL3_EARLY,
+	MMPLL4_EARLY, MMPLL5_EARLY, MMPLL8_EARLY, MMPLL9_EARLY,
+};
+
 static int mmcc_msm8996_probe(struct platform_device *pdev)
 {
 	struct device *dev = &pdev->dev;
@@ -3635,6 +3700,25 @@ static int mmcc_msm8996_probe(struct platform_device *pdev)
 	struct qcom_cc_desc desc = mmcc_msm8996_desc;
 	struct device_node *child;
 	bool split_gfx = false;
+	bool voltage_coupled = msm8996_voltage_required(dev);
+
+	if (voltage_coupled) {
+		if (!IS_BUILTIN(CONFIG_MSM_MMCC_8996))
+			return -EOPNOTSUPP;
+		ret = msm8996_voltage_init(dev, &mmcc_msm8996_digital,
+					 "vdd-dig", NULL);
+		if (ret)
+			return ret;
+		ret = msm8996_voltage_init(dev, &mmcc_msm8996_analog,
+					 "mmpll4-dig", "mmpll4-analog");
+		if (ret)
+			return ret;
+		ret = msm8996_voltage_attach(dev, mmcc_msm8996_voltage_clocks,
+			ARRAY_SIZE(mmcc_msm8996_voltage_clocks),
+			&mmcc_msm8996_digital, &mmcc_msm8996_analog);
+		if (ret)
+			return ret;
+	}
 
 	/* A disabled regulated child must not expose the parent's unregulated
 	 * GFX clocks as a fallback. Base MMCC still provides the CPR bus clocks.
@@ -3646,13 +3730,14 @@ static int mmcc_msm8996_probe(struct platform_device *pdev)
 			break;
 		}
 	}
-	if (split_gfx) {
+	if (split_gfx || voltage_coupled) {
 		desc.clks = devm_kmemdup(dev, desc.clks,
 				desc.num_clks * sizeof(*desc.clks), GFP_KERNEL);
 		if (!desc.clks)
 			return -ENOMEM;
-		for (i = 0; i < ARRAY_SIZE(msm8996_gfx_ids); i++)
-			desc.clks[msm8996_gfx_ids[i]] = NULL;
+		if (split_gfx)
+			for (i = 0; i < ARRAY_SIZE(msm8996_gfx_ids); i++)
+				desc.clks[msm8996_gfx_ids[i]] = NULL;
 	}
 
 	regmap = qcom_cc_map(pdev, &desc);
@@ -3660,9 +3745,13 @@ static int mmcc_msm8996_probe(struct platform_device *pdev)
 		return PTR_ERR(regmap);
 
 	/* Disable the AHB DCD */
-	regmap_update_bits(regmap, 0x50d8, BIT(31), 0);
+	ret = regmap_update_bits(regmap, 0x50d8, BIT(31), 0);
+	if (ret)
+		return ret;
 	/* Disable the NoC FSM for mmss_mmagic_cfg_ahb_clk */
-	regmap_update_bits(regmap, 0x5054, BIT(15), 0);
+	ret = regmap_update_bits(regmap, 0x5054, BIT(15), 0);
+	if (ret)
+		return ret;
 
 	for (i = 0; i < ARRAY_SIZE(mmcc_msm8996_hws); i++) {
 		ret = devm_clk_hw_register(dev, mmcc_msm8996_hws[i]);
@@ -3670,15 +3759,37 @@ static int mmcc_msm8996_probe(struct platform_device *pdev)
 			return ret;
 	}
 
-	ret = qcom_cc_really_probe(pdev, &desc, regmap);
-	if (ret || !split_gfx)
-		return ret;
-	ret = of_platform_populate(dev->of_node, NULL, NULL, dev);
-	if (ret) {
-		of_platform_depopulate(dev);
-		return ret;
+	/* Register VCO parents internally; only the Sony main-output voltage
+	 * contracts may be requested by consumers on a coupled board.
+	 */
+	if (voltage_coupled) {
+		for (i = 0; i < ARRAY_SIZE(mmcc_msm8996_internal_plls); i++) {
+			unsigned int id = mmcc_msm8996_internal_plls[i];
+
+			ret = devm_clk_register_regmap(dev, desc.clks[id]);
+			if (ret)
+				return ret;
+			desc.clks[id] = NULL;
+		}
 	}
-	return devm_add_action_or_reset(dev, msm8996_mmcc_depopulate, dev);
+	ret = qcom_cc_really_probe(pdev, &desc, regmap);
+	if (ret)
+		return ret;
+	if (split_gfx) {
+		ret = of_platform_populate(dev->of_node, NULL, NULL, dev);
+		if (ret) {
+			of_platform_depopulate(dev);
+			return ret;
+		}
+		ret = devm_add_action_or_reset(dev, msm8996_mmcc_depopulate, dev);
+		if (ret)
+			return ret;
+	}
+	if (voltage_coupled)
+		msm8996_voltage_ownership(dev, mmcc_msm8996_voltage_clocks,
+			ARRAY_SIZE(mmcc_msm8996_voltage_clocks),
+			&mmcc_msm8996_digital, &mmcc_msm8996_analog);
+	return 0;
 }
 
 static struct platform_driver mmcc_msm8996_driver = {

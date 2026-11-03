@@ -1492,7 +1492,8 @@ clk_alpha_pll_postdiv_recalc_rate(struct clk_hw *hw, unsigned long parent_rate)
 	struct clk_alpha_pll_postdiv *pll = to_clk_alpha_pll_postdiv(hw);
 	u32 ctl;
 
-	regmap_read(pll->clkr.regmap, PLL_USER_CTL(pll), &ctl);
+	if (regmap_read(pll->clkr.regmap, PLL_USER_CTL(pll), &ctl))
+		return 0;
 
 	ctl >>= PLL_POST_DIV_SHIFT;
 	ctl &= PLL_POST_DIV_MASK(pll);
@@ -1539,11 +1540,15 @@ clk_alpha_pll_postdiv_round_ro_rate(struct clk_hw *hw, unsigned long rate,
 	struct clk_alpha_pll_postdiv *pll = to_clk_alpha_pll_postdiv(hw);
 	struct clk_hw *parent_hw;
 	u32 ctl, div;
+	int ret;
 
-	regmap_read(pll->clkr.regmap, PLL_USER_CTL(pll), &ctl);
+	ret = regmap_read(pll->clkr.regmap, PLL_USER_CTL(pll), &ctl);
+	if (ret)
+		return ret;
 
 	ctl >>= PLL_POST_DIV_SHIFT;
-	ctl &= BIT(pll->width) - 1;
+	/* Match recalc, including the single-bit divider with width == 0. */
+	ctl &= PLL_POST_DIV_MASK(pll);
 	div = 1 << fls(ctl);
 
 	if (clk_hw_get_flags(hw) & CLK_SET_RATE_PARENT) {

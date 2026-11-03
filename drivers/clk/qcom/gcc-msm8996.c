@@ -26,6 +26,7 @@
 
 #include "common.h"
 #include "clk-regmap.h"
+#include "clk-msm8996-voltage.h"
 #include "clk-alpha-pll.h"
 #include "clk-rcg.h"
 #include "clk-branch.h"
@@ -455,7 +456,9 @@ static const struct freq_tbl ftbl_sdcc2_apps_clk_src[] = {
 	F(400000, P_XO, 12, 1, 4),
 	F(20000000, P_GPLL0, 15, 1, 2),
 	F(25000000, P_GPLL0, 12, 1, 2),
+	F(40000000, P_GPLL0, 7.5, 1, 2),
 	F(50000000, P_GPLL0, 12, 0, 0),
+	F(80000000, P_GPLL0, 7.5, 0, 0),
 	F(100000000, P_GPLL0, 6, 0, 0),
 	F(200000000, P_GPLL0, 3, 0, 0),
 	{ }
@@ -3484,19 +3487,144 @@ static const struct qcom_cc_desc gcc_msm8996_desc = {
 	.num_gdscs = ARRAY_SIZE(gcc_msm8996_gdscs),
 };
 
+
+/* Final Sony v3 limits: all four Dora SoC/PMIC variants use this clock revision. */
+static struct msm8996_voltage_clock gcc_msm8996_voltage_clocks[] = {
+	{ .hw = &gpll4.clkr.hw, .fmax = { 0UL, 0UL, 0UL, 384000000UL, 0UL }, .pll = true, },
+	{ .hw = &ufs_axi_clk_src.clkr.hw, .fmax = { 0UL, 19200000UL, 100000000UL, 200000000UL, 240000000UL }, },
+	{ .hw = &pcie_aux_clk_src.clkr.hw, .fmax = { 0UL, 9600000UL, 19200000UL, 19200000UL, 19200000UL }, },
+	{ .hw = &usb30_master_clk_src.clkr.hw, .fmax = { 0UL, 60000000UL, 133333000UL, 200000000UL, 240000000UL }, },
+	{ .hw = &usb20_master_clk_src.clkr.hw, .fmax = { 0UL, 19200000UL, 60000000UL, 120000000UL, 0UL }, },
+	{ .hw = &ufs_ice_core_clk_src.clkr.hw, .fmax = { 0UL, 19200000UL, 150000000UL, 300000000UL, 0UL }, },
+	{ .hw = &blsp1_qup1_i2c_apps_clk_src.clkr.hw, .fmax = { 0UL, 19200000UL, 50000000UL, 0UL, 0UL }, },
+	{ .hw = &blsp1_qup1_spi_apps_clk_src.clkr.hw, .fmax = { 0UL, 19200000UL, 25000000UL, 50000000UL, 0UL }, },
+	{ .hw = &blsp1_qup2_i2c_apps_clk_src.clkr.hw, .fmax = { 0UL, 19200000UL, 50000000UL, 0UL, 0UL }, },
+	{ .hw = &blsp1_qup2_spi_apps_clk_src.clkr.hw, .fmax = { 0UL, 19200000UL, 25000000UL, 50000000UL, 0UL }, },
+	{ .hw = &blsp1_qup3_i2c_apps_clk_src.clkr.hw, .fmax = { 0UL, 19200000UL, 50000000UL, 0UL, 0UL }, },
+	{ .hw = &blsp1_qup3_spi_apps_clk_src.clkr.hw, .fmax = { 0UL, 19200000UL, 25000000UL, 50000000UL, 0UL }, },
+	{ .hw = &blsp1_qup4_i2c_apps_clk_src.clkr.hw, .fmax = { 0UL, 19200000UL, 50000000UL, 0UL, 0UL }, },
+	{ .hw = &blsp1_qup4_spi_apps_clk_src.clkr.hw, .fmax = { 0UL, 19200000UL, 25000000UL, 50000000UL, 0UL }, },
+	{ .hw = &blsp1_qup5_i2c_apps_clk_src.clkr.hw, .fmax = { 0UL, 19200000UL, 50000000UL, 0UL, 0UL }, },
+	{ .hw = &blsp1_qup5_spi_apps_clk_src.clkr.hw, .fmax = { 0UL, 19200000UL, 25000000UL, 50000000UL, 0UL }, },
+	{ .hw = &blsp1_qup6_i2c_apps_clk_src.clkr.hw, .fmax = { 0UL, 19200000UL, 50000000UL, 0UL, 0UL }, },
+	{ .hw = &blsp1_qup6_spi_apps_clk_src.clkr.hw, .fmax = { 0UL, 19200000UL, 25000000UL, 50000000UL, 0UL }, },
+	{ .hw = &blsp1_uart1_apps_clk_src.clkr.hw, .fmax = { 0UL, 19200000UL, 31580000UL, 63160000UL, 0UL }, },
+	{ .hw = &blsp1_uart2_apps_clk_src.clkr.hw, .fmax = { 0UL, 19200000UL, 31580000UL, 63160000UL, 0UL }, },
+	{ .hw = &blsp1_uart3_apps_clk_src.clkr.hw, .fmax = { 0UL, 19200000UL, 31580000UL, 63160000UL, 0UL }, },
+	{ .hw = &blsp1_uart4_apps_clk_src.clkr.hw, .fmax = { 0UL, 19200000UL, 31580000UL, 63160000UL, 0UL }, },
+	{ .hw = &blsp1_uart5_apps_clk_src.clkr.hw, .fmax = { 0UL, 19200000UL, 31580000UL, 63160000UL, 0UL }, },
+	{ .hw = &blsp1_uart6_apps_clk_src.clkr.hw, .fmax = { 0UL, 19200000UL, 31580000UL, 63160000UL, 0UL }, },
+	{ .hw = &blsp2_qup1_i2c_apps_clk_src.clkr.hw, .fmax = { 0UL, 19200000UL, 50000000UL, 0UL, 0UL }, },
+	{ .hw = &blsp2_qup1_spi_apps_clk_src.clkr.hw, .fmax = { 0UL, 19200000UL, 25000000UL, 50000000UL, 0UL }, },
+	{ .hw = &blsp2_qup2_i2c_apps_clk_src.clkr.hw, .fmax = { 0UL, 19200000UL, 50000000UL, 0UL, 0UL }, },
+	{ .hw = &blsp2_qup2_spi_apps_clk_src.clkr.hw, .fmax = { 0UL, 19200000UL, 25000000UL, 50000000UL, 0UL }, },
+	{ .hw = &blsp2_qup3_i2c_apps_clk_src.clkr.hw, .fmax = { 0UL, 19200000UL, 50000000UL, 0UL, 0UL }, },
+	{ .hw = &blsp2_qup3_spi_apps_clk_src.clkr.hw, .fmax = { 0UL, 19200000UL, 25000000UL, 50000000UL, 0UL }, },
+	{ .hw = &blsp2_qup4_i2c_apps_clk_src.clkr.hw, .fmax = { 0UL, 19200000UL, 50000000UL, 0UL, 0UL }, },
+	{ .hw = &blsp2_qup4_spi_apps_clk_src.clkr.hw, .fmax = { 0UL, 19200000UL, 25000000UL, 50000000UL, 0UL }, },
+	{ .hw = &blsp2_qup5_i2c_apps_clk_src.clkr.hw, .fmax = { 0UL, 19200000UL, 50000000UL, 0UL, 0UL }, },
+	{ .hw = &blsp2_qup5_spi_apps_clk_src.clkr.hw, .fmax = { 0UL, 19200000UL, 25000000UL, 50000000UL, 0UL }, },
+	{ .hw = &blsp2_qup6_i2c_apps_clk_src.clkr.hw, .fmax = { 0UL, 19200000UL, 50000000UL, 0UL, 0UL }, },
+	{ .hw = &blsp2_qup6_spi_apps_clk_src.clkr.hw, .fmax = { 0UL, 19200000UL, 25000000UL, 50000000UL, 0UL }, },
+	{ .hw = &blsp2_uart1_apps_clk_src.clkr.hw, .fmax = { 0UL, 19200000UL, 31580000UL, 63160000UL, 0UL }, },
+	{ .hw = &blsp2_uart2_apps_clk_src.clkr.hw, .fmax = { 0UL, 19200000UL, 31580000UL, 63160000UL, 0UL }, },
+	{ .hw = &blsp2_uart3_apps_clk_src.clkr.hw, .fmax = { 0UL, 19200000UL, 31580000UL, 63160000UL, 0UL }, },
+	{ .hw = &blsp2_uart4_apps_clk_src.clkr.hw, .fmax = { 0UL, 19200000UL, 31580000UL, 63160000UL, 0UL }, },
+	{ .hw = &blsp2_uart5_apps_clk_src.clkr.hw, .fmax = { 0UL, 19200000UL, 31580000UL, 63160000UL, 0UL }, },
+	{ .hw = &blsp2_uart6_apps_clk_src.clkr.hw, .fmax = { 0UL, 19200000UL, 31580000UL, 63160000UL, 0UL }, },
+	{ .hw = &gp1_clk_src.clkr.hw, .fmax = { 0UL, 50000000UL, 100000000UL, 200000000UL, 0UL }, },
+	{ .hw = &gp2_clk_src.clkr.hw, .fmax = { 0UL, 50000000UL, 100000000UL, 200000000UL, 0UL }, },
+	{ .hw = &gp3_clk_src.clkr.hw, .fmax = { 0UL, 50000000UL, 100000000UL, 200000000UL, 0UL }, },
+	{ .hw = &pdm2_clk_src.clkr.hw, .fmax = { 0UL, 19200000UL, 60000000UL, 0UL, 0UL }, },
+	{ .hw = &qspi_ser_clk_src.clkr.hw, .fmax = { 0UL, 80200000UL, 160400000UL, 320000000UL, 0UL }, },
+	{ .hw = &sdcc1_apps_clk_src.clkr.hw, .fmax = { 0UL, 19200000UL, 50000000UL, 400000000UL, 0UL }, },
+	{ .hw = &sdcc1_ice_core_clk_src.clkr.hw, .fmax = { 0UL, 19200000UL, 150000000UL, 300000000UL, 0UL }, },
+	{ .hw = &sdcc2_apps_clk_src.clkr.hw, .fmax = { 0UL, 19200000UL, 50000000UL, 200000000UL, 0UL }, },
+	{ .hw = &sdcc3_apps_clk_src.clkr.hw, .fmax = { 0UL, 19200000UL, 50000000UL, 200000000UL, 0UL }, },
+	{ .hw = &sdcc4_apps_clk_src.clkr.hw, .fmax = { 0UL, 19200000UL, 50000000UL, 100000000UL, 0UL }, },
+	{ .hw = &tsif_ref_clk_src.clkr.hw, .fmax = { 0UL, 105500UL, 0UL, 0UL, 0UL }, },
+	{ .hw = &usb20_mock_utmi_clk_src.clkr.hw, .fmax = { 0UL, 19200000UL, 60000000UL, 0UL, 0UL }, },
+	{ .hw = &usb30_mock_utmi_clk_src.clkr.hw, .fmax = { 0UL, 40000000UL, 60000000UL, 0UL, 0UL }, },
+	{ .hw = &usb3_phy_aux_clk_src.clkr.hw, .fmax = { 0UL, 1200000UL, 0UL, 0UL, 0UL }, },
+};
+
 static const struct of_device_id gcc_msm8996_match_table[] = {
 	{ .compatible = "qcom,gcc-msm8996" },
 	{ }
 };
 MODULE_DEVICE_TABLE(of, gcc_msm8996_match_table);
 
+static struct msm8996_voltage gcc_msm8996_digital =
+	MSM8996_VOLTAGE_CLASS("msm8996-gcc-cx");
+
+static const unsigned int gcc_msm8996_internal_plls[] = {
+	GPLL0_EARLY, GPLL4_EARLY,
+};
+
+static int gcc_msm8996_fixed_root(struct device *dev)
+{
+	static const struct clk_init_data *main_original, *early_original;
+	static struct clk_ops early_ops;
+	struct clk_init_data *main, *early;
+
+	if (!main_original) {
+		main_original = gpll0.clkr.hw.init;
+		early_original = gpll0_early.clkr.hw.init;
+		early_ops = *early_original->ops;
+		early_ops.set_rate = NULL;
+		early_ops.round_rate = NULL;
+	}
+	main = devm_kmemdup(dev, main_original, sizeof(*main), GFP_KERNEL);
+	early = devm_kmemdup(dev, early_original, sizeof(*early), GFP_KERNEL);
+	if (!main || !early)
+		return -ENOMEM;
+	/* Sony GPLL0 is a fixed 600 MHz shared/CPU auxiliary root, not a
+	 * programmable CX fmax plan. Preserve both VCO and divider settings.
+	 */
+	main->ops = &clk_alpha_pll_postdiv_ro_ops;
+	main->flags &= ~CLK_SET_RATE_PARENT;
+	/* The read-only APCC/CBF observer cannot gate its auxiliary root. */
+	main->flags |= CLK_IS_CRITICAL;
+	early->ops = &early_ops;
+	early->flags &= ~CLK_SET_RATE_PARENT;
+	gpll0.clkr.hw.init = main;
+	gpll0_early.clkr.hw.init = early;
+	return 0;
+}
+
 static int gcc_msm8996_probe(struct platform_device *pdev)
 {
 	struct device *dev = &pdev->dev;
 	int i, ret;
 	struct regmap *regmap;
+	struct qcom_cc_desc desc = gcc_msm8996_desc;
+	bool voltage_coupled = msm8996_voltage_required(dev);
 
-	regmap = qcom_cc_map(pdev, &gcc_msm8996_desc);
+	if (voltage_coupled) {
+		/* Persistent boot leases are supported for the built-in SoC
+		 * provider only; module unload must not discard firmware votes.
+		 */
+		if (!IS_BUILTIN(CONFIG_MSM_GCC_8996))
+			return -EOPNOTSUPP;
+		ret = gcc_msm8996_fixed_root(dev);
+		if (ret)
+			return ret;
+		ret = msm8996_voltage_init(dev, &gcc_msm8996_digital,
+					 "vdd-dig", NULL);
+		if (ret)
+			return ret;
+		ret = msm8996_voltage_attach(dev, gcc_msm8996_voltage_clocks,
+			ARRAY_SIZE(gcc_msm8996_voltage_clocks),
+			&gcc_msm8996_digital, NULL);
+		if (ret)
+			return ret;
+		desc.clks = devm_kmemdup(dev, desc.clks,
+				desc.num_clks * sizeof(*desc.clks), GFP_KERNEL);
+		if (!desc.clks)
+			return -ENOMEM;
+	}
+
+	regmap = qcom_cc_map(pdev, &desc);
 	if (IS_ERR(regmap))
 		return PTR_ERR(regmap);
 
@@ -3504,7 +3632,9 @@ static int gcc_msm8996_probe(struct platform_device *pdev)
 	 * Set the HMSS_AHB_CLK_SLEEP_ENA bit to allow the hmss_ahb_clk to be
 	 * turned off by hardware during certain apps low power modes.
 	 */
-	regmap_update_bits(regmap, 0x52008, BIT(21), BIT(21));
+	ret = regmap_update_bits(regmap, 0x52008, BIT(21), BIT(21));
+	if (ret)
+		return ret;
 
 	for (i = 0; i < ARRAY_SIZE(gcc_msm8996_hws); i++) {
 		ret = devm_clk_hw_register(dev, gcc_msm8996_hws[i]);
@@ -3512,13 +3642,39 @@ static int gcc_msm8996_probe(struct platform_device *pdev)
 			return ret;
 	}
 
-	return qcom_cc_really_probe(pdev, &gcc_msm8996_desc, regmap);
+	/* Raw VCO frequencies do not have the Sony main-output fmax contract.
+	 * Keep the raw PLLs as internal parents, without publishing a numeric
+	 * consumer path that bypasses the regulated postdivider/source.
+	 */
+	if (voltage_coupled) {
+		for (i = 0; i < ARRAY_SIZE(gcc_msm8996_internal_plls); i++) {
+			unsigned int id = gcc_msm8996_internal_plls[i];
+
+			ret = devm_clk_register_regmap(dev, desc.clks[id]);
+			if (ret)
+				return ret;
+			desc.clks[id] = NULL;
+		}
+		gpll0.clkr.regmap = regmap;
+		if (gpll0.clkr.hw.init->ops->recalc_rate(&gpll0.clkr.hw,
+			clk_hw_get_rate(&gpll0_early.clkr.hw)) != 600000000) {
+			dev_err(dev, "GPLL0 is not the source fixed 600 MHz root\n");
+			return -EINVAL;
+		}
+	}
+	ret = qcom_cc_really_probe(pdev, &desc, regmap);
+	if (!ret && voltage_coupled)
+		msm8996_voltage_ownership(dev, gcc_msm8996_voltage_clocks,
+			ARRAY_SIZE(gcc_msm8996_voltage_clocks),
+			&gcc_msm8996_digital, NULL);
+	return ret;
 }
 
 static struct platform_driver gcc_msm8996_driver = {
 	.probe		= gcc_msm8996_probe,
 	.driver		= {
 		.name	= "gcc-msm8996",
+		.suppress_bind_attrs = true,
 		.of_match_table = gcc_msm8996_match_table,
 	},
 };

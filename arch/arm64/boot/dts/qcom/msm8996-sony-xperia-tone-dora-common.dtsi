@@ -148,12 +148,15 @@
 		status = "okay";
 	};
 
-	/* Sony Dora platform bridge: SIM1 detect & Sony userspace sysfs bridges */
+	/* Sony Dora platform bridge: SIM1 detect, remoteproc boot & Clearpad wakeup */
 	somc_dora_platform: somc-dora-platform {
 		compatible = "somc,dora-platform";
 		pinctrl-names = "default";
 		pinctrl-0 = <&sim1_det_default &dora_nc_gpios>;
 		sim1-det-gpios = <&tlmm 112 GPIO_ACTIVE_HIGH>;
+		somc,adsp-rproc = <&adsp_pil>;
+		somc,slpi-rproc = <&slpi_pil>;
+		somc,touch-i2c = <&clearpad_ts>;
 		status = "okay";
 	};
 };
@@ -257,11 +260,19 @@
 	status = "okay";
 	clock-frequency = <400000>;
 
-	synaptics@2c {
+	clearpad_ts: synaptics@2c {
+		compatible = "syna,rmi4-i2c";
+		reg = <0x2c>;
+		interrupt-parent = <&tlmm>;
+		interrupts = <125 IRQ_TYPE_EDGE_FALLING>;
 		pinctrl-names = "default", "sleep";
 		pinctrl-0 = <&touch_int_n &ts_reset_n>;
 		pinctrl-1 = <&touch_int_sleep &ts_reset_n>;
+		reset-gpios = <&tlmm 89 GPIO_ACTIVE_LOW>;
+		vdd-supply = <&pm8994_l22>;
 		vio-supply = <&pm8994_s4>;
+		syna,reset-delay-ms = <60>;
+		syna,startup-delay-ms = <100>;
 		wakeup-source;
 
 		rmi4-f12@12 {

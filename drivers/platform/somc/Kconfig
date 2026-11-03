@@ -12,7 +12,7 @@ if SOMC_PLATFORMS
 
 config SOMC_DORA_PLATFORM
 	tristate "Sony Xperia X Performance (dora F8131/F8132) platform & FPC1145 driver"
-	depends on OF && GPIOLIB && REGULATOR
+	depends on OF && GPIOLIB && REGULATOR && INPUT
 	default y
 	help
 	  Provides hardware integration for Sony Xperia X Performance

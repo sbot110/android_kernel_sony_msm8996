@@ -535,15 +535,18 @@ static const struct drm_panel_funcs somc_dora_panel_funcs = {
 	.get_modes = somc_dora_panel_get_modes,
 };
 
-static u32 somc_dora_detect_adc_uv(struct device *dev)
+static int somc_dora_detect_adc_uv(struct device *dev, u32 *out_uv)
 {
 	struct device_node *chosen;
 	const char *bootargs = NULL;
 	struct iio_channel *chan;
 	int val_uv = 0;
+	int ret;
 
-	if (somc_lcdid_from_cmdline)
-		return (u32)somc_lcdid_adc_uv;
+	if (somc_lcdid_from_cmdline) {
+		*out_uv = (u32)somc_lcdid_adc_uv;
+		return 0;
+	}
 
 	chosen = of_find_node_by_path("/chosen");
 	if (chosen) {
@@ -560,7 +563,8 @@ static u32 somc_dora_detect_adc_uv(struct device *dev)
 					buf[len] = '\0';
 					if (!kstrtoul(buf, 0, &parsed)) {
 						of_node_put(chosen);
-						return (u32)parsed;
+						*out_uv = (u32)parsed;
+						return 0;
 					}
 				}
 			}
@@ -569,15 +573,22 @@ static u32 somc_dora_detect_adc_uv(struct device *dev)
 	}
 
 	chan = iio_channel_get(dev, "lcd-id");
-	if (!IS_ERR(chan)) {
-		if (iio_read_channel_processed(chan, &val_uv) >= 0 && val_uv >= 0) {
-			iio_channel_release(chan);
-			return (u32)val_uv;
-		}
-		iio_channel_release(chan);
+	if (IS_ERR(chan)) {
+		if (PTR_ERR(chan) == -EPROBE_DEFER)
+			return -EPROBE_DEFER;
+		*out_uv = (u32)somc_lcdid_adc_uv;
+		return 0;
 	}
 
-	return (u32)somc_lcdid_adc_uv;
+	ret = iio_read_channel_processed(chan, &val_uv);
+	iio_channel_release(chan);
+	if (ret >= 0 && val_uv >= 0) {
+		*out_uv = (u32)val_uv;
+		return 0;
+	}
+
+	*out_uv = (u32)somc_lcdid_adc_uv;
+	return 0;
 }
 
 static const struct somc_dora_panel_desc *somc_dora_match_profile(u32 adc_uv)
@@ -638,7 +649,10 @@ static int somc_dora_panel_probe(struct mipi_dsi_device *dsi)
 	if (!ctx)
 		return -ENOMEM;
 
-	ctx->detected_adc_uv = somc_dora_detect_adc_uv(dev);
+	ret = somc_dora_detect_adc_uv(dev, &ctx->detected_adc_uv);
+	if (ret)
+		return dev_err_probe(dev, ret, "Waiting for PM8994 VADC lcd-id channel\n");
+
 	ctx->desc = somc_dora_match_profile(ctx->detected_adc_uv);
 
 	dev_info(dev, "DSI-PANEL-DIAG: physical=%u Panel Name=%s (%s) 1080x1920@60 bitclk=897039360 pclk=149506560\n",

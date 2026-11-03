@@ -1175,23 +1175,23 @@ static int fpc1145_tee_probe(struct platform_device *pdev)
 
 	device_init_wakeup(dev, true);
 
-	ret = fpc1145_power_set(fpc, true);
-	if (ret) {
-		device_init_wakeup(dev, false);
-		return ret;
-	}
-
-	fpc1145_hw_reset(fpc);
-
 	ret = devm_request_threaded_irq(dev, fpc->irq, NULL, fpc1145_irq_handler,
-					IRQF_TRIGGER_RISING | IRQF_ONESHOT,
+					IRQF_TRIGGER_HIGH | IRQF_ONESHOT |
+					IRQF_NO_AUTOEN,
 					dev_name(dev), fpc);
 	if (ret) {
-		fpc1145_power_set(fpc, false);
 		device_init_wakeup(dev, false);
 		return dev_err_probe(dev, ret, "failed to request FPC1145 irq\n");
 	}
-	fpc->irq_enabled = true;
+	fpc->irq_enabled = false;
+
+	if (of_property_read_bool(dev->of_node, "fpc,enable-on-boot")) {
+		ret = fpc1145_device_prepare(fpc, true);
+		if (ret) {
+			device_init_wakeup(dev, false);
+			return ret;
+		}
+	}
 
 	fpc->miscdev.minor = MISC_DYNAMIC_MINOR;
 	fpc->miscdev.name = "fingerprint";
@@ -1222,8 +1222,8 @@ static int fpc1145_tee_remove(struct platform_device *pdev)
 		disable_irq_wake(fpc->irq);
 		fpc->wake_irq_active = false;
 	}
-	if (!fpc->irq_enabled)
-		fpc1145_irq_set(fpc, true);
+	if (fpc->irq_enabled)
+		fpc1145_irq_set(fpc, false);
 	fpc1145_power_set(fpc, false);
 	mutex_unlock(&fpc->lock);
 

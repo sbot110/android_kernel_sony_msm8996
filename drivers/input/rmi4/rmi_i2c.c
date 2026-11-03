@@ -45,7 +45,7 @@ struct rmi_i2c_xport {
 	struct gpio_desc *reset_gpio;
 	u32 startup_delay;
 	u32 reset_delay;
-	bool irq_wake_active;
+	bool suspended_with_wakeup;
 };
 
 #define RMI_PAGE_SELECT_REGISTER 0xff
@@ -318,23 +318,18 @@ static int rmi_i2c_suspend(struct device *dev)
 {
 	struct i2c_client *client = to_i2c_client(dev);
 	struct rmi_i2c_xport *rmi_i2c = i2c_get_clientdata(client);
+	bool wakeup = device_may_wakeup(dev) && client->irq > 0;
 	int ret;
 
-	ret = rmi_driver_suspend(rmi_i2c->xport.rmi_dev, true);
+	ret = rmi_driver_suspend(rmi_i2c->xport.rmi_dev, wakeup);
 	if (ret) {
 		dev_warn(dev, "Failed to suspend device: %d\n", ret);
 		return ret;
 	}
 
-	if (device_may_wakeup(dev) && client->irq > 0) {
-		ret = enable_irq_wake(client->irq);
-		if (!ret) {
-			rmi_i2c->irq_wake_active = true;
-			return 0;
-		}
-		dev_warn(dev, "Failed to enable wake IRQ %d: %d\n",
-			 client->irq, ret);
-	}
+	rmi_i2c->suspended_with_wakeup = wakeup;
+	if (wakeup)
+		return 0;
 
 	if (rmi_i2c->reset_gpio)
 		gpiod_set_value_cansleep(rmi_i2c->reset_gpio, 1);
@@ -349,12 +344,10 @@ static int rmi_i2c_resume(struct device *dev)
 {
 	struct i2c_client *client = to_i2c_client(dev);
 	struct rmi_i2c_xport *rmi_i2c = i2c_get_clientdata(client);
+	bool wakeup = rmi_i2c->suspended_with_wakeup;
 	int ret;
 
-	if (rmi_i2c->irq_wake_active) {
-		disable_irq_wake(client->irq);
-		rmi_i2c->irq_wake_active = false;
-	} else {
+	if (!wakeup) {
 		ret = regulator_bulk_enable(ARRAY_SIZE(rmi_i2c->supplies),
 					    rmi_i2c->supplies);
 		if (ret)
@@ -370,7 +363,8 @@ static int rmi_i2c_resume(struct device *dev)
 		msleep(rmi_i2c->startup_delay);
 	}
 
-	ret = rmi_driver_resume(rmi_i2c->xport.rmi_dev, true);
+	rmi_i2c->suspended_with_wakeup = false;
+	ret = rmi_driver_resume(rmi_i2c->xport.rmi_dev, wakeup);
 	if (ret)
 		dev_warn(dev, "Failed to resume device: %d\n", ret);
 

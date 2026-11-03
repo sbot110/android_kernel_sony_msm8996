@@ -13,6 +13,7 @@
 #include <dt-bindings/sound/qcom,q6asm.h>
 
 /delete-node/ &tof_sensor;
+/delete-node/ &usb3_id;
 /delete-node/ &pm8994_l11;
 /delete-node/ &pm8994_l14;
 
@@ -25,6 +26,12 @@
 	};
 
 	chosen {
+		/*
+		 * Override tone.dtsi bootargs to omit earlycon=msm_serial_dm,0x75b0000:
+		 * on retail F8131/F8132 units without Sony TA UART enabled, S1 leaves
+		 * BLSP2 UART2 unclocked, causing an immediate early-boot SError.
+		 */
+		bootargs = "androidboot.hardware=qcom user_debug=31 msm_rtb.filter=0x237 ehci-hcd.park=3 cma=64M@0-0xffffffff coherent_pool=2M loop.max_part=16";
 		stdout-path = "serial0:115200n8";
 	};
 
@@ -221,17 +228,30 @@
 	status = "disabled";
 };
 
-/* Dora uses Micro-USB 2.0 OTG (ID on GPIO 24), no USB-C FUSB301 on BLSP2 I2C5 */
+/*
+ * Dora uses a capless waterproof Micro-USB 2.0 receptacle (no USB-C FUSB301):
+ *  - GPIO 24 is Sony's analog ID polling pull-down pin; keep it output-low in
+ *    idle (removing tone.dtsi's output-high) to prevent DC corrosion on wet pins.
+ *  - USB peripheral mode does not use digital extcon-usb-gpio (&usb3_id deleted);
+ *    analog ID sensing channel 0x39 (usb_id_lv) is registered on pm8994_vadc.
+ */
 &blsp2_i2c5 {
 	status = "disabled";
 };
 
 &usb_detect {
 	pins = "gpio24";
+	/delete-property/ output-high;
+	output-low;
 };
 
-&usb3_id {
-	id-gpio = <&tlmm 24 GPIO_ACTIVE_LOW>;
+&usb3 {
+	pinctrl-names = "default";
+	pinctrl-0 = <&usb_detect>;
+};
+
+&usb3_dwc3 {
+	/delete-property/ extcon;
 };
 
 /* Broadcom BCM4359 Wi-Fi PCIe0 + host-wake pinctrl */
@@ -326,6 +346,11 @@
 		label = "lcd_id_adc";
 	};
 
+	adc-chan@39 {
+		reg = <VADC_LR_MUX10_USB_ID>;
+		label = "usb_id_lv";
+	};
+
 	adc-chan@73 {
 		reg = <VADC_LR_MUX4_PU1_AMUX_THM1>;
 		label = "msm_therm";
@@ -338,6 +363,7 @@
 };
 
 &uim_detect_en {
+	/delete-property/ output-high;
 	output-low;
 };
 

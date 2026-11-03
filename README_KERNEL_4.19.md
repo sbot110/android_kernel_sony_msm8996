@@ -93,7 +93,7 @@ OUT_DIR="$PWD/out/dora-clean" JOBS=4 scripts/dora/build.sh
 собирает vmlinux, System.map, Image, Image.gz и четыре DTB. Проверяются
 ARM64/ELF/gzip, linked implementation symbols и точный порядок appended DTB;
 создаются Image.gz-dtb, toolchain.txt, config.log, build.log,
-artifact-validation.json и SHA256SUMS. Явная gated policy не позволяет
+artifact-validation.json и SHA256SUMS. Явная policy с active CX и сохранёнными hardware gates не позволяет
 случайно активировать непроверенные power chains.
 
 Ни boot.img, ни прошивка на этом этапе не создаются. Разделы userdata,

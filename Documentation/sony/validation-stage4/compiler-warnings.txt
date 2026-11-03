@@ -1,0 +1,97 @@
+arm-linux-gnueabi-ld: warning: arch/arm64/kernel/vdso32/sigreturn.o: missing .note.GNU-stack section implies executable stack
+/workspace/android_kernel_sony_msm8996/mm/slub.c:5982:41: warning: format ‘%p’ expects argument of type ‘void *’, but argument 3 has type ‘long unsigned int’ [-Wformat=]
+/workspace/android_kernel_sony_msm8996/mm/slub.c:5982:68: warning: format ‘%zu’ expects argument of type ‘size_t’, but argument 5 has type ‘unsigned int’ [-Wformat=]
+/workspace/android_kernel_sony_msm8996/mm/slub.c:5982:82: warning: format ‘%zu’ expects argument of type ‘size_t’, but argument 6 has type ‘unsigned int’ [-Wformat=]
+/workspace/android_kernel_sony_msm8996/drivers/base/core.c:2356:21: warning: the comparison will always evaluate as ‘true’ for the address of ‘kobj’ will never be NULL [-Waddress]
+/workspace/android_kernel_sony_msm8996/drivers/devfreq/governor_gpubw_mon.c:59:46: warning: format ‘%llu’ expects argument of type ‘long long unsigned int’, but argument 4 has type ‘long unsigned int’ [-Wformat=]
+/workspace/android_kernel_sony_msm8996/drivers/gpu/msm/kgsl_debugfs.c:165:29: warning: format ‘%p’ expects argument of type ‘void *’, but argument 4 has type ‘int’ [-Wformat=]
+/workspace/android_kernel_sony_msm8996/drivers/gpu/msm/adreno.c:1060:41: warning: format ‘%d’ expects argument of type ‘int’, but argument 3 has type ‘long int’ [-Wformat=]
+/workspace/android_kernel_sony_msm8996/drivers/gpu/msm/adreno_debugfs.c:163:61: warning: format ‘%d’ expects argument of type ‘int’, but argument 4 has type ‘u64’ {aka ‘long long unsigned int’} [-Wformat=]
+/workspace/android_kernel_sony_msm8996/drivers/iommu/arm-smmu.c:2102:25: warning: format ‘%x’ expects argument of type ‘unsigned int’, but argument 4 has type ‘long unsigned int’ [-Wformat=]
+/workspace/android_kernel_sony_msm8996/drivers/iommu/arm-smmu.c:2102:25: warning: format ‘%x’ expects argument of type ‘unsigned int’, but argument 5 has type ‘long unsigned int’ [-Wformat=]
+/workspace/android_kernel_sony_msm8996/drivers/iommu/arm-smmu.c:2102:25: warning: format ‘%x’ expects argument of type ‘unsigned int’, but argument 6 has type ‘long unsigned int’ [-Wformat=]
+/workspace/android_kernel_sony_msm8996/drivers/iommu/arm-smmu.c:2121:33: warning: format ‘%x’ expects argument of type ‘unsigned int’, but argument 3 has type ‘long unsigned int’ [-Wformat=]
+/workspace/android_kernel_sony_msm8996/drivers/iommu/arm-smmu.c:2121:33: warning: format ‘%x’ expects argument of type ‘unsigned int’, but argument 4 has type ‘long unsigned int’ [-Wformat=]
+/workspace/android_kernel_sony_msm8996/drivers/iommu/arm-smmu.c:2121:33: warning: format ‘%x’ expects argument of type ‘unsigned int’, but argument 5 has type ‘long unsigned int’ [-Wformat=]
+/workspace/android_kernel_sony_msm8996/drivers/iommu/arm-smmu.c:6741:45: warning: format ‘%x’ expects argument of type ‘unsigned int’, but argument 4 has type ‘long int’ [-Wformat=]
+/workspace/android_kernel_sony_msm8996/drivers/iommu/arm-smmu.c:7162:65: warning: format ‘%x’ expects argument of type ‘unsigned int’, but argument 4 has type ‘long unsigned int’ [-Wformat=]
+/workspace/android_kernel_sony_msm8996/drivers/iommu/arm-smmu.c:7245:28: warning: format ‘%llx’ expects argument of type ‘long long unsigned int’, but argument 3 has type ‘int’ [-Wformat=]
+/workspace/android_kernel_sony_msm8996/drivers/iommu/arm-smmu-debug.c:95:31: warning: format ‘%lx’ expects argument of type ‘long unsigned int’, but argument 3 has type ‘u32’ {aka ‘unsigned int’} [-Wformat=]
+/workspace/android_kernel_sony_msm8996/drivers/iommu/arm-smmu-debug.c:95:31: warning: format ‘%llx’ expects argument of type ‘long long unsigned int’, but argument 5 has type ‘u32’ {aka ‘unsigned int’} [-Wformat=]
+/workspace/android_kernel_sony_msm8996/drivers/iommu/arm-smmu-debug.c:130:31: warning: format ‘%lx’ expects argument of type ‘long unsigned int’, but argument 3 has type ‘u32’ {aka ‘unsigned int’} [-Wformat=]
+/workspace/android_kernel_sony_msm8996/drivers/iommu/arm-smmu-debug.c:130:31: warning: format ‘%llx’ expects argument of type ‘long long unsigned int’, but argument 4 has type ‘u32’ {aka ‘unsigned int’} [-Wformat=]
+/workspace/android_kernel_sony_msm8996/drivers/iommu/arm-smmu-debug.c:158:31: warning: format ‘%lx’ expects argument of type ‘long unsigned int’, but argument 3 has type ‘u32’ {aka ‘unsigned int’} [-Wformat=]
+/workspace/android_kernel_sony_msm8996/drivers/iommu/arm-smmu-debug.c:158:31: warning: format ‘%llx’ expects argument of type ‘long long unsigned int’, but argument 4 has type ‘u32’ {aka ‘unsigned int’} [-Wformat=]
+/workspace/android_kernel_sony_msm8996/drivers/iommu/arm-smmu-debug.c:182:39: warning: format ‘%lx’ expects argument of type ‘long unsigned int’, but argument 3 has type ‘u32’ {aka ‘unsigned int’} [-Wformat=]
+/workspace/android_kernel_sony_msm8996/drivers/iommu/arm-smmu-debug.c:182:39: warning: format ‘%lx’ expects argument of type ‘long unsigned int’, but argument 5 has type ‘u32’ {aka ‘unsigned int’} [-Wformat=]
+/workspace/android_kernel_sony_msm8996/drivers/iommu/arm-smmu-debug.c:221:39: warning: format ‘%lx’ expects argument of type ‘long unsigned int’, but argument 3 has type ‘u32’ {aka ‘unsigned int’} [-Wformat=]
+/workspace/android_kernel_sony_msm8996/drivers/iommu/arm-smmu-debug.c:221:39: warning: format ‘%lx’ expects argument of type ‘long unsigned int’, but argument 5 has type ‘u32’ {aka ‘unsigned int’} [-Wformat=]
+/workspace/android_kernel_sony_msm8996/drivers/iommu/arm-smmu-debug.c:231:23: warning: format ‘%lx’ expects argument of type ‘long unsigned int’, but argument 3 has type ‘u32’ {aka ‘unsigned int’} [-Wformat=]
+/workspace/android_kernel_sony_msm8996/drivers/mmc/host/sdhci-msm.c:1315:17: warning: ignoring return value of ‘kstrtoul’ declared with attribute ‘warn_unused_result’ [-Wunused-result]
+/workspace/android_kernel_sony_msm8996/drivers/net/wireless/bcmdhd/dhd_pno.c:3525:13: warning: the comparison will always evaluate as ‘true’ for the address of ‘bss_info’ will never be NULL [-Waddress]
+/workspace/android_kernel_sony_msm8996/drivers/net/wireless/bcmdhd/dhd_linux.c:8613:9: warning: ISO C90 forbids variable length array ‘buf’ [-Wvla]
+/workspace/android_kernel_sony_msm8996/drivers/net/wireless/bcmdhd/wl_android.c:2961:62: warning: the comparison will always evaluate as ‘true’ for the pointer operand in ‘rev_info_delim + 1’ must not be NULL [-Waddress]
+/workspace/android_kernel_sony_msm8996/drivers/rpmsg/qcom_smd.c:619:25: warning: format ‘%d’ expects argument of type ‘int’, but argument 5 has type ‘size_t’ {aka ‘long unsigned int’} [-Wformat=]
+/workspace/android_kernel_sony_msm8996/include/linux/kern_levels.h:5:25: warning: format ‘%d’ expects argument of type ‘int’, but argument 4 has type ‘size_t’ {aka ‘long unsigned int’} [-Wformat=]
+/workspace/android_kernel_sony_msm8996/drivers/rpmsg/qcom_smd.c:669:33: warning: format ‘%d’ expects argument of type ‘int’, but argument 5 has type ‘size_t’ {aka ‘long unsigned int’} [-Wformat=]
+/workspace/android_kernel_sony_msm8996/include/linux/kern_levels.h:5:25: warning: format ‘%d’ expects argument of type ‘int’, but argument 4 has type ‘size_t’ {aka ‘long unsigned int’} [-Wformat=]
+/workspace/android_kernel_sony_msm8996/drivers/rpmsg/qcom_smd.c:686:50: warning: format ‘%d’ expects argument of type ‘int’, but argument 4 has type ‘size_t’ {aka ‘long unsigned int’} [-Wformat=]
+/workspace/android_kernel_sony_msm8996/include/linux/kern_levels.h:5:25: warning: format ‘%d’ expects argument of type ‘int’, but argument 3 has type ‘size_t’ {aka ‘long unsigned int’} [-Wformat=]
+/workspace/android_kernel_sony_msm8996/drivers/rpmsg/qcom_smd.c:952:9: warning: format ‘%d’ expects argument of type ‘int’, but argument 4 has type ‘long unsigned int’ [-Wformat=]
+/workspace/android_kernel_sony_msm8996/include/linux/kern_levels.h:5:25: warning: format ‘%d’ expects argument of type ‘int’, but argument 3 has type ‘long unsigned int’ [-Wformat=]
+/workspace/android_kernel_sony_msm8996/drivers/scsi/ufs/ufshcd.c:785:13: warning: ‘__ufshcd_cmd_log’ defined but not used [-Wunused-function]
+/workspace/android_kernel_sony_msm8996/drivers/scsi/ufs/ufshcd.c:649:13: warning: ‘ufshcd_add_cmd_upiu_trace’ defined but not used [-Wunused-function]
+/workspace/android_kernel_sony_msm8996/include/linux/kern_levels.h:5:25: warning: format ‘%x’ expects argument of type ‘unsigned int’, but argument 2 has type ‘long unsigned int’ [-Wformat=]
+/workspace/android_kernel_sony_msm8996/drivers/staging/android/ion/ion_system_heap.c:769:21: warning: the comparison will always evaluate as ‘true’ for the address of ‘secure_pools’ will never be NULL [-Waddress]
+/workspace/android_kernel_sony_msm8996/include/linux/kern_levels.h:5:25: warning: format ‘%zu’ expects argument of type ‘size_t’, but argument 2 has type ‘uint32_t’ {aka ‘unsigned int’} [-Wformat=]
+/workspace/android_kernel_sony_msm8996/include/linux/kern_levels.h:5:25: warning: format ‘%zu’ expects argument of type ‘size_t’, but argument 3 has type ‘uint32_t’ {aka ‘unsigned int’} [-Wformat=]
+/workspace/android_kernel_sony_msm8996/drivers/soc/qcom/peripheral-loader.c:291:25: warning: value computed is not used [-Wunused-value]
+/workspace/android_kernel_sony_msm8996/drivers/video/fbdev/msm/mdss_mdp.h:135: warning: "BITS_TO_BYTES" redefined
+/workspace/android_kernel_sony_msm8996/include/linux/kern_levels.h:5:25: warning: format ‘%llu’ expects argument of type ‘long long unsigned int’, but argument 4 has type ‘int’ [-Wformat=]
+/workspace/android_kernel_sony_msm8996/drivers/video/fbdev/msm/mdss_mdp.h:135: warning: "BITS_TO_BYTES" redefined
+/workspace/android_kernel_sony_msm8996/drivers/video/fbdev/msm/mdss_mdp.h:135: warning: "BITS_TO_BYTES" redefined
+/workspace/android_kernel_sony_msm8996/drivers/video/fbdev/msm/mdss_mdp.h:135: warning: "BITS_TO_BYTES" redefined
+/workspace/android_kernel_sony_msm8996/drivers/video/fbdev/msm/mdss_mdp.h:135: warning: "BITS_TO_BYTES" redefined
+/workspace/android_kernel_sony_msm8996/drivers/video/fbdev/msm/mdss_mdp.h:135: warning: "BITS_TO_BYTES" redefined
+/workspace/android_kernel_sony_msm8996/drivers/video/fbdev/msm/mdss_mdp.h:135: warning: "BITS_TO_BYTES" redefined
+/workspace/android_kernel_sony_msm8996/drivers/video/fbdev/msm/mdss_mdp.h:135: warning: "BITS_TO_BYTES" redefined
+/workspace/android_kernel_sony_msm8996/drivers/video/fbdev/msm/mdss_mdp.h:135: warning: "BITS_TO_BYTES" redefined
+/workspace/android_kernel_sony_msm8996/include/linux/kern_levels.h:5:25: warning: unknown conversion type character ‘\x0a’ in format [-Wformat=]
+/workspace/android_kernel_sony_msm8996/include/linux/kern_levels.h:5:25: warning: too many arguments for format [-Wformat-extra-args]
+/workspace/android_kernel_sony_msm8996/drivers/video/fbdev/msm/mdss_mdp.h:135: warning: "BITS_TO_BYTES" redefined
+/workspace/android_kernel_sony_msm8996/drivers/video/fbdev/msm/mdss_mdp_intf_video.c:1232:40: warning: increment of a boolean expression [-Wbool-operation]
+/workspace/android_kernel_sony_msm8996/drivers/video/fbdev/msm/mdss_mdp.h:135: warning: "BITS_TO_BYTES" redefined
+/workspace/android_kernel_sony_msm8996/drivers/video/fbdev/msm/mdss_mdp.h:135: warning: "BITS_TO_BYTES" redefined
+/workspace/android_kernel_sony_msm8996/drivers/video/fbdev/msm/mdss_mdp.h:135: warning: "BITS_TO_BYTES" redefined
+/workspace/android_kernel_sony_msm8996/drivers/video/fbdev/msm/mdss_mdp.h:135: warning: "BITS_TO_BYTES" redefined
+/workspace/android_kernel_sony_msm8996/drivers/video/fbdev/msm/mdss_mdp.h:135: warning: "BITS_TO_BYTES" redefined
+/workspace/android_kernel_sony_msm8996/drivers/video/fbdev/msm/mdss_mdp.h:135: warning: "BITS_TO_BYTES" redefined
+/workspace/android_kernel_sony_msm8996/drivers/video/fbdev/msm/mdss_mdp.h:135: warning: "BITS_TO_BYTES" redefined
+/workspace/android_kernel_sony_msm8996/drivers/video/fbdev/msm/mdss_mdp.h:135: warning: "BITS_TO_BYTES" redefined
+/workspace/android_kernel_sony_msm8996/drivers/video/fbdev/msm/mdss_mdp.h:135: warning: "BITS_TO_BYTES" redefined
+/workspace/android_kernel_sony_msm8996/drivers/video/fbdev/msm/mdss_mdp.h:135: warning: "BITS_TO_BYTES" redefined
+/workspace/android_kernel_sony_msm8996/drivers/video/fbdev/msm/mdss_mdp.h:135: warning: "BITS_TO_BYTES" redefined
+/workspace/android_kernel_sony_msm8996/drivers/video/fbdev/msm/mdss_mdp.h:135: warning: "BITS_TO_BYTES" redefined
+/workspace/android_kernel_sony_msm8996/drivers/video/fbdev/msm/mdss_mdp.h:135: warning: "BITS_TO_BYTES" redefined
+/workspace/android_kernel_sony_msm8996/drivers/video/fbdev/msm/mdss_mdp.h:135: warning: "BITS_TO_BYTES" redefined
+/workspace/android_kernel_sony_msm8996/drivers/video/fbdev/msm/mdss_mdp.h:135: warning: "BITS_TO_BYTES" redefined
+/workspace/android_kernel_sony_msm8996/drivers/video/fbdev/msm/mdss_mdp.h:135: warning: "BITS_TO_BYTES" redefined
+/workspace/android_kernel_sony_msm8996/drivers/video/fbdev/msm/mdss_mdp.h:135: warning: "BITS_TO_BYTES" redefined
+/workspace/android_kernel_sony_msm8996/drivers/video/fbdev/msm/mdss_mdp_debug.c:2217:52: warning: format ‘%u’ expects argument of type ‘unsigned int’, but argument 3 has type ‘u64’ {aka ‘long long unsigned int’} [-Wformat=]
+/workspace/android_kernel_sony_msm8996/drivers/video/fbdev/msm/mdss_mdp.h:135: warning: "BITS_TO_BYTES" redefined
+/workspace/android_kernel_sony_msm8996/drivers/video/fbdev/msm/mdss_mdp.h:135: warning: "BITS_TO_BYTES" redefined
+/workspace/android_kernel_sony_msm8996/drivers/video/fbdev/msm/mdss_mdp.h:135: warning: "BITS_TO_BYTES" redefined
+/workspace/android_kernel_sony_msm8996/drivers/video/fbdev/msm/mdss_mdp.h:135: warning: "BITS_TO_BYTES" redefined
+/workspace/android_kernel_sony_msm8996/drivers/video/fbdev/msm/mdss_mdp.h:135: warning: "BITS_TO_BYTES" redefined
+/workspace/android_kernel_sony_msm8996/drivers/video/fbdev/msm/mdss_dsi_panel_driver.c:302:21: warning: the comparison will always evaluate as ‘true’ for the address of ‘ewu_seq’ will never be NULL [-Waddress]
+/workspace/android_kernel_sony_msm8996/drivers/video/fbdev/msm/mdss_dsi_panel_driver.c:992:59: warning: the comparison will always evaluate as ‘true’ for the address of ‘ewu_seq’ will never be NULL [-Waddress]
+/workspace/android_kernel_sony_msm8996/drivers/video/fbdev/msm/mdss_mdp.h:135: warning: "BITS_TO_BYTES" redefined
+/workspace/android_kernel_sony_msm8996/drivers/video/fbdev/msm/mdss_dsi_panel_debugfs.c:1379:13: warning: the comparison will always evaluate as ‘true’ for the address of ‘kobj’ will never be NULL [-Waddress]
+/workspace/android_kernel_sony_msm8996/drivers/video/fbdev/msm/mdss_mdp.h:135: warning: "BITS_TO_BYTES" redefined
+/workspace/android_kernel_sony_msm8996/drivers/video/fbdev/msm/mdss_mdp.h:135: warning: "BITS_TO_BYTES" redefined
+/workspace/android_kernel_sony_msm8996/drivers/video/fbdev/msm/mdss_mdp.h:135: warning: "BITS_TO_BYTES" redefined
+/workspace/android_kernel_sony_msm8996/drivers/video/fbdev/msm/mdss_mdp.h:135: warning: "BITS_TO_BYTES" redefined
+/workspace/android_kernel_sony_msm8996/drivers/video/fbdev/msm/mdss_mdp.h:135: warning: "BITS_TO_BYTES" redefined
+/workspace/android_kernel_sony_msm8996/drivers/video/fbdev/msm/mdss_mdp.h:135: warning: "BITS_TO_BYTES" redefined
+/workspace/android_kernel_sony_msm8996/drivers/video/fbdev/msm/mdss_mdp.h:135: warning: "BITS_TO_BYTES" redefined
+/workspace/android_kernel_sony_msm8996/drivers/video/fbdev/msm/mdss_mdp.h:135: warning: "BITS_TO_BYTES" redefined

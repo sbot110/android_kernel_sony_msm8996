@@ -11,6 +11,7 @@
 #include <linux/kernel.h>
 #include <linux/regmap.h>
 #include <linux/module.h>
+#include <linux/mutex.h>
 #include <linux/of.h>
 #include <linux/of_device.h>
 #include <linux/slab.h>
@@ -1325,16 +1326,20 @@ static struct platform_driver spm_regulator_driver = {
  *
  * Returns 0 on success or errno on failure.
  */
-int __init spm_regulator_init(void)
+int spm_regulator_init(void)
 {
+	static DEFINE_MUTEX(init_lock);
 	static bool has_registered;
+	int ret = 0;
 
-	if (has_registered)
-		return 0;
-
-	has_registered = true;
-
-	return platform_driver_register(&spm_regulator_driver);
+	mutex_lock(&init_lock);
+	if (!has_registered) {
+		ret = platform_driver_register(&spm_regulator_driver);
+		if (!ret)
+			has_registered = true;
+	}
+	mutex_unlock(&init_lock);
+	return ret;
 }
 EXPORT_SYMBOL(spm_regulator_init);
 

@@ -43,5 +43,10 @@ unavailable in this traced environment; ASAN_OPTIONS=detect_leaks=0 is used
 for that optional run, without disabling the state/fault assertions.
 
 Host tests do not prove IRQ scheduling, firmware ACKs, physical voltage,
-PLL lock, suspend or device boot. Dora CPU/display/GPU/MMC and corner DT gates
-are retained. No four-CPU or DVFS activation follows from these tests.
+PLL lock, suspend or device boot. Dora CPU/display/GPU/MMC and MX DT gates are retained. Typed CX is
+active because the clock providers require its real supply. No four-CPU or DVFS activation follows from these tests.
+
+Full-build follow-up: exported spm_regulator_init must not reside in reclaimed
+init text. The annotation was removed from implementation/header; concurrent
+registration is serialized and a failed platform registration remains retryable.
+The actual registration API is exercised by check-spmi-ownership.py.

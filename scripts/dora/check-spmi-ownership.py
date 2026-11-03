@@ -169,3 +169,54 @@ with tempfile.TemporaryDirectory(prefix='dora-spmi-ownership-') as scratch:
                     '-Wno-missing-field-initializers', str(c), '-o', str(binary)], check=True)
     subprocess.run([str(binary)], check=True)
 print('Host model only; no PMIC writes, voltage, CPU bring-up or SPM operation tested.')
+
+# The exported SPM registration API must survive init memory reclamation and
+# must not cache success before platform registration actually succeeds.
+spm = (ROOT/'drivers/regulator/spm-regulator.c').read_text()
+assert 'int __init spm_regulator_init' not in spm
+assert '__init spm_regulator_init' not in (ROOT/'include/linux/regulator/spm-regulator.h').read_text()
+match = re.search(r'int spm_regulator_init\(void\)\s*\{',spm)
+assert match
+end,depth=match.end(),1
+while depth:
+    depth+=(spm[end]=='{')-(spm[end]=='}');end+=1
+registration=r'''
+#include <assert.h>
+#include <errno.h>
+#include <pthread.h>
+#include <stdbool.h>
+#include <stdatomic.h>
+#include <stdio.h>
+#define EPROBE_DEFER 517
+struct mutex {pthread_mutex_t value;};
+#define DEFINE_MUTEX(name) struct mutex name={PTHREAD_MUTEX_INITIALIZER}
+static void mutex_lock(struct mutex *lock) {assert(!pthread_mutex_lock(&lock->value));}
+static void mutex_unlock(struct mutex *lock) {assert(!pthread_mutex_unlock(&lock->value));}
+static int spm_regulator_driver,attempts,result;
+static atomic_int active;
+static int platform_driver_register(int *driver)
+{
+    assert(driver==&spm_regulator_driver && atomic_fetch_add(&active,1)==0);
+    attempts++;atomic_fetch_sub(&active,1);return result;
+}
+'''+spm[match.start():end]+r'''
+static void *register_thread(void *unused) {(void)unused;assert(!spm_regulator_init());return NULL;}
+int main(void)
+{
+    pthread_t threads[16];unsigned i;
+    result=-EIO;assert(spm_regulator_init()==-EIO && attempts==1);
+    result=-EPROBE_DEFER;assert(spm_regulator_init()==-EPROBE_DEFER && attempts==2);
+    result=0;
+    for(i=0;i<16;i++)assert(!pthread_create(&threads[i],NULL,register_thread,NULL));
+    for(i=0;i<16;i++)assert(!pthread_join(threads[i],NULL));
+    assert(attempts==3 && !active && !spm_regulator_init() && attempts==3);
+    puts("PASS: actual permanent SPM registration API retries errors and registers once across concurrent callers");
+    return 0;
+}
+'''
+with tempfile.TemporaryDirectory(prefix='dora-spm-register-') as scratch:
+    c,binary=Path(scratch)/'registration.c',Path(scratch)/'registration'
+    c.write_text(registration)
+    subprocess.run(shlex.split(os.environ.get('HOSTCC','cc'))+
+                   ['-std=gnu11','-O2','-pthread','-Wall','-Wextra','-Werror',str(c),'-o',str(binary)],check=True)
+    subprocess.run([str(binary)],check=True)

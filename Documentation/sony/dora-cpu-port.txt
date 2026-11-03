@@ -1,3 +1,8 @@
+Stage4 update: the observational provider remains active; a fault-tested CPU
+transaction engine now exists, but its hardware adapter is unbound. Typed CX
+is implemented; APCC/SPM/CPR ownership and DVFS remain gated. See
+dora-cpu-transactions.txt and dora-ccf-transactions.txt.
+
 MSM8996 CPU/CBF infrastructure: observational only
 
 Source provenance

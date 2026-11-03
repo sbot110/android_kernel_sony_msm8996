@@ -220,7 +220,7 @@ def main():
     parser.add_argument("dtb", type=Path)
     parser.add_argument("--config", type=Path)
     parser.add_argument("--self-test", action="store_true")
-    parser.add_argument("--require-gated", action="store_true", help="validate retained graph and mandatory MMCC corner safety gates")
+    parser.add_argument("--require-gated", action="store_true", help="validate retained graph and mandatory display power safety gates")
     args = parser.parse_args()
     nodes = power.parse_fdt(args.dtb)
     selected = validate(nodes, args.config, args.require_gated)
@@ -253,7 +253,7 @@ def main():
     print("PASS: original final Sony hardware data, five LCD-ID panels, 1080p60 only")
     print("PASS: native MMCC/PLL parents, GDSC, SMMU, bandwidth, LAB/IBB and WLED chain")
     if args.require_gated:
-        print("PASS: hardware activation gated pending real MMCC frequency/RPM-corner coupling")
+        print("PASS: hardware activation gated pending physical L12/SLEEP recovery and DSI/incell ownership")
     print("Structural validation only; on-device display/secure buffers remain untested.")
 
 

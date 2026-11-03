@@ -41,5 +41,6 @@ physical L12 at exactly 1.8 V. Unknown boot-active parent ownership retains a
 real acknowledged HIGH lease. Native physical regulator errors cannot be
 recovered by cached UV/SWEN success: L12 and MMC uncertainty remain latched.
 Physical replay/SLEEP, integrated handoff and hardware validation remain P0.
-CX/MX, MMC and display/GPU activation gates are retained in all four DTBs.
+Typed CX is active for GCC/MMCC. MX, MMC and display/GPU activation gates
+are retained in all four DTBs.
 No fixed fake regulator or bootloader-voltage assumption replaces this work.

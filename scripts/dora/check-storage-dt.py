@@ -44,7 +44,7 @@ def validate(nodes, config=None):
         if node['name'] != path.rsplit('/',1)[1] or props.get('compatible')!=b'qcom,sdhci-msm\0':
             raise ValueError('SDHCI node/driver name mismatch')
         if props.get('status')!=b'disabled\0':
-            raise ValueError('MMC activated before validated GCC CX coupling gate')
+            raise ValueError('MMC activated before physical rail replay/ownership validation')
         if props.get('bus-width')!=props['qcom,bus-width']:
             raise ValueError('native/legacy bus width mismatch')
         if any(k in props for k in ['vmmc-supply','vqmmc-supply','sdhc-msm-crypto']):
@@ -129,7 +129,7 @@ def main():
         print('FAIL:',e);return 1
     print('PASS: Sony SDHC1 eMMC/SDHC2 hybrid SD-UIM2 data, native GCC/rails/pads, aliases and Android system/oem paths')
     if a.selftest:print('PASS: eleven bad-controller/clock/GPIO/path/load/activation fixtures rejected')
-    print('Controllers safety-gated pending GCC CX proof; GPT partitions/HS200/HS400/suspend require device tests.')
+    print('Controllers safety-gated pending physical rail replay/ownership; GPT partitions/HS200/HS400/suspend require device tests.')
     return 0
 
 if __name__=='__main__':raise SystemExit(main())

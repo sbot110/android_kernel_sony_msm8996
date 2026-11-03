@@ -79,10 +79,10 @@ for dtb in "${dtbs[@]}"; do
     python3 "$root/scripts/dora/check-pin-safety.py" "$tree" --self-test
     python3 "$root/scripts/dora/check-bus-dt.py" "$tree" --selftest
     python3 "$root/scripts/dora/check-storage-dt.py" "$tree" --config "$out/.config" --selftest
-    python3 "$root/scripts/dora/check-clock-voltage-dt.py" "$tree" --config "$out/.config" --require-gated --selftest
+    python3 "$root/scripts/dora/check-clock-voltage-dt.py" "$tree" --config "$out/.config" --require-active --selftest
     python3 "$root/scripts/dora/check-display-dt.py" "$tree" --config "$out/.config" --require-gated --self-test
 done
-python3 "$root/scripts/dora/check-variants.py" "${trees[@]}" --require-four --require-gated --selftest
+python3 "$root/scripts/dora/check-variants.py" "${trees[@]}" --require-four --require-active --selftest
 # An explicit list excludes stale or unrelated DTBs in O=.
 image="$out/arch/arm64/boot/Image.gz"
 cat -- "$image" "${trees[@]}" > "$out/arch/arm64/boot/Image.gz-dtb"

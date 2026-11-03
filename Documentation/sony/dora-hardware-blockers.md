@@ -53,7 +53,7 @@ F8131/F8132 не связаны жёстко с stepping, PMIC или панел
 | Зависимость | Точная граница и следующее действие |
 | --- | --- |
 | eMMC / physical rails | `sdhci-msm.c` power_error и bus vote quarantine запрещают продолжение после uncertain ACK. `qcom_smd-regulator.c:rpm_reg_write_active` не даёт consumer API для полного UV/SWEN/load replay и SLEEP. Нужен настоящий provider contract, затем проверка интегрированной цепочки и снятие CX/SDHC gates. Cached rollback не является восстановлением PMIC. |
-| GCC/MMCC bootstrap | `clk-msm8996-voltage.h:msm8996_voltage_ownership` сохраняет HIGH, если работающий PLL/parent не имеет доказанного counted owner/rate. Нужно подтвердить реальный boot handoff и поведение late/deferred probe; не угадывать idle состояние. CX пока disabled в final DT. |
+| GCC/MMCC bootstrap | `clk-msm8996-voltage.h:msm8996_voltage_ownership` сохраняет HIGH, если работающий PLL/parent не имеет доказанного counted owner/rate. Нужно подтвердить реальный boot handoff и поведение late/deferred probe; не угадывать idle состояние. Typed CX frontend включён: активный GCC не должен ссылаться на disabled supply. |
 | CPU DVFS / четыре CPU | `clk-cpu-8996.c` остаётся observational provider. Новый `clk-msm8996-cpu-transaction.c` не имеет MMIO/CPR/SPM adapter. Нужны native ACD/CBF/PLL callbacks, fuse/binning, S8–S11/SPM ownership, HMSS/Kryo/APM и thermal/hotplug/LPM. |
 | MDSS / MMCC analog | `msm8996_voltage_apply` permanently quarantines uncertain L12 operation: digital ACK не подтверждает physical SWEN. Нужны L12/SLEEP replay, DSI PHY analog/panel/incell ownership, затем display activation и реальные измерения. |
 | GPU Adreno 530 | Gated child provider/MMSS CPR/PMI S2, независимый MX и CX, retention/SMMU/secure firmware и userspace ABI остаются неполными. Нельзя применять SDM845 планы. |
@@ -62,7 +62,7 @@ F8131/F8132 не связаны жёстко с stepping, PMIC или панел
 
 Generic UFS host/PHY recovery остаётся отдельной задачей общей MSM8996 базы,
 но UFS не является установленным Dora storage и не используется для обхода
-неполной eMMC. Обе MMC цепочки, CX/MX, GPU/CPR/PMI S2 и display power chain
+неполной eMMC. Обе MMC цепочки, MX, GPU/CPR/PMI S2 и display power chain
 остаются явно gated. Это не BOOT TEST READY.
 
 ## Независимые проверки и физические пределы

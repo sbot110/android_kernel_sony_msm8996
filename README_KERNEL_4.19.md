@@ -27,7 +27,7 @@ clock/power errors и cleanup. Неопределённость после по�
 rollback, quarantine и безопасный lifetime. GCC/MMCC подключены к typed
 CX consumer API с обязательным forced ACK. Перенесены 56 GCC и 49 MMCC
 frequency limits после конечных Sony v3 overrides; SDCC2 возвращены 40/80 MHz.
-MMPLL4/9 используют реальный L12 1.8 V. Эти ресурсы остаются safety-gated.
+MMPLL4/9 используют реальный L12 1.8 V. Typed CX provider включён для активных GCC/MMCC; MMC/display/GPU/CPU gates сохранены.
 [Контракты clocks](Documentation/sony/dora-clock-voltage.md).
 
 CPU получил fault-tested движок ACD→voltage→PLL с двумя voltage leases,
@@ -68,7 +68,7 @@ PMIC, stepping или одной панели. Наличие четырёх FDT
 
 | Цепочка | Следующее обязательное действие |
 | --- | --- |
-| eMMC / physical RPM | Завершить подтверждённый replay UV/SWEN/load и SLEEP для физических rails; проверить integrated boot-clock handoff, затем отдельно снимать CX и MMC gates. Нужны HS200/HS400/data-integrity, GPT/by-name и encrypted userdata tests без форматирования. |
+| eMMC / physical RPM | Завершить подтверждённый replay UV/SWEN/load и SLEEP для физических rails; проверить integrated boot-clock handoff, затем отдельно снимать MMC gates. Нужны HS200/HS400/data-integrity, GPT/by-name и encrypted userdata tests без форматирования. |
 | CPU / CPR / SAW | Подключить qualified native APCC/CBF/ACD/CPR/SPM adapter к transaction engine, согласовать fuse/binning, S8–S11 ownership, thermal/hotplug/LPM; проверить на телефоне. |
 | MMCC / MDSS | Подтвердить physical L12/SLEEP recovery, DSI PHY analog ownership, incell/touch sequencing, затем отдельно активировать дисплей. |
 | Adreno 530 | Завершить независимые CX/MX/PMI S2/CPR, SMMU и secure-buffer/firmware/vendor ABI dependencies. GPU отключён. |

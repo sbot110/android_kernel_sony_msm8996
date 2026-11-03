@@ -1,3 +1,8 @@
+Stage4 update: GCC/MMCC fmax coupling and typed CX are implemented; the CX
+provider is active for clock suppliers. Display remains disabled pending
+physical L12/SLEEP recovery, DSI PHY analog and incell ownership. See
+dora-clock-voltage.md. The Stage3 graph/data audit below is retained.
+
 Sony dora MSM8996 display integration, Stage 3
 ============================================
 

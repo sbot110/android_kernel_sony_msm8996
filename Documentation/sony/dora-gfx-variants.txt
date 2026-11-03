@@ -1,3 +1,8 @@
+Stage4 update: common typed CX is now available to GCC/MMCC. MX and every
+GPU/CPR/PMI-S2 activation guard remain disabled. The original variant hardware
+goldens below are unchanged; typed frontend/transport projection is verified
+explicitly before comparing them. See dora-clock-voltage.md.
+
 Dora Stage 3 GPU and SoC/PMIC source integration
 ==============================================
 

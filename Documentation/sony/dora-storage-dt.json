@@ -5,7 +5,7 @@
     "Pin states retain group/bias/drive; obsolete num-grp-pins removed",
     "sdhc-msm-crypto omitted: removed legacy ICE API, inline crypto remains unvalidated",
     "mmc0/mmc1 aliases added to preserve actual userspace numeric paths; sdhc1/sdhc2 driver aliases retained",
-    "Controller safety gates remain until GCC CX coupling is validated"
+    "Controller safety gates remain for physical rail ACK replay and runtime qualification"
   ],
   "controllers": {
     "/soc/sdhci@7464900": {

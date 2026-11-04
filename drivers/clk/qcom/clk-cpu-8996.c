@@ -28,71 +28,99 @@ struct msm8996_boot_clk {
 	bool cbf;
 };
 
+struct msm8996_boot_snapshot {
+	u32 mux, mode, l, alpha, alpha_hi, user;
+	unsigned long aux;
+};
+
+static bool msm8996_boot_uses_aux(struct msm8996_boot_clk *clk, u32 mux)
+{
+	return clk->cbf ? (mux & 3) == 3 :
+		!(mux & 3) && ((mux >> 2) & 3) == 3;
+}
+
+static int msm8996_boot_snapshot(struct msm8996_boot_clk *clk,
+				 struct msm8996_boot_snapshot *state)
+{
+	void __iomem *base = clk->base;
+	u32 mux_offset = clk->cbf ? 0x18 : 0x40;
+
+	state->mux = readl_relaxed(base + mux_offset);
+	if (msm8996_boot_uses_aux(clk, state->mux)) {
+		/* Sony sys_apcsaux_clk is GPLL0 main output / 2. GCC validates
+		 * the fixed root at boot; this CCF rate may remain cached and
+		 * cannot detect a later firmware root change or lock loss.
+		 */
+		state->aux = clk_get_rate(clk->aux);
+	} else if (clk->cbf ? state->mux & 3 : state->mux & 0xf) {
+		if (clk->cbf)
+			base += 0xf000;
+		else if ((state->mux & 3) == 3)
+			base += 0x100;
+		state->mode = readl_relaxed(base);
+		state->l = readl_relaxed(base + (clk->cbf ? 0x08 : 0x04));
+		state->alpha = readl_relaxed(base + (clk->cbf ? 0x10 : 0x08));
+		/* The primary Huayra fraction occupies only the low 16 bits. */
+		if (clk->cbf || (state->mux & 3) == 3)
+			state->alpha_hi = readl_relaxed(base +
+						(clk->cbf ? 0x14 : 0x0c));
+		state->user = readl_relaxed(base + (clk->cbf ? 0x18 : 0x10));
+	}
+	/* Order the complete sample before rechecking its selected source. */
+	rmb();
+	return state->mux == readl_relaxed(clk->base + mux_offset) ? 0 : -EAGAIN;
+}
+
 static unsigned long msm8996_boot_recalc(struct clk_hw *hw,
 				       unsigned long xo)
 {
 	struct msm8996_boot_clk *clk = container_of(hw,
 					struct msm8996_boot_clk, hw);
-	void __iomem *base = clk->base;
-	u32 mux, user, alpha, l, offset;
+	struct msm8996_boot_snapshot a = { }, b = { };
+	u32 mux, user, alpha;
 	u64 rate;
-	int div, ret;
+	bool main;
+	int div;
 
-	mux = readl_relaxed(base + (clk->cbf ? 0x18 : 0x40));
-	if (clk->cbf) {
-		switch (mux & 3) {
-		case 0:
-			return xo;
-		case 3:
-			/* Sony sys_apcsaux_clk is GPLL0 main output / 2. */
-			return clk_get_rate(clk->aux) / 2;
-		default:
-			base += 0xf000;
-			l = readl_relaxed(base + 0x08);
-			user = readl_relaxed(base + 0x18);
-			if (user & BIT(12))
-				return 0;
-			rate = (u64)xo * l;
-			if (user & BIT(24)) {
-				/* Alpha PLL has a 40-bit unsigned fraction. */
-				alpha = readl_relaxed(base + 0x10) >> 8;
-				alpha |= (readl_relaxed(base + 0x14) & 0xff) << 24;
-				rate += (u64)xo * alpha >> 32;
-			}
-			if ((mux & 3) == 2) {
-				div = msm8996_boot_main_div(user);
-				if (div < 0)
-					return 0;
-				rate /= div;
-			}
-			return rate;
-		}
-	}
-
-	/* PMUX: SMUX, primary early PLL, primary ACD (1:1), alt early PLL. */
-	if (!(mux & 3) && !((mux >> 2) & 3))
+	if (!xo || msm8996_boot_snapshot(clk, &a) ||
+	    msm8996_boot_snapshot(clk, &b))
+		return 0;
+	/* A read-only observer cannot exclude firmware/power-controller writes.
+	 * Reject inconsistent selected APCC/CBF PLL/mux samples. Auxiliary
+	 * rates rely on GCC's fixed-root ownership and boot validation.
+	 * This sampling is not a substitute for the transaction domain guard.
+	 */
+	if (a.mux != b.mux || a.mode != b.mode || a.l != b.l ||
+	    a.alpha != b.alpha || a.alpha_hi != b.alpha_hi ||
+	    a.user != b.user || a.aux != b.aux)
+		return 0;
+	mux = a.mux;
+	if (msm8996_boot_uses_aux(clk, mux))
+		return a.aux / 2;
+	if (clk->cbf ? !(mux & 3) : !(mux & 0xf))
 		return xo;
-	if (!(mux & 3) && ((mux >> 2) & 3) != 1)
+	if (!clk->cbf && !(mux & 3) && ((mux >> 2) & 3) != 1)
 		return 0; /* Reserved SMUX input: never invent a frequency. */
-	offset = (mux & 3) == 3 ? 0x100 : 0;
-	l = readl_relaxed(base + offset + 0x04);
-	alpha = readl_relaxed(base + offset + 0x08);
-	user = readl_relaxed(base + offset + 0x10);
-	if (offset) {
-		if (user & BIT(12))
-			return 0;
-		rate = (u64)xo * l;
+	main = clk->cbf ? (mux & 3) == 2 : !(mux & 3);
+	user = a.user;
+	/* Original handoff requires OUTCTRL/BYPASSNL/RESET_N. Both PLL types
+	 * use MODE[31] for lock and USER[0]/[3] for main/early output enable.
+	 */
+	if ((a.mode & 7) != 7 || !(a.mode & BIT(31)) ||
+	    !(user & (main ? BIT(0) : BIT(3))) || (user & BIT(12)))
+		return 0;
+	alpha = a.alpha;
+	if (clk->cbf || (mux & 3) == 3) {
+		rate = (u64)xo * a.l;
 		if (user & BIT(24)) {
+			/* Native alpha PLL decoding keeps the high 32 fraction bits. */
 			alpha >>= 8;
-			alpha |= (readl_relaxed(base + offset + 0x0c) & 0xff) << 24;
+			alpha |= (a.alpha_hi & 0xff) << 24;
 			rate += (u64)xo * alpha >> 32;
 		}
-	} else {
-		ret = msm8996_boot_huayra_rate(xo, l, alpha, user, &rate);
-		if (ret)
-			return 0;
-	}
-	if (!(mux & 3)) {
+	} else if (msm8996_boot_huayra_rate(xo, a.l, alpha, user, &rate))
+		return 0;
+	if (main) {
 		div = msm8996_boot_main_div(user);
 		if (div < 0)
 			return 0;
@@ -112,7 +140,7 @@ static int msm8996_boot_probe(struct platform_device *pdev)
 	struct msm8996_boot_clk *clks;
 	struct clk_init_data init = { };
 	const char *parent;
-	struct clk *xo;
+	struct clk *xo, *aux;
 	struct resource *res;
 	void __iomem *base;
 	unsigned int i, count;
@@ -130,6 +158,13 @@ static int msm8996_boot_probe(struct platform_device *pdev)
 		return PTR_ERR(xo);
 	if (!clk_get_rate(xo))
 		return -EINVAL;
+	/* GCC owns the fixed critical GPLL0 root. This handle only measures it;
+	 * the observer neither acquires a hardware/voltage lease nor programs it.
+	 * Resolve it before registering any clocks, including for APCC SMUX3.
+	 */
+	aux = devm_clk_get(dev, "aux");
+	if (IS_ERR(aux))
+		return PTR_ERR(aux);
 	parent = __clk_get_name(xo);
 	count = cbf ? 1 : 2;
 	data = devm_kzalloc(dev, sizeof(*data) + count * sizeof(data->hws[0]),
@@ -148,11 +183,7 @@ static int msm8996_boot_probe(struct platform_device *pdev)
 		clks[i].hw.init = &init;
 		clks[i].base = base + i * 0x80000;
 		clks[i].cbf = cbf;
-		if (cbf) {
-			clks[i].aux = devm_clk_get(dev, "aux");
-			if (IS_ERR(clks[i].aux))
-				return PTR_ERR(clks[i].aux);
-		}
+		clks[i].aux = aux;
 		ret = devm_clk_hw_register(dev, &clks[i].hw);
 		if (ret)
 			return ret;

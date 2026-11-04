@@ -1,0 +1,91 @@
+MSM8996 CPU boot observer and GCC handoff audit — Stage 5
+=======================================================
+
+Scope and corrected observation
+-------------------------------
+The APCC/CBF provider remains read-only. It does not initialize or program a
+PLL, mux, ACD register or voltage. CPU_FREQ/CPU_IDLE are still disabled and
+maxcpus=2 is unchanged. The compiled CPU transaction engine is unchanged and
+has no bound hardware/power adapter.
+
+Sony 4.4 commit 0c295b15b6d0fb59a64e13b9e0ef2070818ef2a1:
+  drivers/clk/msm/clock-cpu-8996.c:132-133: sys_apcsaux_clk is the external
+    GCC GPLL0 main output divided by two.
+  :438-506: APCC LF mux selects 1=primary main and 3=auxiliary; HF selects
+    0=LF and 1=primary early. :1858-1864 redirects primary to ACD selector 2.
+  :509-527: alternate early output uses HF selector 3.
+  :974-1000: CBF selects 1=early, 2=main and 3=auxiliary.
+  :585-592: CPU disable selects auxiliary with mux value 0x3c.
+  :174-315, :926-970: primary/CBF lock is MODE[31], USER[0] enables main
+    and USER[3] early. The alternate PLL uses the same low output bits and
+    lock bit. drivers/clk/msm/clock-pll.c:810-833 checks MODE[2:0]=7 at
+    handoff. Fraction decoding follows this kernel's clk-alpha-pll.c.
+
+The old observer rejected APCC LF selector 3 as reserved. APCC now resolves
+the same native GPLL0 input already described for CBF, before registering
+either observed CPU clock. The final native DT names both XO and AUX and
+keeps the original Sony frequency-plan/fuse/corner JSON unchanged. Both
+observers divide the GCC boot-validated auxiliary rate by two; they do not
+assign an assumed CPU boot rate. The existing XO boot-leg observation is
+retained.
+
+Two complete selected-source samples must agree, with a mux reread after
+each sample. A selected PLL must show the original enabled mode, lock and
+the selected enabled output. Reserved LF selector 2, unsupported prescaler,
+invalid divider/MN and changing registers or auxiliary rates return zero.
+Unused PLLs are not consulted for XO/AUX. These bounded samples can reject
+inconsistent reads but cannot exclude a subsequent firmware/hardware change;
+they do not establish the domain guard required for a rate transaction.
+The auxiliary CCF rate can be cached: its repeated samples cannot detect a
+later GPLL0 register change or lock loss. AUX observation relies on GCC's
+boot validation and permanent fixed-root ownership. It is not a fresh raw
+GPLL0 measurement and cannot satisfy a future transaction readback callback.
+
+Ownership and remaining adapter dependencies
+--------------------------------------------
+The auxiliary handle is an observation handle, not a prepare/enable lease.
+The Dora GCC provider owns the shared fixed 600 MHz GPLL0 main root as a
+critical CCF clock and disables its rate/divider programming. APCC/CBF defer
+until that real provider exists. An observer failure can release its handles
+without releasing the GCC critical lifetime. GPLL4 remains an internal raw
+PLL with a regulated main output; its original final-v3 limit is 384 MHz at
+NOMINAL. No GCC, MMCC or CCF implementation was changed by this CPU fix.
+
+The read-only audit found no proved premature HIGH lease release in current
+GCC/CCF code: unowned active/raw parents, uncertain rate/parent ownership,
+late handoff and failed release retain their tracked vote. A registration
+failure after a voltage class is registered permanently orphans/quarantines
+the class; a later probe cannot automatically republish it. This retains
+power conservatively but is a liveness limit. Existing host checks do not
+execute the complete GCC probe/unwind with critical-parent failure.
+
+No complete CPU hardware adapter is supportable yet. Exact Sony mux RMW,
+barrier and 5 us delay alone do not make its use safe. A real implementation
+must also provide shared-rail ownership/exclusion, target-cluster wake and
+power-collapse exclusion, original Huayra/alternate/CBF PLL programming and
+lock/readback, target-cluster indirect ACD access, source-selected fuse plan,
+and acknowledged CPR/SPM/APM/Kryo two-lease state across every affected rail.
+The gated S8-S11 gang controller and HMSS dependencies remain unbound.
+Attaching the existing transaction engine to callbacks that merely report
+success would bypass these requirements. No such callbacks were added.
+
+Validation
+-----------
+  python3 scripts/dora/check-cpu-clocks.py --reference-commit --config OUT/.config
+  python3 scripts/dora/check-cpu-transactions.py
+  python3 scripts/dora/check-cpu-dt.py DTB --selftest
+  python3 scripts/dora/check-clk-vdd.py
+  python3 scripts/dora/check-clock-voltage.py --reference-commit
+
+The clock checker compiles and executes the actual observer MMIO read path
+and decoder, injecting mixed mux/PLL/auxiliary observations and testing
+primary/main/ACD/alternate/CBF sources, enabled/locked/output conditions and
+fraction errors. The actual probe executes with deferred/failed AUX lookup
+before any allocation or clock/provider registration, then successful APCC
+and CBF publication; the performance MMIO bank at +0x80000 is exercised.
+It independently parses the original Sony mux/PLL contract and rejects an
+altered auxiliary selector. The DT check validates XO/GPLL0
+phandles for both native providers and rejects missing/wrong dependencies.
+All four Dora DTBs and clk-cpu-8996.o were rebuilt with tone_dora_defconfig
+in /workspace/work/stage5-cpu-observer-out. These are software checks, not
+phone runtime evidence, power measurement or a BOOT TEST READY claim.

@@ -10,8 +10,9 @@
  */
 
 &kryocc {
-	clocks = <&xo_board>;
-	clock-names = "xo";
+	/* Sony sys_apcsaux_clk is GPLL0 main output divided by two. */
+	clocks = <&xo_board>, <&gcc GPLL0>;
+	clock-names = "xo", "aux";
 	qcom,pwrcl-speedbin0-v0 =
 		<0 0>,
 		<307200000 1>,

@@ -65,8 +65,16 @@ def validate(nodes):
                 raise ValueError("Sony CPU data changed: " + path + ":" + key)
     apcc_path = "/soc/clock-controller@6400000"
     apcc = nodes[apcc_path]["props"]
-    if apcc.get("clock-names") != b"xo\0":
-        raise ValueError("missing APCC reference clock")
+    def observer_inputs(props):
+        # Native adaptation: XO plus the same measured GPLL0 main source
+        # used by Sony sys_apcsaux_clk_gcc; the observer applies /2 itself.
+        values = cells(props.get("clocks", b""))
+        if (props.get("clock-names") != b"xo\0aux\0" or len(values) != 3 or
+                phandles.get(values[0]) != "/clocks/xo_board" or
+                phandles.get(values[1]) != "/soc/clock-controller@300000" or
+                values[2] != 1):  # Native GPLL0, not raw GPLL0_EARLY.
+            raise ValueError("incorrect APCC/CBF XO or GPLL0 auxiliary source")
+    observer_inputs(apcc)
     for key, expected in GOLDEN["frequency_plans"].items():
         if cells(apcc.get(key, b"")) != tuple(expected):
             raise ValueError("final Sony bin plan mismatch: " + key)
@@ -77,6 +85,7 @@ def validate(nodes):
     cbf = nodes["/soc/clock-controller@9a11000"]["props"]
     if cbf.get("compatible") != b"qcom,msm8996-cbf\0" or cells(cbf.get("reg", b"")) != (0x9a11000, 0x10000):
         raise ValueError("incorrect CBF register topology")
+    observer_inputs(cbf)
     bootargs = nodes["/chosen"]["props"].get("bootargs", b"").rstrip(b"\0").split()
     if [arg for arg in bootargs if arg.startswith(b"maxcpus=")] != [b"maxcpus=2"]:
         raise ValueError("two-CPU diagnostic limit was removed")
@@ -94,6 +103,10 @@ def selftest(nodes):
         ("/soc/cpr3-ctrl@99e8000", "status", b"okay\0"),
         ("/soc/cpr3-ctrl@99e8000", "vdd-supply", struct.pack(">I", 0xffffffff)),
         ("/soc/clock-controller@6400000", "qcom,pwrcl-speedbin1-v0", b"\0" * 8),
+        ("/soc/clock-controller@6400000", "clock-names", b"xo\0"),
+        ("/soc/clock-controller@6400000", "clocks", struct.pack(">III", 0, 0, 0)),
+        ("/soc/clock-controller@9a11000", "clock-names", b"xo\0"),
+        ("/soc/clock-controller@9a11000", "clocks", struct.pack(">III", 0, 0, 0)),
         ("/chosen", "bootargs", b"\0"),
         ("/chosen", "bootargs", b"maxcpus=2 maxcpus=4\0"),
         ("/chosen", "bootargs", b"maxcpus=20\0"),

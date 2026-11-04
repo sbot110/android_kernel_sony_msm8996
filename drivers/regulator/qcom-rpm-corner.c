@@ -672,7 +672,7 @@ static int rpm_corner_resume(struct device *dev)
 }
 
 static const struct dev_pm_ops rpm_corner_pm_ops = {
-	SET_SYSTEM_SLEEP_PM_OPS(rpm_corner_suspend, rpm_corner_resume)
+	SET_LATE_SYSTEM_SLEEP_PM_OPS(rpm_corner_suspend, rpm_corner_resume)
 };
 
 static const struct of_device_id rpm_corner_match[] = {

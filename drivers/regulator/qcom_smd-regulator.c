@@ -910,7 +910,7 @@ static int __maybe_unused rpm_reg_resume(struct device *dev)
 }
 
 static const struct dev_pm_ops rpm_reg_pm_ops = {
-	SET_SYSTEM_SLEEP_PM_OPS(rpm_reg_suspend, rpm_reg_resume)
+	SET_LATE_SYSTEM_SLEEP_PM_OPS(rpm_reg_suspend, rpm_reg_resume)
 };
 
 static struct platform_driver rpm_reg_driver = {

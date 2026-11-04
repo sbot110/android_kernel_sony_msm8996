@@ -717,6 +717,15 @@ config REGULATOR_QCOM_RPM_CORNER
 	  active/sleep aggregation, acknowledged transport and failure recovery.
 	  These typed corner resources are not physical microvolt regulators.
 
+config REGULATOR_QCOM_RPM_PHYSICAL
+	bool "Qualcomm MSM8996 acknowledged physical RPM votes"
+	depends on OF && ARCH_QCOM && QCOM_SMD_RPM=y
+	help
+	  Opt selected PM8994 rails into explicit ACTIVE/SLEEP uv/ma/swen
+	  transactions with last-ACK protocol replay and sticky uncertainty.
+	  This built-in frontend preserves ownership through provider retirement;
+	  an RPM ACK is not a measurement of the PMIC output voltage.
+
 config REGULATOR_QCOM_SMD_RPM
 	tristate "Qualcomm SMD based RPM regulator driver"
 	depends on QCOM_SMD_RPM

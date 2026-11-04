@@ -1,0 +1,91 @@
+Qualcomm PM8994 acknowledged physical ACTIVE/SLEEP requests
+
+This optional mode extends children of the existing qcom,rpm-pm8994-regulators
+bank. Existing child nodes, consumer supply phandles and PMIC voltage
+descriptors are retained. It currently supports S4 and L12/L13/L20/L21
+only, using their native smpa/ldoa resource type and numeric hardware ID.
+
+Required child properties:
+ - qcom,active-sleep-votes: select the physical request backend.
+ - qcom,rpm-managed-input: explicitly retain the final Sony contract in which
+   RPM receives each physical rail request without a Linux Vin dependency.
+ - qcom,set: must be <3>, selecting both ACTIVE and SLEEP requests.
+ - regulator-min-microvolt, regulator-max-microvolt: physical microvolt
+   constraints; values must intersect the native PM8994 descriptor's ranges.
+
+The bank must provide its qcom,rpm transport phandle. The transport and tuple
+claim must be available before the regulator is published. Duplicate providers
+for the same transport endpoint/type/id are rejected.
+
+The final Sony 4.4 rpm-smd-regulator.c at commit
+0c295b15b6d0fb59a64e13b9e0ef2070818ef2a1 sets a Linux parent only
+when the leaf has parent-supply; none of these five final nodes has one, and
+their resource ancestors supply no input handle. The resource probe creates
+SMD handles only. L12's proxy-supply is a self-consumer, not an electrical input.
+qcom,rpm-managed-input therefore leaves the physical descriptor's supply_name
+unset. It deliberately does not import the different upstream native bank
+graph (including its S5 2.15V edge for 2.95V L20/L21), instantiate a dummy input,
+or assume an alternate physical parent. Parent metadata for legacy rails is
+unaffected. Explicit parent-supply/vin-supply on an opted-in leaf is rejected.
+
+No registration-time request is sent. The native bank activates its physical
+children together only after every child registered successfully. Until then,
+consumer callbacks defer; partial bank-probe cleanup cannot send requests.
+The typed qcom_rpm_physical_check_ready() API checks publication, suspend and
+quarantine state without sending requests or requiring a known baseline. It
+returns -EPROBE_DEFER until bank activation, permitting consumers to retry
+before retaining handles or changing voltage/load requests. Success establishes
+only that the protocol can accept an explicit bootstrap request.
+Provider regulator-boot-on and regulator-always-on are rejected in this mode,
+as are logical corn/vfc selection
+and automatic proxy-consumer properties. Consumers retain their independent
+always-on policy and explicitly acquire complete voltage/load/enable requests.
+For L12, its boot clock consumer retains the Sony 1.8V/10mA bootstrap until clock
+ownership is established; this is not a regulator-always-on declaration.
+
+The regulator core aggregates consumer voltage, current load and enable votes.
+The backend sends literal uv (microvolts), ma (aggregated microamps divided by
+1000, truncated and saturated at 8191), and swen (0/1) in both sets. A disabled
+voltage/load request is cached. First enable requires both voltage and load to
+have been explicitly requested. No unknown firmware SLEEP vote is replaced with
+an assumed zero baseline.
+
+SMD ACK means that RPM processed a request, not that an output voltage was
+measured. A forced typed sync requires fresh BOTH ACKs, even after regulator
+core cache hits. Sync first forces the current core voltage/load aggregate
+through its real callbacks, including loads still cached after failed calls;
+it then requires fresh BOTH ACKs. An uncertain write quarantines the provider.
+Rollback may only replay an earlier fully acknowledged BOTH baseline and retains the original
+failure. Recovery is a separate explicit API operation; a failed initial write
+has no recoverable baseline. The backend sends no physical-tuple release
+requests on removal and retains a tuple tombstone after any write attempt, so
+reprobe cannot erase ownership or uncertainty.
+
+Bank suspend and resume replay the owned BOTH ACK baseline and preserve future
+voltage/load requests cached while disabled. Untouched resources send nothing.
+Failed resume keeps ordinary callbacks blocked; explicit known-baseline
+recovery can replay that baseline while suspended, after which successful
+resume is still required. Neither PM callbacks nor normal sync recover an
+unknown initial transaction.
+
+All mutating callbacks share the bank-to-resource lock order with PM and
+removal, so a concurrent change cannot enter between the bank's ACK pass and
+its suspend freeze. Core aggregate replay runs outside the bank lock to retain
+the regulator-core-to-bank lock order.
+
+Example child of an existing PM8994 bank:
+
+  l12 {
+    regulator-min-microvolt = <1800000>;
+    regulator-max-microvolt = <1800000>;
+    regulator-allow-set-load;
+    qcom,active-sleep-votes;
+    qcom,rpm-managed-input;
+    qcom,set = <3>;
+  };
+
+No additional physical settling or ramp time is inferred from these requests.
+Electrical validation and all independently gated hardware activation remain
+separate from this binding. The source-derived RPM input delegation is a
+software request contract; it does not establish measured input voltage,
+physical wiring or successful hardware settling.

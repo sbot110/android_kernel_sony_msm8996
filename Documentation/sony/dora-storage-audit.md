@@ -1,6 +1,6 @@
 # Dora: аудит внутреннего накопителя, eMMC и UFS
 
-Обновлено: 2026-11-03. Начальный HEAD этапа:
+Обновлено: 2026-11-04. Начальный HEAD предыдущего этапа:
 `8d7ab8a3baeb73cfaea264f3f7758e32cffce097`.
 Рабочий аппаратный эталон Sony 4.4:
 `0c295b15b6d0fb59a64e13b9e0ef2070818ef2a1`.
@@ -92,9 +92,11 @@ Legacy `sdhc-msm-crypto` phandle не скопирован: текущий CQHCI
 Physical power_error и bus quarantine сохраняют первый errno. После любой
 неопределённой physical regulator transaction повторные power/clock enables
 блокируются; best-effort shutdown не снимает latch. Generic cached rollback
-не объявляется восстановлением реального PMIC. Для recovery нужен настоящий
-provider-specific UV/SWEN/load replay/ACK и SLEEP contract. Такая возможность
-не имитируется, gates сохраняются.
+не объявляется восстановлением реального PMIC. В этапе 5 добавлен настоящий
+provider-specific UV/SWEN/load replay/ACK для BOTH sets. Explicit recovery
+разрешён только при наличии ранее подтверждённого полного baseline; неизвестная
+первая транзакция не восстанавливается предположением. Наличие этого API не
+снимает host-local quarantine автоматически и не доказывает напряжение на PMIC.
 SDHC1/2 пока safety-gated до проверки настоящего GCC CX coupling, включая
 родительский GPLL4, подготовку clocks, ACK и ошибки voltage transactions.
 UFS остаётся отключённым независимо от этого. Не включается DVFS, четыре
@@ -115,3 +117,40 @@ hybrid tray — MicroSD и UIM2/DSDS, смена карты, suspend/wakeup и �
 Нет нового boot.img, команд прошивки, операций с userdata/modem/TA/persist
 или форматирования. Статусы сборки, boot readiness и runtime подтверждаются
 раздельно в итоговом отчёте этого этапа.
+
+## Этап 5: физические RPM зависимости
+
+Начальный HEAD этапа 5:
+`03a3c224b84079db06a424e387e220b6eafc6cfa`.
+Во всех четырёх итоговых DTB пять ресурсов S4/L12/L13/L20/L21 используют
+согласованный backend с `qcom,active-sleep-votes`, `qcom,set = <3>` и
+`qcom,rpm-managed-input`. Сохраняются существующие phandles и реальные
+PM8994 voltage descriptors. Оба SDHC требуют
+`sony,require-rpm-physical-acks`; compiled-DT проверки отклоняют отсутствие
+этого флага, физического opt-in, load permission или BOTH request contract.
+
+Устранена ошибочная входная связь общего upstream Tone DT: L20/L21 с
+выходом 2,95 В ссылались на S5, ограниченный 2,15 В. Итоговые Sony 4.4 DTB
+всех четырёх вариантов не задают электрических `*-supply`/`parent-supply`
+у этих пяти RPM ресурсов или их предков. Исходный Sony driver устанавливает
+Linux parent только при явном `parent-supply`; здесь такого свойства нет.
+Поэтому backend сохраняет делегирование входных зависимостей firmware RPM,
+а не назначает другой предполагаемый источник и не создаёт dummy VIN.
+Остальные legacy native rails сохраняют существующие input metadata.
+
+В исходных Sony данных S4 не является provider `regulator-always-on`;
+этот унаследованный upstream флаг удалён. Retention eMMC IO остаётся
+политикой исходного SDHC1 consumer (`qcom,vdd-io-always-on`), с отдельными
+voltage/load/enable requests. Static system loads, дублирующие client loads,
+не возвращены. L12 boot proxy 10 мА является временным clock consumer,
+а не постоянным provider load или разрешением полагаться на bootloader.
+
+Точные source hashes, voltage constraints, sets и отсутствие Linux input
+сохранены в `dora-rpm-physical-dt.json`; `check-rpm-physical-dt.py`
+сверяет данные с четырьмя reference DTB и исходным Sony driver при передаче
+`--reference-dir` и `--reference-commit`. Эти проверки не измеряют voltage,
+не подтверждают RPM firmware input handling и не выдают успешную компиляцию
+за обнаружение mmcblk0. Основные SDHC1/SDHC2 остаются `disabled`; UFS host
+и PHY также остаются отключёнными. Отдельный активный diagnostic DT требует
+дополнительной квалификации полного power/clock handoff и не создаётся
+только на основании наличия новых providers.

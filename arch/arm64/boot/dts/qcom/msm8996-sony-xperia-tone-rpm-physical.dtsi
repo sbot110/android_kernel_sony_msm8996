@@ -1,0 +1,63 @@
+// SPDX-License-Identifier: GPL-2.0-only
+/*
+ * Final Sony dora RPM physical-rail contracts from
+ * 0c295b15b6d0fb59a64e13b9e0ef2070818ef2a1 (all four SoC/PMIC variants).
+ * Copyright (c) 2014-2017, The Linux Foundation. All rights reserved.
+ * Copyright (C) 2014-2016 Sony Mobile Communications Inc.
+ *
+ * These five resources delegate input dependencies to RPM, as the final
+ * Sony DT and regulator driver do. No Linux Vin or measured voltage is
+ * inferred. Consumers must request voltage, load and enable explicitly;
+ * registration does not alter either RPM set. Hardware gates stay separate.
+ */
+
+&{/rpm-glink/rpm_requests/pm8994-regulators} {
+	qcom,rpm = <&{/rpm-glink/rpm_requests}>;
+	/* These inherited upstream input edges are unused by the opted-in
+	 * resources. In particular S5's 2.15 V is not an L20/L21 2.95 V input.
+	 * Other native rails retain their existing dependency metadata.
+	 */
+	/delete-property/ vdd_s4-supply;
+	/delete-property/ vdd_l20_l21-supply;
+};
+
+&pm8994_s4 {
+	/delete-property/ regulator-always-on;
+	regulator-name = "pm8994_s4";
+	regulator-allow-set-load;
+	qcom,active-sleep-votes;
+	qcom,rpm-managed-input;
+	qcom,set = <3>;
+};
+
+&pm8994_l12 {
+	regulator-name = "pm8994_l12";
+	regulator-allow-set-load;
+	qcom,active-sleep-votes;
+	qcom,rpm-managed-input;
+	qcom,set = <3>;
+};
+
+&pm8994_l13 {
+	regulator-name = "pm8994_l13";
+	regulator-allow-set-load;
+	qcom,active-sleep-votes;
+	qcom,rpm-managed-input;
+	qcom,set = <3>;
+};
+
+&pm8994_l20 {
+	regulator-name = "pm8994_l20";
+	regulator-allow-set-load;
+	qcom,active-sleep-votes;
+	qcom,rpm-managed-input;
+	qcom,set = <3>;
+};
+
+&pm8994_l21 {
+	regulator-name = "pm8994_l21";
+	regulator-allow-set-load;
+	qcom,active-sleep-votes;
+	qcom,rpm-managed-input;
+	qcom,set = <3>;
+};

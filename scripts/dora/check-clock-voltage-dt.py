@@ -22,6 +22,7 @@ def load(name, filename):
 
 POWER = load("voltage_power", "check-power-dt.py")
 CONFIG = load("voltage_config", "check-config.py")
+PHYSICAL = load("voltage_physical", "check-rpm-physical-dt.py")
 RPM = "/rpm-glink/rpm_requests"
 CX = RPM + "/rpm-regulator-smpa1"
 MX = RPM + "/rpm-regulator-smpa2"
@@ -114,6 +115,7 @@ def verify_corner_endpoint(nodes, path):
 
 
 def validate(nodes, config, mode):
+    PHYSICAL.validate(nodes, config)
     if mode not in ("gated", "active"):
         raise ValueError("explicit gated/active policy is required")
     required = """QCOM_SMD_RPM RPMSG_QCOM_GLINK_RPM QCOM_APCS_IPC

@@ -24,6 +24,7 @@
 &soc {
 	sdhc1: sdhci@7464900 {
 		compatible = "qcom,sdhci-msm";
+		sony,require-rpm-physical-acks;
 		reg = <0x7464900 0x500 0x7464000 0x800 0x7464e00 0x19c>;
 		reg-names = "hc_mem", "core_mem", "cmdq_mem";
 		interrupts = <0x0 0x8d 0x0 0x0 0x86 0x0>;
@@ -76,6 +77,7 @@
 };
 
 &sdhc2 {
+	sony,require-rpm-physical-acks;
 	/delete-property/ vmmc-supply;
 	/delete-property/ vqmmc-supply;
 	compatible = "qcom,sdhci-msm";

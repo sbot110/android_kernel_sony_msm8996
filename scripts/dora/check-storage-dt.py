@@ -14,6 +14,7 @@ import struct
 
 ROOT = Path(__file__).resolve().parents[2]
 parse_fdt = runpy.run_path(str(ROOT/'scripts/dora/check-power-dt.py'))['parse_fdt']
+physical_validate = runpy.run_path(str(ROOT/'scripts/dora/check-rpm-physical-dt.py'))['validate']
 SD1 = '/soc/sdhci@7464900'
 SD2 = '/soc/sdhci@74a4900'
 
@@ -33,6 +34,7 @@ def compatibles(node):
 
 
 def validate(nodes, config=None):
+    physical_validate(nodes)
     expected = json.loads((ROOT/'Documentation/sony/dora-storage-dt.json').read_text())
     handles = {cells(n['props']['phandle'])[0]:n for n in nodes.values() if 'phandle'in n['props']}
     header = (ROOT/'include/dt-bindings/clock/qcom,gcc-msm8996.h').read_text()
@@ -41,6 +43,8 @@ def validate(nodes, config=None):
     bus = next(n for n in nodes.values() if b'qcom,msm-bus-device'in compatibles(n))
     for path, gold in expected['controllers'].items():
         node=nodes[path];props=node['props']
+        if props.get('sony,require-rpm-physical-acks') != b'':
+            raise ValueError('MMC must require typed physical BOTH ACKs before clock use')
         if node['name'] != path.rsplit('/',1)[1] or props.get('compatible')!=b'qcom,sdhci-msm\0':
             raise ValueError('SDHCI node/driver name mismatch')
         if props.get('status')!=b'disabled\0':
@@ -97,7 +101,8 @@ def validate(nodes, config=None):
     if phy['props'].get('status')!=b'disabled\0':raise ValueError('Dora unused UFS PHY enabled')
     if config:
         cfg=config.read_text()
-        for name in ['MMC','MMC_BLOCK','MMC_SDHCI','MMC_SDHCI_PLTFM','MMC_SDHCI_MSM','EFI_PARTITION']:
+        for name in ['MMC','MMC_BLOCK','MMC_SDHCI','MMC_SDHCI_PLTFM','MMC_SDHCI_MSM','EFI_PARTITION',
+                     'REGULATOR_QCOM_SMD_RPM','REGULATOR_QCOM_RPM_PHYSICAL','QCOM_SMD_RPM']:
             if not re.search(r'^CONFIG_'+name+r'=y$',cfg,re.M):raise ValueError('missing storage implementation: '+name)
         if not re.search(r'^CONFIG_MMC_BLOCK_MINORS=32$',cfg,re.M):raise ValueError('original MMC minors compatibility not preserved')
     return expected
@@ -105,6 +110,8 @@ def validate(nodes, config=None):
 
 def selftest(nodes,config):
     cases=[(SD1,'compatible',b'qcom,sdhci-msm-v4\0'),(SD1,'qcom,bus-width',struct.pack('>I',4)),
+           (SD1,'sony,require-rpm-physical-acks',None),
+           (SD2,'sony,require-rpm-physical-acks',None),
            (SD1,'clock-names',b'iface\0core\0'),(SD1,'qcom,clk-rates',struct.pack('>I',400000000)),
            (SD2,'uim2-gpios',b'\0'*12),('/aliases','mmc0',(SD2+'\0').encode()),
            ('/soc/ufshc@624000','status',b'okay\0'),(SD1,'status',b'okay\0'),
@@ -128,7 +135,7 @@ def main():
     except (ValueError,KeyError,StopIteration,IndexError,struct.error,OSError)as e:
         print('FAIL:',e);return 1
     print('PASS: Sony SDHC1 eMMC/SDHC2 hybrid SD-UIM2 data, native GCC/rails/pads, aliases and Android system/oem paths')
-    if a.selftest:print('PASS: eleven bad-controller/clock/GPIO/path/load/activation fixtures rejected')
+    if a.selftest:print('PASS: thirteen bad-controller/clock/GPIO/path/load/ACK/activation fixtures rejected')
     print('Controllers safety-gated pending physical rail replay/ownership; GPT partitions/HS200/HS400/suspend require device tests.')
     return 0
 

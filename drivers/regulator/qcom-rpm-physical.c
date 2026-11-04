@@ -459,18 +459,20 @@ static int rpm_physical_bank_pm(struct device *bank, bool resume)
 			memcpy(baseline, physical->baseline, sizeof(baseline));
 			error = rpm_physical_transaction(physical, baseline);
 		}
-		if (resume && !error)
-			physical->suspended = false;
 		if (!ret)
 			ret = error;
 		mutex_unlock(&physical->lock);
 	}
-	if (!resume && !ret)
+	/* Commit the bank's software state only after every owned baseline ACKs.
+	 * A later resume error must leave earlier resources and untouched siblings
+	 * frozen, so no ordinary callback can enter a partially resumed bank.
+	 */
+	if (!ret)
 		list_for_each_entry(physical, &rpm_physical_banks, bank_list) {
 			if (physical->bank != bank)
 				continue;
 			mutex_lock(&physical->lock);
-			physical->suspended = true;
+			physical->suspended = !resume;
 			mutex_unlock(&physical->lock);
 		}
 	mutex_unlock(&rpm_physical_bank_lock);

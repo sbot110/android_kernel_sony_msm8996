@@ -65,8 +65,10 @@ Bank suspend and resume replay the owned BOTH ACK baseline and preserve future
 voltage/load requests cached while disabled. Untouched resources send nothing.
 Failed resume keeps ordinary callbacks blocked; explicit known-baseline
 recovery can replay that baseline while suspended, after which successful
-resume is still required. Neither PM callbacks nor normal sync recover an
-unknown initial transaction.
+resume is still required. Suspend and resume commit the software state of all
+bank resources together only after every owned baseline receives BOTH ACKs;
+a failed resume leaves earlier resources and untouched siblings suspended.
+Neither PM callbacks nor normal sync recover an unknown initial transaction.
 
 All mutating callbacks share the bank-to-resource lock order with PM and
 removal, so a concurrent change cannot enter between the bank's ACK pass and

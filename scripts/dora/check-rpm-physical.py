@@ -298,18 +298,27 @@ static void bank_release(struct device *dev)
     }
 }
 struct host_claim { struct qcom_smd_rpm *rpm; u32 type, id; const void *owner; bool tombstone; };
-static struct host_claim claim;
+static struct host_claim claim, sibling_claims[2][32];
 static unsigned claims, claim_releases;
+static struct host_claim *host_claim_slot(struct qcom_smd_rpm *rpm, u32 type, u32 id)
+{
+    assert(rpm == &endpoint && id < 32);
+    assert(type == QCOM_SMD_RPM_LDOA || type == QCOM_SMD_RPM_SMPA);
+    if (type == QCOM_SMD_RPM_LDOA && id == 13) return &claim;
+    return &sibling_claims[type == QCOM_SMD_RPM_SMPA][id];
+}
 static int qcom_rpm_smd_claim(struct qcom_smd_rpm *rpm, u32 type, u32 id, const void *owner)
 {
-    if (claim.owner || claim.tombstone) return -EBUSY;
-    claim = (struct host_claim){ rpm, type, id, owner, false }; claims++; return 0;
+    struct host_claim *slot = host_claim_slot(rpm, type, id);
+    if (slot->owner || slot->tombstone) return -EBUSY;
+    *slot = (struct host_claim){ rpm, type, id, owner, false }; claims++; return 0;
 }
 static void qcom_rpm_smd_release(struct qcom_smd_rpm *rpm, u32 type, u32 id,
                                  const void *owner, bool preserve)
 {
-    assert(claim.owner == owner && claim.rpm == rpm && claim.type == type && claim.id == id);
-    claim.owner = NULL; claim.tombstone = preserve; claim_releases++;
+    struct host_claim *slot = host_claim_slot(rpm, type, id);
+    assert(slot->owner == owner && slot->rpm == rpm && slot->type == type && slot->id == id);
+    slot->owner = NULL; slot->tombstone = preserve; claim_releases++;
 }
 static bool replay_core;
 static int core_min_uV, core_max_uV, core_loads[2], core_system_load;
@@ -354,8 +363,8 @@ static int regulator_sync_load(struct regulator *reg)
 }
 static unsigned sends, failures[16384];
 static bool failed_write_applied;
-static u32 physical[2][3], sent_values[16384][3];
-static unsigned sent_states[16384];
+static u32 physical[2][3], sibling_physical[32][2][3], sent_values[16384][3];
+static unsigned sent_states[16384], sent_ids[16384];
 static pthread_mutex_t transport_mutex = PTHREAD_MUTEX_INITIALIZER;
 static pthread_cond_t transport_condition = PTHREAD_COND_INITIALIZER;
 static bool block_transport, transport_blocked, release_transport;
@@ -364,7 +373,11 @@ static int qcom_rpm_smd_write(struct qcom_smd_rpm *rpm, int state,
 {
     struct kvp { u32 key, length, value; } *packet = data;
     unsigned i, mask = 0, call = sends++;
-    assert(rpm == &endpoint && state <= 1 && type == QCOM_SMD_RPM_LDOA && id == 13);
+    u32 (*rail)[3];
+    struct host_claim *slot = host_claim_slot(rpm, type, id);
+    assert(rpm == &endpoint && state <= 1 && type == QCOM_SMD_RPM_LDOA);
+    assert(slot->owner && slot->rpm == rpm && slot->type == type && slot->id == id);
+    rail = id == 13 ? physical : sibling_physical[id];
     assert(size == 36 && call < ARRAY_SIZE(failures));
     for (i = 0; i < 3; i++) {
         unsigned key;
@@ -380,9 +393,9 @@ static int qcom_rpm_smd_write(struct qcom_smd_rpm *rpm, int state,
         if (key == 1) assert(packet[i].value <= 8191);
         if (key == 2) assert(packet[i].value <= 1);
         if (!failures[call] || failed_write_applied)
-            physical[state][key] = packet[i].value;
+            rail[state][key] = packet[i].value;
     }
-    assert(mask == 7); sent_states[call] = state;
+    assert(mask == 7); sent_states[call] = state; sent_ids[call] = id;
     pthread_mutex_lock(&transport_mutex);
     if (block_transport) {
         transport_blocked = true; pthread_cond_broadcast(&transport_condition);
@@ -403,6 +416,9 @@ static char supply_name[] = "vdd_l13_l19_l23_l24";
 static void setup(void)
 {
     assert(!live_allocations && !claim.owner);
+    for (unsigned t = 0; t < ARRAY_SIZE(sibling_claims); t++)
+        for (unsigned id = 0; id < ARRAY_SIZE(sibling_claims[t]); id++)
+            assert(!sibling_claims[t][id].owner);
     memset(&bank, 0, sizeof(bank));
     node = (struct device_node){ .optin = true, .managed_input = true,
                                .sets = 3, .min_uV = 1800000,
@@ -412,7 +428,10 @@ static void setup(void)
     native_template.linear_ranges = native_ranges;
     expected_bank = &bank; expected_node = &node;
     memset(&claim, 0, sizeof(claim)); memset(failures, 0, sizeof(failures));
+    memset(sibling_claims, 0, sizeof(sibling_claims));
     memset(sent_values, 0, sizeof(sent_values)); memset(physical, 0xa5, sizeof(physical));
+    memset(sibling_physical, 0xa5, sizeof(sibling_physical));
+    memset(sent_ids, 0, sizeof(sent_ids));
     sends = 0; failed_write_applied = false; fail_allocation = 0;
     fail_devres = fail_register = fail_action = fail_init = raced_consumer = false; published = NULL;
     memcpy(supply_name, "vdd_l13_l19_l23_l24", sizeof(supply_name));
@@ -476,7 +495,7 @@ static void bootstrap(void)
     assert(reg.rdev->desc->ops->is_enabled(reg.rdev) == 1);
     for (unsigned s = 0; s < 2; s++) {
         assert(physical[s][0] == 1800000 && physical[s][1] == 10 && physical[s][2] == 1);
-        assert(sent_states[s] == s);
+        assert(sent_states[s] == s && sent_ids[s] == 13);
     }
 }
 static void test_voltage_and_load(void)
@@ -660,6 +679,105 @@ static void test_pm(void)
     assert(qcom_rpm_physical_sync(&reg, true) == 0);
     cleanup();
 }
+static void assert_rail_frozen(struct regulator *rail)
+{
+    const struct regulator_ops *ops = rail->rdev->desc->ops;
+    unsigned before = sends;
+    assert(qcom_rpm_physical_check_ready(rail) == -EBUSY);
+    assert(ops->is_enabled(rail->rdev) == -EBUSY);
+    assert(ops->get_voltage(rail->rdev) == -EBUSY);
+    assert(ops->set_voltage(rail->rdev, 1800000, 1800000, NULL) == -EBUSY);
+    assert(ops->set_load(rail->rdev, 33000) == -EBUSY);
+    assert(ops->enable(rail->rdev) == -EBUSY);
+    assert(ops->disable(rail->rdev) == -EBUSY);
+    assert(qcom_rpm_physical_sync(rail, false) == -EBUSY);
+    assert(qcom_rpm_physical_sync(rail, true) == -EBUSY);
+    assert(sends == before);
+}
+static void assert_pm_pair(unsigned offset, unsigned id, unsigned load)
+{
+    assert(offset + 1 < sends);
+    for (unsigned state = 0; state < 2; state++) {
+        unsigned call = offset + state;
+        assert(sent_ids[call] == id && sent_states[call] == state);
+        assert(sent_values[call][0] == 1800000);
+        assert(sent_values[call][1] == load && sent_values[call][2] == 1);
+    }
+}
+static void assert_l20_untouched(void)
+{
+    for (unsigned call = 0; call < sends; call++) assert(sent_ids[call] != 20);
+    for (unsigned state = 0; state < 2; state++)
+        for (unsigned key = 0; key < 3; key++)
+            assert(sibling_physical[20][state][key] == 0xa5a5a5a5U);
+}
+static void test_bank_pm_atomic_resume(void)
+{
+    /* Registration order matters: L13 ACKs before L12 fails, with an unowned
+     * L20 sibling after both. Every child shares the real production bank list. */
+    struct device_node siblings[2];
+    struct regulator rails[3] = {0};
+    const unsigned ids[] = {13, 12, 20};
+    const char *names[] = {"l13", "l12", "l20"};
+    unsigned before;
+
+    setup(); assert(create_deferred() == 0); rails[0].rdev = reg.rdev;
+    for (unsigned i = 1; i < ARRAY_SIZE(rails); i++) {
+        siblings[i - 1] = node; siblings[i - 1].refs = 0;
+        siblings[i - 1].name = names[i]; expected_node = &siblings[i - 1];
+        assert(qcom_rpm_physical_register(&bank, expected_node, &endpoint,
+            QCOM_SMD_RPM_LDOA, ids[i], &native_template, supply_name) == 0);
+        rails[i].rdev = published;
+    }
+    for (unsigned i = 0; i < ARRAY_SIZE(rails); i++)
+        assert(qcom_rpm_physical_check_ready(&rails[i]) == -EPROBE_DEFER);
+    assert(!sends && qcom_rpm_physical_activate(&bank) == 0);
+    for (unsigned i = 0; i < 2; i++) {
+        const struct regulator_ops *ops = rails[i].rdev->desc->ops;
+        assert(ops->set_voltage(rails[i].rdev, 1800000, 1800000, NULL) == 0);
+        assert(ops->set_load(rails[i].rdev, i ? 22000 : 10000) == 0);
+        assert(sends == i * 2); /* No vote until an explicit complete enable. */
+        assert(ops->enable(rails[i].rdev) == 0 && sends == (i + 1) * 2);
+        assert_pm_pair(i * 2, ids[i], i ? 22 : 10);
+    }
+    before = sends;
+    assert(qcom_rpm_physical_suspend(&bank) == 0 && sends == before + 4);
+    assert_pm_pair(before, 13, 10); assert_pm_pair(before + 2, 12, 22);
+    for (unsigned i = 0; i < ARRAY_SIZE(rails); i++) assert_rail_frozen(&rails[i]);
+    assert_l20_untouched();
+
+    before = sends; failures[before + 3] = ETIMEDOUT; failed_write_applied = true;
+    assert(qcom_rpm_physical_resume(&bank) == -ETIMEDOUT && sends == before + 6);
+    assert_pm_pair(before, 13, 10); /* This success must not unfreeze L13. */
+    assert_pm_pair(before + 2, 12, 22); assert_pm_pair(before + 4, 12, 22);
+    for (unsigned i = 0; i < ARRAY_SIZE(rails); i++) assert_rail_frozen(&rails[i]);
+    assert_l20_untouched();
+
+    before = sends;
+    assert(qcom_rpm_physical_recover(&rails[1]) == 0 && sends == before + 2);
+    assert_pm_pair(before, 12, 22);
+    for (unsigned i = 0; i < ARRAY_SIZE(rails); i++) assert_rail_frozen(&rails[i]);
+    before = sends;
+    assert(qcom_rpm_physical_recover(&rails[2]) == -ENODATA && sends == before);
+    assert(qcom_rpm_physical_resume(&bank) == 0 && sends == before + 4);
+    assert_pm_pair(before, 13, 10); assert_pm_pair(before + 2, 12, 22);
+    for (unsigned i = 0; i < ARRAY_SIZE(rails); i++)
+        assert(qcom_rpm_physical_check_ready(&rails[i]) == 0);
+    for (unsigned i = 0; i < 2; i++) {
+        before = sends;
+        assert(rails[i].rdev->desc->ops->set_load(rails[i].rdev, 33000) == 0);
+        assert(sends == before + 2); assert_pm_pair(before, ids[i], 33);
+    }
+    before = sends;
+    assert(rails[2].rdev->desc->ops->is_enabled(rails[2].rdev) == -EINVAL);
+    assert(rails[2].rdev->desc->ops->get_voltage(rails[2].rdev) == -ENODATA);
+    assert(rails[2].rdev->desc->ops->set_load(rails[2].rdev, 5000) == 0);
+    assert(sends == before); assert_l20_untouched();
+    cleanup();
+    assert(!siblings[0].refs && !siblings[1].refs);
+    assert(claim.tombstone && sibling_claims[0][12].tombstone);
+    assert(!sibling_claims[0][20].tombstone);
+}
 static int host_core_set_load(unsigned consumer, int load_uA)
 {
     /* Native core keeps this cache even when the provider callback fails. */
@@ -805,11 +923,12 @@ static void test_concurrency(void)
 int main(void)
 {
     test_voltage_and_load(); test_failures(); test_constructor_and_lifetime(); test_pm();
-    test_core_cache_replay(); test_pm_ack_freeze(); test_concurrency();
+    test_bank_pm_atomic_resume(); test_core_cache_replay(); test_pm_ack_freeze(); test_concurrency();
     puts("PASS: production physical UV/MA/SWEN BOTH transactions, literal values and voltage selectors");
     puts("PASS: partial/lost ACK rollback, explicit recovery, sticky unknown baseline and core aggregate loads");
     puts("PASS: publication allocation failure, final-rdev lifetime, competing consumers and pending-write retirement");
     puts("PASS: bank activation, PM baseline replay, suspended callbacks and explicit failed-resume recovery");
+    puts("PASS: multi-resource bank resume commits only after all ACKs, including untouched siblings");
     puts("PASS: failed core-cache replay and mutation blocked between PM ACK and freeze");
     return 0;
 }
@@ -879,6 +998,13 @@ def main():
         assert no_bank_lock != change
         run(source.replace(change, no_bank_lock, 1), flags, expect_failure=True)
         print('PASS: rejected PM freeze locking mutation')
+        bank_pm = function(source, 'rpm_physical_bank_pm')
+        first_error = '\t\tif (!ret)\n\t\t\tret = error;'
+        early_unfreeze = bank_pm.replace(first_error,
+            '\t\tif (resume && !error)\n\t\t\tphysical->suspended = false;\n' + first_error, 1)
+        assert early_unfreeze != bank_pm
+        run(source.replace(bank_pm, early_unfreeze, 1), flags, expect_failure=True)
+        print('PASS: rejected per-resource resume unfreeze mutation')
     print('Host models only; RPM firmware, physical voltage and on-device power collapse remain unverified.')
 
 

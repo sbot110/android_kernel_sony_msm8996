@@ -103,6 +103,10 @@ static int rpm_corner_claim(struct rpm_corner_resource *resource)
 			ret = -EBUSY;
 			goto out;
 		}
+	ret = qcom_rpm_smd_claim(resource->rpm, resource->type, resource->id,
+				 resource);
+	if (ret)
+		goto out;
 	list_add_tail(&resource->registry, &rpm_corner_resources);
 	resource->claimed = true;
 out:
@@ -116,6 +120,8 @@ static void rpm_corner_unclaim(struct rpm_corner_resource *resource)
 	if (resource->claimed) {
 		list_del_init(&resource->registry);
 		resource->claimed = false;
+		qcom_rpm_smd_release(resource->rpm, resource->type, resource->id,
+				     resource, resource->owned || resource->quarantined);
 	}
 	mutex_unlock(&rpm_corner_registry_lock);
 }

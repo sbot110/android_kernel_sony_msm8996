@@ -19,6 +19,7 @@
 #include <linux/interrupt.h>
 #include <linux/slab.h>
 #include <linux/kref.h>
+#include <linux/list.h>
 #include <linux/rpmsg.h>
 #include <linux/soc/qcom/smd-rpm.h>
 #include <asm/unaligned.h>
@@ -76,6 +77,110 @@ static void qcom_smd_rpm_put_driver(void *data)
 	dev_set_drvdata(rpm->dev, NULL);
 	qcom_smd_rpm_put(rpm);
 }
+
+struct qcom_rpm_resource_claim {
+	struct list_head node;
+	struct qcom_smd_rpm *rpm;
+	struct device_node *endpoint;
+	const void *owner;
+	u32 type, id;
+	bool preserved;
+};
+
+static LIST_HEAD(qcom_rpm_resource_claims);
+static DEFINE_MUTEX(qcom_rpm_resource_lock);
+
+static bool qcom_rpm_same_endpoint(struct qcom_rpm_resource_claim *claim,
+				   struct qcom_smd_rpm *rpm)
+{
+	struct device_node *node = rpm->dev->of_node;
+
+	return claim->rpm == rpm || (claim->endpoint && node &&
+		!of_node_cmp(claim->endpoint->full_name, node->full_name));
+}
+
+int qcom_rpm_smd_claim(struct qcom_smd_rpm *rpm, u32 type, u32 id,
+		       const void *owner)
+{
+	struct qcom_rpm_resource_claim *claim, *new;
+	int ret = 0;
+
+	if (IS_ERR_OR_NULL(rpm) || !rpm->dev || !owner || !type)
+		return -EINVAL;
+	if (!READ_ONCE(rpm->online))
+		return -ENODEV;
+	new = kzalloc(sizeof(*new), GFP_KERNEL);
+	if (!new)
+		return -ENOMEM;
+	mutex_lock(&qcom_rpm_resource_lock);
+	if (!READ_ONCE(rpm->online)) {
+		ret = -ENODEV;
+		goto unlock;
+	}
+	list_for_each_entry(claim, &qcom_rpm_resource_claims, node) {
+		if (claim->type != type || claim->id != id ||
+		    !qcom_rpm_same_endpoint(claim, rpm))
+			continue;
+		ret = claim->preserved ? -ESHUTDOWN : -EBUSY;
+		goto unlock;
+	}
+	/* The held transport/device and OF references prevent address reuse.
+	 * Stable endpoint paths also reject a new transport generation taking
+	 * over a retained apps vote without a qualified firmware-reset contract.
+	 */
+	if (!try_module_get(THIS_MODULE)) {
+		ret = -ENODEV;
+		goto unlock;
+	}
+	kref_get(&rpm->refs);
+	new->rpm = rpm;
+	new->endpoint = of_node_get(rpm->dev->of_node);
+	new->owner = owner;
+	new->type = type;
+	new->id = id;
+	list_add_tail(&new->node, &qcom_rpm_resource_claims);
+	new = NULL;
+unlock:
+	mutex_unlock(&qcom_rpm_resource_lock);
+	kfree(new);
+	return ret;
+}
+EXPORT_SYMBOL_GPL(qcom_rpm_smd_claim);
+
+void qcom_rpm_smd_release(struct qcom_smd_rpm *rpm, u32 type, u32 id,
+			  const void *owner, bool preserve)
+{
+	struct qcom_rpm_resource_claim *claim, *drop = NULL;
+
+	if (!rpm || !owner)
+		return;
+	mutex_lock(&qcom_rpm_resource_lock);
+	list_for_each_entry(claim, &qcom_rpm_resource_claims, node) {
+		if (claim->rpm != rpm || claim->type != type ||
+		    claim->id != id || claim->owner != owner)
+			continue;
+		if (preserve) {
+			/* No wire write and no invented release of bootstrap state.
+			 * One tombstone per real tuple is deliberately retained until
+			 * a future provider-qualified reset can establish ownership.
+			 */
+			claim->owner = NULL;
+			claim->preserved = true;
+		} else {
+			list_del(&claim->node);
+			drop = claim;
+		}
+		break;
+	}
+	mutex_unlock(&qcom_rpm_resource_lock);
+	if (drop) {
+		of_node_put(drop->endpoint);
+		qcom_smd_rpm_put(drop->rpm);
+		kfree(drop);
+		module_put(THIS_MODULE);
+	}
+}
+EXPORT_SYMBOL_GPL(qcom_rpm_smd_release);
 
 static int qcom_smd_rpm_match_node(struct device *dev, void *data)
 {

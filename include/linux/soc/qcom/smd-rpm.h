@@ -2,9 +2,19 @@
 #ifndef __QCOM_SMD_RPM_H__
 #define __QCOM_SMD_RPM_H__
 
+#include <linux/types.h>
+
 struct device;
 struct qcom_smd_rpm;
 struct qcom_smd_rpm *qcom_smd_rpm_get(struct device *consumer);
+
+/* One apps-side writer per endpoint/type/id. Retiring an owned or uncertain
+ * vote preserves a bounded claim tombstone; reprobe is not a firmware reset.
+ */
+int qcom_rpm_smd_claim(struct qcom_smd_rpm *rpm, u32 type, u32 id,
+		       const void *owner);
+void qcom_rpm_smd_release(struct qcom_smd_rpm *rpm, u32 type, u32 id,
+			  const void *owner, bool preserve);
 
 #define QCOM_SMD_RPM_ACTIVE_STATE        0
 #define QCOM_SMD_RPM_SLEEP_STATE         1

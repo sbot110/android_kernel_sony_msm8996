@@ -78,11 +78,41 @@ static void *dev_get_drvdata(struct device *dev) { return dev->data; }
 static const struct regulator_ops rpm_corner_ops;
 struct qcom_smd_rpm { int unused; };
 static struct qcom_smd_rpm endpoint;
+/* This checker models the shared-registry boundary. Its real implementation,
+   refs, generation identity and concurrency run in check-rpm-ownership.py. */
+static struct { struct qcom_smd_rpm *rpm;u32 type,id;const void *owner;bool held,preserved; } claims[8];
+static unsigned preserved_claims,common_claims,common_releases;
+static int common_claim_error;
+static int qcom_rpm_smd_claim(struct qcom_smd_rpm *rpm,u32 type,u32 id,const void *owner)
+{
+    unsigned i;
+    assert(rpm && owner && type);
+    if(common_claim_error)return common_claim_error;
+    for(i=0;i<8;i++)if(claims[i].held && claims[i].rpm==rpm && claims[i].type==type && claims[i].id==id)
+        return claims[i].preserved?-ESHUTDOWN:-EBUSY;
+    for(i=0;i<8;i++)if(!claims[i].held) {
+        claims[i].rpm=rpm;claims[i].type=type;claims[i].id=id;claims[i].owner=owner;
+        claims[i].held=true;common_claims++;return 0;
+    }
+    assert(!"registry boundary model exhausted");return -ENOMEM;
+}
+static void qcom_rpm_smd_release(struct qcom_smd_rpm *rpm,u32 type,u32 id,const void *owner,bool preserve)
+{
+    for(unsigned i=0;i<8;i++)if(claims[i].held && claims[i].rpm==rpm && claims[i].type==type &&
+                               claims[i].id==id && claims[i].owner==owner) {
+        common_releases++;
+        if(preserve) { claims[i].preserved=true;claims[i].owner=NULL;preserved_claims++; }
+        else memset(&claims[i],0,sizeof(claims[i]));
+        return;
+    }
+    assert(!"release of absent registry boundary claim");
+}
 static unsigned sends, fails[8192], applied_failed, freed_resources, freed_arrays;
 static u32 physical[2][3];
 static unsigned masks[8192], states[8192];
 static u32 sent[8192][3];
 static int qcom_rpm_smd_write(struct qcom_smd_rpm *, int, u32, u32, void *, size_t);
+
 '''
 harness += '\n'.join(l for l in source.splitlines() if l.startswith('#define RPM_CORNER_'))+'\n'
 harness += source[source.index('enum rpm_corner_key'):source.index('/* All aggregation/')]
@@ -278,6 +308,9 @@ int main(void)
     assert(physical[0][CORNER]==6 && physical[1][CORNER]==4 && !resource.quarantined);
     done();
     reset();
+    common_claim_error=-EPROBE_DEFER;
+    assert(rpm_corner_claim(&resource)==-EPROBE_DEFER && !resource.claimed && !common_claims);
+    common_claim_error=0;
     assert(rpm_corner_claim(&resource)==0);
     {
         struct rpm_corner_resource duplicate={.rpm=&endpoint,.type=0x61706d73,.id=1};
@@ -285,6 +318,7 @@ int main(void)
         assert(rpm_corner_claim(&duplicate)==-EBUSY);
         duplicate.id=2;assert(rpm_corner_claim(&duplicate)==0);
         rpm_corner_unclaim(&duplicate);rpm_corner_unclaim(&resource);
+        assert(common_claims==2 && common_releases==2);
     }
     done();
     /* Real registration helper allocates its release record before publishing.
@@ -307,6 +341,12 @@ int main(void)
     assert(!pthread_mutex_destroy(&heap->lock.value));rdev_put(&published_rdev);
     assert(freed_resources==1 && freed_arrays==1 && !nodes[0].refs && !nodes[1].refs);
     assert(allocations==releases);
+    /* Actual corner unclaim forwards owned state without sending NONE. */
+    reset();assert(!rpm_corner_claim(&resource));bootstrap();before=sends;
+    rpm_corner_unclaim(&resource);
+    assert(!resource.claimed && preserved_claims==1 && sends==before);
+    assert(qcom_rpm_smd_claim(&endpoint,resource.type,resource.id,&provider)==-ESHUTDOWN);
+    done();
     puts("PASS: actual corn/vfc/swen aggregation, BOTH/AO, ACK timeout/offline/partial rollback, initial quarantine, forced sync, PM and competing consumers");
     puts("PASS: final-rdev resource lifetime and offline callbacks retain valid state");
     return 0;

@@ -240,12 +240,14 @@ static int map_aux_minidump_regions(struct pil_desc *desc,
 static void unmap_aux_minidump_regions(struct aux_minidump_info *aux_mdump,
 				       int num_aux_md_ids)
 {
-	unsigned int i = 0;
+	unsigned int i;
 
-	while (i < num_aux_md_ids && aux_mdump[i].region_info_aux) {
-		iounmap(aux_mdump[i].region_info_aux);
-		i++;
-	}
+	if (!aux_mdump)
+		return;
+
+	for (i = 0; i < num_aux_md_ids; i++)
+		if (aux_mdump[i].region_info_aux)
+			iounmap(aux_mdump[i].region_info_aux);
 }
 
 /**
@@ -288,7 +290,7 @@ static unsigned int prepare_minidump_segments(struct ramdump_segment *rd_segs,
 			rd_segs++;
 			val_segs++;
 		} else {
-			*ss_valid_seg_cnt--;
+			(*ss_valid_seg_cnt)--;
 		}
 
 		region_info++;
@@ -323,7 +325,7 @@ static void prepare_aux_minidump_segments(struct ramdump_segment *rd_segs,
 
 	for (i = 0; i < num_aux_md_ids; i++) {
 		s = &rd_segs[next_offset];
-		next_offset = prepare_minidump_segments(s,
+		next_offset += prepare_minidump_segments(s,
 					aux_mdump[i].region_info_aux,
 					aux_mdump[i].seg_cnt,
 					ss_valid_seg_cnt);

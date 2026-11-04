@@ -8610,12 +8610,30 @@ done:
 int
 dhd_iovar(dhd_pub_t *pub, int ifidx, char *name, char *cmd_buf, uint cmd_len, int set)
 {
-	char buf[strlen(name) + 1 + cmd_len];
-	int len = sizeof(buf);
+	char *buf;
+	uint name_len;
+	int len;
 	wl_ioctl_t ioc;
 	int ret;
 
-	len = bcm_mkiovar(name, cmd_buf, cmd_len, buf, len);
+	if (!name || (cmd_len && !cmd_buf) || cmd_len > WLC_IOCTL_MAXLEN)
+		return BCME_BADARG;
+
+	name_len = strnlen(name, WLC_IOCTL_MAXLEN);
+	if (name_len >= WLC_IOCTL_MAXLEN ||
+	    cmd_len > WLC_IOCTL_MAXLEN - name_len - 1)
+		return BCME_BADARG;
+
+	len = name_len + 1 + cmd_len;
+	buf = kzalloc(len, GFP_KERNEL);
+	if (!buf)
+		return BCME_NOMEM;
+
+	len = bcm_mkiovar(name, cmd_buf ? cmd_buf : "", cmd_len, buf, len);
+	if (!len) {
+		ret = BCME_BUFTOOSHORT;
+		goto out;
+	}
 
 	memset(&ioc, 0, sizeof(ioc));
 
@@ -8625,9 +8643,11 @@ dhd_iovar(dhd_pub_t *pub, int ifidx, char *name, char *cmd_buf, uint cmd_len, in
 	ioc.set = set;
 
 	ret = dhd_wl_ioctl(pub, ifidx, &ioc, ioc.buf, ioc.len);
-	if (!set && ret >= 0)
+	if (!set && ret >= 0 && cmd_len)
 		memcpy(cmd_buf, buf, cmd_len);
 
+out:
+	kfree(buf);
 	return ret;
 }
 

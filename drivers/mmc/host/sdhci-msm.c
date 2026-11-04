@@ -1302,38 +1302,60 @@ static ssize_t store_mask_and_match(struct device *dev,
 {
 	struct sdhci_host *host = dev_get_drvdata(dev);
 	unsigned long value;
-	char *token;
-	int i = 0;
-	u32 mask = 0, match = 0, bit_shift = 0, testbus = 0;
-
-	char *temp = (char *)buf;
+	u32 values[4];
+	char *params, *temp, *token;
+	int i = 0, ret;
 
 	if (!host)
 		return -EINVAL;
 
-	while ((token = strsep(&temp, " "))) {
-		kstrtoul(token, 0, &value);
-		if (i == 0)
-			mask = value;
-		else if (i == 1)
-			match = value;
-		else if (i == 2)
-			bit_shift = value;
-		else if (i == 3) {
-			testbus = value;
-			break;
+	params = kstrndup(buf, count, GFP_KERNEL);
+	if (!params)
+		return -ENOMEM;
+	temp = params;
+	while ((token = strsep(&temp, " \t\n"))) {
+		if (!*token)
+			continue;
+		if (i == ARRAY_SIZE(values)) {
+			ret = -EINVAL;
+			goto out;
 		}
-		i++;
+		ret = kstrtoul(token, 0, &value);
+		if (ret)
+			goto out;
+		if (value > U32_MAX) {
+			ret = -ERANGE;
+			goto out;
+		}
+		values[i++] = value;
+	}
+	if (i != ARRAY_SIZE(values)) {
+		ret = -EINVAL;
+		goto out;
+	}
+	if (values[2] >= 32 || values[3] > MAX_TESTBUS) {
+		ret = -ERANGE;
+		goto out;
 	}
 
-	pr_info("%s: M&M parameter passed are: %d %d %d %d\n",
-		mmc_hostname(host->mmc), mask, match, bit_shift, testbus);
-	pm_runtime_get_sync(dev);
-	sdhci_msm_mm_dbg_configure(host, mask, match, bit_shift, testbus);
+	pr_info("%s: M&M parameter passed are: %u %u %u %u\n",
+		mmc_hostname(host->mmc), values[0], values[1], values[2],
+		values[3]);
+	ret = pm_runtime_get_sync(dev);
+	if (ret < 0) {
+		pm_runtime_put_noidle(dev);
+		goto out;
+	}
+	sdhci_msm_mm_dbg_configure(host, values[0], values[1], values[2],
+				   values[3]);
 	pm_runtime_put_sync(dev);
 
 	pr_debug("%s: M&M debug enabled.\n", mmc_hostname(host->mmc));
+	kfree(params);
 	return count;
+out:
+	kfree(params);
+	return ret;
 }
 
 /* Enter sdcc debug mode */

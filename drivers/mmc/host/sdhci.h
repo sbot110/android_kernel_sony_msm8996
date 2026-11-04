@@ -698,6 +698,8 @@ struct sdhci_ops {
 #endif
 
 	void	(*set_clock)(struct sdhci_host *host, unsigned int clock);
+	/* Sticky platform uncertainty; must not sleep or access controller MMIO. */
+	int	(*power_error)(struct sdhci_host *host);
 	void	(*set_power)(struct sdhci_host *host, unsigned char mode,
 			     unsigned short vdd);
 
@@ -749,6 +751,11 @@ struct sdhci_ops {
 	void	(*enter_dbg_mode)(struct sdhci_host *host);
 	void	(*exit_dbg_mode)(struct sdhci_host *host);
 };
+
+static inline int sdhci_power_error(struct sdhci_host *host)
+{
+	return host->ops->power_error ? host->ops->power_error(host) : 0;
+}
 
 #ifdef CONFIG_MMC_SDHCI_IO_ACCESSORS
 

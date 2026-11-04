@@ -363,6 +363,9 @@ static int cqhci_enable(struct mmc_host *mmc, struct mmc_card *card)
 	struct cqhci_host *cq_host = mmc->cqe_private;
 	int err;
 
+	err = sdhci_power_error(mmc_priv(mmc));
+	if (err)
+		return err;
 	if (cq_host->enabled)
 		return 0;
 
@@ -673,6 +676,9 @@ static int cqhci_request(struct mmc_host *mmc, struct mmc_request *mrq)
 	struct sdhci_host *host = mmc_priv(mmc);
 	u64 ice_ctx = 0;
 
+	err = sdhci_power_error(host);
+	if (err)
+		return err;
 	if (!cq_host->enabled) {
 		pr_err("%s: cqhci: not enabled\n", mmc_hostname(mmc));
 		return -EINVAL;

@@ -55,6 +55,9 @@ harness = r'''
 #define mb() ((void)0)
 #define atomic_read(p) (*(p))
 #define atomic_set(p,v) (*(p)=(v))
+#define READ_ONCE(x) (x)
+#define WRITE_ONCE(x,v) ((x)=(v))
+#define cmpxchg(p,old,new) __sync_val_compare_and_swap(p,old,new)
 typedef unsigned int u32;
 typedef long ktime_t;
 struct clk { int refs,error,rate_error;unsigned long rate; };
@@ -62,13 +65,16 @@ struct device_node { bool names,irq_names;int malformed,irq_malformed;unsigned p
 struct device { struct device_node *of_node;void *data; };
 struct platform_device { struct device dev; };
 struct mmc_card { bool ungate,sdio; };
-struct mmc_host { struct mmc_card *card;struct { int timing; } ios;bool card_clock_off; };
+struct mmc_host { struct mmc_card *card;struct { int timing; } ios;bool card_clock_off;unsigned actual_clock; };
 struct sdhci_msm_pltfm_data { unsigned ice_clk_max;int sdiowakeup_irq,testbus_trigger_irq,power_error; };
+struct sdhci_msm_offset { unsigned CORE_PWRCTL_MASK; };
+static const struct sdhci_msm_offset offsets;
 struct sdhci_msm_host { struct clk *bus_clk,*pclk,*bus_aggr_clk,*ice_clk,*clk,*ff_clk,*sleep_clk;
     struct sdhci_msm_pltfm_data *pdata;unsigned ice_clk_rate;
+    const struct sdhci_msm_offset *offset;struct { int error; } msm_bus_vote;
     int controller_clock,clks_on,pwr_irq; };
 struct sdhci_pltfm_host { struct sdhci_msm_host *priv; };
-struct sdhci_host { struct sdhci_pltfm_host priv;struct mmc_host *mmc; };
+struct sdhci_host { struct sdhci_pltfm_host priv;struct mmc_host *mmc;unsigned clock; };
 static const char * const names[]={"bus_clk","iface_clk","bus_aggr_clk","ice_core_clk","core_clk","cal_clk","sleep_clk"};
 static const char * const irqs[]={"pwr_irq","sdiowakeup_irq","tb_trig_irq"};
 static struct clk clocks[7];
@@ -87,11 +93,13 @@ static int clk_prepare_enable(struct clk *c) { if(!c)return 0;assert(!IS_ERR(c))
 static void clk_disable_unprepare(struct clk *c) { if(!c)return;assert(!IS_ERR(c)&&c->refs>0);disables++;c->refs--; }
 static void *sdhci_priv(struct sdhci_host *h) { return &h->priv; }
 static const char *mmc_hostname(struct mmc_host *h) { return "mmc0"; }
-static int sdhci_msm_host_error(struct sdhci_msm_host *h) { return h->pdata->power_error; }
+static int sdhci_msm_power_error(struct sdhci_msm_pltfm_data *p) { return p->power_error; }
 static int sdhci_msm_bus_voting(struct sdhci_host *h,u32 enable) { if(enable&&vote_error)return vote_error;votes=enable;return 0; }
 static void sdhci_msm_registers_restore(struct sdhci_host *h) { restores++; }
 static void sdhci_msm_registers_save(struct sdhci_host *h) { saves++; }
-static void sdhci_writew(struct sdhci_host *h,int v,int reg) { }
+static void sdhci_writew(struct sdhci_host *h,int v,int reg)
+{ assert(h->priv.priv->controller_clock); }
+static void sdhci_msm_writel_relaxed(unsigned v,struct sdhci_host *h,unsigned reg) { }
 static void *dev_get_drvdata(struct device *dev) { return dev->data; }
 static bool mmc_host_may_gate_card(struct mmc_card *c) { return c->ungate; }
 static bool mmc_card_sdio(struct mmc_card *c) { return c->sdio; }
@@ -103,7 +111,8 @@ static void sdhci_msm_toggle_fifo_write_clk(struct sdhci_host *h) { toggles++; }
 static void sdhci_cfg_irq(struct sdhci_host *h,bool on,bool sync) { host_irq=on; }
 static void enable_irq(int irq) { power_irq++; }
 '''
-for name in ['sdhci_msm_bootdevice_matches','sdhci_msm_clk_get','sdhci_msm_get_clocks',
+for name in ['sdhci_msm_host_error','sdhci_msm_latch_error',
+             'sdhci_msm_bootdevice_matches','sdhci_msm_clk_get','sdhci_msm_get_clocks',
              'sdhci_msm_get_irqs','sdhci_msm_setup_ice_clk','sdhci_msm_enable_controller_clock',
              'sdhci_msm_disable_controller_clock','sdhci_msm_prepare_clocks',
              'sdhci_msm_unprepare_clocks','sdhci_msm_runtime_resume']:
@@ -119,7 +128,7 @@ static void reset(void) {
     memset(clocks,0,sizeof(clocks));memset(get_errors,0,sizeof(get_errors));memset(irq_errors,0,sizeof(irq_errors));
     node=(struct device_node){.names=true,.irq_names=true,.present=127,.irq_present=7};
     pdata=(struct sdhci_msm_pltfm_data){.ice_clk_max=300000000};
-    msm=(struct sdhci_msm_host){.pdata=&pdata};mmc=(struct mmc_host){0};
+    msm=(struct sdhci_msm_host){.pdata=&pdata,.offset=&offsets};mmc=(struct mmc_host){0};
     host=(struct sdhci_host){.priv={.priv=&msm},.mmc=&mmc};
     pdev=(struct platform_device){.dev={.of_node=&node,.data=&host}};
     gets=prepares=disables=votes=vote_error=restores=saves=host_irq=power_irq=toggles=trace_error=0;
@@ -147,7 +156,12 @@ int main(void) {
     for(int i=1;i<=4;i++) {
         reset();assert(!sdhci_msm_get_clocks(&msm,&pdev.dev));clocks[i].error=-EIO;
         assert(sdhci_msm_enable_controller_clock(&host)==-EIO&&!msm.controller_clock&&!votes&&!restores);empty_refs();
-        clocks[i].error=0;assert(!sdhci_msm_enable_controller_clock(&host)&&msm.controller_clock&&restores==1);
+        clocks[i].error=0;
+        int failed_prepares=prepares;
+        assert(sdhci_msm_enable_controller_clock(&host)==-EIO&&prepares==failed_prepares);
+        assert(!host.clock&&!mmc.actual_clock&&msm.msm_bus_vote.error==-EIO);
+        reset();assert(!sdhci_msm_get_clocks(&msm,&pdev.dev));
+        assert(!sdhci_msm_enable_controller_clock(&host)&&msm.controller_clock&&restores==1);
         int old=prepares;assert(!sdhci_msm_enable_controller_clock(&host)&&prepares==old);
         sdhci_msm_disable_controller_clock(&host);empty_refs();assert(!votes&&!msm.controller_clock&&saves==1);
     }
@@ -158,6 +172,11 @@ int main(void) {
     reset();assert(!sdhci_msm_get_clocks(&msm,&pdev.dev));assert(!sdhci_msm_prepare_clocks(&host,true));
     assert(msm.clks_on&&msm.controller_clock);mmc.card_clock_off=true;
     sdhci_msm_unprepare_clocks(&msm);empty_refs();assert(!msm.clks_on&&!msm.controller_clock);
+    /* Runtime suspend gates controller clocks while auxiliary inputs remain
+     * prepared. A repeated zero-clock cleanup must not access gated MMIO. */
+    reset();assert(!sdhci_msm_get_clocks(&msm,&pdev.dev));assert(!sdhci_msm_prepare_clocks(&host,true));
+    sdhci_msm_disable_controller_clock(&host);assert(msm.clks_on&&!msm.controller_clock);
+    assert(!sdhci_msm_prepare_clocks(&host,false));empty_refs();assert(!msm.clks_on);
     reset();assert(!sdhci_msm_get_clocks(&msm,&pdev.dev));vote_error=-EIO;mmc.ios.timing=MMC_TIMING_MMC_HS400;
     assert(sdhci_msm_runtime_resume(&pdev.dev)==-EIO&&trace_error==-EIO&&!host_irq&&!power_irq&&!toggles&&!prepares);
     reset();assert(!sdhci_msm_get_clocks(&msm,&pdev.dev));pdata.power_error=-ETIMEDOUT;

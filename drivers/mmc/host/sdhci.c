@@ -1340,10 +1340,16 @@ static void sdhci_del_timer(struct sdhci_host *host, struct mmc_request *mrq)
 
 void sdhci_send_command(struct sdhci_host *host, struct mmc_command *cmd)
 {
-	int flags;
+	int flags, error;
 	u32 mask;
 	unsigned long timeout;
 
+	error = sdhci_power_error(host);
+	if (error) {
+		cmd->error = error;
+		sdhci_finish_mrq(host, cmd->mrq);
+		return;
+	}
 	WARN_ON(host->cmd);
 
 	/* Initially, a command has no error */
@@ -1923,11 +1929,19 @@ static int sdhci_get_tuning_cmd(struct sdhci_host *host)
 static void sdhci_request(struct mmc_host *mmc, struct mmc_request *mrq)
 {
 	struct sdhci_host *host;
-	int present;
+	int present, error;
 	unsigned long flags;
 
 	host = mmc_priv(mmc);
 
+	error = sdhci_power_error(host);
+	if (error) {
+		mrq->cmd->error = error;
+		if (mrq->data)
+			mrq->data->error = error;
+		mmc_request_done(mmc, mrq);
+		return;
+	}
 	if (sdhci_check_state(host)) {
 		sdhci_dump_state(host);
 		WARN(1, "sdhci in bad state");
@@ -2109,6 +2123,12 @@ void sdhci_set_ios(struct mmc_host *mmc, struct mmc_ios *ios)
 		return;
 	}
 
+	if (sdhci_power_error(host)) {
+		/* A faulted host may stop SDCLK. Keep uncertain rail ownership. */
+		if (!ios->clock)
+			host->ops->set_clock(host, 0);
+		return;
+	}
 	if (host->version >= SDHCI_SPEC_300 &&
 		(ios->power_mode == MMC_POWER_UP) &&
 		!(host->quirks2 & SDHCI_QUIRK2_PRESET_VALUE_BROKEN))
@@ -2126,6 +2146,11 @@ void sdhci_set_ios(struct mmc_host *mmc, struct mmc_ios *ios)
 		turning_on_clk = ios->clock && !host->clock;
 
 		host->ops->set_clock(host, ios->clock);
+		/* The platform clock hook is void: do not publish its request or
+		 * continue timing MMIO after a failed/uncertain clock transaction.
+		 */
+		if (sdhci_power_error(host))
+			return;
 		spin_lock_irqsave(&host->lock, flags);
 		host->clock = ios->clock;
 
@@ -2165,6 +2190,8 @@ void sdhci_set_ios(struct mmc_host *mmc, struct mmc_ios *ios)
 		}
 	}
 
+	if (sdhci_power_error(host))
+		return;
 	spin_lock_irqsave(&host->lock, flags);
 	if (!host->clock) {
 		if (host->mmc && host->mmc->card &&
@@ -2182,6 +2209,8 @@ void sdhci_set_ios(struct mmc_host *mmc, struct mmc_ios *ios)
 					(MMC_POWER_UP | MMC_POWER_ON)))
 			sdhci_set_power(host, ios->power_mode, ios->vdd);
 
+	if (sdhci_power_error(host))
+		return;
 	spin_lock_irqsave(&host->lock, flags);
 
 	if (host->ops->platform_send_init_74_clocks)
@@ -2265,6 +2294,8 @@ void sdhci_set_ios(struct mmc_host *mmc, struct mmc_ios *ios)
 			if (ios->clock) {
 				spin_unlock_irqrestore(&host->lock, flags);
 				host->ops->set_clock(host, host->clock);
+				if (sdhci_power_error(host))
+					return;
 				spin_lock_irqsave(&host->lock, flags);
 			}
 		}
@@ -2291,6 +2322,8 @@ void sdhci_set_ios(struct mmc_host *mmc, struct mmc_ios *ios)
 		if (ios->clock) {
 			spin_unlock_irqrestore(&host->lock, flags);
 			host->ops->set_clock(host, host->clock);
+			if (sdhci_power_error(host))
+				return;
 			spin_lock_irqsave(&host->lock, flags);
 		}
 	} else
@@ -3901,6 +3934,8 @@ void sdhci_cqe_enable(struct mmc_host *mmc)
 	unsigned long flags;
 	u8 ctrl;
 
+	if (sdhci_power_error(host))
+		return;
 	spin_lock_irqsave(&host->lock, flags);
 
 	ctrl = sdhci_readb(host, SDHCI_HOST_CONTROL);

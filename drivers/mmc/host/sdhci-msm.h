@@ -92,6 +92,8 @@ struct sdhci_msm_reg_data {
 	int max_uV;
 	/* Generic regulator caches cannot reconcile a delivered, lost RPM ACK. */
 	int power_error;
+	/* Require the typed physical BOTH-set request protocol for this slot. */
+	bool require_physical_ack;
 
 	/* is this regulator enabled? */
 	bool is_enabled;

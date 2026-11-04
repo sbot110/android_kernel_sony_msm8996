@@ -12,6 +12,7 @@
 #include <linux/of.h>
 #include <linux/regulator/consumer.h>
 #include <linux/regulator/qcom-rpm-corner.h>
+#include <linux/regulator/qcom-rpm-physical.h>
 #include <linux/slab.h>
 
 /* Logical RPM corners, not physical microvolt values. */
@@ -35,6 +36,7 @@ struct msm8996_voltage {
 	int applied;
 	bool digital_enabled;
 	bool analog_enabled;
+	bool analog_boot_load;
 	bool analog_uncertain;
 	bool initialized;
 	bool ownership_known;
@@ -70,10 +72,9 @@ static int msm8996_voltage_apply(struct msm8996_voltage *voltage, int level)
 
 	if (level < 0 || level >= MSM8996_VOLTAGE_LEVELS)
 		return -EINVAL;
-	/* The native physical L12 provider cannot force a lost SWEN ACK to
-	 * be replayed through its consumer API. A cached enable count cannot
-	 * establish that the analog rail is on. Quarantine such a transaction
-	 * until a physical-provider reconciliation interface is implemented.
+	/* A typed provider quarantine must not be cleared by a CCF retry.
+	 * Recovering an RPM request baseline alone does not reconcile clock
+	 * ownership or a consumer enable count after a lost SWEN ACK.
 	 */
 	if (voltage->analog_uncertain)
 		return -EIO;
@@ -94,6 +95,15 @@ static int msm8996_voltage_apply(struct msm8996_voltage *voltage, int level)
 		voltage->digital_enabled = true;
 	}
 	if (voltage->analog && level) {
+		/* Sony's temporary L12 clock proxy requests 10 mA. Steady clock
+		 * consumers have no load request after qualified handoff.
+		 */
+		ret = regulator_set_load(voltage->analog,
+				voltage->analog_boot_load ? 10000 : 0);
+		if (ret) {
+			voltage->analog_uncertain = true;
+			return ret;
+		}
 		/* Original MMPLL4/MMPLL9 analog level is exactly 1.8 V. */
 		ret = regulator_set_voltage(voltage->analog, 1800000, 1800000);
 		if (ret) {
@@ -123,6 +133,13 @@ static int msm8996_voltage_apply(struct msm8996_voltage *voltage, int level)
 			if (ret)
 				return ret;
 			voltage->digital_enabled = false;
+		}
+	}
+	if (voltage->analog) {
+		ret = qcom_rpm_physical_sync(voltage->analog, level != 0);
+		if (ret) {
+			voltage->analog_uncertain = true;
+			return ret;
 		}
 	}
 	ret = qcom_rpm_corner_sync(voltage->digital, level != 0);
@@ -164,6 +181,11 @@ static int msm8996_voltage_sync(struct clk_vdd_class *vdd, int level)
 	if (voltage->faulted || voltage->applied != level)
 		return msm8996_voltage_set(vdd, level);
 	ret = qcom_rpm_corner_sync(voltage->digital, level != 0);
+	if (!ret && voltage->analog) {
+		ret = qcom_rpm_physical_sync(voltage->analog, level != 0);
+		if (ret)
+			voltage->analog_uncertain = true;
+	}
 	if (ret)
 		voltage->faulted = true;
 	return ret;
@@ -197,9 +219,19 @@ static int msm8996_voltage_init(struct device *dev,
 			regulator_put(dig);
 			return ret;
 		}
+		/* No bootstrap or retained handle until the complete physical bank
+		 * is online. Registration may expose an rdev before activation.
+		 */
+		ret = qcom_rpm_physical_check_ready(ana);
+		if (ret) {
+			regulator_put(ana);
+			regulator_put(dig);
+			return ret;
+		}
 	}
 	voltage->digital = dig;
 	voltage->analog = ana;
+	voltage->analog_boot_load = ana != NULL;
 	/* Consumer regulator handles store a raw device pointer. Pin the
 	 * bounded built-in quarantine object even if a platform device is
 	 * dynamically removed after a failed probe; retries reuse this ref.
@@ -217,6 +249,41 @@ static int msm8996_voltage_init(struct device *dev,
 	mutex_init(&voltage->vdd.lock);
 	voltage->initialized = true;
 	ret = msm8996_voltage_set(&voltage->vdd, MSM8996_VOLTAGE_HIGH);
+	return ret;
+}
+
+/* The CCF query takes the prepare/list locks and must precede vdd.lock.
+ * A failed drop remains quarantined; it is never reported as a released
+ * source proxy merely because a consumer load request was cached.
+ */
+static int msm8996_voltage_finish_handoff(struct msm8996_voltage *voltage)
+{
+	int ret = 0;
+
+	if (!voltage->initialized || !voltage->analog_boot_load ||
+	    !clk_vdd_class_handoff_done(&voltage->vdd))
+		return 0;
+	mutex_lock(&voltage->vdd.lock);
+	if (!voltage->analog_boot_load || !voltage->ownership_known ||
+	    voltage->faulted || voltage->analog_uncertain)
+		goto out;
+	ret = regulator_set_load(voltage->analog, 0);
+	if (!ret)
+		ret = qcom_rpm_physical_sync(voltage->analog,
+					      voltage->analog_enabled);
+	if (ret) {
+		/* set_load caches the consumer request even on failure. Restore
+		 * our source lease as well as retaining the flag. A quarantined
+		 * backend rejects the wire operation; that is not recovery.
+		 */
+		regulator_set_load(voltage->analog, 10000);
+		voltage->analog_uncertain = true;
+		voltage->faulted = true;
+	} else {
+		voltage->analog_boot_load = false;
+	}
+out:
+	mutex_unlock(&voltage->vdd.lock);
 	return ret;
 }
 
@@ -286,6 +353,8 @@ static void msm8996_voltage_ownership(struct device *dev,
 			dev_warn(dev, "retaining digital HIGH lease after release failure\n");
 		if (analog && clk_vdd_class_release_handoff(&analog->vdd))
 			dev_warn(dev, "retaining analog HIGH lease after release failure\n");
+		if (analog && msm8996_voltage_finish_handoff(analog))
+			dev_warn(dev, "retaining quarantined analog bootstrap load\n");
 	}
 }
 

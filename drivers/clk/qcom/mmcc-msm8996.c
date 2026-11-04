@@ -3811,6 +3811,21 @@ static int __init mmcc_msm8996_init(void)
 }
 module_init(mmcc_msm8996_init);
 
+#if IS_BUILTIN(CONFIG_MSM_MMCC_8996)
+/* Runs after CCF unused-clock cleanup. Late provider retries also call this
+ * helper from their ownership pass; an unknown/faulted lease is retained.
+ */
+static int __init mmcc_msm8996_finish_handoff(void)
+{
+	int ret = msm8996_voltage_finish_handoff(&mmcc_msm8996_analog);
+
+	if (ret)
+		pr_err("mmcc-msm8996: analog bootstrap release failed: %d\n", ret);
+	return ret;
+}
+late_initcall_sync(mmcc_msm8996_finish_handoff);
+#endif
+
 static void __exit mmcc_msm8996_exit(void)
 {
 	platform_unregister_drivers(msm8996_mmcc_drivers,

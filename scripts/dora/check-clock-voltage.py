@@ -17,6 +17,8 @@ ROOT = Path(__file__).resolve().parents[2]
 parser = argparse.ArgumentParser(description=__doc__)
 parser.add_argument('--reference-commit', action='store_true',
                     help='also verify the manifest against the saved Sony Git object')
+parser.add_argument('--self-test', action='store_true',
+                    help='reject in-memory readiness, ACK and handoff regressions')
 args = parser.parse_args()
 manifest = json.loads((ROOT / 'Documentation/sony/dora-clock-voltage.json').read_text())
 header = (ROOT / 'drivers/clk/qcom/clk-msm8996-voltage.h').read_text()
@@ -123,8 +125,12 @@ harness = r'''
 #define IS_ERR(p) ((uintptr_t)(p)>=(uintptr_t)-4095)
 #define PTR_ERR(p) ((int)(intptr_t)(p))
 struct device { void *of_node;unsigned refs; };
-struct mutex { unsigned unused; };
-static void mutex_init(struct mutex *m) {m->unused=0;}
+struct mutex { unsigned held; };
+static void (*lock_boundary)(void);
+static void mutex_init(struct mutex *m) {m->held=0;}
+static void mutex_lock(struct mutex *m)
+{ assert(!m->held);if(lock_boundary){void (*hook)(void)=lock_boundary;lock_boundary=NULL;hook();}m->held=1; }
+static void mutex_unlock(struct mutex *m) {assert(m->held);m->held=0;}
 struct clk_vdd_class {
     const char *class_name;unsigned num_levels;int *level_votes,cur_level;
     int (*set_vdd)(struct clk_vdd_class *,int);
@@ -133,132 +139,322 @@ struct clk_vdd_class {
 };
 struct clk_init_data {struct clk_vdd_class *vdd_class;unsigned long *rate_max;unsigned num_rate_max,flags;};
 struct clk_hw {const struct clk_init_data *init;bool enabled,prepared;unsigned long rate;struct clk_hw *parent;};
-struct regulator {unsigned id;int logical,physical,count;bool physical_enabled;};
-static struct regulator digital={.id=0},analog={.id=1};
-static unsigned steps,fail_at,gets,puts,warnings,releases;static bool partial,machine,forever;
-static char trace[256];
-static int step(char event) {trace[steps++]=event;trace[steps]=0;return fail_at && (steps==fail_at || (forever && steps>=fail_at))?-EIO:0;}
+/* API boundaries only: the actual core aggregation and RPM transaction engines
+ * have separate source-executing tests. Cached load changes on every call,
+ * including a failed or quarantined callback. Lost ACK delivery is selectable.
+ */
+struct regulator {
+    unsigned id;int logical,physical,count,load_request,physical_load;
+    bool physical_enabled,online,typed,quarantined;
+};
+static struct regulator digital,analog;
+static unsigned steps,fail_at,gets,put_count,warnings,releases,ready_checks,queries,wire_requests;
+static bool partial,machine,forever,handoff_done,release_marks_done;
+static int release_error,ready_error;
+static char trace[1024];
+static int step(char event)
+{ assert(steps+1<sizeof(trace));trace[steps++]=event;trace[steps]=0;
+  return fail_at && (steps==fail_at || (forever && steps>=fail_at))?-EIO:0; }
+static int analog_step(char event)
+{ bool blocked=analog.quarantined;int ret=step(event);
+  if(blocked)return -EUCLEAN;
+  wire_requests++;if(ret)analog.quarantined=true;return ret; }
 static bool of_machine_is_compatible(const char *name) {(void)name;return machine;}
 static bool of_property_read_bool(void *node,const char *name) {(void)name;return !!node;}
 static struct device *get_device(struct device *dev) {dev->refs++;return dev;}
 static struct regulator *regulator_get(struct device *dev,const char *name)
 { (void)dev;gets++;return !strcmp(name,"defer")?ERR_PTR(-EPROBE_DEFER):!strcmp(name,"digital")?&digital:&analog; }
-static void regulator_put(struct regulator *reg) {(void)reg;puts++;}
+static void regulator_put(struct regulator *reg) {(void)reg;put_count++;}
 static int regulator_set_voltage(struct regulator *reg,int min,int max)
-{ int ret=step(reg->id?'u':'v');assert(min<=max);if(!ret||partial){reg->logical=min;reg->physical=min;}return ret; }
+{ bool may_apply=!reg->quarantined;int ret=reg->id?analog_step('u'):step('v');assert(min<=max);
+  if(may_apply&&(!ret||partial)){reg->logical=min;reg->physical=min;}return ret; }
+static int regulator_set_load(struct regulator *reg,int load)
+{ bool may_apply=!reg->quarantined;int ret;assert(reg->id);reg->load_request=load;
+  ret=analog_step('l');if(may_apply&&(!ret||partial))reg->physical_load=load;return ret; }
 static int regulator_enable(struct regulator *reg)
-{ int ret=step(reg->id?'a':'d');if(!ret||partial)reg->physical_enabled=true;if(!ret)reg->count++;return ret; }
+{ bool may_apply=!reg->quarantined;int ret=reg->id?analog_step('a'):step('d');
+  if(may_apply&&(!ret||partial)){reg->physical_enabled=true;}if(!ret){reg->count++;}return ret; }
 static int regulator_disable(struct regulator *reg)
-{ int ret=step(reg->id?'A':'D');assert(reg->count>0);if(!ret||partial)reg->physical_enabled=false;if(!ret)reg->count--;return ret; }
+{ bool may_apply=!reg->quarantined;int ret=reg->id?analog_step('A'):step('D');assert(reg->count>0);
+  if(may_apply&&(!ret||partial)){reg->physical_enabled=false;}if(!ret){reg->count--;}return ret; }
 static int qcom_rpm_corner_sync(struct regulator *reg,bool enabled)
 { int ret=step('K');assert(!reg->id);if(!ret){reg->physical=reg->logical;reg->physical_enabled=enabled?true:reg->count>0;}return ret; }
+static int qcom_rpm_physical_check_ready(struct regulator *reg)
+{ assert(reg==&analog);ready_checks++;if(!reg->typed)return -EOPNOTSUPP;
+  if(ready_error){return ready_error;}if(!reg->online){return -EPROBE_DEFER;}
+  return reg->quarantined?-EUCLEAN:0; }
+static int qcom_rpm_physical_sync(struct regulator *reg,bool enabled)
+{ int ret;assert(reg==&analog&&reg->online&&reg->typed);ret=analog_step('P');
+  if(!ret){assert(!enabled||reg->count>0);reg->physical=reg->logical;
+    reg->physical_load=reg->load_request;reg->physical_enabled=reg->count>0;}return ret; }
 static void *devm_kmemdup(struct device *dev,const void *p,size_t size,int flags)
 { void *copy=malloc(size);(void)dev;(void)flags;assert(copy);return memcpy(copy,p,size); }
 static bool clk_hw_is_enabled(struct clk_hw *hw) {return hw->enabled;}
 static bool clk_hw_is_prepared(struct clk_hw *hw) {return hw->prepared;}
 static struct clk_hw *clk_hw_get_parent(struct clk_hw *hw) {return hw->parent;}
 static unsigned long clk_hw_get_rate(struct clk_hw *hw) {return hw->rate;}
-static int clk_vdd_class_release_handoff(struct clk_vdd_class *vdd) {(void)vdd;releases++;return 0;}
+static int clk_vdd_class_release_handoff(struct clk_vdd_class *vdd)
+{ (void)vdd;releases++;if(!release_error&&release_marks_done)handoff_done=true;return release_error; }
+static bool clk_vdd_class_handoff_done(struct clk_vdd_class *vdd)
+{ assert(!vdd->lock.held);queries++;return handoff_done; }
 #define dev_warn(dev,...) ((void)(dev),(void)warnings++)
 '''
 harness += re.sub(r'^#include[^\n]*\n', '', header, flags=re.M)
 harness += r'''
 static struct msm8996_voltage voltage;
 static struct device device;
-static void reset(bool with_analog)
+static void fresh(void)
 {
     struct msm8996_voltage initial=MSM8996_VOLTAGE_CLASS("test");
-    voltage=initial;memset(&digital,0,sizeof(digital));memset(&analog,0,sizeof(analog));analog.id=1;
-    memset(&device,0,sizeof(device));steps=fail_at=gets=puts=warnings=releases=0;partial=machine=forever=false;trace[0]=0;
+    voltage=initial;memset(&digital,0,sizeof(digital));memset(&analog,0,sizeof(analog));
+    analog.id=1;analog.online=analog.typed=true;
+    memset(&device,0,sizeof(device));steps=fail_at=gets=put_count=warnings=releases=0;
+    ready_checks=queries=wire_requests=0;ready_error=release_error=0;
+    lock_boundary=NULL;
+    partial=machine=forever=handoff_done=release_marks_done=false;trace[0]=0;
+}
+static void reset(bool with_analog)
+{
+    fresh();
     assert(!msm8996_voltage_init(&device,&voltage,"digital",with_analog?"analog":NULL));
     assert(voltage.applied==MSM8996_VOLTAGE_HIGH && digital.physical==7);
     assert(voltage.digital_enabled && digital.count==1 && digital.physical_enabled);
     assert(!with_analog || (analog.physical==1800000 && analog.physical_enabled && analog.count==1));
+    assert(voltage.analog_boot_load==with_analog);
+    assert(!with_analog || (analog.load_request==10000&&analog.physical_load==10000&&ready_checks==1));
 }
 static void clear_events(void) {steps=fail_at=0;partial=forever=false;trace[0]=0;}
-int main(void)
+static void assert_sticky(void)
 {
-    unsigned i,n,limit;int ret;bool uncertain;struct device other={0};
-    struct clk_init_data original={0};struct clk_hw hw={.init=&original,.enabled=true,.rate=0};
+    unsigned before=wire_requests,old_gets=gets,refs=device.refs;
+    int dig_count=digital.count,ana_count=analog.count;
+    assert(voltage.analog_uncertain&&voltage.faulted);clear_events();
+    assert(msm8996_voltage_sync(&voltage.vdd,MSM8996_VOLTAGE_HIGH)==-EIO&&!steps);
+    assert(msm8996_voltage_set(&voltage.vdd,MSM8996_VOLTAGE_HIGH)==-EIO&&!steps);
+    assert(msm8996_voltage_init(&device,&voltage,"digital","analog")==-EIO&&!steps);
+    assert(gets==old_gets&&device.refs==refs&&digital.count==dig_count&&analog.count==ana_count);
+    /* Explicit provider baseline recovery alone cannot reconcile the clock
+     * lease/counts and must not silently clear the helper's uncertainty.
+     */
+    analog.quarantined=false;
+    assert(msm8996_voltage_sync(&voltage.vdd,MSM8996_VOLTAGE_HIGH)==-EIO&&!steps);
+    assert(wire_requests==before&&voltage.analog_uncertain&&voltage.faulted);
+}
+static void test_digital_and_ownership(void)
+{
+    struct device other={0};struct clk_init_data original={0};
+    struct clk_hw hw={.init=&original,.enabled=true,.rate=0};
     struct msm8996_voltage_clock maps[]={{.hw=&hw,.fmax={0,19200000,50000000,400000000,0}}};
-    reset(false);assert(device.refs==1 && gets==1);clear_events();
-    assert(voltage.vdd.require_handoff); /* Including late/deferred registration. */
+    reset(false);assert(device.refs==1&&gets==1);clear_events();
+    assert(voltage.vdd.require_handoff&&!voltage.vdd.skip_handoff);
     assert(msm8996_voltage_set(&voltage.vdd,MSM8996_VOLTAGE_LOW)==-EAGAIN);
-    assert(digital.physical==7 && voltage.applied==MSM8996_VOLTAGE_HIGH && !voltage.faulted);
-    assert(!msm8996_voltage_init(&device,&voltage,"digital",NULL));assert(gets==1 && device.refs==1 && digital.count==1);
+    assert(digital.physical==7&&voltage.applied==MSM8996_VOLTAGE_HIGH&&!voltage.faulted);
+    assert(!msm8996_voltage_init(&device,&voltage,"digital",NULL));
+    assert(gets==1&&device.refs==1&&digital.count==1);
     assert(msm8996_voltage_init(&other,&voltage,"digital",NULL)==-EBUSY);
     assert(msm8996_voltage_apply(&voltage,-1)==-EINVAL);
     assert(msm8996_voltage_apply(&voltage,MSM8996_VOLTAGE_LEVELS)==-EINVAL);
     assert(!msm8996_voltage_attach(&device,maps,1,&voltage,NULL));
-    assert(hw.init->vdd_class==&voltage.vdd && hw.init->rate_max==maps[0].fmax && hw.init->flags&CLK_ENABLE_HAND_OFF);
-    msm8996_voltage_ownership(&device,maps,1,&voltage,NULL);assert(!voltage.ownership_known && warnings==1);
-    assert(!releases);
-    assert(msm8996_voltage_set(&voltage.vdd,MSM8996_VOLTAGE_NONE)==-EAGAIN && digital.count==1);
-    hw.rate=19200000;msm8996_voltage_ownership(&device,maps,1,&voltage,NULL);assert(voltage.ownership_known);
-    assert(releases==1);
+    assert(hw.init->vdd_class==&voltage.vdd&&hw.init->rate_max==maps[0].fmax&&hw.init->flags&CLK_ENABLE_HAND_OFF);
+    msm8996_voltage_ownership(&device,maps,1,&voltage,NULL);
+    assert(!voltage.ownership_known&&warnings==1&&!releases);
+    assert(msm8996_voltage_set(&voltage.vdd,MSM8996_VOLTAGE_NONE)==-EAGAIN&&digital.count==1);
+    hw.rate=19200000;msm8996_voltage_ownership(&device,maps,1,&voltage,NULL);
+    assert(voltage.ownership_known&&releases==1);
     { struct clk_hw parent={.enabled=true};
       hw.parent=&parent;maps[0].pll=true;hw.prepared=false;releases=0;
       msm8996_voltage_ownership(&device,maps,1,&voltage,NULL);
-      assert(!voltage.ownership_known && !releases);
+      assert(!voltage.ownership_known&&!releases);
       hw.prepared=true;msm8996_voltage_ownership(&device,maps,1,&voltage,NULL);
-      assert(voltage.ownership_known && releases==1);maps[0].pll=false;hw.parent=NULL; }
+      assert(voltage.ownership_known&&releases==1);maps[0].pll=false;hw.parent=NULL; }
     free((void *)hw.init);hw.init=&original;
     clear_events();assert(!msm8996_voltage_set(&voltage.vdd,MSM8996_VOLTAGE_LOW));
-    assert(digital.physical==4 && digital.count==1 && voltage.applied==MSM8996_VOLTAGE_LOW);
+    assert(digital.physical==4&&digital.count==1&&voltage.applied==MSM8996_VOLTAGE_LOW);
     clear_events();assert(!msm8996_voltage_sync(&voltage.vdd,MSM8996_VOLTAGE_LOW));assert(!strcmp(trace,"K"));
-    clear_events();fail_at=1;assert(msm8996_voltage_sync(&voltage.vdd,MSM8996_VOLTAGE_LOW)==-EIO && voltage.faulted);
-    clear_events();assert(!msm8996_voltage_sync(&voltage.vdd,MSM8996_VOLTAGE_LOW) && !voltage.faulted);
+    clear_events();fail_at=1;assert(msm8996_voltage_sync(&voltage.vdd,MSM8996_VOLTAGE_LOW)==-EIO&&voltage.faulted);
+    clear_events();assert(!msm8996_voltage_sync(&voltage.vdd,MSM8996_VOLTAGE_LOW)&&!voltage.faulted);
     clear_events();fail_at=1;forever=true;
-    assert(msm8996_voltage_set(&voltage.vdd,MSM8996_VOLTAGE_NOMINAL)==-EIO && voltage.faulted);
-    clear_events();assert(!msm8996_voltage_sync(&voltage.vdd,MSM8996_VOLTAGE_LOW) && !voltage.faulted);
-    clear_events();assert(!msm8996_voltage_set(&voltage.vdd,0));assert(!digital.count && !voltage.digital_enabled);
-    assert(!strcmp(trace,"vDK"));
-    /* Every callback failure, delivered or not: restore the last ACKed
-       digital contract, or permanently quarantine an uncertain analog rail. */
-    for(n=0;n<2;n++)for(i=1;i<=4;i++) {
+    assert(msm8996_voltage_set(&voltage.vdd,MSM8996_VOLTAGE_NOMINAL)==-EIO&&voltage.faulted);
+    clear_events();assert(!msm8996_voltage_sync(&voltage.vdd,MSM8996_VOLTAGE_LOW)&&!voltage.faulted);
+    clear_events();assert(!msm8996_voltage_set(&voltage.vdd,0));
+    assert(!digital.count&&!voltage.digital_enabled&&!strcmp(trace,"vDK"));
+}
+static void test_analog_transitions(void)
+{
+    unsigned i,n,limit;int ret;char events[32];bool uncertain;
+    reset(true);voltage.ownership_known=true;clear_events();
+    assert(!msm8996_voltage_set(&voltage.vdd,0));assert(!strcmp(trace,"vADPK"));
+    limit=steps;strcpy(events,trace);
+    for(n=0;n<2;n++)for(i=1;i<=limit;i++) {
         reset(true);voltage.ownership_known=true;clear_events();fail_at=i;partial=n;
         ret=msm8996_voltage_set(&voltage.vdd,0);assert(ret==-EIO);
-        uncertain=trace[i-1]=='A';
+        uncertain=events[i-1]=='A'||events[i-1]=='P';
         assert(voltage.analog_uncertain==uncertain);
-        if(uncertain) {
-            assert(voltage.faulted);clear_events();
-            assert(msm8996_voltage_sync(&voltage.vdd,MSM8996_VOLTAGE_HIGH)==-EIO && !steps);
-        } else {
-            assert(!voltage.faulted && voltage.applied==MSM8996_VOLTAGE_HIGH);
-            assert(digital.physical==7 && digital.physical_enabled && digital.count==1);
-            assert(analog.physical_enabled && analog.count==1);
+        if(uncertain)assert_sticky();
+        else {
+            assert(!voltage.faulted&&voltage.applied==MSM8996_VOLTAGE_HIGH);
+            assert(digital.physical==7&&digital.physical_enabled&&digital.count==1);
+            assert(analog.physical_enabled&&analog.count==1);
         }
     }
     reset(true);voltage.ownership_known=true;assert(!msm8996_voltage_set(&voltage.vdd,0));clear_events();
-    assert(!msm8996_voltage_set(&voltage.vdd,MSM8996_VOLTAGE_HIGH));limit=steps;
+    assert(!msm8996_voltage_set(&voltage.vdd,MSM8996_VOLTAGE_HIGH));assert(!strcmp(trace,"vdluaPK"));
+    limit=steps;strcpy(events,trace);
     for(n=0;n<2;n++)for(i=1;i<=limit;i++) {
-        reset(true);voltage.ownership_known=true;assert(!msm8996_voltage_set(&voltage.vdd,0));clear_events();fail_at=i;partial=n;
+        reset(true);voltage.ownership_known=true;assert(!msm8996_voltage_set(&voltage.vdd,0));
+        clear_events();fail_at=i;partial=n;
         ret=msm8996_voltage_set(&voltage.vdd,MSM8996_VOLTAGE_HIGH);assert(ret==-EIO);
-        uncertain=trace[i-1]=='u'||trace[i-1]=='a';assert(voltage.analog_uncertain==uncertain);
-        if(uncertain)assert(voltage.faulted);
-        else assert(!voltage.faulted && voltage.applied==0 && !digital.count && !analog.count);
+        uncertain=strchr("luaP",events[i-1])!=NULL;
+        assert(voltage.analog_uncertain==uncertain);
+        if(uncertain)assert_sticky();
+        else assert(!voltage.faulted&&voltage.applied==0&&!digital.count&&!analog.count);
     }
-    /* Failed analog lookup releases the acquired digital handle before
-       any bootstrap, and does not retain a device reference. */
-    reset(false);voltage.initialized=false;gets=puts=0;device.refs=0;
-    assert(msm8996_voltage_init(&device,&voltage,"digital","defer")==-EPROBE_DEFER);
-    assert(gets==2 && puts==1 && !device.refs && !voltage.initialized);
+    for(n=0;n<2;n++)for(i=1;i<=2;i++) {
+        reset(true);voltage.ownership_known=true;clear_events();
+        assert(!msm8996_voltage_sync(&voltage.vdd,MSM8996_VOLTAGE_HIGH));assert(!strcmp(trace,"KP"));
+        clear_events();fail_at=i;partial=n;
+        assert(msm8996_voltage_sync(&voltage.vdd,MSM8996_VOLTAGE_HIGH)==-EIO&&voltage.faulted);
+        assert(voltage.analog_uncertain==(i==2));
+        if(i==2)assert_sticky();
+        else {clear_events();assert(!msm8996_voltage_sync(&voltage.vdd,MSM8996_VOLTAGE_HIGH));assert(!voltage.faulted);}
+    }
+}
+static void test_init_and_defer(void)
+{
+    unsigned i,n,old_gets;int dig_count,ana_count;char events[32];
+    reset(true);strcpy(events,trace);assert(!strcmp(events,"vdluaPK"));
+    for(n=0;n<2;n++)for(i=1;i<=strlen(events);i++) {
+        fresh();fail_at=i;partial=n;
+        assert(msm8996_voltage_init(&device,&voltage,"digital","analog")==-EIO);
+        assert(voltage.initialized&&gets==2&&!put_count&&device.refs==1);
+        if(strchr("luaP",events[i-1]))assert_sticky();
+        else {
+            assert(!voltage.faulted&&voltage.applied==MSM8996_VOLTAGE_HIGH);
+            old_gets=gets;dig_count=digital.count;ana_count=analog.count;clear_events();
+            assert(!msm8996_voltage_init(&device,&voltage,"digital","analog"));
+            assert(gets==old_gets&&device.refs==1&&digital.count==dig_count&&analog.count==ana_count);
+        }
+    }
+    fresh();analog.online=false;
+    for(i=1;i<=3;i++) {
+        assert(msm8996_voltage_init(&device,&voltage,"digital","analog")==-EPROBE_DEFER);
+        assert(gets==2*i&&put_count==2*i&&ready_checks==i);
+        assert(!steps&&!wire_requests&&!device.refs&&!voltage.initialized);
+        assert(!voltage.digital&&!voltage.analog&&!voltage.analog_uncertain&&!voltage.faulted);
+    }
+    analog.online=true;assert(!msm8996_voltage_init(&device,&voltage,"digital","analog"));
+    assert(gets==8&&put_count==6&&device.refs==1&&digital.count==1&&analog.count==1);
+    for(i=0;i<4;i++)assert(!msm8996_voltage_init(&device,&voltage,"digital","analog"));
+    assert(gets==8&&device.refs==1&&digital.count==1&&analog.count==1&&ready_checks==4);
+    fresh();analog.typed=false;
+    assert(msm8996_voltage_init(&device,&voltage,"digital","analog")==-EOPNOTSUPP);
+    assert(gets==2&&put_count==2&&!steps&&!device.refs&&!voltage.initialized);
+    for(i=0;i<3;i++) {
+        fresh();ready_error=(int[]){-ENODEV,-EBUSY,-EUCLEAN}[i];
+        assert(msm8996_voltage_init(&device,&voltage,"digital","analog")==ready_error);
+        assert(gets==2&&put_count==2&&!steps&&!device.refs&&!voltage.initialized&&!voltage.analog_uncertain);
+    }
+    fresh();assert(msm8996_voltage_init(&device,&voltage,"digital","defer")==-EPROBE_DEFER);
+    assert(gets==2&&put_count==1&&!device.refs&&!voltage.initialized&&!steps);
+    fresh();assert(msm8996_voltage_init(&device,&voltage,"defer","analog")==-EPROBE_DEFER);
+    assert(gets==1&&!put_count&&!device.refs&&!voltage.initialized&&!steps);
     machine=false;device.of_node=NULL;assert(!msm8996_voltage_required(&device));
     machine=true;assert(msm8996_voltage_required(&device));machine=false;device.of_node=&device;
     assert(msm8996_voltage_required(&device));
-    puts("PASS: production clock voltage adapter ACK/rollback, handoff, retry lifetime and analog lost-ACK quarantine");
+}
+static void concurrent_handoff_completed(void)
+{
+    /* Another qualified caller completed after our query and before our lock.
+     * Its acknowledged request is represented only at this boundary.
+     */
+    voltage.analog_boot_load=false;analog.load_request=analog.physical_load=0;
+}
+static void test_qualified_handoff(void)
+{
+    unsigned i,n,before;struct clk_init_data init={0};
+    struct clk_hw hw={.init=&init,.enabled=true,.prepared=true,.rate=19200000};
+    struct msm8996_voltage_clock maps[]={{.hw=&hw}};
+    fresh();assert(!msm8996_voltage_finish_handoff(&voltage)&&!queries&&!steps);
+    reset(true);clear_events();
+    assert(!msm8996_voltage_finish_handoff(&voltage)&&queries==1&&!steps&&voltage.analog_boot_load);
+    handoff_done=true;assert(!msm8996_voltage_finish_handoff(&voltage)&&!steps&&voltage.analog_boot_load);
+    voltage.ownership_known=true;voltage.faulted=true;
+    assert(!msm8996_voltage_finish_handoff(&voltage)&&!steps&&voltage.analog_boot_load);
+    voltage.faulted=false;voltage.analog_uncertain=true;
+    assert(!msm8996_voltage_finish_handoff(&voltage)&&!steps&&voltage.analog_boot_load);
+    voltage.analog_uncertain=false;assert(!msm8996_voltage_finish_handoff(&voltage));
+    assert(!strcmp(trace,"lP")&&!voltage.analog_boot_load&&analog.load_request==0&&analog.physical_load==0);
+    assert(analog.count==1&&voltage.analog_enabled);before=queries;clear_events();
+    assert(!msm8996_voltage_finish_handoff(&voltage)&&queries==before&&!steps);
+    assert(!msm8996_voltage_set(&voltage.vdd,MSM8996_VOLTAGE_LOW));
+    assert(!strcmp(trace,"vluPK")&&analog.load_request==0&&analog.count==1);
+    /* A failed or not-yet-complete CCF release must retain the source load.
+     * The query stub models the public CCF completion boundary, not its engine.
+     */
+    reset(true);clear_events();release_error=-EIO;release_marks_done=true;
+    msm8996_voltage_ownership(&device,maps,1,&voltage,&voltage);
+    assert(releases==2&&warnings==2&&!handoff_done&&!steps&&voltage.analog_boot_load&&analog.load_request==10000);
+    release_error=0;release_marks_done=false;
+    msm8996_voltage_ownership(&device,maps,1,&voltage,&voltage);
+    assert(!handoff_done&&!steps&&voltage.analog_boot_load&&analog.load_request==10000);
+    release_marks_done=true;msm8996_voltage_ownership(&device,maps,1,&voltage,&voltage);
+    assert(handoff_done&&!strcmp(trace,"lP")&&!voltage.analog_boot_load&&analog.load_request==0);
+    reset(true);voltage.ownership_known=true;handoff_done=true;clear_events();
+    lock_boundary=concurrent_handoff_completed;fail_at=1;
+    assert(!msm8996_voltage_finish_handoff(&voltage)&&!steps&&!voltage.analog_boot_load);
+    assert(!voltage.analog_uncertain&&!voltage.faulted&&analog.load_request==0);
+    for(n=0;n<2;n++)for(i=1;i<=2;i++) {
+        reset(true);voltage.ownership_known=true;handoff_done=true;clear_events();fail_at=i;partial=n;
+        assert(msm8996_voltage_finish_handoff(&voltage)==-EIO);
+        assert(!strcmp(trace,i==1?"ll":"lPl"));
+        /* The failed call cached zero. Production must explicitly restore
+         * 10mA even though quarantine rejects that restore's wire request.
+         */
+        assert(voltage.analog_boot_load&&analog.load_request==10000&&analog.quarantined);
+        assert(voltage.analog_uncertain&&voltage.faulted);before=wire_requests;clear_events();
+        assert(!msm8996_voltage_finish_handoff(&voltage)&&!steps&&voltage.analog_boot_load);
+        assert(wire_requests==before&&analog.load_request==10000);assert_sticky();
+    }
+}
+int main(void)
+{
+    test_digital_and_ownership();test_analog_transitions();test_init_and_defer();test_qualified_handoff();
+    puts("PASS: production clock adapter digital rollback, every analog callback/typed ACK failure and sticky uncertainty");
+    puts("PASS: typed readiness before bootstrap, repeated deferred/successful init without lease/count leaks");
+    puts("PASS: qualified handoff load/ACK release, cached-load restoration on failure and no automatic recovery");
     return 0;
 }
 '''
-# Keep the API model's puts counter from shadowing stdio puts().
-harness = harness.replace('gets,puts,warnings', 'gets,put_count,warnings').replace('puts++', 'put_count++').replace('gets=puts=', 'gets=put_count=').replace('puts==1', 'put_count==1')
-with tempfile.TemporaryDirectory(prefix='dora-clock-voltage-') as directory:
-    path = Path(directory)
-    (path / 'test.c').write_text(harness)
-    subprocess.run(shlex.split(os.environ.get('HOSTCC', 'cc')) +
-                   ['-std=gnu11', '-O2', '-Wall', '-Wextra', '-Werror',
-                    '-I' + str(ROOT), str(path / 'test.c'), '-o', str(path / 'test')], check=True)
-    subprocess.run([str(path / 'test')], check=True)
+host_flags = shlex.split(os.environ.get('HOSTCFLAGS', ''))
+
+
+def run_adapter(code, expect_failure=False):
+    with tempfile.TemporaryDirectory(prefix='dora-clock-voltage-') as directory:
+        path = Path(directory)
+        (path / 'test.c').write_text(code)
+        subprocess.run(shlex.split(os.environ.get('HOSTCC', 'cc')) +
+                       ['-std=gnu11', '-O2', '-Wall', '-Wextra', '-Werror', *host_flags,
+                        '-I' + str(ROOT), str(path / 'test.c'), '-o', str(path / 'test')], check=True)
+        result = subprocess.run([str(path / 'test')], capture_output=expect_failure, text=True)
+        assert (result.returncode != 0) == expect_failure, 'adapter regression escaped checks'
+
+
+run_adapter(harness)
+if args.self_test:
+    stripped_header = re.sub(r'^#include[^\n]*\n', '', header, flags=re.M)
+    mutations = (
+        ('typed preflight', 'ret = qcom_rpm_physical_check_ready(ana);',
+         '(void)qcom_rpm_physical_check_ready; ret = 0;'),
+        ('apply physical ACK', 'ret = qcom_rpm_physical_sync(voltage->analog, level != 0);', 'ret = 0;'),
+        ('failed handoff cached load restoration', 'regulator_set_load(voltage->analog, 10000);', '(void)0;'),
+        ('locked handoff idempotence', 'if (!voltage->analog_boot_load || !voltage->ownership_known ||',
+         'if (!voltage->ownership_known ||'),
+    )
+    for label, before, after in mutations:
+        assert before in stripped_header, label
+        run_adapter(harness.replace(stripped_header, stripped_header.replace(before, after, 1), 1),
+                    expect_failure=True)
+        print('PASS: rejected', label, 'mutation')
 print('PASS: final Sony GCC %d / MMCC %d fmax contracts, GPLL4 and SDCC2 source rates; mutation rejected' %
       (counts['gcc'], counts['mmcc']))
 
@@ -336,5 +532,5 @@ int main(void)
 with tempfile.TemporaryDirectory(prefix='dora-pll-divider-') as directory:
     path=Path(directory);(path/'test.c').write_text(pll_test)
     subprocess.run(shlex.split(os.environ.get('HOSTCC','cc'))+
-                   ['-std=gnu11','-O2','-Wall','-Wextra','-Werror',str(path/'test.c'),'-o',str(path/'test')],check=True)
+                   ['-std=gnu11','-O2','-Wall','-Wextra','-Werror',*host_flags,str(path/'test.c'),'-o',str(path/'test')],check=True)
     subprocess.run([str(path/'test')],check=True)

@@ -54,13 +54,46 @@ the VCO is idle. A provider deferred beyond late init explicitly requests a
 tracked HIGH handoff lease too. Only a complete ownership barrier may release
 that late lease; release failures preserve the recorded vote for retry.
 
+Stage 5 replaces the legacy L12 request path with the typed physical RPM
+backend. A no-I/O readiness check precedes retaining consumer handles or
+bootstrapping the class: a visible but not yet activated bank defers cleanly.
+The source L12 boot proxy is requested explicitly as 1.8 V and 10,000 uA;
+ordinary clock consumers have no steady load request. Every successful
+analog transition and repeated pre-operation sync forces fresh UV/MA/SWEN
+ACTIVE and SLEEP ACKs through the real regulator-core aggregates. A cached
+enable count is insufficient. Requests processed by RPM are not measured
+voltages or a proof of physical settling.
+
+The temporary 10 mA lease is removed only with known clock ownership and
+completed CCF handoff accounting. `clk_vdd_class_handoff_done()` takes the
+prepare/list locks before the voltage-class lock is acquired; it does not
+measure hardware activity. Both the MMCC late-init hook after CCF cleanup
+and a provider completing late probe use this check. An unowned active PLL,
+ignored unused-clock cleanup or failed handoff keeps the bootstrap lease.
+Repeated release is idempotent under the class lock. Failed load release
+restores the consumer's 10 mA request as well as retaining the lease flag:
+this core caches a changed load even when the provider returns an error.
+The original failure and quarantine remain visible.
+
 A failed digital transition attempts to restore the last acknowledged
-contract; failed recovery quarantines the class until an actual typed ACK
-reconciles it. A physical L12 failure is stricter: the existing physical RPM
-provider has no consumer API to force replay of a potentially lost SWEN ACK.
-The analog class therefore remains quarantined, and a digital ACK or cached
-physical enable count cannot clear that state. Physical L12 SLEEP handling
-and real suspend/resume remain unverified.
+contract. Physical L12 failures latch the analog class and block subsequent
+clock operations. The physical backend has a separate explicit recovery API
+for a known BOTH baseline; replaying that request alone cannot reconcile a
+CCF consumer count or clock ownership after a lost ACK, and does not clear
+the analog latch automatically. Unknown initial transactions have no guessed
+recovery baseline. No clock-level automatic recovery or gate removal is
+claimed by this implementation.
+
+The bounded built-in consumer lease survives provider deferral without
+multiplying enable references. A different case remains deliberately sticky:
+if partial clock registration unwinds the last class member while its HIGH
+handoff is held, CCF marks that class orphaned and rejects re-registration.
+There is no qualified same-owner reattachment API yet. Retaining power is
+safe against a guessed voltage drop, but this is an availability limitation,
+not successful deferred-probe recovery. See clk_vdd_class_deinit/init and
+qcom_cc_really_probe. The read-only APCC/CBF observer additionally checks
+stable source samples and resolves the original GPLL0/2 AUX leg; it still
+provides no CPU power/rate transaction adapter.
 
 The host checker executes the production helper with delivered/lost-ACK
 failures and checks source maps against the manifest, including a rejected

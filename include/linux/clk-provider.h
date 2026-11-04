@@ -353,6 +353,12 @@ struct clk_vdd_class {
  */
 int clk_vdd_class_release_handoff(struct clk_vdd_class *vdd);
 
+/* True only after global cleanup and this live class's handoff vote release.
+ * This reports CCF accounting, not hardware ownership, idle state or rail ACK.
+ * Call outside the class lock; the query takes prepare/list locks in order.
+ */
+bool clk_vdd_class_handoff_done(struct clk_vdd_class *vdd);
+
 #define DEFINE_VDD_CLASS(_name, _set_vdd, _num_levels) \
 	struct clk_vdd_class _name = { \
 		.class_name = #_name, \

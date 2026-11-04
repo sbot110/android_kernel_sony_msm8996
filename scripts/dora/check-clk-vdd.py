@@ -187,7 +187,7 @@ match = re.search(r'enum clk_vdd_action \{.*?\n\};', source, re.S)
 assert match
 common += match[0] + '\n'
 names = ['clk_find_vdd_level','clk_apply_vdd_level','clk_sync_vdd','clk_update_vdd',
- 'clk_vote_vdd_level','clk_unvote_vdd_level','clk_vote_rate_vdd','clk_vdd_class_init','clk_vdd_class_deinit','clk_vdd_class_release_handoff',
+ 'clk_vote_vdd_level','clk_unvote_vdd_level','clk_vote_rate_vdd','clk_vdd_class_init','clk_vdd_class_deinit','clk_vdd_class_release_handoff','clk_vdd_class_handoff_done',
  'clk_sync_core_vdd','clk_drop_vdd_vote','clk_promote_vdd_vote','clk_finish_vdd_vote','clk_detach_vdd_core',
  'clk_retry_vdd_votes','clk_release_unprepared_vdd','clk_core_prepare','clk_core_unprepare',
  '__clk_set_parent_before','__clk_set_parent_after','clk_reconcile_parent','clk_parent_failed','__clk_set_parent',
@@ -242,6 +242,17 @@ static void reset(void)
 static void prepare(void) {assert(clk_core_prepare(&clk)==0);assert(votes[1]==1 && rail.enables==1 && clk.pm_refs==1);}
 int main(void)
 {
+ reset();assert(!clk_vdd_class_handoff_done(NULL) && !clk_vdd_class_handoff_done(&vdd));
+ /* No handoff record is required after global cleanup, but a live,
+    non-orphaned class is. A skipped/no-vote record is not a held lease. */
+ assert(clk_vdd_class_init(&vdd)==0 && vdd.num_clocks==1);
+ assert(!clk_vdd_class_handoff_done(&vdd));
+ vdd_class_handoff_completed=true;assert(clk_vdd_class_handoff_done(&vdd));
+ vdd.orphaned=true;assert(!clk_vdd_class_handoff_done(&vdd));vdd.orphaned=false;
+ clk_vdd_class_deinit(&vdd);assert(!clk_vdd_class_handoff_done(&vdd));
+ reset();vdd.skip_handoff=false;vdd_class_handoff_completed=true;
+ assert(clk_vdd_class_init(&vdd)==0 && !votes[2] && !list_empty(&clk_handoff_vdd_list));
+ assert(clk_vdd_class_handoff_done(&vdd));clk_vdd_class_deinit(&vdd);
  reset();assert(clk_vote_vdd_level(&vdd,-1)==-EINVAL && !votes[0]);
  assert(clk_unvote_vdd_level(&vdd,-1)==-EINVAL);
  rail.on_error=-EIO;assert(clk_vote_vdd_level(&vdd,2)==-EIO);
@@ -306,14 +317,21 @@ int main(void)
  reset();vdd.skip_handoff=false;alloc_error=1;
  assert(clk_vdd_class_init(&vdd)==-ENOMEM && !votes[2] && !rail.enables);
  alloc_error=0;assert(clk_vdd_class_init(&vdd)==0 && vdd.num_clocks==1 && votes[2]==1);
+ assert(!clk_vdd_class_handoff_done(&vdd));
  clk_vdd_class_deinit(&vdd);assert(list_empty(&clk_handoff_vdd_list) && vdd.orphaned && votes[2]==1);
+ assert(!clk_vdd_class_handoff_done(&vdd));
  reset();vdd.skip_handoff=false;vdd.require_handoff=true;vdd_class_handoff_completed=true;
  assert(clk_vdd_class_init(&vdd)==0 && votes[2]==1 && vdd.cur_level==2);
+ assert(!clk_vdd_class_handoff_done(&vdd));
+ {struct clk_vdd_class unrelated={.num_clocks=1};assert(clk_vdd_class_handoff_done(&unrelated));}
  assert(clk_core_prepare(&clk)==0 && votes[1]==1 && votes[2]==1 && rail.voltage==2000);
  rail.set_error=-EIO;assert(clk_vdd_class_release_handoff(&vdd)==-EIO && votes[2]==1 && !list_empty(&clk_handoff_vdd_list));
+ assert(!clk_vdd_class_handoff_done(&vdd));
  rail.set_error=0;assert(clk_vdd_class_release_handoff(&vdd)==0 && !votes[2] && votes[1]==1 && list_empty(&clk_handoff_vdd_list));
+ assert(clk_vdd_class_handoff_done(&vdd));
  reset();vdd.skip_handoff=false;vdd.require_handoff=true;assert(clk_vdd_class_init(&vdd)==0);
  assert(clk_vdd_class_release_handoff(&vdd)==0 && votes[2]==1 && !list_empty(&clk_handoff_vdd_list));
+ assert(!clk_vdd_class_handoff_done(&vdd));
  clk_vdd_class_deinit(&vdd);
  puts("PASS: actual CCF leases, ACK quarantine, bootstrap sentinel, PM balance, unprepared writes, mux readback, notifier abort and teardown");
  return 0;

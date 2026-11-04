@@ -1000,6 +1000,31 @@ out:
 }
 EXPORT_SYMBOL_GPL(clk_vdd_class_release_handoff);
 
+bool clk_vdd_class_handoff_done(struct clk_vdd_class *vdd)
+{
+	struct clk_handoff_vdd *v;
+	bool done = false;
+
+	if (!vdd)
+		return false;
+	/* Keep the same order as handoff release and unused-clock cleanup.
+	 * Callers must not hold the individual class lock while querying.
+	 */
+	clk_prepare_lock();
+	mutex_lock(&vdd_class_list_lock);
+	if (!vdd_class_handoff_completed || vdd->orphaned || !vdd->num_clocks)
+		goto out;
+	list_for_each_entry(v, &clk_handoff_vdd_list, list)
+		if (v->vdd_class == vdd && v->vote_held)
+			goto out;
+	done = true;
+out:
+	mutex_unlock(&vdd_class_list_lock);
+	clk_prepare_unlock();
+	return done;
+}
+EXPORT_SYMBOL_GPL(clk_vdd_class_handoff_done);
+
 static int clk_reconcile_parent(struct clk_core *core);
 
 static int clk_sync_core_vdd(struct clk_core *core)

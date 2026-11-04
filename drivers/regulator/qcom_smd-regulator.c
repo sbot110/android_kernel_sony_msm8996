@@ -13,12 +13,18 @@
  */
 
 #include <linux/module.h>
+#include <linux/kref.h>
+#include <linux/mutex.h>
 #include <linux/of.h>
 #include <linux/of_device.h>
 #include <linux/platform_device.h>
+#include <linux/slab.h>
 #include <linux/regulator/driver.h>
 #include <linux/regulator/of_regulator.h>
+#include <linux/regulator/qcom-rpm-physical.h>
 #include <linux/soc/qcom/smd-rpm.h>
+
+#include "internal.h"
 
 struct qcom_rpm_reg {
 	struct device *dev;
@@ -29,6 +35,12 @@ struct qcom_rpm_reg {
 	u32 id;
 
 	struct regulator_desc desc;
+	struct regulator_dev *rdev;
+	struct mutex lock;
+	struct kref refs;
+	bool online;
+	bool attempted;
+	bool claimed;
 
 	int is_enabled;
 	int uV;
@@ -48,6 +60,9 @@ static int rpm_reg_write_active(struct qcom_rpm_reg *vreg,
 				struct rpm_regulator_req *req,
 				size_t size)
 {
+	if (!vreg->online)
+		return -ENODEV;
+	vreg->attempted = true;
 	return qcom_rpm_smd_write(vreg->rpm,
 				  QCOM_SMD_RPM_ACTIVE_STATE,
 				  vreg->type,
@@ -65,9 +80,11 @@ static int rpm_reg_enable(struct regulator_dev *rdev)
 	req.nbytes = cpu_to_le32(sizeof(u32));
 	req.value = cpu_to_le32(1);
 
+	mutex_lock(&vreg->lock);
 	ret = rpm_reg_write_active(vreg, &req, sizeof(req));
 	if (!ret)
 		vreg->is_enabled = 1;
+	mutex_unlock(&vreg->lock);
 
 	return ret;
 }
@@ -75,8 +92,12 @@ static int rpm_reg_enable(struct regulator_dev *rdev)
 static int rpm_reg_is_enabled(struct regulator_dev *rdev)
 {
 	struct qcom_rpm_reg *vreg = rdev_get_drvdata(rdev);
+	int ret;
 
-	return vreg->is_enabled;
+	mutex_lock(&vreg->lock);
+	ret = vreg->online ? vreg->is_enabled : -ENODEV;
+	mutex_unlock(&vreg->lock);
+	return ret;
 }
 
 static int rpm_reg_disable(struct regulator_dev *rdev)
@@ -89,9 +110,11 @@ static int rpm_reg_disable(struct regulator_dev *rdev)
 	req.nbytes = cpu_to_le32(sizeof(u32));
 	req.value = 0;
 
+	mutex_lock(&vreg->lock);
 	ret = rpm_reg_write_active(vreg, &req, sizeof(req));
 	if (!ret)
 		vreg->is_enabled = 0;
+	mutex_unlock(&vreg->lock);
 
 	return ret;
 }
@@ -99,8 +122,12 @@ static int rpm_reg_disable(struct regulator_dev *rdev)
 static int rpm_reg_get_voltage(struct regulator_dev *rdev)
 {
 	struct qcom_rpm_reg *vreg = rdev_get_drvdata(rdev);
+	int ret;
 
-	return vreg->uV;
+	mutex_lock(&vreg->lock);
+	ret = vreg->online ? vreg->uV : -ENODEV;
+	mutex_unlock(&vreg->lock);
+	return ret;
 }
 
 static int rpm_reg_set_voltage(struct regulator_dev *rdev,
@@ -110,15 +137,30 @@ static int rpm_reg_set_voltage(struct regulator_dev *rdev,
 {
 	struct qcom_rpm_reg *vreg = rdev_get_drvdata(rdev);
 	struct rpm_regulator_req req;
-	int ret = 0;
+	int ret, selected = -1;
+
+	if (min_uV <= 0 || min_uV > max_uV)
+		return -EINVAL;
+	if (rdev->desc->ops->list_voltage && rdev->desc->n_voltages) {
+		selected = regulator_map_voltage_iterate(rdev, min_uV, max_uV);
+		if (selected < 0)
+			return selected;
+		min_uV = rdev->desc->ops->list_voltage(rdev, selected);
+		if (min_uV <= 0)
+			return -EINVAL;
+	}
 
 	req.key = cpu_to_le32(RPM_KEY_UV);
 	req.nbytes = cpu_to_le32(sizeof(u32));
 	req.value = cpu_to_le32(min_uV);
 
+	mutex_lock(&vreg->lock);
 	ret = rpm_reg_write_active(vreg, &req, sizeof(req));
 	if (!ret)
 		vreg->uV = min_uV;
+	mutex_unlock(&vreg->lock);
+	if (!ret && selector && selected >= 0)
+		*selector = selected;
 
 	return ret;
 }
@@ -127,12 +169,19 @@ static int rpm_reg_set_load(struct regulator_dev *rdev, int load_uA)
 {
 	struct qcom_rpm_reg *vreg = rdev_get_drvdata(rdev);
 	struct rpm_regulator_req req;
+	int ret;
+
+	if (load_uA < 0)
+		return -EINVAL;
 
 	req.key = cpu_to_le32(RPM_KEY_MA);
 	req.nbytes = cpu_to_le32(sizeof(u32));
-	req.value = cpu_to_le32(load_uA / 1000);
+	req.value = cpu_to_le32(min(load_uA / 1000, 0x1fff));
 
-	return rpm_reg_write_active(vreg, &req, sizeof(req));
+	mutex_lock(&vreg->lock);
+	ret = rpm_reg_write_active(vreg, &req, sizeof(req));
+	mutex_unlock(&vreg->lock);
+	return ret;
 }
 
 static const struct regulator_ops rpm_smps_ldo_ops = {
@@ -674,60 +723,134 @@ static const struct of_device_id rpm_of_match[] = {
 };
 MODULE_DEVICE_TABLE(of, rpm_of_match);
 
-/**
- * rpm_regulator_init_vreg() - initialize all attributes of a qcom_smd-regulator
- * @vreg:		Pointer to the individual qcom_smd-regulator resource
- * @dev:		Pointer to the top level qcom_smd-regulator PMIC device
- * @node:		Pointer to the individual qcom_smd-regulator resource
- *			device node
- * @rpm:		Pointer to the rpm bus node
- * @pmic_rpm_data:	Pointer to a null-terminated array of qcom_smd-regulator
- *			resources defined for the top level PMIC device
- *
- * Return: 0 on success, errno on failure
- */
-static int rpm_regulator_init_vreg(struct qcom_rpm_reg *vreg, struct device *dev,
-				   struct device_node *node, struct qcom_smd_rpm *rpm,
-				   const struct rpm_regulator_data *pmic_rpm_data)
+/* Callback storage outlives bank devres whenever a consumer still holds rdev. */
+static void rpm_reg_release(struct kref *ref)
 {
-	struct regulator_config config = {};
-	const struct rpm_regulator_data *rpm_data;
+	struct qcom_rpm_reg *vreg = container_of(ref, struct qcom_rpm_reg, refs);
+
+	kfree(vreg);
+}
+
+static void rpm_reg_put(void *data)
+{
+	struct qcom_rpm_reg *vreg = data;
+
+	kref_put(&vreg->refs, rpm_reg_release);
+}
+
+static void rpm_reg_rdev_release(struct device *dev, void *data)
+{
+	struct qcom_rpm_reg **vreg = data;
+
+	rpm_reg_put(*vreg);
+}
+
+static void rpm_reg_unregister(void *data)
+{
+	struct qcom_rpm_reg *vreg = data;
+	bool retain_parent;
+
+	/* No consumer can race another transport call after this lock barrier. */
+	mutex_lock(&vreg->lock);
+	vreg->online = false;
+	/* A surviving consumer enters core supply code before our callback.
+	 * A declared supply can resolve concurrently, so use its immutable
+	 * declaration rather than a racy supply/use_count snapshot. Retain the
+	 * built-in registration even when this child has not sent a request.
+	 */
+	retain_parent = IS_BUILTIN(CONFIG_REGULATOR_QCOM_SMD_RPM) &&
+		vreg->rdev && vreg->desc.supply_name;
+	if (vreg->claimed) {
+		qcom_rpm_smd_release(vreg->rpm, vreg->type, vreg->id,
+				     vreg, vreg->attempted || retain_parent);
+		vreg->claimed = false;
+	}
+	/* Core unregister withdraws upstream enable references. For a built-in
+	 * legacy provider whose hardware may still require its Linux parent,
+	 * retain one bounded inert registration instead of dropping that lease.
+	 * Transactional Dora rails use the separately audited firmware-input
+	 * contract and have no invented Linux supply edge.
+	 */
+	mutex_unlock(&vreg->lock);
+	if (vreg->rdev && !retain_parent) {
+		regulator_unregister(vreg->rdev);
+		vreg->rdev = NULL;
+	}
+	rpm_reg_put(vreg);
+}
+
+static int rpm_regulator_init_vreg(struct device *dev, struct device_node *node,
+		struct qcom_smd_rpm *rpm, const struct rpm_regulator_data *pmic_data)
+{
+	const struct rpm_regulator_data *data;
+	struct regulator_config config = { };
+	struct qcom_rpm_reg *vreg, **ref;
 	struct regulator_dev *rdev;
 	int ret;
 
-	for (rpm_data = pmic_rpm_data; rpm_data->name; rpm_data++)
-		if (of_node_name_eq(node, rpm_data->name))
+	for (data = pmic_data; data->name; data++)
+		if (of_node_name_eq(node, data->name))
 			break;
-
-	if (!rpm_data->name) {
-		dev_err(dev, "Unknown regulator %pOFn\n", node);
+	if (!data->name)
 		return -EINVAL;
+	if (of_property_read_bool(node, "qcom,active-sleep-votes")) {
+		if (!IS_BUILTIN(CONFIG_REGULATOR_QCOM_SMD_RPM) ||
+		    !of_device_is_compatible(dev->of_node,
+					     "qcom,rpm-pm8994-regulators") ||
+		    !of_find_property(dev->of_node, "qcom,rpm", NULL))
+			return -EINVAL;
+		return qcom_rpm_physical_register(dev, node, rpm, data->type,
+				data->id, data->desc, data->supply);
 	}
 
-	vreg->dev	= dev;
-	vreg->rpm	= rpm;
-	vreg->type	= rpm_data->type;
-	vreg->id	= rpm_data->id;
-
-	memcpy(&vreg->desc, rpm_data->desc, sizeof(vreg->desc));
-	vreg->desc.name = rpm_data->name;
-	vreg->desc.supply_name = rpm_data->supply;
+	vreg = kzalloc(sizeof(*vreg), GFP_KERNEL);
+	if (!vreg)
+		return -ENOMEM;
+	mutex_init(&vreg->lock);
+	kref_init(&vreg->refs);
+	vreg->dev = dev;
+	vreg->rpm = rpm;
+	vreg->type = data->type;
+	vreg->id = data->id;
+	vreg->desc = *data->desc;
+	vreg->desc.name = data->name;
+	vreg->desc.supply_name = data->supply;
 	vreg->desc.owner = THIS_MODULE;
 	vreg->desc.type = REGULATOR_VOLTAGE;
-	vreg->desc.of_match = rpm_data->name;
-
-	config.dev		= dev;
-	config.of_node		= node;
-	config.driver_data	= vreg;
-
-	rdev = devm_regulator_register(dev, &vreg->desc, &config);
+	vreg->desc.of_match = data->name;
+	ret = qcom_rpm_smd_claim(rpm, data->type, data->id, vreg);
+	if (ret)
+		goto put;
+	vreg->claimed = true;
+	/* Preallocate final-rdev ownership before publication. Unlike the
+	 * transactional mode, legacy machine constraints may send requests.
+	 */
+	ref = devres_alloc(rpm_reg_rdev_release, sizeof(*ref), GFP_KERNEL);
+	if (!ref) {
+		ret = -ENOMEM;
+		goto retire;
+	}
+	vreg->online = true;
+	config.dev = dev;
+	config.of_node = node;
+	config.driver_data = vreg;
+	rdev = regulator_register(&vreg->desc, &config);
 	if (IS_ERR(rdev)) {
 		ret = PTR_ERR(rdev);
-		dev_err(dev, "%pOFn: devm_regulator_register() failed, ret=%d\n", node, ret);
-		return ret;
+		devres_free(ref);
+		goto retire;
 	}
-
-	return 0;
+	kref_get(&vreg->refs);
+	*ref = vreg;
+	devres_add(&rdev->dev, ref);
+	vreg->rdev = rdev;
+	return devm_add_action_or_reset(dev, rpm_reg_unregister, vreg);
+retire:
+	rpm_reg_unregister(vreg);
+	return ret;
+put:
+	rpm_reg_put(vreg);
+	return ret;
 }
 
 static int rpm_reg_probe(struct platform_device *pdev)
@@ -735,14 +858,29 @@ static int rpm_reg_probe(struct platform_device *pdev)
 	struct device *dev = &pdev->dev;
 	const struct rpm_regulator_data *vreg_data;
 	struct device_node *node;
-	struct qcom_rpm_reg *vreg;
 	struct qcom_smd_rpm *rpm;
 	int ret;
 
-	rpm = dev_get_drvdata(pdev->dev.parent);
-	if (!rpm) {
-		dev_err(&pdev->dev, "Unable to retrieve handle to rpm\n");
-		return -ENODEV;
+	/* A module cannot host transactional votes. Reject the whole bank
+	 * before legacy siblings can publish and apply machine constraints.
+	 */
+	if (!IS_BUILTIN(CONFIG_REGULATOR_QCOM_SMD_RPM)) {
+		for_each_available_child_of_node(dev->of_node, node) {
+			if (of_property_read_bool(node, "qcom,active-sleep-votes")) {
+				of_node_put(node);
+				return -EINVAL;
+			}
+		}
+	}
+
+	if (of_find_property(dev->of_node, "qcom,rpm", NULL)) {
+		rpm = qcom_smd_rpm_get(dev);
+		if (IS_ERR(rpm))
+			return PTR_ERR(rpm);
+	} else {
+		rpm = dev_get_drvdata(pdev->dev.parent);
+		if (!rpm)
+			return -EPROBE_DEFER;
 	}
 
 	vreg_data = of_device_get_match_data(dev);
@@ -750,13 +888,7 @@ static int rpm_reg_probe(struct platform_device *pdev)
 		return -ENODEV;
 
 	for_each_available_child_of_node(dev->of_node, node) {
-		vreg = devm_kzalloc(&pdev->dev, sizeof(*vreg), GFP_KERNEL);
-		if (!vreg) {
-			of_node_put(node);
-			return -ENOMEM;
-		}
-
-		ret = rpm_regulator_init_vreg(vreg, dev, node, rpm, vreg_data);
+		ret = rpm_regulator_init_vreg(dev, node, rpm, vreg_data);
 
 		if (ret < 0) {
 			of_node_put(node);
@@ -764,14 +896,30 @@ static int rpm_reg_probe(struct platform_device *pdev)
 		}
 	}
 
-	return 0;
+	return qcom_rpm_physical_activate(dev);
 }
+
+static int __maybe_unused rpm_reg_suspend(struct device *dev)
+{
+	return qcom_rpm_physical_suspend(dev);
+}
+
+static int __maybe_unused rpm_reg_resume(struct device *dev)
+{
+	return qcom_rpm_physical_resume(dev);
+}
+
+static const struct dev_pm_ops rpm_reg_pm_ops = {
+	SET_SYSTEM_SLEEP_PM_OPS(rpm_reg_suspend, rpm_reg_resume)
+};
 
 static struct platform_driver rpm_reg_driver = {
 	.probe = rpm_reg_probe,
 	.driver = {
 		.name  = "qcom_rpm_smd_regulator",
 		.of_match_table = rpm_of_match,
+		.pm = &rpm_reg_pm_ops,
+		.suppress_bind_attrs = true,
 	},
 };
 

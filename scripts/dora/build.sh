@@ -45,8 +45,18 @@ python3 "$root/scripts/dora/check-mmc-alias.py"
 python3 "$root/scripts/dora/check-mmc-uim2.py"
 python3 "$root/scripts/dora/check-mmc-providers.py"
 python3 "$root/scripts/dora/check-mmc-power.py"
+python3 "$root/scripts/dora/check-mmc-physical.py" --self-test
+python3 "$root/scripts/dora/check-mmc-clock-faults.py" --self-test
+python3 "$root/scripts/dora/check-mmc-irq-faults.py" --self-test
+python3 "$root/scripts/dora/check-minidump.py"
+python3 "$root/scripts/dora/check-warning-inputs.py" --self-test
+python3 "$root/scripts/dora/check-regulator-load.py"
+python3 "$root/scripts/dora/check-rpm-ownership.py"
+python3 "$root/scripts/dora/check-rpm-native.py" --self-test
+python3 "$root/scripts/dora/check-rpm-physical.py" --self-test
+python3 "$root/scripts/dora/check-rpm-pm-order.py" --self-test
 python3 "$root/scripts/dora/check-rpm-corners.py"
-python3 "$root/scripts/dora/check-clock-voltage.py"
+python3 "$root/scripts/dora/check-clock-voltage.py" --self-test
 python3 "$root/scripts/dora/check-clk-vdd.py"
 python3 "$root/scripts/dora/check-panels.py"
 python3 "$root/scripts/dora/check-panel-selection.py"
@@ -80,8 +90,11 @@ for dtb in "${dtbs[@]}"; do
     python3 "$root/scripts/dora/check-bus-dt.py" "$tree" --selftest
     python3 "$root/scripts/dora/check-storage-dt.py" "$tree" --config "$out/.config" --selftest
     python3 "$root/scripts/dora/check-clock-voltage-dt.py" "$tree" --config "$out/.config" --require-active --selftest
+    python3 "$root/scripts/dora/check-rpm-physical-dt.py" "$tree" --config "$out/.config" --selftest
     python3 "$root/scripts/dora/check-display-dt.py" "$tree" --config "$out/.config" --require-gated --self-test
 done
+python3 "$root/scripts/dora/check-sdhc1-diagnostic.py" --default-only \
+    "${trees[@]}" --config "$out/.config" --selftest
 python3 "$root/scripts/dora/check-variants.py" "${trees[@]}" --require-four --require-active --selftest
 # An explicit list excludes stale or unrelated DTBs in O=.
 image="$out/arch/arm64/boot/Image.gz"

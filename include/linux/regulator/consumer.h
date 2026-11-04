@@ -275,6 +275,10 @@ unsigned int regulator_get_mode(struct regulator *regulator);
 int regulator_get_error_flags(struct regulator *regulator,
 				unsigned int *flags);
 int regulator_set_load(struct regulator *regulator, int load_uA);
+/* Replay aggregate load without rewriting a consumer request; requested load
+ * is not proof that a previous provider operation was acknowledged.
+ */
+int regulator_sync_load(struct regulator *regulator);
 
 int regulator_allow_bypass(struct regulator *regulator, bool allow);
 
@@ -527,6 +531,11 @@ static inline int regulator_get_error_flags(struct regulator *regulator,
 static inline int regulator_set_load(struct regulator *regulator, int load_uA)
 {
 	return 0;
+}
+
+static inline int regulator_sync_load(struct regulator *regulator)
+{
+	return -EOPNOTSUPP;
 }
 
 static inline int regulator_allow_bypass(struct regulator *regulator,

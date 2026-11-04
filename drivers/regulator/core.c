@@ -3526,6 +3526,35 @@ out:
 }
 EXPORT_SYMBOL_GPL(regulator_sync_voltage);
 
+/**
+ * regulator_sync_load - replay the current aggregate consumer load
+ * @regulator: consumer handle whose provider must be resynchronized
+ *
+ * A failed set_load leaves the consumer request cached. This operation does
+ * not alter any consumer's request. This core already reissues set_load for
+ * identical values; a separate replay API also avoids rewriting one consumer
+ * when the operation is verification of the whole aggregate. Provider success
+ * is not a measurement of physical current.
+ */
+int regulator_sync_load(struct regulator *regulator)
+{
+	struct regulator_dev *rdev;
+	int ret;
+
+	if (IS_ERR_OR_NULL(regulator))
+		return -EINVAL;
+	rdev = regulator->rdev;
+	regulator_lock(rdev);
+	if (!regulator_ops_is_valid(rdev, REGULATOR_CHANGE_DRMS) ||
+	    !rdev->desc->ops->set_load)
+		ret = -EOPNOTSUPP;
+	else
+		ret = drms_uA_update(rdev);
+	regulator_unlock(rdev);
+	return ret;
+}
+EXPORT_SYMBOL_GPL(regulator_sync_load);
+
 static int _regulator_get_voltage(struct regulator_dev *rdev)
 {
 	int sel, ret;

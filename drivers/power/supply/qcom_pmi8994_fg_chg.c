@@ -1,32 +1,34 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
- * Qualcomm PMI8994 / PMI8996 SMBCHG + Fuel Gauge Hardware Telemetry Driver
+ * Qualcomm PMI8994 / PMI8996 SPMI Fuel Gauge & SMBCHG Telemetry Driver
  *
- * Designed for Sony Xperia Tone / Dora (MSM8996, F8131/F8132) running Linux 5.15:
- *   - Reads real SPMI registers on USID 2:
- *       chgr@1000, bat-if@1200, usb-chgpth@1300, chgr-misc@1600,
- *       fg-soc@4000, fg-batt@4100, fg-memif@4400
- *   - Detects silicon revision / peripheral subtype at runtime:
- *       PMI8994 (subtype 10, RIF SRAM arbiter) vs PMI8996 (subtype 19, IMA arbiter)
- *   - Reads real VBUS voltage via PMI8994 SPMI VADC IIO channel ("usbin")
- *   - Strictly preserves hardware/S1 OTP JEITA temperature windows, float voltage
- *     (4.35 V max on Dora LIP1621ERPC), input current limit (AICL), and safety
- *     timers without overriding any protective thresholds from software.
+ * Designed for Sony Xperia X Performance (Tone Dora: F8131 / F8132, MSM8996)
+ *
+ * Hardware-autonomous charging safety limits:
+ * - Float voltage, fast-charge current, AICL, JEITA thresholds, PMIC safety
+ *   timers, battery overvoltage protection, and thermal shutdown are preserved
+ *   100% as programmed in hardware / PMIC OTP / Sony S1 bootloader.
+ * - This driver operates strictly as a telemetry, health, and status monitor,
+ *   performing memory interface and register reads without mutating charging
+ *   safety parameters.
  */
 
-#include <linux/bits.h>
 #include <linux/delay.h>
+#include <linux/device.h>
 #include <linux/err.h>
 #include <linux/iio/consumer.h>
+#include <linux/init.h>
 #include <linux/interrupt.h>
 #include <linux/kernel.h>
-#include <linux/math64.h>
 #include <linux/module.h>
-#include <linux/mutex.h>
 #include <linux/of.h>
+#include <linux/of_device.h>
 #include <linux/platform_device.h>
+#include <linux/pm.h>
 #include <linux/power_supply.h>
 #include <linux/regmap.h>
+#include <linux/slab.h>
+#include <linux/types.h>
 #include <linux/workqueue.h>
 
 /* PMIC REVID on USID 2 */
@@ -49,6 +51,7 @@
 #define CHG_TYPE_PRE				1
 #define CHG_TYPE_FAST				2
 #define CHG_TYPE_TAPER				3
+
 #define CHGR_RT_CHG_INHIBIT			BIT(1)
 #define CHGR_RT_BAT_TCC_REACHED			BIT(7)
 
@@ -70,6 +73,7 @@
 #define APSD_STS_DCP				BIT(2)
 #define APSD_STS_TIMEOUT			BIT(3)
 #define APSD_STS_HVDCP				BIT(4)
+
 #define USB_RT_USBIN_UV				BIT(0)
 #define USB_RT_USBIN_OV				BIT(1)
 #define USB_RT_USBIN_SRC_DET			BIT(2)
@@ -98,54 +102,65 @@
 
 #define MEM_INTF_ACCESS_REQ			BIT(7)
 #define MEM_INTF_IACS_SLCT			BIT(5)
-#define MEM_INTF_BURST_EN			BIT(7)
-#define MEM_INTF_WR_EN				BIT(6)
+#define MEM_INTF_WR_EN				BIT(7)
+#define MEM_INTF_BURST_EN			BIT(6)
+
+#define IMA_OPR_STS_READY			BIT(0)
 #define RIF_RT_MEM_AVAIL			BIT(0)
-#define IMA_OPR_IACS_RDY			BIT(1)
 
 /* Fuel Gauge SRAM addresses & byte offsets (Sony 4.4 qpnp-fg.c verified) */
 #define FG_SRAM_BATT_TEMP_ADDR			0x550
 #define FG_SRAM_BATT_TEMP_OFF			2
+
 #define FG_SRAM_OCV_ADDR			0x588
 #define FG_SRAM_OCV_OFF				3
+
 #define FG_SRAM_VBAT_ADDR			0x5cc
 #define FG_SRAM_VBAT_OFF			1
+
 #define FG_SRAM_IBAT_ADDR			0x5cc
 #define FG_SRAM_IBAT_OFF			3
+
+#define FG_SRAM_CC_ADDR				0x570
+#define FG_SRAM_CC_OFF				0
+
 #define FG_SRAM_CYCLE_ADDR			0x5e8
 #define FG_SRAM_CYCLE_OFF			0
 
-/* FG 16-bit scaling factors from Qualcomm qpnp-fg */
-#define FG_LSB_16B_NUMRTR			152587ULL
+/* Conversion multipliers per Qualcomm FG specification */
+#define FG_LSB_16B_NUMRTR			976563ULL
 #define FG_LSB_16B_DENMTR			1000ULL
 #define FG_TEMP_LSB_16B				625
 #define FG_DECIKELVIN				2730
+#define FG_SRAM_CACHE_MS			1000
 
-#define FG_SRAM_CACHE_MS			2000
-
-static const int pmi8994_usb_icl_ma_table[32] = {
-	300, 400, 450, 475, 500, 550, 600, 650,
-	700, 900, 950, 1000, 1100, 1200, 1400, 1450,
-	1500, 1600, 1800, 1850, 1880, 1910, 1930, 1950,
-	1970, 2000, 2050, 2100, 2300, 2400, 2500, 3000
-};
-
-struct pmi8994_sram_snapshot {
+struct pmi8994_sram_cache {
 	bool valid;
 	unsigned long updated_jiffies;
 	int vbat_uv;
-	int ocv_uv;
 	int ibat_ua;
 	int temp_decidegc;
+	int ocv_uv;
 	int cycle_count;
+	int charge_counter_uah;
+	bool charge_counter_valid;
+};
+
+struct pmi8994_irq_desc {
+	const char *name;
+	int irq;
+	bool wake_enabled;
 };
 
 struct pmi8994_fg_chg {
 	struct device *dev;
 	struct regmap *regmap;
+	struct power_supply *batt_psy;
+	struct power_supply *usb_psy;
 	struct iio_channel *usbin_chan;
-	struct mutex sram_lock;
 	struct delayed_work notify_work;
+	struct mutex sram_lock;
+	struct pmi8994_sram_cache cache;
 
 	u32 chgr_base;
 	u32 bat_if_base;
@@ -155,47 +170,45 @@ struct pmi8994_fg_chg {
 	u32 fg_batt_base;
 	u32 fg_memif_base;
 
+	u8 pmic_subtype;
+	bool is_pmi8996_ima;
+
 	u32 design_capacity_uah;
 	u32 design_vmax_uv;
 	u32 design_vmin_uv;
 
-	bool is_pmi8996_ima;
-	u8 pmic_subtype;
-
-	struct pmi8994_sram_snapshot cache;
-	struct power_supply *batt_psy;
-	struct power_supply *usb_psy;
+	struct pmi8994_irq_desc irqs[10];
+	size_t num_irqs;
 };
 
-static int pmi8994_read_u8(struct pmi8994_fg_chg *chip, u32 addr, u8 *val)
+static int pmi8994_read_u8(struct pmi8994_fg_chg *chip, u32 reg, u8 *val)
 {
-	unsigned int tmp = 0;
+	unsigned int temp;
 	int ret;
 
-	ret = regmap_read(chip->regmap, addr, &tmp);
+	ret = regmap_read(chip->regmap, reg, &temp);
 	if (ret)
 		return ret;
 
-	*val = (u8)tmp;
+	*val = (u8)temp;
 	return 0;
 }
 
 static int pmi8994_ima_wait_ready(struct pmi8994_fg_chg *chip)
 {
-	u8 opr = 0;
+	u8 sts = 0;
 	int i, ret;
 
-	for (i = 0; i < 40; i++) {
+	for (i = 0; i < 20; i++) {
 		ret = pmi8994_read_u8(chip,
 				      chip->fg_memif_base + IMA_MEM_INTF_OPR_STS,
-				      &opr);
+				      &sts);
 		if (ret)
 			return ret;
-		if (opr & IMA_OPR_IACS_RDY)
+		if (sts & IMA_OPR_STS_READY)
 			return 0;
-		usleep_range(250, 400);
+		usleep_range(200, 400);
 	}
-
 	return -ETIMEDOUT;
 }
 
@@ -204,7 +217,7 @@ static int pmi8994_rif_wait_avail(struct pmi8994_fg_chg *chip)
 	u8 rt = 0;
 	int i, ret;
 
-	for (i = 0; i < 40; i++) {
+	for (i = 0; i < 20; i++) {
 		ret = pmi8994_read_u8(chip,
 				      chip->fg_memif_base + INT_RT_STS_OFFSET,
 				      &rt);
@@ -214,26 +227,25 @@ static int pmi8994_rif_wait_avail(struct pmi8994_fg_chg *chip)
 			return 0;
 		usleep_range(500, 800);
 	}
-
 	return -ETIMEDOUT;
 }
 
 /*
- * Read 'len' bytes from Fuel Gauge SRAM starting at 4-byte aligned 'addr' + 'offset'.
- * Supports crossing a 32-bit word boundary (e.g. IBAT at 0x5cc offset 3, len 2)
- * via hardware burst read on both PMI8994 (RIF) and PMI8996 (IMA).
+ * Read len bytes from Fuel Gauge SRAM starting at word-aligned addr + byte offset.
+ * Fully supports multi-word reads crossing 32-bit word boundaries (e.g. IBAT at 0x5cc offset 3).
+ * When crossing words, explicitly advances cur_addr += 4 and reprograms the address registers.
  */
 static int pmi8994_fg_sram_read(struct pmi8994_fg_chg *chip, u16 addr,
 				u8 offset, u8 *dst, size_t len)
 {
-	bool burst = (offset + len) > 4;
 	u32 cfg_reg, ctl_reg, lsb_reg, rd0_reg;
+	u16 cur_addr = addr + (offset / 4) * 4;
+	u8 cur_off = offset % 4;
 	u8 addr_le[2];
 	size_t rem = len;
-	u8 cur_off = offset;
 	int ret;
 
-	if (!len || offset >= 4)
+	if (!len)
 		return -EINVAL;
 
 	if (chip->is_pmi8996_ima) {
@@ -249,8 +261,7 @@ static int pmi8994_fg_sram_read(struct pmi8994_fg_chg *chip, u16 addr,
 			return ret;
 
 		ret = regmap_update_bits(chip->regmap, ctl_reg,
-					 MEM_INTF_BURST_EN | MEM_INTF_WR_EN,
-					 burst ? MEM_INTF_BURST_EN : 0);
+					 MEM_INTF_BURST_EN | MEM_INTF_WR_EN, 0);
 		if (ret)
 			goto out_release;
 
@@ -258,8 +269,8 @@ static int pmi8994_fg_sram_read(struct pmi8994_fg_chg *chip, u16 addr,
 		if (ret)
 			goto out_release;
 
-		addr_le[0] = addr & 0xff;
-		addr_le[1] = (addr >> 8) & 0xff;
+		addr_le[0] = cur_addr & 0xff;
+		addr_le[1] = (cur_addr >> 8) & 0xff;
 		ret = regmap_bulk_write(chip->regmap, lsb_reg, addr_le, 2);
 		if (ret)
 			goto out_release;
@@ -269,20 +280,28 @@ static int pmi8994_fg_sram_read(struct pmi8994_fg_chg *chip, u16 addr,
 			goto out_release;
 
 		while (rem > 0) {
-			size_t chunk = min_t(size_t, rem, 4 - cur_off);
+			size_t chunk = min_t(size_t, rem, (size_t)(4 - cur_off));
 
 			ret = regmap_bulk_read(chip->regmap, rd0_reg + cur_off,
 					       dst, chunk);
 			if (ret)
 				goto out_release;
 
-			ret = pmi8994_ima_wait_ready(chip);
-			if (ret)
-				goto out_release;
-
 			dst += chunk;
 			rem -= chunk;
-			cur_off = 0;
+
+			if (rem > 0) {
+				cur_addr += 4;
+				cur_off = 0;
+				addr_le[0] = cur_addr & 0xff;
+				addr_le[1] = (cur_addr >> 8) & 0xff;
+				ret = regmap_bulk_write(chip->regmap, lsb_reg, addr_le, 2);
+				if (ret)
+					goto out_release;
+				ret = pmi8994_ima_wait_ready(chip);
+				if (ret)
+					goto out_release;
+			}
 		}
 	} else {
 		cfg_reg = chip->fg_memif_base + RIF_MEM_INTF_CFG;
@@ -301,19 +320,18 @@ static int pmi8994_fg_sram_read(struct pmi8994_fg_chg *chip, u16 addr,
 			goto out_release;
 
 		ret = regmap_update_bits(chip->regmap, ctl_reg,
-					 MEM_INTF_BURST_EN | MEM_INTF_WR_EN,
-					 burst ? MEM_INTF_BURST_EN : 0);
+					 MEM_INTF_BURST_EN | MEM_INTF_WR_EN, 0);
 		if (ret)
 			goto out_release;
 
-		addr_le[0] = addr & 0xff;
-		addr_le[1] = (addr >> 8) & 0xff;
+		addr_le[0] = cur_addr & 0xff;
+		addr_le[1] = (cur_addr >> 8) & 0xff;
 		ret = regmap_bulk_write(chip->regmap, lsb_reg, addr_le, 2);
 		if (ret)
 			goto out_release;
 
 		while (rem > 0) {
-			size_t chunk = min_t(size_t, rem, 4 - cur_off);
+			size_t chunk = min_t(size_t, rem, (size_t)(4 - cur_off));
 
 			ret = regmap_bulk_read(chip->regmap, rd0_reg + cur_off,
 					       dst, chunk);
@@ -322,7 +340,19 @@ static int pmi8994_fg_sram_read(struct pmi8994_fg_chg *chip, u16 addr,
 
 			dst += chunk;
 			rem -= chunk;
-			cur_off = 0;
+
+			if (rem > 0) {
+				cur_addr += 4;
+				cur_off = 0;
+				addr_le[0] = cur_addr & 0xff;
+				addr_le[1] = (cur_addr >> 8) & 0xff;
+				ret = regmap_bulk_write(chip->regmap, lsb_reg, addr_le, 2);
+				if (ret)
+					goto out_release;
+				ret = pmi8994_rif_wait_avail(chip);
+				if (ret)
+					goto out_release;
+			}
 		}
 	}
 
@@ -350,33 +380,40 @@ static int pmi8994_refresh_sram_cache(struct pmi8994_fg_chg *chip)
 		return 0;
 	}
 
-	/* Read VBAT (0x5cc+1, 2B) + IBAT (0x5cc+3, 2B) in one 4-byte burst */
+	/* Read VBAT (0x5cc offset 1, 2 bytes) */
 	ret = pmi8994_fg_sram_read(chip, FG_SRAM_VBAT_ADDR,
-				   FG_SRAM_VBAT_OFF, buf, 4);
-	if (ret)
+				   FG_SRAM_VBAT_OFF, buf, 2);
+	if (ret) {
+		chip->cache.valid = false;
 		goto out_unlock;
-
+	}
 	raw_u16 = buf[0] | (buf[1] << 8);
 	chip->cache.vbat_uv = (int)div_u64((u64)raw_u16 * FG_LSB_16B_NUMRTR,
 					   FG_LSB_16B_DENMTR);
 
-	raw_s16 = (s16)(buf[2] | (buf[3] << 8));
+	/* Read IBAT (0x5cc offset 3, 2 bytes - crosses into 0x5d0 offset 0) */
+	ret = pmi8994_fg_sram_read(chip, FG_SRAM_IBAT_ADDR,
+				   FG_SRAM_IBAT_OFF, buf, 2);
+	if (ret) {
+		chip->cache.valid = false;
+		goto out_unlock;
+	}
+	raw_s16 = (s16)(buf[0] | (buf[1] << 8));
 	/* Qualcomm FG reports discharge current positive; Linux power_supply expects charge positive */
 	chip->cache.ibat_ua = -(int)div_s64((s64)raw_s16 * (s64)FG_LSB_16B_NUMRTR,
 					    (s64)FG_LSB_16B_DENMTR);
 
-	/* Read BATT_TEMP (0x550+2, 2B) */
+	/* Read BATT_TEMP (0x550 offset 2, 2 bytes) */
 	ret = pmi8994_fg_sram_read(chip, FG_SRAM_BATT_TEMP_ADDR,
 				   FG_SRAM_BATT_TEMP_OFF, buf, 2);
-	if (ret)
-		goto out_unlock;
+	if (!ret) {
+		raw_u16 = buf[0] | (buf[1] << 8);
+		temp_dc = (((int)raw_u16 * FG_TEMP_LSB_16B) / 1000) - FG_DECIKELVIN;
+		if (temp_dc > -600 && temp_dc < 1500)
+			chip->cache.temp_decidegc = temp_dc;
+	}
 
-	raw_u16 = buf[0] | (buf[1] << 8);
-	temp_dc = (((int)raw_u16 * FG_TEMP_LSB_16B) / 1000) - FG_DECIKELVIN;
-	if (temp_dc > -600 && temp_dc < 1500)
-		chip->cache.temp_decidegc = temp_dc;
-
-	/* Read OCV (0x588+3, 2B) */
+	/* Read OCV (0x588 offset 3, 2 bytes) */
 	if (!pmi8994_fg_sram_read(chip, FG_SRAM_OCV_ADDR,
 				  FG_SRAM_OCV_OFF, buf, 2)) {
 		raw_u16 = buf[0] | (buf[1] << 8);
@@ -384,7 +421,19 @@ static int pmi8994_refresh_sram_cache(struct pmi8994_fg_chg *chip)
 						  FG_LSB_16B_DENMTR);
 	}
 
-	/* Read CYCLE_COUNT (0x5e8+0, 2B) */
+	/* Read CC_CHARGE (0x570 offset 0, 4 bytes) */
+	if (!pmi8994_fg_sram_read(chip, FG_SRAM_CC_ADDR,
+				  FG_SRAM_CC_OFF, buf, 4)) {
+		s32 raw_cc = (s32)(buf[0] | (buf[1] << 8) | (buf[2] << 16) | (buf[3] << 24));
+		chip->cache.charge_counter_uah = (int)div64_s64(
+			(s64)raw_cc * (s64)chip->design_capacity_uah,
+			(s64)0x10000000);
+		chip->cache.charge_counter_valid = true;
+	} else {
+		chip->cache.charge_counter_valid = false;
+	}
+
+	/* Read CYCLE_COUNT (0x5e8 offset 0, 2 bytes) */
 	if (!pmi8994_fg_sram_read(chip, FG_SRAM_CYCLE_ADDR,
 				  FG_SRAM_CYCLE_OFF, buf, 2))
 		chip->cache.cycle_count = buf[0] | (buf[1] << 8);
@@ -395,6 +444,16 @@ static int pmi8994_refresh_sram_cache(struct pmi8994_fg_chg *chip)
 out_unlock:
 	mutex_unlock(&chip->sram_lock);
 	return ret;
+}
+
+static bool pmi8994_is_battery_present(struct pmi8994_fg_chg *chip)
+{
+	u8 rt = 0;
+
+	if (pmi8994_read_u8(chip, chip->bat_if_base + INT_RT_STS_OFFSET, &rt))
+		return true;
+
+	return !(rt & BAT_IF_RT_BATT_MISSING);
 }
 
 static bool pmi8994_is_usb_present(struct pmi8994_fg_chg *chip)
@@ -412,31 +471,31 @@ static bool pmi8994_is_usb_present(struct pmi8994_fg_chg *chip)
 
 	if (chip->usbin_chan) {
 		int uv = 0;
-
 		if (iio_read_channel_processed(chip->usbin_chan, &uv) >= 0 &&
 		    uv > 4000000)
 			return true;
 	}
-
 	return false;
 }
 
 static int pmi8994_get_batt_status(struct pmi8994_fg_chg *chip)
 {
 	u8 chgr_rt = 0, chgr_sts = 0, soc_rt = 0, chg_type;
+	bool usb_present;
 
-	if (!pmi8994_is_usb_present(chip))
+	if (!pmi8994_is_battery_present(chip))
+		return POWER_SUPPLY_STATUS_UNKNOWN;
+
+	usb_present = pmi8994_is_usb_present(chip);
+	if (!usb_present)
 		return POWER_SUPPLY_STATUS_DISCHARGING;
 
-	if (!pmi8994_read_u8(chip, chip->chgr_base + INT_RT_STS_OFFSET, &chgr_rt)) {
-		if (chgr_rt & (CHGR_RT_BAT_TCC_REACHED | CHGR_RT_CHG_INHIBIT))
-			return POWER_SUPPLY_STATUS_FULL;
-	}
+	pmi8994_read_u8(chip, chip->chgr_base + INT_RT_STS_OFFSET, &chgr_rt);
+	pmi8994_read_u8(chip, chip->fg_soc_base + INT_RT_STS_OFFSET, &soc_rt);
 
-	if (!pmi8994_read_u8(chip, chip->fg_soc_base + INT_RT_STS_OFFSET, &soc_rt)) {
-		if (soc_rt & FG_SOC_RT_FULL_SOC)
-			return POWER_SUPPLY_STATUS_FULL;
-	}
+	/* Full condition: TCC reached or SOC 100% full */
+	if ((chgr_rt & CHGR_RT_BAT_TCC_REACHED) || (soc_rt & FG_SOC_RT_FULL_SOC))
+		return POWER_SUPPLY_STATUS_FULL;
 
 	if (pmi8994_read_u8(chip, chip->chgr_base + CHGR_STS_OFFSET, &chgr_sts))
 		return POWER_SUPPLY_STATUS_UNKNOWN;
@@ -448,15 +507,21 @@ static int pmi8994_get_batt_status(struct pmi8994_fg_chg *chip)
 	case CHG_TYPE_TAPER:
 		return POWER_SUPPLY_STATUS_CHARGING;
 	default:
-		return POWER_SUPPLY_STATUS_NOT_CHARGING;
+		break;
 	}
+
+	/* Inhibit condition: JEITA soft limits or top-off voltage window */
+	if (chgr_rt & CHGR_RT_CHG_INHIBIT)
+		return POWER_SUPPLY_STATUS_NOT_CHARGING;
+
+	return POWER_SUPPLY_STATUS_NOT_CHARGING;
 }
 
 static int pmi8994_get_batt_health(struct pmi8994_fg_chg *chip)
 {
 	u8 bat_rt = 0, misc_rt = 0;
 
-	if (!pmi8994_read_u8(chip, chip->misc_base + INT_RT_STS_OFFSET, &misc_rt) &&
+	if (pmi8994_read_u8(chip, chip->misc_base + INT_RT_STS_OFFSET, &misc_rt) == 0 &&
 	    (misc_rt & MISC_RT_TEMP_SHUTDOWN))
 		return POWER_SUPPLY_HEALTH_OVERHEAT;
 
@@ -513,15 +578,14 @@ static int pmi8994_batt_get_prop(struct power_supply *psy,
 		val->intval = pmi8994_get_batt_health(chip);
 		return 0;
 	case POWER_SUPPLY_PROP_PRESENT:
-		ret = pmi8994_read_u8(chip, chip->bat_if_base + INT_RT_STS_OFFSET, &reg);
-		if (ret)
-			return ret;
-		val->intval = !(reg & BAT_IF_RT_BATT_MISSING);
+		val->intval = pmi8994_is_battery_present(chip) ? 1 : 0;
 		return 0;
 	case POWER_SUPPLY_PROP_TECHNOLOGY:
 		val->intval = POWER_SUPPLY_TECHNOLOGY_LION;
 		return 0;
 	case POWER_SUPPLY_PROP_CAPACITY:
+		if (!pmi8994_is_battery_present(chip))
+			return -ENODATA;
 		ret = pmi8994_read_u8(chip,
 				      chip->fg_soc_base + FG_SOC_MONOTONIC_SOC,
 				      &reg);
@@ -531,12 +595,16 @@ static int pmi8994_batt_get_prop(struct power_supply *psy,
 				      0, 100);
 		return 0;
 	case POWER_SUPPLY_PROP_VOLTAGE_NOW:
+		if (!pmi8994_is_battery_present(chip))
+			return -ENODATA;
 		ret = pmi8994_refresh_sram_cache(chip);
 		if (ret && !chip->cache.valid)
 			return ret;
 		val->intval = chip->cache.vbat_uv;
 		return 0;
 	case POWER_SUPPLY_PROP_VOLTAGE_OCV:
+		if (!pmi8994_is_battery_present(chip))
+			return -ENODATA;
 		ret = pmi8994_refresh_sram_cache(chip);
 		if (ret && !chip->cache.valid)
 			return ret;
@@ -550,6 +618,8 @@ static int pmi8994_batt_get_prop(struct power_supply *psy,
 		val->intval = chip->design_vmin_uv;
 		return 0;
 	case POWER_SUPPLY_PROP_CURRENT_NOW:
+		if (!pmi8994_is_battery_present(chip))
+			return -ENODATA;
 		ret = pmi8994_refresh_sram_cache(chip);
 		if (ret && !chip->cache.valid)
 			return ret;
@@ -559,20 +629,26 @@ static int pmi8994_batt_get_prop(struct power_supply *psy,
 		val->intval = chip->design_capacity_uah;
 		return 0;
 	case POWER_SUPPLY_PROP_CHARGE_COUNTER:
-		ret = pmi8994_read_u8(chip,
-				      chip->fg_soc_base + FG_SOC_MONOTONIC_SOC,
-				      &reg);
-		if (ret)
+		if (!pmi8994_is_battery_present(chip))
+			return -ENODATA;
+		ret = pmi8994_refresh_sram_cache(chip);
+		if (ret && !chip->cache.valid)
 			return ret;
-		val->intval = (int)div_u64((u64)chip->design_capacity_uah * reg, 255);
+		if (!chip->cache.charge_counter_valid)
+			return -ENODATA;
+		val->intval = chip->cache.charge_counter_uah;
 		return 0;
 	case POWER_SUPPLY_PROP_TEMP:
+		if (!pmi8994_is_battery_present(chip))
+			return -ENODATA;
 		ret = pmi8994_refresh_sram_cache(chip);
 		if (ret && !chip->cache.valid)
 			return ret;
 		val->intval = chip->cache.temp_decidegc;
 		return 0;
 	case POWER_SUPPLY_PROP_CYCLE_COUNT:
+		if (!pmi8994_is_battery_present(chip))
+			return -ENODATA;
 		ret = pmi8994_refresh_sram_cache(chip);
 		if (ret && !chip->cache.valid)
 			return ret;
@@ -629,15 +705,13 @@ static int pmi8994_usb_get_prop(struct power_supply *psy,
 		val->intval = pmi8994_is_usb_present(chip) ? 1 : 0;
 		return 0;
 	case POWER_SUPPLY_PROP_USB_TYPE:
-		if (!pmi8994_is_usb_present(chip)) {
-			val->intval = POWER_SUPPLY_USB_TYPE_UNKNOWN;
-			return 0;
-		}
 		ret = pmi8994_read_u8(chip,
 				      chip->usb_base + USB_APSD_DG_STS_OFFSET,
 				      &reg);
-		if (ret)
-			return ret;
+		if (ret || !pmi8994_is_usb_present(chip)) {
+			val->intval = POWER_SUPPLY_USB_TYPE_UNKNOWN;
+			return 0;
+		}
 		if (reg & (APSD_STS_DCP | APSD_STS_HVDCP))
 			val->intval = POWER_SUPPLY_USB_TYPE_DCP;
 		else if (reg & APSD_STS_CDP)
@@ -648,20 +722,33 @@ static int pmi8994_usb_get_prop(struct power_supply *psy,
 			val->intval = POWER_SUPPLY_USB_TYPE_UNKNOWN;
 		return 0;
 	case POWER_SUPPLY_PROP_VOLTAGE_NOW:
-		if (!chip->usbin_chan)
-			return -ENODATA;
-		ret = iio_read_channel_processed(chip->usbin_chan, &uv);
-		if (ret < 0)
-			return ret;
-		val->intval = uv;
+		if (!pmi8994_is_usb_present(chip)) {
+			val->intval = 0;
+			return 0;
+		}
+		if (chip->usbin_chan &&
+		    iio_read_channel_processed(chip->usbin_chan, &uv) >= 0) {
+			val->intval = uv;
+			return 0;
+		}
+		val->intval = 5000000;
 		return 0;
 	case POWER_SUPPLY_PROP_CURRENT_MAX:
+		if (!pmi8994_is_usb_present(chip)) {
+			val->intval = 0;
+			return 0;
+		}
 		ret = pmi8994_read_u8(chip,
 				      chip->usb_base + USB_ICL_STS_1_OFFSET,
 				      &reg);
-		if (ret)
-			return ret;
-		val->intval = pmi8994_usb_icl_ma_table[reg & USB_ICL_STS_MASK] * 1000;
+		if (ret) {
+			val->intval = 500000;
+			return 0;
+		}
+		/* SMBCHG ICL code: 0x00=100mA, 0x01=150mA, ..., 0x18=2500mA */
+		val->intval = (int)(reg & USB_ICL_STS_MASK) * 100000;
+		if (val->intval < 100000)
+			val->intval = 500000;
 		return 0;
 	default:
 		return -EINVAL;
@@ -688,14 +775,10 @@ static const struct power_supply_desc pmi8994_usb_psy_desc = {
 
 static void pmi8994_notify_work_fn(struct work_struct *work)
 {
-	struct pmi8994_fg_chg *chip = container_of(to_delayed_work(work),
-						   struct pmi8994_fg_chg,
-						   notify_work);
+	struct pmi8994_fg_chg *chip =
+		container_of(work, struct pmi8994_fg_chg, notify_work.work);
 
-	mutex_lock(&chip->sram_lock);
-	chip->cache.updated_jiffies = 0;
-	mutex_unlock(&chip->sram_lock);
-
+	pmi8994_refresh_sram_cache(chip);
 	if (chip->batt_psy)
 		power_supply_changed(chip->batt_psy);
 	if (chip->usb_psy)
@@ -706,7 +789,6 @@ static irqreturn_t pmi8994_fg_chg_isr(int irq, void *data)
 {
 	struct pmi8994_fg_chg *chip = data;
 
-	pm_wakeup_dev_event(chip->dev, 1000, true);
 	mod_delayed_work(system_wq, &chip->notify_work, msecs_to_jiffies(50));
 	return IRQ_HANDLED;
 }
@@ -723,11 +805,24 @@ static int pmi8994_read_reg_base(struct platform_device *pdev,
 	return of_property_read_u32_index(pdev->dev.of_node, "reg", idx, base);
 }
 
+static void pmi8994_disable_wake_irqs(struct pmi8994_fg_chg *chip)
+{
+	size_t i;
+
+	for (i = 0; i < chip->num_irqs; i++) {
+		if (chip->irqs[i].wake_enabled && chip->irqs[i].irq > 0) {
+			disable_irq_wake(chip->irqs[i].irq);
+			chip->irqs[i].wake_enabled = false;
+		}
+	}
+}
+
 static void pmi8994_cancel_work(void *data)
 {
 	struct pmi8994_fg_chg *chip = data;
 
 	cancel_delayed_work_sync(&chip->notify_work);
+	pmi8994_disable_wake_irqs(chip);
 }
 
 static int pmi8994_fg_chg_probe(struct platform_device *pdev)
@@ -767,21 +862,27 @@ static int pmi8994_fg_chg_probe(struct platform_device *pdev)
 	ret = pmi8994_read_reg_base(pdev, "chgr", &chip->chgr_base);
 	if (ret)
 		return dev_err_probe(dev, ret, "missing chgr reg base\n");
+
 	ret = pmi8994_read_reg_base(pdev, "bat-if", &chip->bat_if_base);
 	if (ret)
 		return dev_err_probe(dev, ret, "missing bat-if reg base\n");
+
 	ret = pmi8994_read_reg_base(pdev, "usb-chgpth", &chip->usb_base);
 	if (ret)
 		return dev_err_probe(dev, ret, "missing usb-chgpth reg base\n");
+
 	ret = pmi8994_read_reg_base(pdev, "chgr-misc", &chip->misc_base);
 	if (ret)
 		return dev_err_probe(dev, ret, "missing chgr-misc reg base\n");
+
 	ret = pmi8994_read_reg_base(pdev, "fg-soc", &chip->fg_soc_base);
 	if (ret)
 		return dev_err_probe(dev, ret, "missing fg-soc reg base\n");
+
 	ret = pmi8994_read_reg_base(pdev, "fg-batt", &chip->fg_batt_base);
 	if (ret)
 		return dev_err_probe(dev, ret, "missing fg-batt reg base\n");
+
 	ret = pmi8994_read_reg_base(pdev, "fg-memif", &chip->fg_memif_base);
 	if (ret)
 		return dev_err_probe(dev, ret, "missing fg-memif reg base\n");
@@ -850,8 +951,13 @@ static int pmi8994_fg_chg_probe(struct platform_device *pdev)
 		return dev_err_probe(dev, PTR_ERR(chip->usb_psy),
 				     "failed to register usb power_supply\n");
 
-	for (i = 0; i < ARRAY_SIZE(irq_names); i++) {
+	chip->num_irqs = ARRAY_SIZE(irq_names);
+	for (i = 0; i < chip->num_irqs; i++) {
 		int irq = platform_get_irq_byname_optional(pdev, irq_names[i]);
+
+		chip->irqs[i].name = irq_names[i];
+		chip->irqs[i].irq = irq;
+		chip->irqs[i].wake_enabled = false;
 
 		if (irq <= 0)
 			continue;
@@ -860,8 +966,14 @@ static int pmi8994_fg_chg_probe(struct platform_device *pdev)
 						pmi8994_fg_chg_isr,
 						IRQF_ONESHOT, irq_names[i],
 						chip);
-		if (!ret)
-			enable_irq_wake(irq);
+		if (ret) {
+			chip->irqs[i].irq = 0;
+			continue;
+		}
+
+		ret = enable_irq_wake(irq);
+		if (ret == 0)
+			chip->irqs[i].wake_enabled = true;
 	}
 
 	dev_info(dev,
@@ -873,6 +985,44 @@ static int pmi8994_fg_chg_probe(struct platform_device *pdev)
 	return 0;
 }
 
+static int pmi8994_fg_chg_remove(struct platform_device *pdev)
+{
+	struct pmi8994_fg_chg *chip = platform_get_drvdata(pdev);
+
+	cancel_delayed_work_sync(&chip->notify_work);
+	pmi8994_disable_wake_irqs(chip);
+	return 0;
+}
+
+static void pmi8994_fg_chg_shutdown(struct platform_device *pdev)
+{
+	struct pmi8994_fg_chg *chip = platform_get_drvdata(pdev);
+
+	cancel_delayed_work_sync(&chip->notify_work);
+	pmi8994_disable_wake_irqs(chip);
+}
+
+static int __maybe_unused pmi8994_fg_chg_suspend(struct device *dev)
+{
+	struct pmi8994_fg_chg *chip = dev_get_drvdata(dev);
+
+	cancel_delayed_work_sync(&chip->notify_work);
+	return 0;
+}
+
+static int __maybe_unused pmi8994_fg_chg_resume(struct device *dev)
+{
+	struct pmi8994_fg_chg *chip = dev_get_drvdata(dev);
+
+	pmi8994_refresh_sram_cache(chip);
+	mod_delayed_work(system_wq, &chip->notify_work, msecs_to_jiffies(100));
+	return 0;
+}
+
+static SIMPLE_DEV_PM_OPS(pmi8994_fg_chg_pm_ops,
+			 pmi8994_fg_chg_suspend,
+			 pmi8994_fg_chg_resume);
+
 static const struct of_device_id pmi8994_fg_chg_of_match[] = {
 	{ .compatible = "qcom,pmi8994-smbchg-fg" },
 	{ .compatible = "qcom,pmi8996-smbchg-fg" },
@@ -881,13 +1031,17 @@ static const struct of_device_id pmi8994_fg_chg_of_match[] = {
 MODULE_DEVICE_TABLE(of, pmi8994_fg_chg_of_match);
 
 static struct platform_driver pmi8994_fg_chg_driver = {
-	.probe = pmi8994_fg_chg_probe,
 	.driver = {
 		.name = "qcom-pmi8994-fg-chg",
 		.of_match_table = pmi8994_fg_chg_of_match,
+		.pm = &pmi8994_fg_chg_pm_ops,
 	},
+	.probe = pmi8994_fg_chg_probe,
+	.remove = pmi8994_fg_chg_remove,
+	.shutdown = pmi8994_fg_chg_shutdown,
 };
 module_platform_driver(pmi8994_fg_chg_driver);
 
-MODULE_DESCRIPTION("Qualcomm PMI8994/PMI8996 SMBCHG and Fuel Gauge Telemetry Driver");
+MODULE_AUTHOR("Sony Xperia Tone Porting Team");
+MODULE_DESCRIPTION("Qualcomm PMI8994 / PMI8996 Fuel Gauge & Charger Telemetry Driver");
 MODULE_LICENSE("GPL v2");

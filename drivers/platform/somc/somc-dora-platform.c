@@ -122,20 +122,19 @@ static bool somc_dora_is_bcm4359_pci(struct pci_dev *pdev)
 static int somc_dora_wifi_pci_iter(struct device *dev, void *data)
 {
 	struct pci_dev *pdev = to_pci_dev(dev);
-	bool force_rebind = *(bool *)data;
 	int ret;
 
 	if (!somc_dora_is_bcm4359_pci(pdev))
 		return 0;
 
+	/*
+	 * Safe attach only: avoid destructive runtime device_reprobe()
+	 * which can panic when PCIe links or firmware states are unsettled.
+	 */
 	if (!dev->driver) {
 		ret = device_attach(dev);
 		if (ret < 0)
 			dev_dbg(dev, "deferred brcmfmac attach failed: %d\n", ret);
-	} else if (force_rebind && !strcmp(dev->driver->name, "brcmfmac")) {
-		ret = device_reprobe(dev);
-		if (ret < 0)
-			dev_warn(dev, "brcmfmac op_mode reprobe failed: %d\n", ret);
 	}
 
 	return 0;
@@ -143,10 +142,10 @@ static int somc_dora_wifi_pci_iter(struct device *dev, void *data)
 
 static void somc_dora_wifi_reprobe_work_fn(struct work_struct *work)
 {
-	bool force_rebind = atomic_xchg(&bcmdhd_force_rebind, 0) != 0;
+	atomic_set(&bcmdhd_force_rebind, 0);
 
 #if IS_ENABLED(CONFIG_PCI)
-	bus_for_each_dev(&pci_bus_type, NULL, &force_rebind,
+	bus_for_each_dev(&pci_bus_type, NULL, NULL,
 			 somc_dora_wifi_pci_iter);
 #endif
 }

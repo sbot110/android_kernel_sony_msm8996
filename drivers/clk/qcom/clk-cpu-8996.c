@@ -344,7 +344,7 @@ static void __iomem *base;
 
 void qcom_cpu_clk_msm8996_acd_init(void __iomem *reg_base)
 {
-	u64 mpidr, l2acdtd;
+	u64 l2acdtd;
 	unsigned long flags;
 
 	if (!reg_base)
@@ -353,21 +353,16 @@ void qcom_cpu_clk_msm8996_acd_init(void __iomem *reg_base)
 	spin_lock_irqsave(&qcom_clk_acd_lock, flags);
 
 	l2acdtd = kryo_l2_get_indirect_reg(L2ACDTD_REG);
-	if (l2acdtd == L2ACDTD_INIT_VAL) {
-		spin_unlock_irqrestore(&qcom_clk_acd_lock, flags);
-		return;
+	if (l2acdtd != L2ACDTD_INIT_VAL) {
+		kryo_l2_set_indirect_reg(L2ACDTD_REG, L2ACDTD_INIT_VAL);
+		kryo_l2_set_indirect_reg(L2ACDDVMRC_REG, L2ACDDVMRC_INIT_VAL);
+		kryo_l2_set_indirect_reg(L2ACDSSCR_REG, L2ACDSSCR_INIT_VAL);
+		kryo_l2_set_indirect_reg(L2ACDCR_REG, L2ACDCR_INIT_VAL);
 	}
 
-	kryo_l2_set_indirect_reg(L2ACDTD_REG, L2ACDTD_INIT_VAL);
-	kryo_l2_set_indirect_reg(L2ACDDVMRC_REG, L2ACDDVMRC_INIT_VAL);
-	kryo_l2_set_indirect_reg(L2ACDSSCR_REG, L2ACDSSCR_INIT_VAL);
-	kryo_l2_set_indirect_reg(L2ACDCR_REG, L2ACDCR_INIT_VAL);
-
-	mpidr = read_cpuid_mpidr() & CPU_CLUSTER_AFFINITY_MASK;
-	if (mpidr == PWRCL_CLUSTER_ID)
-		writel(0xf, reg_base + PWRCL_REG_OFFSET + SSSCTL_OFFSET);
-	else if (mpidr == PERFCL_CLUSTER_ID)
-		writel(0xf, reg_base + PERFCL_REG_OFFSET + SSSCTL_OFFSET);
+	/* Always configure SSSCTL on both clusters to ensure secondary cluster readiness */
+	writel(0xf, reg_base + PWRCL_REG_OFFSET + SSSCTL_OFFSET);
+	writel(0xf, reg_base + PERFCL_REG_OFFSET + SSSCTL_OFFSET);
 
 	spin_unlock_irqrestore(&qcom_clk_acd_lock, flags);
 }
@@ -448,12 +443,17 @@ static int qcom_cpu_clk_msm8996_register_clks(struct device *dev,
 	}
 
 	/* Ensure always-on GPLL0/2 fallback source is selected for AUTO_CLK_SEL */
-	regmap_update_bits(regmap, PWRCL_REG_OFFSET + MUX_OFFSET,
-			   MUX_AUTO_CLK_SEL_ALWAYS_ON_MASK,
-			   MUX_AUTO_CLK_SEL_ALWAYS_ON_GPLL0_SEL);
-	regmap_update_bits(regmap, PERFCL_REG_OFFSET + MUX_OFFSET,
-			   MUX_AUTO_CLK_SEL_ALWAYS_ON_MASK,
-			   MUX_AUTO_CLK_SEL_ALWAYS_ON_GPLL0_SEL);
+	ret = regmap_update_bits(regmap, PWRCL_REG_OFFSET + MUX_OFFSET,
+				 MUX_AUTO_CLK_SEL_ALWAYS_ON_MASK,
+				 MUX_AUTO_CLK_SEL_ALWAYS_ON_GPLL0_SEL);
+	if (ret)
+		goto err_unreg;
+
+	ret = regmap_update_bits(regmap, PERFCL_REG_OFFSET + MUX_OFFSET,
+				 MUX_AUTO_CLK_SEL_ALWAYS_ON_MASK,
+				 MUX_AUTO_CLK_SEL_ALWAYS_ON_GPLL0_SEL);
+	if (ret)
+		goto err_unreg;
 
 	clk_alpha_pll_configure(&perfcl_pll, regmap, &hfpll_config);
 	clk_alpha_pll_configure(&pwrcl_pll, regmap, &hfpll_config);
@@ -462,18 +462,34 @@ static int qcom_cpu_clk_msm8996_register_clks(struct device *dev,
 
 	/* Wait for HWFSM PLLs to settle, then enable AUTO_CLK_SEL and PSCTL */
 	udelay(50);
-	regmap_write(regmap, PWRCL_REG_OFFSET + PSCTL_OFFSET, PSCTL_DEFAULT_VAL);
-	regmap_write(regmap, PERFCL_REG_OFFSET + PSCTL_OFFSET, PSCTL_DEFAULT_VAL);
-	regmap_update_bits(regmap, PWRCL_REG_OFFSET + CLK_CTL_OFFSET,
-			   CLK_CTL_AUTO_CLK_SEL, CLK_CTL_AUTO_CLK_SEL);
-	regmap_update_bits(regmap, PERFCL_REG_OFFSET + CLK_CTL_OFFSET,
-			   CLK_CTL_AUTO_CLK_SEL, CLK_CTL_AUTO_CLK_SEL);
+	ret = regmap_write(regmap, PWRCL_REG_OFFSET + PSCTL_OFFSET, PSCTL_DEFAULT_VAL);
+	if (ret)
+		goto err_unreg;
+
+	ret = regmap_write(regmap, PERFCL_REG_OFFSET + PSCTL_OFFSET, PSCTL_DEFAULT_VAL);
+	if (ret)
+		goto err_unreg;
+
+	ret = regmap_update_bits(regmap, PWRCL_REG_OFFSET + CLK_CTL_OFFSET,
+				 CLK_CTL_AUTO_CLK_SEL, CLK_CTL_AUTO_CLK_SEL);
+	if (ret)
+		goto err_unreg;
+
+	ret = regmap_update_bits(regmap, PERFCL_REG_OFFSET + CLK_CTL_OFFSET,
+				 CLK_CTL_AUTO_CLK_SEL, CLK_CTL_AUTO_CLK_SEL);
+	if (ret)
+		goto err_unreg;
 
 	qcom_cpu_clk_msm8996_acd_init(base);
 
 	/* Park secondary muxes on PLL/2 so sub-600 MHz OPPs are ready */
-	clk_cpu_8996_mux_set_parent(&pwrcl_smux.clkr.hw, SMUX_PLL_DIV2_INDEX);
-	clk_cpu_8996_mux_set_parent(&perfcl_smux.clkr.hw, SMUX_PLL_DIV2_INDEX);
+	ret = clk_cpu_8996_mux_set_parent(&pwrcl_smux.clkr.hw, SMUX_PLL_DIV2_INDEX);
+	if (ret)
+		goto err_unreg;
+
+	ret = clk_cpu_8996_mux_set_parent(&perfcl_smux.clkr.hw, SMUX_PLL_DIV2_INDEX);
+	if (ret)
+		goto err_unreg;
 
 	ret = clk_notifier_register(pwrcl_pmux.clkr.hw.clk, &pwrcl_pmux.nb);
 	if (ret)
@@ -527,15 +543,20 @@ static int cpu_clk_notifier_cb(struct notifier_block *nb, unsigned long event,
 		 * and ensure SMUX stays on PLL/2 only after HFPLL settles.
 		 */
 		if (cnd->new_rate < DIV_2_THRESHOLD &&
-		    cnd->old_rate >= DIV_2_THRESHOLD)
-			clk_cpu_8996_mux_set_parent(&smux->clkr.hw,
-						    SMUX_XO_INDEX);
+		    cnd->old_rate >= DIV_2_THRESHOLD) {
+			ret = clk_cpu_8996_mux_set_parent(&smux->clkr.hw,
+							   SMUX_XO_INDEX);
+			if (ret)
+				break;
+		}
 		ret = clk_cpu_8996_mux_set_parent(&cpuclk->clkr.hw, ALT_INDEX);
 		break;
 	case POST_RATE_CHANGE:
 		if (cnd->new_rate < DIV_2_THRESHOLD) {
-			clk_cpu_8996_mux_set_parent(&smux->clkr.hw,
-						    SMUX_PLL_DIV2_INDEX);
+			ret = clk_cpu_8996_mux_set_parent(&smux->clkr.hw,
+							   SMUX_PLL_DIV2_INDEX);
+			if (ret)
+				break;
 			ret = clk_cpu_8996_mux_set_parent(&cpuclk->clkr.hw,
 							  DIV_2_INDEX);
 		} else {

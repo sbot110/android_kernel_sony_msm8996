@@ -1,3 +1,37 @@
+Dora Linux 4.19.318 / Stage 6 current validation (2026-11-05)
+==========================================================
+STATUS: BUILDABLE; BOOT TEST READY: NO; PHONE BOOT: UNTESTED.
+Initial actual HEAD: 961ff7bf2eb9ab1dc6d83be69972b06e7cede65b.
+Validated kernel/config/check HEAD: 886a55f70209438d4fc790f8013465cdd03f1433.
+Final evidence commit changes documentation/logs only; final SHA and post-push
+ref verification are in the final reply. Six commits in this stage.
+
+Clean OUT_DIR=/workspace/stage6-final-clean-out JOBS=3 scripts/dora/build.sh:
+exit0, 2026-11-05T10:22:57Z..10:33:01Z. All47 checks/74 default executions
+passed (Stage5:44/71), .config byte-identical to Stage5, all normal artifacts
+and exact ordered four-DTB append verified. Separate four-SDHC1-DTB workflow
+exit0; complete delta comparison and unchanged normal hashes verified.
+Compiler90 warnings, normalized added/removed0/0. Independent dtc1.6.1:
+29 warnings per normal DTB, added/removed0/0. Bundled dtc1.4.6:15 per tree,
+recorded separately. No new warning suppression. git diff --check passes.
+Image.gz-dtb:9723110 bytes; SHA256:
+cfb6aceb00f22b732a687c62515ca308c1f99242339e08d9d9194a70da4e5bf5
+
+Real QFPROM reading and strict CPU plans are connected; writable CPU adapter
+is still unbound. Same-owner CCF reattach covers only the intact sole HIGH
+bootstrap lease. Lost clock ownership and hardware quarantine remain blocked.
+Watchdog, USB/firmware charging ownership, real boot.img/LOS21 ramdisk and
+phone RPM/eMMC/early-init evidence are P0. No boot.img, flash or eMMC write.
+
+Full current report: dora-stage6-report.md.
+Machine results/config/logs/SHA256: validation-stage6/.
+The first clean attempt compiled/linked but failed a stale shared CPU/GPU
+fuse DT checker; its exit1/logs are retained in failed-first-* and fixed
+strictly before the independent final clean run. No failed run is hidden.
+
+Historical Stage 5 report follows, unchanged
+===========================================
+
 Dora Linux 4.19.318 / Stage 5 verified source and build report
 ============================================================
 Clean build: 2026-11-04; publication audit: 2026-11-05. F8131 Single SIM / F8132 Dual SIM/DSDS, LOS21 / Android14.

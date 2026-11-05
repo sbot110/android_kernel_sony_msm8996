@@ -1,3 +1,10 @@
+Stage 6 update (2026-11-05): CPU QFPROM/selected plans and limited CCF
+same-owner bootstrap reattachment are implemented. All hardware/runtime limits
+below remain; writable CPU DVFS, watchdog/console/charging handoff and actual
+LOS21 boot artifacts are unqualified. See dora-stage6-early-boot.md and the
+current dora-build-validation.txt. No bpfloader/BoringSSL/vold runtime fix is
+claimed from compilation or host ABI checks.
+
 # Dora F8131/F8132 — матрица совместимости Linux 4.19
 
 Обновлено: 2026-11-05. Этап 5 начат от

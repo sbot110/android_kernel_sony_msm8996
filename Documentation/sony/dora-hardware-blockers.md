@@ -1,7 +1,7 @@
-# Dora Linux 4.19: блокеры после этапа 5
+# Dora Linux 4.19: блокеры после этапа 6
 
 Обновлено: 2026-11-05. Начальный HEAD этапа:
-`03a3c224b84079db06a424e387e220b6eafc6cfa`.
+`961ff7bf2eb9ab1dc6d83be69972b06e7cede65b`.
 Эталон Sony 4.4.302: `0c295b15b6d0fb59a64e13b9e0ef2070818ef2a1`.
 
 Ни F8131, ни F8132 не загружались с этим ядром. Первая диагностическая
@@ -51,6 +51,16 @@ Read-only APCC теперь распознаёт исходный AUX mux 0x3c, 
 не программируются. Исправлены minidump count/aux offsets/cleanup, DHD VLA,
 SDHCI debug input/PM handling и ARM32 GNU-stack/SLUB varargs.
 
+Stage 6 подключает настоящее чтение QFPROM и строгий выбор трёх CPU plans
+для source speed bin, исправляет недопустимый NVMEM offset29 на byte-relative
+`0x133/1,bits5:3`. Частоты/напряжения не изменяются. Writable CPU adapter
+по-прежнему отсутствует. CCF теперь допускает same-owner reattach только
+единственного чистого HIGH bootstrap vote с новыми ACK; потерянные per-clock
+votes и аппаратная quarantine не восстанавливаются этим API.
+Подробности: [CPU](dora-stage6-cpu-hardware.txt),
+[CCF](dora-stage6-clock-ownership.txt),
+[early boot](dora-stage6-early-boot.md).
+
 ## Четыре варианта данных
 
 | SoC | PMIC | msm revision | pmic-id | GPU CPR corners | BCL derating | Flash ramp |
@@ -73,11 +83,12 @@ F8131/F8132 не связаны жёстко с stepping, PMIC или панел
 | Зависимость | Точная граница и следующее действие |
 | --- | --- |
 | eMMC / physical rails | `qcom-rpm-physical.c` реализует UV/MA/SWEN BOTH replay. `sdhci-msm.c` сохраняет host quarantine после uncertain ACK. Source qualification clock/IRQ/PM/shutdown завершена; добавлены отдельные experimental SDHC1 DT. Нужны аппаратные CID/GPT/by-name/HS200/HS400/data-integrity тесты и проверка полного boot chain. Основные SDHC отключены; cached rollback не измеряет PMIC. |
-| GCC/MMCC bootstrap | `clk-msm8996-voltage.h:msm8996_voltage_ownership` сохраняет HIGH, если работающий PLL/parent не имеет доказанного counted owner/rate. Нужно подтвердить реальный boot handoff; partial-registration unwind с held HIGH помечает class orphaned и блокирует повторную регистрацию. Для reattach требуется отдельный qualified same-owner протокол; автоматическое снятие quarantine не добавлено. Typed CX frontend включён: активный GCC не должен ссылаться на disabled supply. |
-| CPU DVFS / четыре CPU | `clk-cpu-8996.c` остаётся observational provider. Новый `clk-msm8996-cpu-transaction.c` не имеет MMIO/CPR/SPM adapter. Нужны native ACD/CBF/PLL callbacks, fuse/binning, S8–S11/SPM ownership, HMSS/Kryo/APM и thermal/hotplug/LPM. |
+| GCC/MMCC bootstrap | `clk-msm8996-voltage.h:msm8996_voltage_ownership` сохраняет HIGH, если работающий PLL/parent не имеет доказанного counted owner/rate. Нужно подтвердить реальный boot handoff; partial-registration unwind с sole healthy HIGH теперь допускает same-owner reattach после fresh typed ACK. Потерянные per-clock leases/parent ownership и failed ACK остаются заблокированными; автоматического снятия hardware quarantine нет. Typed CX frontend включён: активный GCC не должен ссылаться на disabled supply. |
+| CPU DVFS / четыре CPU | `clk-cpu-8996.c` остаётся observational provider. Новый `clk-msm8996-cpu-transaction.c` не имеет MMIO/CPR/SPM adapter. QFPROM/binning/selected source plans подключены read-only. Нужны native ACD/CBF/PLL callbacks, S8–S11/SPM ownership, HMSS/Kryo/APM и thermal/hotplug/LPM. |
 | MDSS / MMCC analog | `msm8996_voltage_apply` получает typed L12 BOTH ACK и quarantines uncertain operation. Отдельный backend baseline recovery не восстанавливает clock ownership/counts. Нужны qualified clock-level recovery, DSI PHY analog/panel/incell ownership и реальные измерения до display activation. |
 | GPU Adreno 530 | Gated child provider/MMSS CPR/PMI S2, независимый MX и CX, retention/SMMU/secure firmware и userspace ABI остаются неполными. Нельзя применять SDM845 планы. |
 | USB / зарядка | Не завершены DPDM/PHY ownership, BC1.2/VBUS, MicroUSB ID/ADC и SMBcharger safety paths. Нет fake fixed DPDM; JEITA/thermal/current protections не отключены. |
+| Watchdog / logging | Нет APSS watchdog node, QCOM_WATCHDOG_V2 выключен в унаследованной конфигурации. Нужно source-qualified исправление probe/IRQ/lifetime и передача владения bootloader. UART node/config и ramoops reservation не доказывают физический serial transport или persistence; USB/charging conflict остаётся P0 безопасной диагностики. |
 | Android boot | Не предоставлены фактический рабочий boot.img, LOS21 ramdisk и новые runtime логи. Требуются boot header/partition size/cmdline/DTB-selection/vendor checks. Сохранённая DT bootargs сама не доказывает итоговую cmdline загрузчика. |
 
 Generic UFS host/PHY recovery остаётся отдельной задачей общей MSM8996 базы,
@@ -87,7 +98,7 @@ Generic UFS host/PHY recovery остаётся отдельной задачей
 
 ## Независимые проверки и физические пределы
 
-Все check-*.py включены в build.sh; исходные 32 проверки сохранены. Точное число и результаты — в протоколе сборки. Новые
+Все 47 check-*.py включены в build.sh; исходные 44 проверки Stage5 сохранены. Точное число и результаты — в протоколе сборки. Новые
 тесты выполняют MMC alias/UIM2/provider/power helpers, physical/cache ACK
 расхождения, RPM corner aggregation/rollback/lifetime/concurrency, CCF
 transactions, CPU transaction engine и реальные Android ABI/filesystem

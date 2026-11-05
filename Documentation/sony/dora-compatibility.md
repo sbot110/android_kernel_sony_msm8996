@@ -1,9 +1,11 @@
-Stage 6 update (2026-11-05): CPU QFPROM/selected plans and limited CCF
-same-owner bootstrap reattachment are implemented. All hardware/runtime limits
-below remain; writable CPU DVFS, watchdog/console/charging handoff and actual
-LOS21 boot artifacts are unqualified. See dora-stage6-early-boot.md and the
-current dora-build-validation.txt. No bpfloader/BoringSSL/vold runtime fix is
-claimed from compilation or host ABI checks.
+Stage 7 update (2026-11-05): native APCC/CBF/ACD/PLL callbacks and real
+SPM/watchdog/USB fixes are implemented. CPU writes remain unbound without
+the shared CPR/SPM/APM owner; maxcpus=2 and CPU_FREQ/CPU_IDLE=n remain.
+Sony USB PHY init is explicitly blocked before rails/reset/MMIO, so USB/ADB
+logging is unavailable. Watchdog activation and firmware charging handoff,
+actual LOS21 boot artifacts and phone runtime remain unqualified. See
+dora-stage7-report.md and dora-stage7-early-boot.md. Compilation/host ABI
+checks do not establish bpfloader/BoringSSL/vold runtime fixes.
 
 # Dora F8131/F8132 — матрица совместимости Linux 4.19
 
@@ -60,14 +62,14 @@ PMIC, stepping или панель.** Подробнее: [GPU/варианты]
 | Подсистема | F8131 | F8132 | Подтверждённое состояние и следующий blocker |
 | --- | --- | --- | --- |
 | SDHC1 eMMC / SDHC2 | Hardware/driver tests; gated | То же + host-local hybrid UIM2 | Internal 7464900.sdhci, removable 74a4900.sdhci; реальные clocks/rails/pads/vectors. Typed physical UV/load/SWEN/BOTH replay добавлен; gated activation, GPT/HS400/encryption tests не подтверждены. UFS host/PHY отключены. |
-| CPU / CBF / CPR / SAW | Read-only provider; transaction engine tests | То же | ACD/lease/PLL engine добавлен, MMIO/CPR/SPM adapter не подключён; S8–S11 native RPM owners исключены. maxcpus=2, cpufreq/cpuidle выключены. |
+| CPU / CBF / CPR / SAW | Read-only provider; native callbacks gated | То же | Source APCC/CBF/ACD/PLL callbacks исполняются с engine в host tests. Реальный общий CPR/SPM/APM owner не подключён; S8–S11 native RPM owners исключены. maxcpus=2, cpufreq/cpuidle выключены. |
 | MDSS / DSI / все 5 панелей | Граф/данные; gated | То же | MMCC fmax/CX contract добавлен; Typed L12 BOTH replay добавлен; clock-level recovery, DSI PHY и incell ownership требуют квалификации до activation. |
 | Adreno 530 / KGSL | Данные/child clocks; отключено | То же | Реальные variant CPR/fuse/frequency планы и исправлен provider cycle. Нет полного CX/MX/PMI S2/retention/SMMU/secure ABI контракта. |
 | BCM4359 C0 | Код/PCIe DT; runtime нет | То же | Sony BCMDHD и WPA2/AKM/cipher fixes сохранены. Нужны link training, DMA/IOMMU, firmware/NVRAM, CCMP/reconnect/suspend/wakeup. |
 | Clearpad / incell | Код; нет полной touch DT связи | То же | Sony MDSS/incell API есть; I2C12/controller/питание и согласование с panel sequencing ещё не завершены. |
 | VADC / FG / BCL | Код/PMIC данные; runtime нет | То же | Оригинальные каналы/профиль/JEITA и PMIC/BCL overrides сохранены. Требуются измерения, calibration, IRQ и температурные тесты. |
 | SMBcharger / BC1.2 / OTG | Код; зарядная цепь отключена | То же | Нет согласованного настоящего DPDM/USB PHY/VBUS/MicroUSB ID/ADC provider. Защиты не отключены, fixed DPDM отсутствует. |
-| USB / ADB / MTP | Код/peripheral DT; runtime нет | То же | Sony QUSB2 tuning и удаление ложного ID сохранены. Реальные cable/role/VBUS/OTG и charging ownership не завершены. |
+| USB / ADB / MTP | Init заблокирован; недоступны | То же | Source QUSB2 IRQ masks исправлены, но Sony-only EOPNOTSUPP gate удерживается до реального DPDM/VBUS/ID/charging handoff. Не использовать USB как подтверждённый logging transport. |
 | Tasha / WCD9335 / audio | Драйверы; DT/firmware неполны | То же | Нужны LPASS/PIL/SSR/SLIMbus/clock маршруты и firmware, затем media, mic/headphone/speaker и voice calls. |
 | Modem / радио | Полной цепочки нет | Полной цепочки/DSDS нет | MPSS firmware/PIL/SSR, SMD/GLINK, RMNET/IPA и RIL ABI требуют завершения. Ни calls, ни data не подтверждены. |
 | Камеры | Не интегрированы полностью | То же | Sensor/CCI/ISP/EEPROM/actuator и vendor ABI. |

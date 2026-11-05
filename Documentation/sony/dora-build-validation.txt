@@ -1,3 +1,45 @@
+Dora Linux 4.19.318 / Stage 7 current validation (2026-11-05)
+==========================================================
+STATUS: BUILDABLE; BOOT TEST READY: NO; PHONE BOOT: UNTESTED.
+Initial actual local/remote HEAD: b8a20dab81b8f891fdb6f9ec935c5183549b18c8.
+Validated source/config/check commit: 5bcf038a27bd5334cdaec7ecd0f28d989f028ae1.
+Seven commits: six source/test commits and final documentation/evidence.
+Final SHA and post-push audit are in the final reply/external audit file.
+Build started with the initial HEAD plus frozen working-tree source changes;
+all built source hashes match the validated source commit. toolchain.txt
+records the original invocation HEAD; version strings may contain dirty.
+
+Clean OUT_DIR=/workspace/stage7-final-clean-out JOBS=3 scripts/dora/build.sh:
+exit0, 2026-11-05T20:07:34Z..20:17:23Z. All52 checks/79 default executions
+passed (Stage6:47/74); all47 former checks preserved. Config byte-identical
+to Stage6. vmlinux/System.map/Image/Image.gz/four DTBs/Image.gz-dtb verified.
+Separate fresh four-SDHC1-DTB workflow: exit0; exact full-tree delta and
+normal artifact hash preservation passed. All four normal DTBs are byte-
+identical to Stage6. Four new ASan/UBSan runs passed (detect_leaks=0);
+watchdog object compiled with initial-logbuf on/off without warnings.
+Compiler90 warnings, normalized added/removed0/0. External dtc1.6.1:29/DTB,
+added/removed0/0. Bundled dtc1.4.6:15/DTB, unchanged and recorded separately.
+No suppressed warnings or weakened assertions. git diff --check passes.
+Image.gz-dtb:9731579 bytes; SHA256:
+f64fee87380efa84c1f7dac67a0c75e15c2fa7ebe4a986dfd149febf495bd421
+
+Real native CPU ACD/APCC/CBF/PLL callbacks exist, but no live shared CPR/SPM/
+APM power backend is installed. SPM fallback/races and watchdog setup/lifetime
+are fixed; firmware handoffs remain unqualified. Final Sony Tone watchdog
+bark is12s/pet10s, not generic intermediate11s. Dora USB PHY init now returns
+EOPNOTSUPP before rail/clock/reset/MMIO: USB/ADB is unavailable. Parent VBUS
+and firmware charging safety remain P0. Existing HIGH/quarantine retained.
+maxcpus=2, CPU_FREQ=n, CPU_IDLE=n. No boot.img, flash or eMMC write.
+
+Remote kernel-5.5 moved externally 470fdeeb.. -> 030f0b02.. before our first
+Stage7 push. Both snapshots are retained; no attempt was made to write or
+restore that branch. Post-push checks compare fresh pre-push refs separately.
+Full current report: dora-stage7-report.md.
+Machine results/config/logs/SHA256: validation-stage7/.
+
+Historical Stage 6 report follows, unchanged
+===========================================
+
 Dora Linux 4.19.318 / Stage 6 current validation (2026-11-05)
 ==========================================================
 STATUS: BUILDABLE; BOOT TEST READY: NO; PHONE BOOT: UNTESTED.

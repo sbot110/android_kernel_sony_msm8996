@@ -1,7 +1,7 @@
-# Dora Linux 4.19: блокеры после этапа 6
+# Dora Linux 4.19: блокеры после этапа 7
 
 Обновлено: 2026-11-05. Начальный HEAD этапа:
-`961ff7bf2eb9ab1dc6d83be69972b06e7cede65b`.
+`b8a20dab81b8f891fdb6f9ec935c5183549b18c8`.
 Эталон Sony 4.4.302: `0c295b15b6d0fb59a64e13b9e0ef2070818ef2a1`.
 
 Ни F8131, ни F8132 не загружались с этим ядром. Первая диагностическая
@@ -23,7 +23,8 @@ leases, bootstrap/handoff и teardown. Host-тесты исполняют produc
 они не измеряют напряжение или работу firmware телефона.
 
 CPU transaction engine проверяет ACD/lease/PLL/readback/rollback и исходные
-12 fuse plans, но hardware adapter не подключён. Native RPM S8–S11
+12 fuse plans. Native MMIO callbacks теперь реализованы, но live adapter
+не подключён без настоящего shared power owner. Native RPM S8–S11
 отключены, чтобы не конкурировать с четырёхфазным SPM-controlled APCC.
 maxcpus=2 и выключенные CPU_FREQ/CPU_IDLE сохранены.
 
@@ -61,6 +62,19 @@ votes и аппаратная quarantine не восстанавливаются
 [CCF](dora-stage6-clock-ownership.txt),
 [early boot](dora-stage6-early-boot.md).
 
+Stage 7 добавляет настоящие APCC/CBF mux/PLL и target-cluster ACD callbacks,
+проверяет source warm-PLL handoff до записи, объединяет reservation трёх
+domains и исполняет их с production transaction engine в host tests.
+Полного CPR/SPM/APM shared-gang backend нет; live clock provider остаётся
+read-only. SPM ошибки больше не вызывают direct-SPMI fallback, main/AVS
+операции сериализованы, unknown state quarantined. Watchdog probe/IRQ/
+worker lifetime исправлены, но activation/handoff остаются gated. У Dora
+USB PHY init явно блокируется до опасных hardware операций, поэтому USB/
+ADB не являются доступной консолью. Read-only boot artifact parser не
+подменяет отсутствующий рабочий boot.img или наблюдения телефона.
+Подробности: [CPU/shared rails](dora-stage7-cpu-hardware.md),
+[watchdog/USB/boot](dora-stage7-early-boot.md), [отчёт](dora-stage7-report.md).
+
 ## Четыре варианта данных
 
 | SoC | PMIC | msm revision | pmic-id | GPU CPR corners | BCL derating | Flash ramp |
@@ -84,11 +98,11 @@ F8131/F8132 не связаны жёстко с stepping, PMIC или панел
 | --- | --- |
 | eMMC / physical rails | `qcom-rpm-physical.c` реализует UV/MA/SWEN BOTH replay. `sdhci-msm.c` сохраняет host quarantine после uncertain ACK. Source qualification clock/IRQ/PM/shutdown завершена; добавлены отдельные experimental SDHC1 DT. Нужны аппаратные CID/GPT/by-name/HS200/HS400/data-integrity тесты и проверка полного boot chain. Основные SDHC отключены; cached rollback не измеряет PMIC. |
 | GCC/MMCC bootstrap | `clk-msm8996-voltage.h:msm8996_voltage_ownership` сохраняет HIGH, если работающий PLL/parent не имеет доказанного counted owner/rate. Нужно подтвердить реальный boot handoff; partial-registration unwind с sole healthy HIGH теперь допускает same-owner reattach после fresh typed ACK. Потерянные per-clock leases/parent ownership и failed ACK остаются заблокированными; автоматического снятия hardware quarantine нет. Typed CX frontend включён: активный GCC не должен ссылаться на disabled supply. |
-| CPU DVFS / четыре CPU | `clk-cpu-8996.c` остаётся observational provider. Новый `clk-msm8996-cpu-transaction.c` не имеет MMIO/CPR/SPM adapter. QFPROM/binning/selected source plans подключены read-only. Нужны native ACD/CBF/PLL callbacks, S8–S11/SPM ownership, HMSS/Kryo/APM и thermal/hotplug/LPM. |
+| CPU DVFS / четыре CPU | `clk-cpu-8996.c` остаётся observational provider. Native ACD/CBF/PLL callbacks реализованы и gated. Нет настоящего transferable shared-gang CPR/SPM/APM guard, voltage leases/parents, HMSS/Kryo/retention и thermal/hotplug/LPM integration. SPM instance lock не заменяет gang ownership; quarantine/reprobe и SAW per-CPU lifetime требуют завершения до activation. |
 | MDSS / MMCC analog | `msm8996_voltage_apply` получает typed L12 BOTH ACK и quarantines uncertain operation. Отдельный backend baseline recovery не восстанавливает clock ownership/counts. Нужны qualified clock-level recovery, DSI PHY analog/panel/incell ownership и реальные измерения до display activation. |
 | GPU Adreno 530 | Gated child provider/MMSS CPR/PMI S2, независимый MX и CX, retention/SMMU/secure firmware и userspace ABI остаются неполными. Нельзя применять SDM845 планы. |
-| USB / зарядка | Не завершены DPDM/PHY ownership, BC1.2/VBUS, MicroUSB ID/ADC и SMBcharger safety paths. Нет fake fixed DPDM; JEITA/thermal/current protections не отключены. |
-| Watchdog / logging | Нет APSS watchdog node, QCOM_WATCHDOG_V2 выключен в унаследованной конфигурации. Нужно source-qualified исправление probe/IRQ/lifetime и передача владения bootloader. UART node/config и ramoops reservation не доказывают физический serial transport или persistence; USB/charging conflict остаётся P0 безопасной диагностики. |
+| USB / зарядка | Не завершены DPDM/PHY ownership, BC1.2/VBUS, MicroUSB ID/ADC и SMBcharger safety paths. Sony PHY init возвращает EOPNOTSUPP до rails/clocks/reset/MMIO; USB/ADB недоступны. Parent qscratch VBUS override и firmware charging не квалифицированы. Нет fake fixed DPDM; JEITA/thermal/current protections не отключены. |
+| Watchdog / logging | Probe/IRQ/worker/resource errors исправлены и fault-tested. Source final Tone/official prebuilt: base 0x9830000/0x1000, SPI28/29, bark12s/pet10s (11s был generic intermediate). Нет APSS watchdog node, QCOM_WATCHDOG_V2 выключен в унаследованной конфигурации; bootloader/secure handoff остаётся P0. UART node/config и ramoops reservation не доказывают физический serial transport или persistence. |
 | Android boot | Не предоставлены фактический рабочий boot.img, LOS21 ramdisk и новые runtime логи. Требуются boot header/partition size/cmdline/DTB-selection/vendor checks. Сохранённая DT bootargs сама не доказывает итоговую cmdline загрузчика. |
 
 Generic UFS host/PHY recovery остаётся отдельной задачей общей MSM8996 базы,
@@ -98,7 +112,8 @@ Generic UFS host/PHY recovery остаётся отдельной задачей
 
 ## Независимые проверки и физические пределы
 
-Все 47 check-*.py включены в build.sh; исходные 44 проверки Stage5 сохранены. Точное число и результаты — в протоколе сборки. Новые
+Все 52 check-*.py включены в build.sh; все 47 проверок Stage6 сохранены.
+Точное число и результаты — в протоколе сборки. Новые
 тесты выполняют MMC alias/UIM2/provider/power helpers, physical/cache ACK
 расхождения, RPM corner aggregation/rollback/lifetime/concurrency, CCF
 transactions, CPU transaction engine и реальные Android ABI/filesystem

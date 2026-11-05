@@ -103,6 +103,8 @@ image="$out/arch/arm64/boot/Image.gz"
 cat -- "$image" "${trees[@]}" > "$out/arch/arm64/boot/Image.gz-dtb"
 python3 "$root/scripts/dora/check-artifacts.py" "$out" "${artifact_args[@]}" \
     --report "$out/artifact-validation.json"
+python3 "$root/scripts/dora/check-early-boot.py" "$out" --self-test \
+    --report "$out/early-boot-validation.json"
 sha256sum "$out/.config" "$out/vmlinux" "$out/System.map" "$out/arch/arm64/boot/Image" \
     "$image" "${trees[@]}" "$out/arch/arm64/boot/Image.gz-dtb" \
     > "$out/SHA256SUMS"

@@ -44,6 +44,7 @@ def validate(out, dtbs):
         qcom_smd_rpm_probe msm_bus_device_probe msm8996_boot_probe
         qcom_rpm_corner_sync rpm_corner_probe sdhci_msm_probe
         mmc_gpiod_request_uim2 msm8996_cpu_transaction_set_rate
+        msm8996_cpu_hw_read_plans clk_vdd_class_reattach
         qcom_genpd_regulator_probe qpnp_wled_probe msm8996_gfx_probe
         cpr3_hmss_regulator_probe cpr3_mmss_regulator_probe
         kryo_regulator_probe msm_apm_probe""".split()

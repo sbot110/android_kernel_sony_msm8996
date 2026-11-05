@@ -42,6 +42,8 @@ python3 "$root/scripts/dora/check-cpu-clocks.py" --config "$out/.config"
 python3 "$root/scripts/dora/check-cpu-transactions.py"
 python3 "$root/scripts/dora/check-cpu-hardware.py"
 python3 "$root/scripts/dora/check-cpu-native.py"
+python3 "$root/scripts/dora/check-cpu-shared-power.py" --self-test \
+    --report "$out/cpu-shared-power-validation.json"
 python3 "$root/scripts/dora/check-spm-transactions.py"
 python3 "$root/scripts/dora/check-watchdog.py" --self-test
 python3 "$root/scripts/dora/check-usb-handoff.py" --self-test \
@@ -103,6 +105,10 @@ done
 python3 "$root/scripts/dora/check-sdhc1-diagnostic.py" --default-only \
     "${trees[@]}" --config "$out/.config" --selftest
 python3 "$root/scripts/dora/check-variants.py" "${trees[@]}" --require-four --require-active --selftest
+usb_parent_args=()
+for tree in "${trees[@]}"; do usb_parent_args+=(--dtb "$tree"); done
+python3 "$root/scripts/dora/check-usb-parent-handoff.py" --self-test \
+    "${usb_parent_args[@]}" --report "$out/usb-parent-handoff-validation.json"
 # An explicit list excludes stale or unrelated DTBs in O=.
 image="$out/arch/arm64/boot/Image.gz"
 cat -- "$image" "${trees[@]}" > "$out/arch/arm64/boot/Image.gz-dtb"

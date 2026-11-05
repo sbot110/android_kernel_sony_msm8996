@@ -41,6 +41,11 @@ python3 "$root/scripts/dora/check-android-abi.py" "$out/.config" --selftest
 python3 "$root/scripts/dora/check-cpu-clocks.py" --config "$out/.config"
 python3 "$root/scripts/dora/check-cpu-transactions.py"
 python3 "$root/scripts/dora/check-cpu-hardware.py"
+python3 "$root/scripts/dora/check-cpu-native.py"
+python3 "$root/scripts/dora/check-spm-transactions.py"
+python3 "$root/scripts/dora/check-watchdog.py" --self-test
+python3 "$root/scripts/dora/check-usb-handoff.py" --self-test \
+    --report "$out/usb-handoff-validation.json"
 python3 "$root/scripts/dora/check-spmi-ownership.py"
 python3 "$root/scripts/dora/check-mmc-alias.py"
 python3 "$root/scripts/dora/check-mmc-uim2.py"
@@ -105,6 +110,9 @@ python3 "$root/scripts/dora/check-artifacts.py" "$out" "${artifact_args[@]}" \
     --report "$out/artifact-validation.json"
 python3 "$root/scripts/dora/check-early-boot.py" "$out" --self-test \
     --report "$out/early-boot-validation.json"
+python3 "$root/scripts/dora/check-boot-image.py" --self-test \
+    --kernel "$out/arch/arm64/boot/Image.gz-dtb" --config "$out/.config" \
+    --report "$out/boot-image-validation.json"
 sha256sum "$out/.config" "$out/vmlinux" "$out/System.map" "$out/arch/arm64/boot/Image" \
     "$image" "${trees[@]}" "$out/arch/arm64/boot/Image.gz-dtb" \
     > "$out/SHA256SUMS"

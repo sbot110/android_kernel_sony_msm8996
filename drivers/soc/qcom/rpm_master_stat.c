@@ -1,15 +1,9 @@
-/* Copyright (c) 2012-2017, 2020, The Linux Foundation. All rights reserved.
- *
- * This program is free software; you can redistribute it and/or modify
- * it under the terms of the GNU General Public License version 2 and
- * only version 2 as published by the Free Software Foundation.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
- *
+// SPDX-License-Identifier: GPL-2.0-only
+
+/*
+ * Copyright (c) 2012-2020, The Linux Foundation. All rights reserved.
  */
+
 #include <linux/debugfs.h>
 #include <linux/delay.h>
 #include <linux/errno.h>
@@ -25,7 +19,6 @@
 #include <linux/of.h>
 #include <linux/uaccess.h>
 
-#include "rpm_stats.h"
 
 #define RPM_MASTERS_BUF_LEN 400
 
@@ -49,6 +42,23 @@
 	 prvdata->master_names[a])
 
 #define GET_FIELD(a) ((strnstr(#a, ".", 80) + 1))
+
+struct msm_rpm_master_stats_platform_data {
+	phys_addr_t phys_addr_base;
+	u32 phys_size;
+	char **masters;
+	/*
+	 * RPM maintains PC stats for each master in MSG RAM,
+	 * it allocates 256 bytes for this use.
+	 * No of masters differs for different targets.
+	 * Based on the number of masters, linux rpm stat
+	 * driver reads (32 * num_masters) bytes to display
+	 * master stats.
+	 */
+	s32 num_masters;
+	u32 master_offset;
+	u32 version;
+};
 
 static DEFINE_MUTEX(msm_rpm_master_stats_mutex);
 
@@ -77,7 +87,7 @@ struct msm_rpm_master_stats_private_data {
 	struct msm_rpm_master_stats_platform_data *platform_data;
 };
 
-int msm_rpm_master_stats_file_close(struct inode *inode,
+static int msm_rpm_master_stats_file_close(struct inode *inode,
 		struct file *file)
 {
 	struct msm_rpm_master_stats_private_data *private = file->private_data;
@@ -250,10 +260,14 @@ static int msm_rpm_master_copy_stats(
 
 	active_cores = record.active_cores;
 	j = find_first_bit(&active_cores, BITS_PER_LONG);
-	while (j < BITS_PER_LONG) {
+	while (j < (BITS_PER_LONG - 1)) {
 		SNPRINTF(buf, count, "\t\tcore%d\n", j);
-		j = find_next_bit(&active_cores, BITS_PER_LONG, j + 1);
+		j = find_next_bit((const unsigned long *)&active_cores,
+							BITS_PER_LONG, j + 1);
 	}
+
+	if (j == (BITS_PER_LONG - 1))
+		SNPRINTF(buf, count, "\t\tcore%d\n", j);
 
 	master_cnt++;
 	return RPM_MASTERS_BUF_LEN - count;
@@ -351,7 +365,7 @@ static struct msm_rpm_master_stats_platform_data
 {
 	struct msm_rpm_master_stats_platform_data *pdata;
 	struct device_node *node = dev->of_node;
-	int rc = 0, i, rpm_master_name_len = 0;
+	int rc = 0, i;
 
 	pdata = devm_kzalloc(dev, sizeof(*pdata), GFP_KERNEL);
 	if (!pdata)
@@ -387,17 +401,18 @@ static struct msm_rpm_master_stats_platform_data
 	 * Read master names from DT
 	 */
 	for (i = 0; i < pdata->num_masters; i++) {
-		const char *master_name = NULL;
+		const char *master_name;
+		size_t master_name_len;
 
 		of_property_read_string_index(node, "qcom,masters",
 							i, &master_name);
+		master_name_len = strlen(master_name);
 		pdata->masters[i] = devm_kzalloc(dev, sizeof(char) *
-				strlen(master_name) + 1, GFP_KERNEL);
+				master_name_len + 1, GFP_KERNEL);
 		if (!pdata->masters[i])
 			goto err;
-		rpm_master_name_len = strlen(master_name);
-		strscpy(pdata->masters[i], master_name,
-					rpm_master_name_len + 1);
+		strlcpy(pdata->masters[i], master_name,
+					master_name_len + 1);
 	}
 	return pdata;
 err:
@@ -427,7 +442,7 @@ static  int msm_rpm_master_stats_probe(struct platform_device *pdev)
 
 	if (!res) {
 		dev_err(&pdev->dev,
-			"%s: Failed to get IO resource from platform device",
+			"%s: Failed to get IO resource from platform device\n",
 			__func__);
 		return -ENXIO;
 	}
@@ -435,7 +450,7 @@ static  int msm_rpm_master_stats_probe(struct platform_device *pdev)
 	pdata->phys_addr_base = res->start;
 	pdata->phys_size = resource_size(res);
 
-	dent = debugfs_create_file("rpm_master_stats", S_IRUGO, NULL,
+	dent = debugfs_create_file("rpm_master_stats", 0444, NULL,
 					pdata, &msm_rpm_master_stats_fops);
 
 	if (!dent) {
@@ -468,7 +483,6 @@ static struct platform_driver msm_rpm_master_stats_driver = {
 	.remove = msm_rpm_master_stats_remove,
 	.driver = {
 		.name = "msm_rpm_master_stats",
-		.owner = THIS_MODULE,
 		.of_match_table = rpm_master_table,
 	},
 };

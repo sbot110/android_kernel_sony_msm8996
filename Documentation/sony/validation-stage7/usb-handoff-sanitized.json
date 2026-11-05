@@ -1,0 +1,7 @@
+{
+  "production_cases": 42,
+  "negative_mutations": 11,
+  "physical_usb_charging_handoff_verified": false,
+  "dpdm_vbus_id_owner_integrated": false,
+  "dora_public_usb_init_blocked": true
+}

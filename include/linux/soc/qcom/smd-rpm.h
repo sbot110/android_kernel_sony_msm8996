@@ -1,7 +1,20 @@
+/* SPDX-License-Identifier: GPL-2.0 */
 #ifndef __QCOM_SMD_RPM_H__
 #define __QCOM_SMD_RPM_H__
 
+#include <linux/types.h>
+
+struct device;
 struct qcom_smd_rpm;
+struct qcom_smd_rpm *qcom_smd_rpm_get(struct device *consumer);
+
+/* One apps-side writer per endpoint/type/id. Retiring an owned or uncertain
+ * vote preserves a bounded claim tombstone; reprobe is not a firmware reset.
+ */
+int qcom_rpm_smd_claim(struct qcom_smd_rpm *rpm, u32 type, u32 id,
+		       const void *owner);
+void qcom_rpm_smd_release(struct qcom_smd_rpm *rpm, u32 type, u32 id,
+			  const void *owner, bool preserve);
 
 #define QCOM_SMD_RPM_ACTIVE_STATE        0
 #define QCOM_SMD_RPM_SLEEP_STATE         1
@@ -9,6 +22,7 @@ struct qcom_smd_rpm;
 /*
  * Constants used for addressing resources in the RPM.
  */
+#define QCOM_SMD_RPM_BOBB	0x62626f62
 #define QCOM_SMD_RPM_BOOST	0x61747362
 #define QCOM_SMD_RPM_BUS_CLK	0x316b6c63
 #define QCOM_SMD_RPM_BUS_MASTER	0x73616d62
@@ -30,6 +44,10 @@ struct qcom_smd_rpm;
 #define QCOM_SMD_RPM_IPA_CLK	0x617069
 #define QCOM_SMD_RPM_CE_CLK	0x6563
 #define QCOM_SMD_RPM_AGGR_CLK	0x72676761
+#define QCOM_SMD_RPM_QUP_CLK    0x00707571
+#define QCOM_SMD_RPM_MMXI_CLK   0x69786D6D
+#define QCOM_SMD_RPM_HWKM_CLK	0x6D6B7768
+#define QCOM_SMD_RPM_PKA_CLK	0x616B70
 
 int qcom_rpm_smd_write(struct qcom_smd_rpm *rpm,
 		       int state,

@@ -1,0 +1,40 @@
+MSM8996 Sony GFX clock child of native MMCC
+
+This child separates GFX clock registration from the base MMCC clocks used by
+CPR. It shares the parent's regmap and must not have its own reg property or
+independently map MMCC registers. Native MMCC remains the single clock/GDSC
+register owner.
+
+Required parent: qcom,mmcc-msm8996.
+Required child properties:
+- compatible: qcom,msm8996-v3.0-gfxcc or qcom,msm8996-v3.1-gfxcc, matching SoC.
+- #clock-cells: 1.
+- vdd-gfx-supply: the real MSM8996 MMSS CPR corner regulator.
+- vdd-mx-supply: the real RPM MX logical-corner provider. Native RPM microvolt
+  regulators do not implement the required corn/vfc, active/sleep semantics.
+- nvmem-cells / nvmem-cell-names: the GPU speed-bin cell, named "speed-bin".
+  Sony MSM8996 uses bits 29..31 of the word at physical address 0x74130.
+- qcom,gfxfreq-speedbin0 through qcom,gfxfreq-speedbin3: original Sony triples
+  <frequency-Hz GFX-corner MX-corner>. The first row is <0 0 0>. Subsequent rows
+  have strictly increasing frequencies and supported positive corner indices.
+  Reserved fuse bins fail rather than falling back to the fastest bin zero.
+- qcom,rpm: the native Qualcomm RPM rpmsg supplier, mandatory for v3.1's original
+  MinSVS notification (misc clock resource 3, STAT key). No no-op RPM backend.
+
+Clock indices retain qcom,mmcc-msm8996.h definitions for this five-clock subset:
+GFX3D_CLK_SRC, GPU_GX_GFX3D_CLK, GPU_GX_RBBMTIMER_CLK, GPU_AHB_CLK,
+GPU_AON_ISENSE_CLK. They are removed from the parent when this child is present,
+including when the child is disabled. Thus disabling the regulated child cannot
+publish an unregulated parent fallback. Base MMCC still supplies CPR bus clocks.
+
+Retained source-data properties:
+- qcom,gfxfreq-mx-speedbin0 through qcom,gfxfreq-mx-speedbin3: original independent
+  gpu_mx_clk <frequency-Hz MX-corner> plans. The independent MX vote clock and
+  KGSL GX/CX sequencing still need a coordinated port; these properties do not
+  imply that the five-clock child implements that separate clock.
+
+Dora source variants keep the child, MMSS CPR, mem-acc, physical S2 buck and RPM
+corner resources disabled until the complete voltage, power and KGSL/SMMU chain
+is validated. Enabling this node alone is unsupported and is rejected by the
+board's automatic source-data/safety checks. F8131/F8132 and panel identity must
+not be inferred from a SoC/PMIC tuple.

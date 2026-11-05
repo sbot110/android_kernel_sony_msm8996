@@ -1,0 +1,24 @@
+{
+  "remote_before": {
+    "refs/heads/4.9-test-not-startable": "d8587034624fdf13432814248e4d63fa2771879c",
+    "refs/heads/Lineageos-21": "2e5470fd532fec62f20265062b34c5a0d7cd453f",
+    "refs/heads/dora-full-state-20261017": "d686db8c1cbc1299c95e4ca15da0fcc306d88126",
+    "refs/heads/kernel-4.19-701905467803253630": "8d7ab8a3baeb73cfaea264f3f7758e32cffce097",
+    "refs/heads/kernel-5.5": "54f7a7200d5e662854877e6df5099eb2c63e5e7e",
+    "refs/heads/main": "0c295b15b6d0fb59a64e13b9e0ef2070818ef2a1",
+    "refs/heads/wpa2-dora-debug": "3a9646ed5ade6c62483c46d4a85f27653bfcb191"
+  },
+  "remote_before_publication": {
+    "refs/heads/4.9-test-not-startable": "d8587034624fdf13432814248e4d63fa2771879c",
+    "refs/heads/Lineageos-21": "2e5470fd532fec62f20265062b34c5a0d7cd453f",
+    "refs/heads/dora-full-state-20261017": "d686db8c1cbc1299c95e4ca15da0fcc306d88126",
+    "refs/heads/kernel-4.19-701905467803253630": "8d7ab8a3baeb73cfaea264f3f7758e32cffce097",
+    "refs/heads/kernel-5.5": "54f7a7200d5e662854877e6df5099eb2c63e5e7e",
+    "refs/heads/main": "0c295b15b6d0fb59a64e13b9e0ef2070818ef2a1",
+    "refs/heads/wpa2-dora-debug": "3a9646ed5ade6c62483c46d4a85f27653bfcb191"
+  },
+  "other_remote_refs_equal": true,
+  "other_local_refs_equal": true,
+  "only_authorized_branch": "refs/heads/kernel-4.19-701905467803253630",
+  "post_push_check": "performed after final report commit; exact result recorded in final reply"
+}

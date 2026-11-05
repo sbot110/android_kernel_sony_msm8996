@@ -1,5 +1,6 @@
 config WIFI_CONTROL_FUNC
-	bool "Enable WiFi control function abstraction"
+	bool "Sony WiFi power and PCIe control"
+	depends on BCMDHD_PCIE && PCI_MSM
 	help
-	  Enables Power/Reset/Carddetect function abstraction
+	  Sony tone board power sequencing and PCIe enumeration for BCMDHD.
 

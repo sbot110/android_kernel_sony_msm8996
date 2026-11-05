@@ -1,0 +1,67 @@
+MSM8996 native-SMD RPM logical-corner resource
+============================================
+
+This frontend implements the Sony MSM8996 corn/vfc/swen apps-master requests.
+It is NOT a physical microvolt regulator. The legacy regulator voltage API and
+regulator-min/max-microvolt property names carry logical corners 1..7 ONLY for
+this explicit compatible/use-voltage-corner contract. Firmware receives corn
+or vfc value logical-1 (0..6), never a uv KVP. Do not connect ordinary physical
+voltage consumers or native microvolt S1/S2 providers to these supplies.
+
+Resource required properties:
+- compatible: "qcom,msm8996-rpm-corner-resource"
+- qcom,rpm: phandle to the real qcom,rpm-msm8996 request node
+- qcom,resource-name and qcom,resource-id: "smpa"/1 (CX), "smpa"/2 (MX),
+  or "ldoa"/26 (original SS-CX corner resource). No other resources supported.
+
+Every available child must have:
+- compatible: "qcom,rpm-smd-regulator"
+- regulator-name: unique frontend name
+- qcom,set: 1 ACTIVE, 2 SLEEP, 3 BOTH (these are bit masks, not wire state IDs)
+- exactly one qcom,use-voltage-corner or qcom,use-voltage-floor-corner
+- regulator-min-microvolt and regulator-max-microvolt: logical bounds in1..7
+Optional qcom,always-send-voltage preserves original disabled-client voltage
+updates (used for floor requests). Disabled physical microvolt child nodes are
+ignored. Parent supplies, boot-on and always-on requests are rejected: probe
+must not guess a bootstrap corner or program power before clock ownership is
+established. No init-voltage/default voltage is synthesized.
+
+All stored logical requests aggregate by MAX per key and per set, including
+requests from disabled frontends. SWEN aggregates independently; disabling a
+client does not implicitly clear its stored corner. Higher-level clock users
+must explicitly reduce their request after reducing/gating the hardware rate.
+
+Unlike Sony's sleep-inheritance optimization, the first transmitted transaction
+explicitly ACKs both owned ACTIVE and SLEEP keys. This does not depend on an
+unknown bootloader sleep vote. ACTIVE-only requests therefore have an explicit
+zero sleep-side vote when no BOTH/SLEEP consumer requests that key. Zero here
+is a genuine apps-master release, not a fake power provider or guessed voltage.
+All transport operations wait for native correlated firmware ACKs.
+
+No hardware writes occur at probe or removal. Before the full resource is
+registered, consumer mutations defer. Unknown physical voltage is reported as
+ENODATA; is_enabled reports this frontend's logical request, not a PMIC read.
+
+Clock coupling must set a source-derived logical corner, enable the consumer,
+and call qcom_rpm_corner_sync(regulator, true) before enabling/raising a clock.
+Generic regulator API cached success does not replace this explicit ACK.
+The false argument permits disabled state confirmation, or an explicit
+always-send voltage-only floor request; it is not proof of an enabled supply.
+
+On partial failure, acknowledged old ACTIVE/SLEEP values are explicitly
+restored. Failure to restore quarantines the resource. A failed initial
+transaction with no ACK baseline holds max(previous request, attempted request)
+and requires an explicit dominating retry; it never restores an assumed NONE
+baseline. Returned errors preserve the first transaction failure. Uncertainty
+is visible through REGULATOR_ERROR_FAIL and blocks cached/reducing success.
+Source-derived bootstrap/ownership and caller failure sequencing are still
+mandatory; this driver cannot infer the safe corner of unclaimed live clocks.
+
+Suspend confirms both sets; unresolved uncertainty aborts suspend. Resume
+re-confirms both sets and keeps further changes blocked if confirmation fails.
+These software contracts do not establish physical suspend or voltage safety.
+
+Exactly one resource frontend may own a given RPM transport/type/id tuple.
+Callback storage remains alive until the last regulator device reference is
+released. Provider removal marks all operations offline without blindly
+withdrawing a voltage still required by live consumers.

@@ -1,0 +1,33 @@
+/* Copyright (c) 2014-2017, The Linux Foundation. All rights reserved.
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License version 2 and
+ * only version 2 as published by the Free Software Foundation.
+ */
+/* Hardware data from the final Sony dora DT at
+ * 0c295b15b6d0fb59a64e13b9e0ef2070818ef2a1, not intermediate includes.
+ * Source data is retained while unsupported power chains remain disabled.
+ */
+
+/ { qcom,pmic-id = <0x20009 0x10013 0 0>; };
+
+&{/soc/qcom,spmi@400f000/pmic@2} {
+	compatible = "qcom,pmi8996", "qcom,spmi-pmic";
+};
+&{/soc/qcom,spmi@400f000/pmic@3} {
+	compatible = "qcom,pmi8996", "qcom,spmi-pmic";
+};
+&{/soc/qcom,spmi@400f000/pmic@2/gpios@c000} {
+	compatible = "qcom,pmi8996-gpio", "qcom,spmi-gpio";
+};
+
+&pmi8994_bcl { qcom,inhibit-derating-ua = <0>; };
+
+/* Final Sony overrides set 32 on BOTH PMIC revisions. Intermediate PMI8996
+ * includes contain 300, which is not the effective dora hardware setting. */
+&ibb_regulator { qcom,qpnp-ibb-discharge-resistor = <32>; };
+
+&tone_flash {
+	qcom,ramp_up_step = "27_US";
+	qcom,ramp_dn_step = "27_US";
+};

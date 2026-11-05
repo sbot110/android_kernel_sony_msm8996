@@ -1,0 +1,42 @@
+// SPDX-License-Identifier: GPL-2.0-only
+/*
+ * The graph in tone-display*.dtsi is complete enough for structural checks,
+ * but native MMCC currently lacks the Sony vdd_dig frequency/corner votes.
+ * In particular, mdss_mdp_irq_clk_setup() can request 412.5 MHz at probe, requiring
+ * the original HIGH corner rather than an inherited bootloader voltage.
+ *
+ * Keep every producer of display clocks/analogue power disabled until a real
+ * clock-to-RPM corner implementation preserves the Sony 4.4 fmax maps. This
+ * gate is deliberately visible in the final DT, not a successful fake probe.
+ */
+&mdss_mdp {
+	status = "disabled";
+};
+
+&mdss_dsi {
+	status = "disabled";
+};
+
+&mdss_dsi0_pll {
+	status = "disabled";
+};
+
+&mdss_dsi1_pll {
+	status = "disabled";
+};
+
+&mdp_smmu {
+	status = "disabled";
+};
+
+&rot_smmu {
+	status = "disabled";
+};
+
+&labibb {
+	status = "disabled";
+};
+
+&pmi8994_wled {
+	status = "disabled";
+};

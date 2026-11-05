@@ -48,7 +48,7 @@ static void somc_chg_therm_level_set_work(struct work_struct *work);
 static int somc_chg_apsd_wait_rerun(struct smbchg_chip *chip);
 static void somc_chg_apsd_rerun_check(struct smbchg_chip *chip);
 static void somc_chg_apsd_rerun(struct smbchg_chip *chip);
-static void somc_chg_init(struct chg_somc_params *params);
+static int somc_chg_init(struct chg_somc_params *params);
 static int somc_chg_set_step_charge_params(struct smbchg_chip *chip,
 			struct device_node *node);
 static const char *somc_chg_get_prop_battery_type(struct smbchg_chip *chip);
@@ -68,4 +68,5 @@ static int somc_chg_smb_parse_dt(struct smbchg_chip *chip,
 			struct device_node *node);
 static int somc_chg_register(struct smbchg_chip *chip);
 static void somc_chg_unregister(struct smbchg_chip *chip);
+static void somc_chg_remove_sysfs_entries(struct device *dev);
 #endif /* __QPNP_SMBCHARGER_EXTENSION */

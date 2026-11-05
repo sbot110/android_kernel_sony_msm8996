@@ -1,0 +1,107 @@
+Sony Dora legacy QPNP fuel gauge on Linux 4.19
+============================================
+
+Source and scope
+----------------
+
+The qpnp-fg.c and Sony extension sources come from the working Tone 4.4
+reference, sbot110/android_kernel_sony_msm8996 commit
+0c295b15b6d0fb59a64e13b9e0ef2070818ef2a1, under
+drivers/power/supply/qcom/. They implement the original PMIC SRAM fuel gauge,
+battery profiles, Sony capacity learning, aging and JEITA controls. This is
+not a replacement with the FG GEN3/GEN4 register layout.
+
+The source supports the PMI8994 and PMI8996 PMIC subtypes used by the original
+Dora DT variants. Neither subtype is assigned to F8131 or F8132 by model name.
+The original board/revision DT selection remains necessary for both models.
+
+Changes for 4.19
+---------------
+
+* Register accesses use the parent SPMI regmap, with original hardware register
+  offsets, interrupt names, SRAM tables and Sony battery algorithms retained.
+* Native wakeup_source objects replace the removed Android wake-lock API.
+  Allocation errors propagate; devres unregisters successfully allocated
+  sources. IRQ registration/wake ownership is tracked for unwind/removal.
+* power_supply_config is initialized, registration is checked, and teardown
+  explicitly unregisters the BMS after asynchronous users are stopped.
+* Legacy integer properties are appended to power_supply_property and to the
+  matching sysfs array. Existing property IDs and the bounded string-property
+  range are retained. FV_CFG retains Sony's vfloat_mv sysfs name.
+* Cached USB/DC/battery supply references are acquired under a per-device
+  mutex and released by devres. Temporary BMS lookups in module parameter
+  setters are paired with power_supply_put(); setters are serialized against
+  teardown and reject a stopping provider.
+* Hard-JEITA alarmtimer callbacks queue sleepable work. The timer callback
+  performs no power_supply or regmap operations. A dedicated wakeup_source
+  covers the worker, polling remains ten seconds, and teardown cancels both
+  the timer and worker.
+* All initialized works, including battery_age_work, are drained. The init
+  worker does not synchronously cancel itself. Alarm rearming is checked
+  against the stopping flag.
+* Sony sysfs and debugfs interfaces are removed before BMS teardown. Initial
+  hardware work starts after Sony sysfs registration, so an initialization
+  failure cannot race with creation of new attributes. Partial debugfs setup
+  clears its stored pointers, and file operations pin the module.
+* PMIC-revision phandles and early-exit child-node references are put.
+  Deferred IRQ/provider errors are preserved. Unknown FG peripheral subtypes
+  fail probe, and an unsuccessful SOC interrupt-status read cannot be logged
+  as an initialized value.
+* Time accounting uses a real configurable RTC via QPNP_FG_RTC_DEVICE; no
+  synthetic RTC or voltage/current readings were introduced.
+
+Configuration and DT dependencies
+---------------------------------
+
+For built-in Dora integration, enable:
+
+  CONFIG_QPNP_FG=y
+  CONFIG_QPNP_FG_EXTENSION=y
+  CONFIG_QPNP_FG_RTC_DEVICE="rtc0"
+  CONFIG_RTC_CLASS=y
+  CONFIG_RTC_DRV_PM8XXX=y
+
+QPNP_FG also requires MFD_SPMI_PMIC and PM_SLEEP, and selects OF_BATTERYDATA
+and QPNP_REVID. RTC_HCTOSYS is optional: the private RTC device setting uses
+RTC_HCTOSYS_DEVICE when available, otherwise defaults to rtc0. The native
+PM8994 DT uses qcom,pm8941-rtc, which RTC_DRV_PM8XXX actually matches.
+
+The driver matches qcom,qpnp-fg. A functioning board DT must supply the
+original FG SOC/battery/memory-interface children and named IRQs, PMIC-revid
+phandle, Dora battery-data profile and Tone/Dora temperature and termination
+settings. The original locations are:
+
+  arch/arm/boot/dts/qcom/msm-pmi8994.dtsi
+  arch/arm/boot/dts/qcom/msm8996-tone-common.dtsi
+  arch/arm/boot/dts/qcom/msm8996-tone-dora-common.dtsi
+  arch/arm/boot/dts/qcom/batterydata-tone-dora-send.dtsi
+
+For example, the Dora override selects its own battery-data node, 150 mA
+termination settings and 20 deci-C JEITA hysteresis. These must not be
+replaced by another Tone model's profile to obtain a successful probe.
+
+The dora power DT supplement now supplies the original legacy FG children,
+revision phandle and Dora profile for PM8994/PMI8994. Its 32 power/profile
+nodes were compared against the flattened Sony reference; see dora-power-dt.txt.
+This source/DT activation is not proof of successful probe or accuracy.
+A charger exposing the original battery power_supply controls is also required: battery charging
+enable, JEITA thresholds and Sony FV_CFG/FV_CMP_CFG aging controls are real
+inter-driver dependencies. VADC/BCL and charger integration are separate
+ports; the FG reads its own SRAM/regmap directly rather than a fake ADC shim.
+
+Validation and physical testing
+-------------------------------
+
+The initial isolated configuration linked a complete ARM64 vmlinux with
+QPNP_FG and the Sony extension enabled. The final reviewed source was checked
+again by building drivers/power/supply/qcom/qpnp-fg.o with ARM64 GCC 12.2 and
+the 4.19 tree's normal strict API checks. The latest combined build and validated source revision are recorded in
+dora-build-validation.txt; object compilation alone does not cover hardware.
+
+No phone test has been performed for this 4.19 FG port. F8131 and F8132 each
+need separate checks of PMIC revision selection, measured voltage/current/
+temperature and battery ID, profile selection, SOC across reboot/suspend,
+USB insertion/removal, normal and warm/cool charging, hot/cold charge cutoff,
+termination, aging controls and shutdown. Battery safety behavior cannot be
+established by compilation or by the display evidence from the working 4.4
+F8132 kernel.

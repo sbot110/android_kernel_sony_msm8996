@@ -1,4 +1,5 @@
-/* Copyright (c) 2011-2016, The Linux Foundation. All rights reserved.
+// SPDX-License-Identifier: GPL-2.0-only
+/* Copyright (c) 2011-2020  The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -27,6 +28,7 @@
 #include "spm_driver.h"
 
 #define VDD_DEFAULT 0xDEADF00D
+#define VDD_UNKNOWN 0xDEADF00E
 #define SLP_CMD_BIT 17
 #define PC_MODE_BIT 16
 #define RET_MODE_BIT 15
@@ -67,13 +69,26 @@ static LIST_HEAD(spm_list);
 static DEFINE_PER_CPU_SHARED_ALIGNED(struct msm_spm_device, msm_cpu_spm_device);
 static DEFINE_PER_CPU(struct msm_spm_device *, cpu_vctl_device);
 
+/* A failed probe is published as ERR_PTR for every CPU sharing this SAW. */
+static struct msm_spm_device *msm_spm_vctl_device(unsigned int cpu)
+{
+	struct msm_spm_device *dev;
+
+	if (cpu >= nr_cpu_ids || !cpu_possible(cpu))
+		return ERR_PTR(-EINVAL);
+	dev = per_cpu(cpu_vctl_device, cpu);
+	if (!dev)
+		return ERR_PTR(-EPROBE_DEFER);
+	return dev;
+}
+
 static void msm_spm_smp_set_vdd(void *data)
 {
 	struct msm_spm_vdd_info *info = (struct msm_spm_vdd_info *)data;
 	struct msm_spm_device *dev = info->vctl_dev;
 
-	dev->cpu_vdd = info->vlevel;
 	info->err = msm_spm_drv_set_vdd(&dev->reg_data, info->vlevel);
+	dev->cpu_vdd = info->err ? VDD_UNKNOWN : info->vlevel;
 }
 
 /**
@@ -86,16 +101,14 @@ int msm_spm_probe_done(void)
 {
 	struct msm_spm_device *dev;
 	int cpu;
-	int ret = 0;
 
 	for_each_possible_cpu(cpu) {
 		dev = per_cpu(cpu_vctl_device, cpu);
 		if (!dev)
 			return -EPROBE_DEFER;
 
-		ret = IS_ERR(dev);
-		if (ret)
-			return ret;
+		if (IS_ERR(dev))
+			return PTR_ERR(dev);
 	}
 
 	return 0;
@@ -117,15 +130,11 @@ void msm_spm_dump_regs(unsigned int cpu)
 int msm_spm_set_vdd(unsigned int cpu, unsigned int vlevel)
 {
 	struct msm_spm_vdd_info info;
-	struct msm_spm_device *dev = per_cpu(cpu_vctl_device, cpu);
+	struct msm_spm_device *dev = msm_spm_vctl_device(cpu);
 	int ret;
 
-	if (!dev)
-		return -EPROBE_DEFER;
-
-	ret = IS_ERR(dev);
-	if (ret)
-		return ret;
+	if (IS_ERR(dev))
+		return PTR_ERR(dev);
 
 	info.vctl_dev = dev;
 	info.vlevel = vlevel;
@@ -146,10 +155,10 @@ EXPORT_SYMBOL(msm_spm_set_vdd);
  */
 int msm_spm_get_vdd(unsigned int cpu)
 {
-	struct msm_spm_device *dev = per_cpu(cpu_vctl_device, cpu);
+	struct msm_spm_device *dev = msm_spm_vctl_device(cpu);
 
-	if (!dev)
-		return -EPROBE_DEFER;
+	if (IS_ERR(dev))
+		return PTR_ERR(dev);
 
 	return msm_spm_drv_get_vdd(&dev->reg_data) ? : -EINVAL;
 }
@@ -186,7 +195,7 @@ static void msm_spm_config_q2s(struct msm_spm_device *dev, unsigned int mode)
 
 	val = spm_legacy_mode << 2 | qchannel_ignore << 1;
 	__raw_writel(val, dev->q2s_reg);
-	mb();
+	mb(); /* Ensure flush */
 }
 
 static void msm_spm_config_hw_flush(struct msm_spm_device *dev,
@@ -234,7 +243,7 @@ static void msm_spm_config_slpreq(struct msm_spm_device *dev,
 }
 
 static int msm_spm_dev_set_low_power_mode(struct msm_spm_device *dev,
-		unsigned int mode, bool notify_rpm)
+		unsigned int mode, bool notify_rpm, bool set_spm_enable)
 {
 	uint32_t i;
 	int ret = -EINVAL;
@@ -251,9 +260,11 @@ static int msm_spm_dev_set_low_power_mode(struct msm_spm_device *dev,
 	if (!dev->num_modes)
 		return 0;
 
-	if (mode == MSM_SPM_MODE_DISABLED) {
+	if (mode == MSM_SPM_MODE_DISABLED && set_spm_enable) {
 		ret = msm_spm_drv_set_spm_enable(&dev->reg_data, false);
-	} else if (!msm_spm_drv_set_spm_enable(&dev->reg_data, true)) {
+	} else {
+		if (set_spm_enable)
+			ret = msm_spm_drv_set_spm_enable(&dev->reg_data, true);
 		for (i = 0; i < dev->num_modes; i++) {
 			if (dev->modes[i].mode != mode)
 				continue;
@@ -282,8 +293,8 @@ static int msm_spm_dev_init(struct msm_spm_device *dev,
 
 	dev->cpu_vdd = VDD_DEFAULT;
 	dev->num_modes = data->num_modes;
-	dev->modes = kmalloc(
-			sizeof(struct msm_spm_power_modes) * dev->num_modes,
+	dev->modes = kmalloc_array(
+			dev->num_modes, sizeof(struct msm_spm_power_modes),
 			GFP_KERNEL);
 
 	if (!dev->modes)
@@ -331,8 +342,18 @@ int msm_spm_turn_on_cpu_rail(struct device_node *vctl_node,
 		unsigned int val, int cpu, int vctl_offset)
 {
 	uint32_t timeout = 2000; /* delay for voltage to settle on the core */
-	struct msm_spm_device *dev = per_cpu(cpu_vctl_device, cpu);
+	struct msm_spm_device *dev;
 	void __iomem *base;
+
+	if (cpu < 0 || (unsigned int)cpu >= nr_cpu_ids || !cpu_possible(cpu))
+		return -EINVAL;
+	dev = per_cpu(cpu_vctl_device, cpu);
+	if (IS_ERR(dev))
+		return PTR_ERR(dev);
+	if (dev && dev->cpu_vdd == VDD_UNKNOWN)
+		return -EIO;
+	if (dev && dev->cpu_vdd != VDD_DEFAULT)
+		return 0;
 
 	base = of_iomap(vctl_node, 1);
 	if (base) {
@@ -343,7 +364,7 @@ int msm_spm_turn_on_cpu_rail(struct device_node *vctl_node,
 		 * bit[2] = spm_legacy_mode = 0
 		 */
 		writel_relaxed(0x2, base);
-		mb();
+		mb(); /* Ensure flush */
 		iounmap(base);
 	}
 
@@ -351,19 +372,16 @@ int msm_spm_turn_on_cpu_rail(struct device_node *vctl_node,
 	if (!base)
 		return -ENOMEM;
 
-	if (dev && (dev->cpu_vdd != VDD_DEFAULT))
-		return 0;
-
 	/* Set the CPU supply regulator voltage */
 	val = (val & 0xFF);
 	writel_relaxed(val, base + vctl_offset);
-	mb();
+	mb(); /* Ensure flush */
 	udelay(timeout);
 
 	/* Enable the CPU supply regulator*/
 	val = 0x30080;
 	writel_relaxed(val, base + vctl_offset);
-	mb();
+	mb(); /* Ensure flush */
 	udelay(timeout);
 
 	iounmap(base);
@@ -375,6 +393,7 @@ EXPORT_SYMBOL(msm_spm_turn_on_cpu_rail);
 void msm_spm_reinit(void)
 {
 	unsigned int cpu;
+
 	for_each_possible_cpu(cpu)
 		msm_spm_drv_reinit(
 			&per_cpu(msm_cpu_spm_device.reg_data, cpu), true);
@@ -408,10 +427,10 @@ bool msm_spm_is_mode_avail(unsigned int mode)
  */
 int msm_spm_is_avs_enabled(unsigned int cpu)
 {
-	struct msm_spm_device *dev = per_cpu(cpu_vctl_device, cpu);
+	struct msm_spm_device *dev = msm_spm_vctl_device(cpu);
 
-	if (!dev)
-		return -ENXIO;
+	if (IS_ERR(dev))
+		return PTR_ERR(dev);
 
 	return msm_spm_drv_get_avs_enable(&dev->reg_data);
 }
@@ -426,10 +445,10 @@ EXPORT_SYMBOL(msm_spm_is_avs_enabled);
  */
 int msm_spm_avs_enable(unsigned int cpu)
 {
-	struct msm_spm_device *dev = per_cpu(cpu_vctl_device, cpu);
+	struct msm_spm_device *dev = msm_spm_vctl_device(cpu);
 
-	if (!dev)
-		return -ENXIO;
+	if (IS_ERR(dev))
+		return PTR_ERR(dev);
 
 	return msm_spm_drv_set_avs_enable(&dev->reg_data, true);
 }
@@ -444,10 +463,10 @@ EXPORT_SYMBOL(msm_spm_avs_enable);
  */
 int msm_spm_avs_disable(unsigned int cpu)
 {
-	struct msm_spm_device *dev = per_cpu(cpu_vctl_device, cpu);
+	struct msm_spm_device *dev = msm_spm_vctl_device(cpu);
 
-	if (!dev)
-		return -ENXIO;
+	if (IS_ERR(dev))
+		return PTR_ERR(dev);
 
 	return msm_spm_drv_set_avs_enable(&dev->reg_data, false);
 }
@@ -466,10 +485,10 @@ EXPORT_SYMBOL(msm_spm_avs_disable);
 int msm_spm_avs_set_limit(unsigned int cpu,
 		uint32_t min_lvl, uint32_t max_lvl)
 {
-	struct msm_spm_device *dev = per_cpu(cpu_vctl_device, cpu);
+	struct msm_spm_device *dev = msm_spm_vctl_device(cpu);
 
-	if (!dev)
-		return -ENXIO;
+	if (IS_ERR(dev))
+		return PTR_ERR(dev);
 
 	return msm_spm_drv_set_avs_limit(&dev->reg_data, min_lvl, max_lvl);
 }
@@ -484,10 +503,10 @@ EXPORT_SYMBOL(msm_spm_avs_set_limit);
  */
 int msm_spm_avs_enable_irq(unsigned int cpu, enum msm_spm_avs_irq irq)
 {
-	struct msm_spm_device *dev = per_cpu(cpu_vctl_device, cpu);
+	struct msm_spm_device *dev = msm_spm_vctl_device(cpu);
 
-	if (!dev)
-		return -ENXIO;
+	if (IS_ERR(dev))
+		return PTR_ERR(dev);
 
 	return msm_spm_drv_set_avs_irq_enable(&dev->reg_data, irq, true);
 }
@@ -502,10 +521,10 @@ EXPORT_SYMBOL(msm_spm_avs_enable_irq);
  */
 int msm_spm_avs_disable_irq(unsigned int cpu, enum msm_spm_avs_irq irq)
 {
-	struct msm_spm_device *dev = per_cpu(cpu_vctl_device, cpu);
+	struct msm_spm_device *dev = msm_spm_vctl_device(cpu);
 
-	if (!dev)
-		return -ENXIO;
+	if (IS_ERR(dev))
+		return PTR_ERR(dev);
 
 	return msm_spm_drv_set_avs_irq_enable(&dev->reg_data, irq, false);
 }
@@ -520,10 +539,10 @@ EXPORT_SYMBOL(msm_spm_avs_disable_irq);
  */
 int msm_spm_avs_clear_irq(unsigned int cpu, enum msm_spm_avs_irq irq)
 {
-	struct msm_spm_device *dev = per_cpu(cpu_vctl_device, cpu);
+	struct msm_spm_device *dev = msm_spm_vctl_device(cpu);
 
-	if (!dev)
-		return -ENXIO;
+	if (IS_ERR(dev))
+		return PTR_ERR(dev);
 
 	return msm_spm_drv_avs_clear_irq(&dev->reg_data, irq);
 }
@@ -537,9 +556,24 @@ EXPORT_SYMBOL(msm_spm_avs_clear_irq);
 int msm_spm_set_low_power_mode(unsigned int mode, bool notify_rpm)
 {
 	struct msm_spm_device *dev = this_cpu_ptr(&msm_cpu_spm_device);
-	return msm_spm_dev_set_low_power_mode(dev, mode, notify_rpm);
+
+	return msm_spm_dev_set_low_power_mode(dev, mode, notify_rpm, true);
 }
 EXPORT_SYMBOL(msm_spm_set_low_power_mode);
+
+void msm_spm_set_rpm_hs(bool allow_rpm_hs)
+{
+	struct msm_spm_device *dev = this_cpu_ptr(&msm_cpu_spm_device);
+
+	dev->allow_rpm_hs = allow_rpm_hs;
+}
+EXPORT_SYMBOL(msm_spm_set_rpm_hs);
+
+int msm_spm_config_low_power_mode_addr(struct msm_spm_device *dev,
+		unsigned int mode, bool notify_rpm)
+{
+	return msm_spm_dev_set_low_power_mode(dev, mode, notify_rpm, false);
+}
 
 /**
  * msm_spm_init(): Board initalization function
@@ -551,10 +585,12 @@ int __init msm_spm_init(struct msm_spm_platform_data *data, int nr_devs)
 	unsigned int cpu;
 	int ret = 0;
 
-	BUG_ON((nr_devs < num_possible_cpus()) || !data);
+	if ((nr_devs < num_possible_cpus()) || !data)
+		return -EINVAL;
 
 	for_each_possible_cpu(cpu) {
 		struct msm_spm_device *dev = &per_cpu(msm_cpu_spm_device, cpu);
+
 		ret = msm_spm_dev_init(dev, &data[cpu]);
 		if (ret < 0) {
 			pr_warn("%s():failed CPU:%u ret:%d\n", __func__,
@@ -582,7 +618,7 @@ struct msm_spm_device *msm_spm_get_device_by_name(const char *name)
 int msm_spm_config_low_power_mode(struct msm_spm_device *dev,
 		unsigned int mode, bool notify_rpm)
 {
-	return msm_spm_dev_set_low_power_mode(dev, mode, notify_rpm);
+	return msm_spm_dev_set_low_power_mode(dev, mode, notify_rpm, true);
 }
 #ifdef CONFIG_MSM_L2_SPM
 
@@ -593,10 +629,10 @@ int msm_spm_config_low_power_mode(struct msm_spm_device *dev,
  */
 int msm_spm_apcs_set_phase(int cpu, unsigned int phase_cnt)
 {
-	struct msm_spm_device *dev = per_cpu(cpu_vctl_device, cpu);
+	struct msm_spm_device *dev = msm_spm_vctl_device(cpu);
 
-	if (!dev)
-		return -ENXIO;
+	if (IS_ERR(dev))
+		return PTR_ERR(dev);
 
 	return msm_spm_drv_set_pmic_data(&dev->reg_data,
 			MSM_SPM_PMIC_PHASE_PORT, phase_cnt);
@@ -610,10 +646,10 @@ EXPORT_SYMBOL(msm_spm_apcs_set_phase);
  */
 int msm_spm_enable_fts_lpm(int cpu, uint32_t mode)
 {
-	struct msm_spm_device *dev = per_cpu(cpu_vctl_device, cpu);
+	struct msm_spm_device *dev = msm_spm_vctl_device(cpu);
 
-	if (!dev)
-		return -ENXIO;
+	if (IS_ERR(dev))
+		return PTR_ERR(dev);
 
 	return msm_spm_drv_set_pmic_data(&dev->reg_data,
 			MSM_SPM_PMIC_PFM_PORT, mode);
@@ -669,7 +705,7 @@ static struct msm_spm_device *msm_spm_get_device(struct platform_device *pdev)
 
 static void get_cpumask(struct device_node *node, struct cpumask *mask)
 {
-	unsigned c;
+	unsigned int c;
 	int idx = 0;
 	struct device_node *cpu_node;
 	char *key = "qcom,cpu-vctl-list";
@@ -778,11 +814,15 @@ static int msm_spm_dev_probe(struct platform_device *pdev)
 	}
 
 	spm_data.vctl_port = -1;
+	spm_data.vctl_port_ub = -1;
 	spm_data.phase_port = -1;
 	spm_data.pfm_port = -1;
 
 	key = "qcom,vctl-port";
 	of_property_read_u32(node, key, &spm_data.vctl_port);
+
+	key = "qcom,vctl-port-ub";
+	of_property_read_u32(node, key, &spm_data.vctl_port_ub);
 
 	key = "qcom,phase-port";
 	of_property_read_u32(node, key, &spm_data.phase_port);
@@ -869,7 +909,7 @@ static int msm_spm_dev_probe(struct platform_device *pdev)
 
 		for (i = 0; i < ARRAY_SIZE(mode_of_data); i++)
 			if (!strcmp(name, mode_of_data[i].key))
-					break;
+				break;
 
 		if (i == ARRAY_SIZE(mode_of_data)) {
 			pr_err("Mode name invalid %s\n", name);
@@ -952,11 +992,12 @@ fail:
 static int msm_spm_dev_remove(struct platform_device *pdev)
 {
 	struct msm_spm_device *dev = platform_get_drvdata(pdev);
+
 	list_del(&dev->list);
 	return 0;
 }
 
-static struct of_device_id msm_spm_match_table[] = {
+static const struct of_device_id msm_spm_match_table[] = {
 	{.compatible = "qcom,spm-v2"},
 	{},
 };
@@ -966,7 +1007,6 @@ static struct platform_driver msm_spm_device_driver = {
 	.remove = msm_spm_dev_remove,
 	.driver = {
 		.name = "spm-v2",
-		.owner = THIS_MODULE,
 		.of_match_table = msm_spm_match_table,
 	},
 };
@@ -977,6 +1017,7 @@ static struct platform_driver msm_spm_device_driver = {
 int __init msm_spm_device_init(void)
 {
 	static bool registered;
+
 	if (registered)
 		return 0;
 	registered = true;

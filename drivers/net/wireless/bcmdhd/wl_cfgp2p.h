@@ -71,6 +71,7 @@ struct p2p_bss {
 };
 
 struct p2p_info {
+	struct bcm_cfg80211 *cfg;
 	bool on;    /* p2p on/off switch */
 	bool scan;
 	int16 search_state;
@@ -169,10 +170,8 @@ enum wl_cfgp2p_status {
 	} while (0)
 #define INIT_TIMER(timer, func, duration, extra_delay)	\
 	do {				   \
-		init_timer(timer); \
-		timer->function = func; \
+		timer_setup(timer, func, 0); \
 		timer->expires = jiffies + msecs_to_jiffies(duration + extra_delay); \
-		timer->data = (unsigned long) cfg; \
 		add_timer(timer); \
 	} while (0);
 
@@ -217,7 +216,7 @@ enum wl_cfgp2p_status {
 #define P2P_ECSA_CNT 50
 
 extern void
-wl_cfgp2p_listen_expired(unsigned long data);
+wl_cfgp2p_listen_expired(struct timer_list *timer);
 extern bool
 wl_cfgp2p_is_pub_action(void *frame, u32 frame_len);
 extern bool

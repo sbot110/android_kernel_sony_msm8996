@@ -1,0 +1,33 @@
+Stage5 SDHC/PM closure at source freeze, 2026-11-04
+Branch: kernel-4.19-701905467803253630; no agent commits/branch changes/device operations.
+
+Combined object compile exit=0:
+source /workspace/work/toolchain/env.sh
+make O=/workspace/work/stage5-mmc-out ARCH=arm64 -j4 drivers/mmc/host/sdhci-msm.o drivers/mmc/host/sdhci.o drivers/mmc/host/cqhci.o drivers/regulator/qcom_smd-regulator.o drivers/regulator/qcom-rpm-corner.o
+Log: mmc-pm-final-build.log; no compiler diagnostics.
+
+Host test exits:
+check-mmc-power.py: 0 (mmc-power-final.log)
+check-mmc-providers.py: 0 (mmc-providers-final.log), original provider/unwind/bus coverage preserved, sticky and gated cleanup negatives added
+check-mmc-physical.py --self-test: 0; ASan+UBSan --self-test: 0, detect_leaks=0
+check-mmc-clock-faults.py --self-test: 0; --sanitize: 0 (DT agent), 19 unsafe mutations rejected
+check-mmc-irq-faults.py --self-test: 0; ASan+UBSan --self-test: 0, 8 unsafe mutations rejected
+check-rpm-pm-order.py --self-test: 0; ASan+UBSan --self-test: 0, 7 unsafe mutations rejected
+
+Source qualification audit: /workspace/work/stage5/sdhc1-qualification.md
+No remaining confirmed requested SDHC1 source dependency blocker after repairs; root still owns clean build and separate exact-DT experimental artifact integration.
+No host model result establishes RPM electrical behavior, card data integrity, tuning/encryption, live suspend/IRQ timing or real shutdown/reboot.
+
+Frozen SHA256:
+694e6c6ba48ef5d30d4c5d82ba58984fde521d5b85405a82aad7d98da5248cbf  drivers/mmc/host/sdhci-msm.c
+ffc95eec56c152d97b5d62bab5b2e3b941786141e567ec81531a7b0db7123fb2  drivers/mmc/host/sdhci-msm.h
+d8de20b33dd63744340b50b70ff6a5b52bbff8dfe070667d0b29d30d6929ba37  drivers/mmc/host/sdhci.c
+32f1be839225323df1dc740e114418bead2f232d715afcc45fd5a4b5e345c692  drivers/mmc/host/sdhci.h
+8503ed562dd74101edf06d87585220ace5128823c0ebf70141c1c38f8b71b46e  drivers/mmc/host/cqhci.c
+7b2f659be71dd95091ceb2b07d63c5acce47bc2c6c2c07c6e2e6d889e28aefea  drivers/regulator/qcom_smd-regulator.c
+dd42a348a1f0ba659875246f3a084c99e4606eb8fcba9b3bd56bdc61db94bcdc  drivers/regulator/qcom-rpm-corner.c
+4d73d911e3324607c990fb1d3588afbfc73789da6333f8200e5b637ac01abb49  scripts/dora/check-mmc-providers.py
+8b7b92fd51a51da3c71370a18d384c75efd735902fccf6f33ae0146fa4e9f1ab  scripts/dora/check-mmc-physical.py
+650e8059a0a0159f6b6e39487aaf4f515c81942e950f8a6bdbcefce4fb5be79c  scripts/dora/check-mmc-clock-faults.py
+0e747db99b7c7e2e753bc8b0ca18dac62049164ce141cdad45662647c792669a  scripts/dora/check-mmc-irq-faults.py
+79f6b833c23a43ecc955fae0720321d74be812f895aded6c881e49016548b5b4  scripts/dora/check-rpm-pm-order.py

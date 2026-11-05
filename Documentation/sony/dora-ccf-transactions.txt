@@ -1,0 +1,52 @@
+Dora: CCF voltage transaction corrections
+========================================
+
+Source: native Linux4.19 CCF in this repository. The Sony clock fmax data and
+native RPM corner implementation are described in dora-clock-voltage.md.
+These changes correct software error contracts, not physical operation.
+
+A negative fmax result is rejected before indexing level votes. Voltage
+classes track their own regulator enable references; an unknown initial
+level is not used as a voltage-table index or an assumed zero baseline.
+Per-class errors quarantine failed transitions. Explicit sync_vdd callbacks
+must reconcile real state; generic UV-only synchronization cannot prove a
+lost SWEN ACK. Generic uncertain physical enables remain fail-closed.
+
+Prepare propagates runtime-PM, voltage and hardware failures and balances
+acquired parent/PM resources. Set-rate obtains voltage leases even for an
+unprepared clock, before any hardware write. The old requirement is held
+through clock programming, with voltage released only after rate lowering.
+Primary errors survive rollback/release errors. Unknown partial hardware
+changes retain max(old,new) safety leases; the framework does not invent a
+hardware rollback. A successful parent and failed descendant are treated as
+one failed transaction, so a later prepare cannot silently shed that lease.
+
+Parent changes check prepare/enable and combined/set_parent callback errors.
+Actual selector readback confirms ownership after an uncertain change, under
+a runtime-PM reference. Invalid selector indices cannot confirm NULL orphan
+parents. Rate-change notifier ABORT and cleanup preserve the error path.
+
+Tracked handoff records are allocated before voting. require_handoff classes
+acquire a HIGH lease even when RPM/provider probe occurs after late unused
+clock cleanup; the provider-qualified release API handles that lease. Failed
+release retains its record/vote. Unregister detaches global pending nodes;
+uncertain hardware leaves an orphaned class floor, not a dangling core node
+or a fake unvote. Recovering orphan hardware requires a provider-specific
+contract and is not inferred by generic clock teardown.
+
+check-clk-vdd.py extracts and executes real class/prepare/rate/parent/finish/
+handoff functions with regulator/clock/notifier/PM error injection. It covers
+initial enable, partial hardware writes, negative levels, retained leases,
+same-rate retry, late bootstrap, parent readback, orphan cleanup and teardown.
+Optional CCF_TEST_SANITIZE=1 enables AddressSanitizer/UBSan. LeakSanitizer is
+unavailable in this traced environment; ASAN_OPTIONS=detect_leaks=0 is used
+for that optional run, without disabling the state/fault assertions.
+
+Host tests do not prove IRQ scheduling, firmware ACKs, physical voltage,
+PLL lock, suspend or device boot. Dora CPU/display/GPU/MMC and MX DT gates are retained. Typed CX is
+active because the clock providers require its real supply. No four-CPU or DVFS activation follows from these tests.
+
+Full-build follow-up: exported spm_regulator_init must not reside in reclaimed
+init text. The annotation was removed from implementation/header; concurrent
+registration is serialized and a failed platform registration remains retryable.
+The actual registration API is exercised by check-spmi-ownership.py.

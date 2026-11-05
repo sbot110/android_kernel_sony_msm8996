@@ -1,0 +1,46 @@
+Dora MSM8996: eMMC and GCC/MMCC voltage corners (stage4)
+======================================================
+
+Hardware source: final Sony4.4 dora DTs and clock sources at
+0c295b15b6d0fb59a64e13b9e0ef2070818ef2a1, after all v3 overrides.
+Dora internal storage is SDHC1 eMMC, NOT UFS. See dora-storage-audit.md.
+Old UFS frequency data is retained only for generic MSM8996 regressions.
+
+The original vdd_dig contract is now implemented by a typed native SMD RPM
+frontend and source clock fmax classes. Logical NONE/LOWER/LOW/NOMINAL/HIGH
+map to 1/3/4/5/7; wire corners are logical minus1. corn/vfc and BOTH/AO/floor
+aggregation use real correlated ACTIVE/SLEEP ACKs. Logical corners are not
+physical microvolts. Native S1/S2 microvolt clients are explicitly disabled.
+
+Final source contracts:
+ source              LOWER       LOW          NOMINAL       HIGH
+ SDCC1 apps          19.2MHz      50MHz        400MHz        --
+ SDCC1 ICE           19.2MHz     150MHz        300MHz        --
+ SDCC2 apps          19.2MHz      50MHz        200MHz        --
+ GPLL4 main          --          --           384MHz        --
+ UFS AXI (unused)    19.2MHz     100MHz        200MHz       240MHz
+ USB30 master        60MHz     133.333MHz     200MHz       240MHz
+ MMCC MDP          171.43MHz    275MHz        330MHz       412.5MHz
+
+SDCC1 actual frequency table still tops out at 384 MHz (DDR root), not 400 MHz.
+SDCC2 original 40/80 MHz entries are restored. GPLL0 remains fixed/read-only
+at its source 600 MHz and critical for uncounted CPU/CBF auxiliary consumers;
+no probe retune is performed. Raw EARLY PLL numeric IDs cannot bypass the
+regulated main/source outputs on coupled Dora.
+
+All 56 GCC / 49 MMCC maps and final override line provenance are in
+ dora-clock-voltage.json
+ dora-clock-voltage.md
+Check-clock-voltage.py --reference-commit independently reparses those Sony
+Git sources, executes the production adapter and readonly PLL callbacks,
+and rejects changed map data. CCF and RPM tests exercise their actual code
+separately, including ACK loss, rollback, bootstrap and lifetime failures.
+
+GCC/MMCC supplies reference the typed CX child; MMPLL4/9 additionally use
+physical L12 at exactly 1.8 V. Unknown boot-active parent ownership retains a
+real acknowledged HIGH lease. Native physical regulator errors cannot be
+recovered by cached UV/SWEN success: L12 and MMC uncertainty remain latched.
+Physical replay/SLEEP, integrated handoff and hardware validation remain P0.
+Typed CX is active for GCC/MMCC. MX, MMC and display/GPU activation gates
+are retained in all four DTBs.
+No fixed fake regulator or bootloader-voltage assumption replaces this work.

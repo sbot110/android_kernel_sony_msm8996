@@ -1,0 +1,75 @@
+Stage4 update: the observational provider remains active; a fault-tested CPU
+transaction engine now exists, but its hardware adapter is unbound. Typed CX
+is implemented; APCC/SPM/CPR ownership and DVFS remain gated. See
+dora-cpu-transactions.txt and dora-ccf-transactions.txt.
+
+MSM8996 CPU/CBF infrastructure: observational only
+
+Source provenance
+-----------------
+The HMSS CPR3 frontend, Kryo LDO/retention frontend and APM controller come
+from sbot110/android_kernel_sony_msm8996 commit
+0c295b15b6d0fb59a64e13b9e0ef2070818ef2a1:
+  drivers/regulator/cpr3-hmss-regulator.c
+  drivers/regulator/kryo-regulator.c
+  drivers/power/qcom/apm.c -> drivers/soc/qcom/msm-apm.c
+Original copyright and GPL notices are retained. HMSS fuse arrays, partial
+binning, CPR corner calculations and register constants were not invented.
+The existing 4.19 CPR3/SPM/mem-acc APIs compile these frontends directly.
+
+Port adaptations
+----------------
+APM uses public arm_smccc_smc() instead of the removed private PSCI helper,
+and propagates secure-call errors. Kryo probe checks retention/notifier
+registration failures, releases child-node references and unregisters the
+retention regulator on later failures/removal. HMSS aging allocation is
+managed for controller lifetime. Manual unbind is suppressed for built-in
+controllers referenced by CPR. A misleading-indentation error in the shared
+CPR4-only unregister block is corrected.
+
+The new native APCC/CBF driver only reads firmware-programmed mux/PLL/divider
+registers. It supports the pre-existing qcom,apcc-msm8996 match. It never
+initializes/relocks PLLs, programs ACD, changes regulators or sets a rate.
+A host test compiles the real fractional-rate decoder, including signed
+Huayra alpha/M/N handling and invalid denominator/divider cases.
+
+DT data and activation guard
+----------------------------
+msm8996-sony-xperia-tone-cpu.dtsi preserves final flattened Sony CPU bin
+plans and HMSS/SPM/APM/Kryo/mem-acc dependencies. dora-cpu-dt.json records the
+reference DT hashes and raw properties after all Sony overrides. CPU bin
+plans and all preserved voltage-controller data were compared across the four
+final v3.0/v3.1 + PMI8994/PMI8996 original DTBs and are identical after
+normalizing phandles. No artificial CPU variant differences were added.
+Every voltage
+controller stays disabled. Native SPMI changes only the S11 reg cell from
+<0x3200 0x100> to <0x3200>; legacy hashed HMSS clock becomes the real native
+GCC_HMSS_RBCPR_CLK. Supply phandles resolve to the preserved hardware nodes.
+The two CPU clusters reference observational APCC outputs 0 and 1.
+
+Do not enable CPU_FREQ or CPU_IDLE or remove maxcpus=2. The active native RPM
+microvolt S8/S9/S10/S11 descriptors must also be reconciled with SPM ownership
+before enabling the disabled S11 gang leader. CPU clock vdd-dig requires real
+RPM corners, not a microvolt regulator alias.
+
+Remaining P0 work
+-----------------
+The legacy clock-cpu-8996 driver switches ACD to its safe source in pre_set_rate
+before raising CPR votes. This CCF raises VDD votes in clk_calc_new_rates()
+before PRE_RATE_CHANGE notifiers. A simple upstream clock/notifier import
+therefore does not preserve Sony ordering. Implement a coordinated rate/CPR/
+ACD transaction with error rollback, genuine digit-corner votes and fuse-bin
+selection before enabling DVFS. Unknown bins must fail, not use bin0.
+
+SAW/LPM voltage-controller data alone does not establish PSCI state IDs,
+power-collapse sequencing, thermal throttling or safe four-CPU operation.
+Those remain blocked and require source completion plus physical tests.
+Successful compilation does not prove DVFS, suspend, hotplug or CPU2/3 boot.
+
+Checks
+------
+  python3 scripts/dora/check-cpu-clocks.py --config OUT/.config
+  python3 scripts/dora/check-cpu-dt.py OUT/.../dora.dtb --selftest
+The DT checker verifies all preserved data, provider links and disabled
+voltage guards and rejects deliberately malformed fixtures. Tests do not
+prove runtime clock accuracy on a phone or voltage safety.

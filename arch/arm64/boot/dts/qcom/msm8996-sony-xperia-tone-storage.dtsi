@@ -1,0 +1,271 @@
+// SPDX-License-Identifier: GPL-2.0-only
+/*
+ * Copyright (c) 2014-2016, The Linux Foundation. All rights reserved.
+ * Copyright (C) 2014-2016 Sony Mobile Communications Inc.
+ * Final Sony Dora data from 0c295b15b6d0fb59a64e13b9e0ef2070818ef2a1.
+ * Native clock/regulator/pinctrl APIs are used; no partition data is written.
+ */
+
+#include <dt-bindings/clock/qcom,gcc-msm8996.h>
+
+/ {
+	aliases {
+		sdhc1 = &sdhc1;
+		sdhc2 = &sdhc2;
+		mmc0 = &sdhc1;
+		mmc1 = &sdhc2;
+	};
+};
+
+/* Dora internal storage is eMMC; no supported Dora UFS variant is known. */
+&{/soc/ufshc@624000} { status = "disabled"; };
+&ufsphy { status = "disabled"; };
+
+&soc {
+	sdhc1: sdhci@7464900 {
+		compatible = "qcom,sdhci-msm";
+		sony,require-rpm-physical-acks;
+		reg = <0x7464900 0x500 0x7464000 0x800 0x7464e00 0x19c>;
+		reg-names = "hc_mem", "core_mem", "cmdq_mem";
+		interrupts = <0x0 0x8d 0x0 0x0 0x86 0x0>;
+		interrupt-names = "hc_irq", "pwr_irq";
+		clock-names = "iface_clk", "core_clk", "ice_core_clk";
+		clocks = <&gcc GCC_SDCC1_AHB_CLK>, <&gcc GCC_SDCC1_APPS_CLK>, <&gcc GCC_SDCC1_ICE_CORE_CLK>;
+		qcom,large-address-bus;
+		qcom,bus-width = <0x8>;
+		qcom,devfreq,freq-table = <0x1312d00 0xbebc200>;
+		qcom,msm-bus,name = "sdhc1";
+		qcom,msm-bus,num-cases = <0x9>;
+		qcom,msm-bus,num-paths = <0x1>;
+		qcom,msm-bus,vectors-KBps =
+			<0x4e 0x200 0x0 0x0>,
+			<0x4e 0x200 0x640 0xc80>,
+			<0x4e 0x200 0x13880 0x27100>,
+			<0x4e 0x200 0x186a0 0x30d40>,
+			<0x4e 0x200 0x30d40 0x61a80>,
+			<0x4e 0x200 0x61a80 0xc3500>,
+			<0x4e 0x200 0x61a80 0xc3500>,
+			<0x4e 0x200 0x61a80 0xc3500>,
+			<0x4e 0x200 0x1f4000 0x3e8000>;
+		qcom,bus-bw-vectors-bps = <0x0 0x61a80 0x1312d00 0x17d7840 0x2faf080 0x5f5e100 0xbebc200 0x17d78400 0xffffffff>;
+		qcom,pm-qos-cpu-groups = <0x3 0xc>;
+		qcom,pm-qos-cmdq-latency-us = <0x46 0x46 0x46 0x46>;
+		qcom,pm-qos-legacy-latency-us = <0x46 0x46 0x46 0x46>;
+		qcom,pm-qos-irq-type = "affine_cores";
+		qcom,pm-qos-irq-cpu = <0x0>;
+		qcom,pm-qos-irq-latency = <0x46 0x46>;
+		non-removable;
+		vdd-supply = <&pm8994_l20>;
+		qcom,vdd-voltage-level = <0x2d0370 0x2d0370>;
+		qcom,vdd-current-level = <0xc8 0x8b290>;
+		vdd-io-supply = <&pm8994_s4>;
+		qcom,vdd-io-always-on;
+		qcom,vdd-io-voltage-level = <0x1b7740 0x1b7740>;
+		qcom,vdd-io-current-level = <0x6e 0x4f588>;
+		pinctrl-names = "active", "sleep";
+		pinctrl-0 = <&dora_sdc1_clk_on &dora_sdc1_cmd_on &dora_sdc1_data_on &dora_sdc1_rclk_on>;
+		pinctrl-1 = <&dora_sdc1_clk_off &dora_sdc1_cmd_off &dora_sdc1_data_off &dora_sdc1_rclk_off>;
+		qcom,clk-rates = <0x61a80 0x1312d00 0x17d7840 0x2faf080 0x5b8d800 0xb71b000 0x16e36000>;
+		qcom,ice-clk-rates = <0x11e1a300 0x8f0d180>;
+		qcom,nonremovable;
+		qcom,bus-speed-mode = "HS400_1p8v", "HS200_1p8v", "DDR_1p8v";
+		bus-width = <8>;
+		qcom,msm-bus-provider = <&ad_hoc_bus>;
+		/* Require proven GCC CX voltage coupling before hardware activation. */
+		status = "disabled";
+	};
+};
+
+&sdhc2 {
+	sony,require-rpm-physical-acks;
+	/delete-property/ vmmc-supply;
+	/delete-property/ vqmmc-supply;
+	compatible = "qcom,sdhci-msm";
+	reg = <0x74a4900 0x314 0x74a4000 0x800>;
+	reg-names = "hc_mem", "core_mem";
+	interrupts = <0x0 0x7d 0x0 0x0 0xdd 0x0>;
+	interrupt-names = "hc_irq", "pwr_irq";
+	clock-names = "iface_clk", "core_clk";
+	clocks = <&gcc GCC_SDCC2_AHB_CLK>, <&gcc GCC_SDCC2_APPS_CLK>;
+	qcom,large-address-bus;
+	qcom,bus-width = <0x4>;
+	qcom,devfreq,freq-table = <0x1312d00 0xbebc200>;
+	qcom,msm-bus,name = "sdhc2";
+	qcom,msm-bus,num-cases = <0xa>;
+	qcom,msm-bus,num-paths = <0x1>;
+	qcom,msm-bus,vectors-KBps =
+		<0x51 0x200 0x0 0x0>,
+		<0x51 0x200 0x416 0xc80>,
+		<0x51 0x200 0xcc3e 0x27100>,
+		<0x51 0x200 0xff50 0x30d40>,
+		<0x51 0x200 0x1987c 0x4e200>,
+		<0x51 0x200 0x1fe9e 0x61a80>,
+		<0x51 0x200 0x330f8 0x9c400>,
+		<0x51 0x200 0x3fd3e 0xc3500>,
+		<0x51 0x200 0x3fd3e 0xc3500>,
+		<0x51 0x200 0x146cc2 0x3e8000>;
+	qcom,bus-bw-vectors-bps = <0x0 0x61a80 0x1312d00 0x17d7840 0x2625a00 0x2faf080 0x4c4b400 0x5f5e100 0xbebc200 0xffffffff>;
+	qcom,pm-qos-cpu-groups = <0x3 0xc>;
+	qcom,pm-qos-legacy-latency-us = <0x46 0x46 0x46 0x46>;
+	qcom,pm-qos-irq-type = "affine_cores";
+	qcom,pm-qos-irq-cpu = <0x0>;
+	qcom,pm-qos-irq-latency = <0x46 0x46>;
+	vdd-supply = <&pm8994_l21>;
+	qcom,vdd-voltage-level = <0x2d0370 0x2d0370>;
+	qcom,vdd-current-level = <0xc8 0xc3500>;
+	vdd-io-supply = <&pm8994_l13>;
+	qcom,vdd-io-voltage-level = <0x1b7740 0x2d0370>;
+	qcom,vdd-io-current-level = <0xc8 0x55f0>;
+	pinctrl-names = "active", "sleep";
+	pinctrl-0 = <&dora_sdc2_clk_on &dora_sdc2_cmd_on &dora_sdc2_data_on>;
+	pinctrl-1 = <&dora_sdc2_clk_off &dora_sdc2_cmd_off &dora_sdc2_data_off>;
+	qcom,clk-rates = <0x61a80 0x17d7840 0x2625a00 0x2faf080 0x4c4b400 0x5f5e100 0xbebc200>;
+	qcom,bus-speed-mode = "SDR12", "SDR25", "SDR50", "DDR50", "SDR104";
+	cd-gpios = <&msmgpio 40 0>;
+	interrupt-map-mask = <0x3>;
+	uim2-gpios = <&msmgpio 29 0>;
+	bus-width = <4>;
+	qcom,msm-bus-provider = <&ad_hoc_bus>;
+	/* Require proven GCC CX voltage coupling before hardware activation. */
+	status = "disabled";
+};
+
+&msmgpio {
+	dora_sdc1_clk_on: sdc1_clk_on {
+		config {
+			pins = "sdc1_clk";
+			bias-disable;
+			drive-strength = <0x10>;
+		};
+	};
+	dora_sdc1_cmd_on: sdc1_cmd_on {
+		config {
+			pins = "sdc1_cmd";
+			bias-pull-up;
+			drive-strength = <0xa>;
+		};
+	};
+	dora_sdc1_data_on: sdc1_data_on {
+		config {
+			pins = "sdc1_data";
+			bias-pull-up;
+			drive-strength = <0xa>;
+		};
+	};
+	dora_sdc1_rclk_on: sdc1_rclk_on {
+		config {
+			pins = "sdc1_rclk";
+			bias-pull-down;
+		};
+	};
+	dora_sdc1_clk_off: sdc1_clk_off {
+		config {
+			pins = "sdc1_clk";
+			bias-disable;
+			drive-strength = <0x2>;
+		};
+	};
+	dora_sdc1_cmd_off: sdc1_cmd_off {
+		config {
+			pins = "sdc1_cmd";
+			bias-pull-up;
+			drive-strength = <0x2>;
+		};
+	};
+	dora_sdc1_data_off: sdc1_data_off {
+		config {
+			pins = "sdc1_data";
+			bias-pull-up;
+			drive-strength = <0x2>;
+		};
+	};
+	dora_sdc1_rclk_off: sdc1_rclk_off {
+		config {
+			pins = "sdc1_rclk";
+			bias-pull-down;
+		};
+	};
+	dora_sdc2_clk_on: sdc2_clk_on {
+		config {
+			pins = "sdc2_clk";
+			bias-disable;
+			drive-strength = <0x10>;
+		};
+	};
+	dora_sdc2_cmd_on: sdc2_cmd_on {
+		config {
+			pins = "sdc2_cmd";
+			bias-pull-up;
+			drive-strength = <0xa>;
+		};
+	};
+	dora_sdc2_data_on: sdc2_data_on {
+		config {
+			pins = "sdc2_data";
+			bias-pull-up;
+			drive-strength = <0xa>;
+		};
+	};
+	dora_sdc2_clk_off: sdc2_clk_off {
+		config {
+			pins = "sdc2_clk";
+			bias-disable;
+			drive-strength = <0x2>;
+		};
+	};
+	dora_sdc2_cmd_off: sdc2_cmd_off {
+		config {
+			pins = "sdc2_cmd";
+			bias-pull-up;
+			drive-strength = <0x2>;
+		};
+	};
+	dora_sdc2_data_off: sdc2_data_off {
+		config {
+			pins = "sdc2_data";
+			bias-pull-up;
+			drive-strength = <0x2>;
+		};
+	};
+};
+
+/* Original Sony early-mount metadata, preserving system/oem partition names. */
+&{/firmware} {
+	android {
+		compatible = "android,firmware";
+		vbmeta {
+			compatible = "android,vbmeta";
+			parts = "vbmeta,boot,system,vendor,dtbo,recovery";
+		};
+		fstab {
+			compatible = "android,fstab";
+			system {
+				compatible = "android,system";
+				dev = "/dev/block/platform/soc/7464900.sdhci/by-name/system";
+				type = "ext4";
+				mnt_flags = "ro,barrier=1";
+				fsmgr_flags = "wait";
+				status = "ok";
+			};
+			vendor {
+				compatible = "android,vendor";
+				dev = "/dev/block/platform/soc/7464900.sdhci/by-name/oem";
+				type = "squashfs";
+				mnt_flags = "ro,barrier=1";
+				fsmgr_flags = "wait";
+				status = "ok";
+			};
+		};
+	};
+};
+
+/* Original Sony client load votes replace the upstream static duplicates.
+ * Shared consumers continue to aggregate their own explicit loads in core.
+ */
+&pm8994_s4 {
+	/delete-property/ regulator-system-load;
+	regulator-allow-set-load;
+};
+&pm8994_l20 { /delete-property/ regulator-system-load; };
+&pm8994_l21 { /delete-property/ regulator-system-load; };
+&pm8994_l13 { /delete-property/ regulator-system-load; };

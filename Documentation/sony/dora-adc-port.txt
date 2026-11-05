@@ -1,0 +1,95 @@
+Sony MSM8996 legacy VADC: initial Linux 4.19 port
+Date: 2026-11-01
+
+Source and purpose
+------------------
+The voltage ADC and scale/calibration implementation comes from Sony 4.4.302
+reference 0c295b15b6d0fb59a64e13b9e0ef2070818ef2a1. This is actual VADC
+conversion/calibration logic, not an implementation returning fabricated data.
+The optional CONFIG_SENSORS_QPNP_ADC_VOLTAGE provider serves legacy clients
+which use the Sony VADC API. Its presence does not establish that the complete
+charger, thermal monitoring, fuel-gauge or board power stack is ready.
+
+Files
+-----
+drivers/hwmon/qpnp-adc-voltage.c
+drivers/hwmon/qpnp-adc-legacy-common.c
+include/linux/qpnp/qpnp-legacy-adc.h
+
+The private header namespaces the legacy API, structures and common scaling
+symbols with sony_legacy_. The native 4.19 ADC/ADC-TM header and implementation
+remain separate; old and native structures must not be passed across APIs.
+Legacy consumers must include the private header. Merely changing an include
+to the native header would expose a different data/API contract.
+
+Device access uses the parent SPMI regmap and platform resources in 4.19.
+The old qcom,qpnp-vadc / qcom,qpnp-vadc-hc child/channel properties remain
+the driver contract. This source port alone does not change the active DT
+or prove calibration and conversion accuracy on any PMIC revision.
+
+Error and resource handling
+---------------------------
+Channel searches check bounds before indexing. Hardware/scaling failures are
+returned rather than manufacturing a successful measurement. Thermal-zone
+registration retains its real error, and a failed sysfs conversion returns
+the conversion error instead of an empty successful read.
+
+SPARE2 charger-temperature reads take a local battery power_supply reference
+and release it on every exit. A per-device mutex serializes the complete
+FORCE_TLIM vote / conversion / vote-reset sequence. A failed conversion stays
+an error even when vote reset succeeds; reset is attempted on that path.
+No shared supply-reference cache can leak references under concurrent reads.
+
+IRQ lookup errors preserve -EPROBE_DEFER. Threshold handlers use threaded
+IRQs with IRQF_ONESHOT because register/regulator operations may sleep.
+The EOC hard handler only schedules its completion work.
+
+Regulator enable votes are tracked so repeated stop/cleanup does not issue
+unbalanced disables. A newly acquired voltage vote is rolled back when the
+subsequent ADC-enable register write fails. Interface attributes and thermal
+instances are tracked per device for probe unwind. Wake IRQ state is tracked
+only after successful setup and is undone during cleanup.
+
+Threshold ownership and callback lifecycle
+-----------------------------------------
+All work objects and locks are initialized before IRQs become visible.
+High/low notifications use delayed_work with zero delay on a per-device
+ordered queue, preventing two threshold callbacks from running concurrently.
+The threaded handler serializes ADC state, rejects inactive/stopped monitors
+and records the threshold transition before queueing a notification.
+
+monitor_lock serializes external monitor replacement and stop. Old ownership
+is cleared under adc_lock, hardware monitoring is stopped, threshold IRQs are
+synchronized and pending/running old callbacks are drained before a new
+owner is installed. No adc_lock is held while waiting for callbacks.
+
+Callbacks may stop or rearm their own monitor. Such calls use trylock rather
+than waiting for an external operation that may already be draining that
+callback; concurrent owner changes return -EBUSY. Self-context cancellation
+is nonblocking, and the ordered queue ensures another callback is not running.
+The private header documents that callers must keep the parameter/context
+alive until a successful stop/replacement, and handle -EBUSY on callback
+rearm. A callback must not use its old context after successfully releasing it.
+
+Probe unwind/removal disables further monitor operations, stops hardware,
+synchronizes/frees each requested IRQ, drains work and destroys the private
+queue before releasing resources. User bind/unbind attributes are suppressed:
+the raw legacy provider API requires a resident PMIC provider and does not
+implement reference-counted hot removal of arbitrary external consumers.
+
+Validation and limits
+---------------------
+Both ADC objects were compiled for ARM64 in an isolated O= build with GCC
+12.2 and binutils 2.44, CONFIG_SENSORS_QPNP_ADC_VOLTAGE=y. Symbol inspection
+of the objects confirmed sony_legacy_ prefixes on exported implementation
+symbols. The final object rebuild on 2026-11-01 exited 0 without compiler
+warnings or errors (scratch log: dora-adc-review-final.log). Its targets were
+drivers/hwmon/qpnp-adc-voltage.o and drivers/hwmon/qpnp-adc-legacy-common.o.
+An earlier retry was blocked by an unrelated BCL Kconfig dependency cycle;
+that dependency was corrected before this final successful build.
+
+This is compile/static lifecycle validation. No PMIC bus error injection,
+real interrupt ordering, concurrent runtime threshold callback tests, ADC
+accuracy/calibration measurements or charger-temperature measurements have
+been performed on a phone. Successful compilation is not proof of safe
+charging or of complete Sony battery/thermal integration.

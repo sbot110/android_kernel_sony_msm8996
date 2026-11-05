@@ -1,14 +1,6 @@
+// SPDX-License-Identifier: GPL-2.0-only
 /*
- * Copyright (c) 2016-2017, 2020, The Linux Foundation. All rights reserved.
- *
- * This program is free software; you can redistribute it and/or modify
- * it under the terms of the GNU General Public License version 2 and
- * only version 2 as published by the Free Software Foundation.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
+ * Copyright (c) 2016-2017, 2020-2021, The Linux Foundation. All rights reserved.
  */
 
 #define pr_fmt(fmt) "RRADC: %s: " fmt, __func__
@@ -193,7 +185,7 @@
 #define FG_RR_ADC_STS_CHANNEL_READING_MASK	0x3
 #define FG_RR_ADC_STS_CHANNEL_STS		0x2
 
-#define FG_RR_CONV_CONTINUOUS_TIME_MIN_MS       50
+#define FG_RR_CONV_CONTINUOUS_TIME_MIN_MS	50
 #define FG_RR_CONV_CONT_CBK_TIME_MIN_MS	10
 #define FG_RR_CONV_MAX_RETRY_CNT		50
 #define FG_RR_TP_REV_VERSION1		21
@@ -241,6 +233,7 @@ struct rradc_chip {
 	struct power_supply		*bms_psy;
 	struct notifier_block		nb;
 	bool				conv_cbk;
+	bool				rradc_fg_reset_wa;
 	struct work_struct	psy_notify_work;
 };
 
@@ -796,8 +789,7 @@ static int rradc_check_status_ready_with_retry(struct rradc_chip *chip,
 
 		if (((prop->channel == RR_ADC_CHG_TEMP) ||
 			(prop->channel == RR_ADC_SKIN_TEMP) ||
-			(prop->channel == RR_ADC_USBIN_I) ||
-			(prop->channel == RR_ADC_DIE_TEMP)) &&
+			(prop->channel == RR_ADC_USBIN_I)) &&
 					((!rradc_is_usb_present(chip)))) {
 			pr_debug("USB not present for %d\n", prop->channel);
 			rc = -ENODATA;
@@ -819,7 +811,8 @@ static int rradc_check_status_ready_with_retry(struct rradc_chip *chip,
 
 	if ((retry_cnt >= FG_RR_CONV_MAX_RETRY_CNT) &&
 		((prop->channel != RR_ADC_DCIN_V) ||
-			(prop->channel != RR_ADC_DCIN_I))) {
+		(prop->channel != RR_ADC_DCIN_I)) &&
+		chip->rradc_fg_reset_wa) {
 		pr_err("rradc is hung, Proceed to recovery\n");
 		if (rradc_is_bms_psy_available(chip)) {
 			rc = power_supply_set_property(chip->bms_psy,
@@ -983,6 +976,30 @@ static int rradc_do_conversion(struct rradc_chip *chip,
 
 		/* Restore usb_in trigger */
 		rc = rradc_masked_write(chip, FG_ADC_RR_USB_IN_V_TRIGGER,
+				FG_ADC_RR_USB_IN_V_EVERY_CYCLE_MASK, 0);
+		if (rc < 0) {
+			pr_err("Restore every cycle update failed:%d\n", rc);
+			goto fail;
+		}
+		break;
+	case RR_ADC_DIE_TEMP:
+		/* Force conversion every cycle */
+		rc = rradc_masked_write(chip, FG_ADC_RR_PMI_DIE_TEMP_TRIGGER,
+				FG_ADC_RR_USB_IN_V_EVERY_CYCLE_MASK,
+				FG_ADC_RR_USB_IN_V_EVERY_CYCLE);
+		if (rc < 0) {
+			pr_err("Force every cycle update failed:%d\n", rc);
+			goto fail;
+		}
+
+		rc = rradc_read_channel_with_continuous_mode(chip, prop, buf);
+		if (rc < 0) {
+			pr_err("Error reading in continuous mode:%d\n", rc);
+			goto fail;
+		}
+
+		/* Restore aux_therm trigger */
+		rc = rradc_masked_write(chip, FG_ADC_RR_PMI_DIE_TEMP_TRIGGER,
 				FG_ADC_RR_USB_IN_V_EVERY_CYCLE_MASK, 0);
 		if (rc < 0) {
 			pr_err("Restore every cycle update failed:%d\n", rc);
@@ -1158,14 +1175,14 @@ static void psy_notify_work(struct work_struct *work)
 					rc = rradc_do_conversion(chip, prop,
 							&adc_code);
 					if (rc == -ENODATA)
-						pr_err("RRADC read failed after reset");
+						pr_err("RRADC read failed after reset\n");
 				} else {
-					pr_err("Error obtaining bms power supply");
+					pr_err("Error obtaining bms power supply\n");
 				}
 			}
 		}
 	} else {
-		pr_err("Error obtaining battery power supply");
+		pr_err("Error obtaining battery power supply\n");
 	}
 	chip->conv_cbk = false;
 	pm_relax(chip->dev);
@@ -1187,7 +1204,6 @@ static int rradc_psy_notifier_cb(struct notifier_block *nb,
 
 static const struct iio_info rradc_info = {
 	.read_raw	= &rradc_read_raw,
-	.driver_module	= THIS_MODULE,
 };
 
 static int rradc_get_dt_data(struct rradc_chip *chip, struct device_node *node)
@@ -1229,11 +1245,17 @@ static int rradc_get_dt_data(struct rradc_chip *chip, struct device_node *node)
 			return rc;
 		}
 
+		if (!chip->pmic_fab_id)
+			return -EINVAL;
+
 		if (chip->pmic_fab_id->fab_id == -EINVAL) {
 			rc = chip->pmic_fab_id->fab_id;
 			pr_debug("Unable to read fabid rc=%d\n", rc);
 		}
 	}
+
+	chip->rradc_fg_reset_wa =
+		of_property_read_bool(node, "qcom,rradc-fg-reset-wa");
 
 	iio_chan = chip->iio_chans;
 
@@ -1296,19 +1318,14 @@ static int rradc_probe(struct platform_device *pdev)
 	if (!chip->usb_trig)
 		pr_debug("Error obtaining usb power supply\n");
 
-	chip->batt_psy = power_supply_get_by_name("battery");
-	if (!chip->batt_psy)
-		pr_debug("Error obtaining battery power supply\n");
+	if (chip->rradc_fg_reset_wa) {
+		chip->nb.notifier_call = rradc_psy_notifier_cb;
+		rc = power_supply_reg_notifier(&chip->nb);
+		if (rc < 0)
+			pr_err("Error registering psy notifier rc = %d\n", rc);
 
-	chip->bms_psy = power_supply_get_by_name("bms");
-	if (!chip->bms_psy)
-		pr_debug("Error obtaining bms power supply\n");
-
-	chip->nb.notifier_call = rradc_psy_notifier_cb;
-	rc = power_supply_reg_notifier(&chip->nb);
-	if (rc < 0)
-		pr_err("Error registering psy notifier rc = %d\n", rc);
-	INIT_WORK(&chip->psy_notify_work, psy_notify_work);
+		INIT_WORK(&chip->psy_notify_work, psy_notify_work);
+	}
 
 	return devm_iio_device_register(dev, indio_dev);
 }

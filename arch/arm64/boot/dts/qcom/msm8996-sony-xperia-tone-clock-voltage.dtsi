@@ -1,0 +1,22 @@
+// SPDX-License-Identifier: GPL-2.0-only
+/* Final Sony MSM8996 v3 digital clock voltage dependencies.
+ * Logical CX requests use the typed corn frontend, never a microvolt rail.
+ * Display/GPU/CPU activation remains independently gated.
+ */
+/* Clock providers are active, so their real typed CX supplier must be live.
+ * Registration itself sends no voltage vote; qualified clock bootstrap owns
+ * the acknowledged lease. MMC/display/GPU/CPU remain separately gated.
+ */
+&dora_rpm_cx { status = "okay"; };
+
+&gcc {
+	sony,msm8996-voltage-coupling;
+	vdd-dig-supply = <&pm8994_s1_corner>;
+};
+
+&mmcc {
+	sony,msm8996-voltage-coupling;
+	vdd-dig-supply = <&pm8994_s1_corner>;
+	mmpll4-dig-supply = <&pm8994_s1_corner>;
+	mmpll4-analog-supply = <&pm8994_l12>;
+};

@@ -1,0 +1,15 @@
+// SPDX-License-Identifier: GPL-2.0-only
+/* Experimental diagnostic selection; never a default DTB.
+ * Source qualification is recorded separately by the integration audit.
+ * Runtime power, storage integrity and suspend remain unverified.
+ */
+#include "../msm8996-v3.0-sony-xperia-tone-dora.dts"
+
+/ {
+	model = "Sony Xperia X Performance (experimental SDHC1 diagnostic: v3.0-pmi8994)";
+	sony,sdhc1-diagnostic;
+};
+
+&sdhc1 {
+	status = "okay";
+};

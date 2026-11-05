@@ -35,11 +35,7 @@
 #include <hnd_cons.h>
 #ifdef SUPPORT_LINKDOWN_RECOVERY
 #ifdef CONFIG_ARCH_QCOM
-#if defined(CONFIG_ARCH_MSM8994) || defined(CONFIG_ARCH_MSM8996)
 #include <linux/msm_pcie.h>
-#else
-#include <mach/msm_pcie.h>
-#endif /* CONFIG_ARCH_MSM8994 */
 #endif /* CONFIG_ARCH_QCOM */
 #endif /* SUPPORT_LINKDOWN_RECOVERY */
 

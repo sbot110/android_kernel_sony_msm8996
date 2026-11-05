@@ -1,0 +1,40 @@
+MSM8996 vendor PCIe API with native CCF/QMP resources
+==================================================
+
+compatible: "qcom,msm8996-pci-msm"
+
+This is an extension of qcom,pci-msm for the actual MSM8996 Gen2 controller,
+not a generic alias for newer SDM/QCS controllers. It retains the vendor
+msm_pcie_* client, configuration recovery and link notification APIs used
+by Sony BCMDHD, while obtaining PHY and power through real 4.19 providers.
+
+Required native resources:
+- phys = <&pciephy_0>; phy-names = "pciephy": the existing
+  qcom,msm8996-qmp-pcie-phy lane, initialized and powered via the PHY API.
+- power-domains = <&gcc PCIE0_GDSC>: real GCC genpd, acquired through
+  runtime PM; do not describe the GDSC as an invented regulator supply.
+- Vendor host clocks named pcie_0_aux_clk, pcie_0_cfg_ahb_clk,
+  pcie_0_mstr_axi_clk, pcie_0_slv_axi_clk, pcie_0_ldo and pcie_0_pipe_clk.
+  The generic QMP PHY owns its PIPE-clock enable/reset lifecycle.
+- vreg-1p8/vreg-0p9 supplies and exact board voltage constraints.
+- Legacy INTx mapping and optional int_pls_link_down dedicated interrupt.
+
+The resource windows, IRQ numbers and regulator/GPIO wiring in the Tone
+supplement come from Sony 4.4.302 commit
+0c295b15b6d0fb59a64e13b9e0ef2070818ef2a1, principally
+arch/arm/boot/dts/qcom/msm8996.dtsi and msm8996-tone-common.dtsi.
+Its drivers/pci/host/pci-msm.c selects PARF DBI/slave-window offsets
+0x168/0x16c for MSM8996, unlike the newer vendor defaults 0x350/0x358.
+The old interrupt-map entry10 (int_pls_link_down) selects GIC SPI254;
+SPI250 is int_pme_legacy and must not be used for link-down.
+The old root-port PCI device ID is 17cb:0104. Gen3 preset programming and
+the newer PARF device-type register are not applied to this Gen2 path.
+
+The supplement removes the alternative fixed WLAN regulator owning GPIO84
+before adding the real android,bcmdhd_wlan platform node. The retained Sony
+controlfnc implementation is the sole GPIO84 owner and invokes the vendor
+host enumerate/PM APIs. GPIO79 is the real WLAN host-wake line.
+
+No PHY-ready, regulator or link-success result is synthesized. Provider
+errors propagate. PCIe link training, actual DMA, wakeup, suspend/resume and
+linkdown recovery still require testing on the physical Sony board.

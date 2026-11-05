@@ -102,7 +102,7 @@ static int hidp_send_message(struct hidp_session *session, struct socket *sock,
 	struct sk_buff *skb;
 	struct sock *sk = sock->sk;
 
-	BT_DBG("session %pK data %pK size %d", session, data, size);
+	BT_DBG("session %p data %p size %d", session, data, size);
 
 	if (atomic_read(&session->terminate))
 		return -EIO;
@@ -113,9 +113,9 @@ static int hidp_send_message(struct hidp_session *session, struct socket *sock,
 		return -ENOMEM;
 	}
 
-	*skb_put(skb, 1) = hdr;
+	skb_put_u8(skb, hdr);
 	if (data && size > 0)
-		memcpy(skb_put(skb, size), data, size);
+		skb_put_data(skb, data, size);
 
 	skb_queue_tail(transmit, skb);
 	wake_up_interruptible(sk_sleep(sk));
@@ -146,7 +146,7 @@ static int hidp_input_event(struct input_dev *dev, unsigned int type,
 	unsigned char newleds;
 	unsigned char hdr, data[2];
 
-	BT_DBG("session %pK type %d code %d value %d",
+	BT_DBG("session %p type %d code %d value %d",
 	       session, type, code, value);
 
 	if (type != EV_LED)
@@ -398,9 +398,9 @@ static int hidp_raw_request(struct hid_device *hid, unsigned char reportnum,
 	}
 }
 
-static void hidp_idle_timeout(unsigned long arg)
+static void hidp_idle_timeout(struct timer_list *t)
 {
-	struct hidp_session *session = (struct hidp_session *) arg;
+	struct hidp_session *session = from_timer(session, t, timer);
 
 	/* The HIDP user-space API only contains calls to add and remove
 	 * devices. There is no way to forward events of any kind. Therefore,
@@ -428,7 +428,7 @@ static void hidp_set_timer(struct hidp_session *session)
 static void hidp_del_timer(struct hidp_session *session)
 {
 	if (session->idle_to > 0)
-		del_timer(&session->timer);
+		del_timer_sync(&session->timer);
 }
 
 static void hidp_process_report(struct hidp_session *session, int type,
@@ -444,7 +444,7 @@ static void hidp_process_report(struct hidp_session *session, int type,
 static void hidp_process_handshake(struct hidp_session *session,
 					unsigned char param)
 {
-	BT_DBG("session %pK param 0x%02x", session, param);
+	BT_DBG("session %p param 0x%02x", session, param);
 	session->output_report_success = 0; /* default condition */
 
 	switch (param) {
@@ -487,7 +487,7 @@ static void hidp_process_handshake(struct hidp_session *session,
 static void hidp_process_hid_control(struct hidp_session *session,
 					unsigned char param)
 {
-	BT_DBG("session %pK param 0x%02x", session, param);
+	BT_DBG("session %p param 0x%02x", session, param);
 
 	if (param == HIDP_CTRL_VIRTUAL_CABLE_UNPLUG) {
 		/* Flush the transmit queues */
@@ -503,8 +503,7 @@ static int hidp_process_data(struct hidp_session *session, struct sk_buff *skb,
 				unsigned char param)
 {
 	int done_with_skb = 1;
-	BT_DBG("session %pK skb %pK len %d param 0x%02x",
-	       session, skb, skb->len, param);
+	BT_DBG("session %p skb %p len %d param 0x%02x", session, skb, skb->len, param);
 
 	switch (param) {
 	case HIDP_DATA_RTYPE_INPUT:
@@ -549,7 +548,7 @@ static void hidp_recv_ctrl_frame(struct hidp_session *session,
 	unsigned char hdr, type, param;
 	int free_skb = 1;
 
-	BT_DBG("session %pK skb %pK len %d", session, skb, skb->len);
+	BT_DBG("session %p skb %p len %d", session, skb, skb->len);
 
 	hdr = skb->data[0];
 	skb_pull(skb, 1);
@@ -585,7 +584,7 @@ static void hidp_recv_intr_frame(struct hidp_session *session,
 {
 	unsigned char hdr;
 
-	BT_DBG("session %pK skb %pK len %d", session, skb, skb->len);
+	BT_DBG("session %p skb %p len %d", session, skb, skb->len);
 
 	hdr = skb->data[0];
 	skb_pull(skb, 1);
@@ -613,7 +612,7 @@ static int hidp_send_frame(struct socket *sock, unsigned char *data, int len)
 	struct kvec iv = { data, len };
 	struct msghdr msg;
 
-	BT_DBG("sock %pK data %pK len %d", sock, data, len);
+	BT_DBG("sock %p data %p len %d", sock, data, len);
 
 	if (!len)
 		return 0;
@@ -631,7 +630,7 @@ static void hidp_process_transmit(struct hidp_session *session,
 	struct sk_buff *skb;
 	int ret;
 
-	BT_DBG("session %pK", session);
+	BT_DBG("session %p", session);
 
 	while ((skb = skb_dequeue(transmit))) {
 		ret = hidp_send_frame(sock, skb->data, skb->len);
@@ -790,7 +789,7 @@ static int hidp_setup_hid(struct hidp_session *session,
 	hid->dev.parent = &session->conn->hcon->dev;
 	hid->ll_driver = &hidp_hid_driver;
 
-	/* True if device is blacklisted in drivers/hid/hid-core.c */
+	/* True if device is blacklisted in drivers/hid/hid-quirks.c */
 	if (hid_ignore(hid)) {
 		hid_destroy_device(session->hid);
 		session->hid = NULL;
@@ -945,8 +944,7 @@ static int hidp_session_new(struct hidp_session **out, const bdaddr_t *bdaddr,
 
 	/* device management */
 	INIT_WORK(&session->dev_init, hidp_session_dev_work);
-	setup_timer(&session->timer, hidp_idle_timeout,
-		    (unsigned long)session);
+	timer_setup(&session->timer, hidp_idle_timeout, 0);
 
 	/* session data */
 	mutex_init(&session->report_mutex);
@@ -1240,7 +1238,7 @@ static void hidp_session_run(struct hidp_session *session)
 	smp_mb__after_atomic();
 }
 
-static int hidp_session_wake_function(wait_queue_t *wait,
+static int hidp_session_wake_function(wait_queue_entry_t *wait,
 				      unsigned int mode,
 				      int sync, void *key)
 {
@@ -1261,7 +1259,7 @@ static int hidp_session_thread(void *arg)
 	DEFINE_WAIT_FUNC(ctrl_wait, hidp_session_wake_function);
 	DEFINE_WAIT_FUNC(intr_wait, hidp_session_wake_function);
 
-	BT_DBG("session %pK", session);
+	BT_DBG("session %p", session);
 
 	/* initialize runtime environment */
 	hidp_session_get(session);

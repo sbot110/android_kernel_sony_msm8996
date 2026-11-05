@@ -22,9 +22,11 @@
 #include <linux/fs.h>
 #include <linux/err.h>
 #include <linux/switch.h>
+#include <linux/mutex.h>
 
 struct class *switch_class;
 static atomic_t device_count;
+static DEFINE_MUTEX(switch_class_lock);
 
 static ssize_t state_show(struct device *dev, struct device_attribute *attr,
 		char *buf)
@@ -100,29 +102,36 @@ EXPORT_SYMBOL_GPL(switch_set_state);
 
 static int create_switch_class(void)
 {
-	if (!switch_class) {
-		switch_class = class_create(THIS_MODULE, "switch");
-		if (IS_ERR(switch_class))
-			return PTR_ERR(switch_class);
-		atomic_set(&device_count, 0);
-	}
+	struct class *class;
+	int ret = 0;
 
-	return 0;
+	mutex_lock(&switch_class_lock);
+	if (!switch_class) {
+		class = class_create(THIS_MODULE, "switch");
+		if (IS_ERR(class)) {
+			ret = PTR_ERR(class);
+			goto out;
+		}
+		atomic_set(&device_count, 0);
+		switch_class = class;
+	}
+out:
+	mutex_unlock(&switch_class_lock);
+	return ret;
 }
 
 int switch_dev_register(struct switch_dev *sdev)
 {
 	int ret;
 
-	if (!switch_class) {
-		ret = create_switch_class();
-		if (ret < 0)
-			return ret;
-	}
+	ret = create_switch_class();
+	if (ret < 0)
+		return ret;
 
 	sdev->index = atomic_inc_return(&device_count);
+	sdev->state = 0;
 	sdev->dev = device_create(switch_class, NULL,
-		MKDEV(0, sdev->index), NULL, sdev->name);
+		MKDEV(0, sdev->index), sdev, "%s", sdev->name);
 	if (IS_ERR(sdev->dev))
 		return PTR_ERR(sdev->dev);
 
@@ -133,8 +142,6 @@ int switch_dev_register(struct switch_dev *sdev)
 	if (ret < 0)
 		goto err_create_file_2;
 
-	dev_set_drvdata(sdev->dev, sdev);
-	sdev->state = 0;
 	return 0;
 
 err_create_file_2:
@@ -152,7 +159,7 @@ void switch_dev_unregister(struct switch_dev *sdev)
 	device_remove_file(sdev->dev, &dev_attr_name);
 	device_remove_file(sdev->dev, &dev_attr_state);
 	device_destroy(switch_class, MKDEV(0, sdev->index));
-	dev_set_drvdata(sdev->dev, NULL);
+	sdev->dev = NULL;
 }
 EXPORT_SYMBOL_GPL(switch_dev_unregister);
 

@@ -1,0 +1,19 @@
+{
+  "original_count": 32,
+  "current_count": 44,
+  "removed": [],
+  "added": [
+    "check-minidump.py",
+    "check-mmc-clock-faults.py",
+    "check-mmc-irq-faults.py",
+    "check-mmc-physical.py",
+    "check-regulator-load.py",
+    "check-rpm-native.py",
+    "check-rpm-ownership.py",
+    "check-rpm-physical-dt.py",
+    "check-rpm-physical.py",
+    "check-rpm-pm-order.py",
+    "check-sdhc1-diagnostic.py",
+    "check-warning-inputs.py"
+  ]
+}

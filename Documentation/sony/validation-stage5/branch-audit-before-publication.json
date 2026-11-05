@@ -1,0 +1,34 @@
+{
+  "remote_heads_before": {
+    "refs/heads/4.9-test-not-startable": "d8587034624fdf13432814248e4d63fa2771879c",
+    "refs/heads/Lineageos-21": "2e5470fd532fec62f20265062b34c5a0d7cd453f",
+    "refs/heads/dora-full-state-20261017": "d686db8c1cbc1299c95e4ca15da0fcc306d88126",
+    "refs/heads/kernel-4.19-701905467803253630": "03a3c224b84079db06a424e387e220b6eafc6cfa",
+    "refs/heads/kernel-5.5": "470fdeebc4a60c93095267c2861ff2e6e642985b",
+    "refs/heads/main": "0c295b15b6d0fb59a64e13b9e0ef2070818ef2a1",
+    "refs/heads/wpa2-dora-debug": "3a9646ed5ade6c62483c46d4a85f27653bfcb191"
+  },
+  "remote_heads_before_publication": {
+    "refs/heads/4.9-test-not-startable": "d8587034624fdf13432814248e4d63fa2771879c",
+    "refs/heads/Lineageos-21": "2e5470fd532fec62f20265062b34c5a0d7cd453f",
+    "refs/heads/dora-full-state-20261017": "d686db8c1cbc1299c95e4ca15da0fcc306d88126",
+    "refs/heads/kernel-4.19-701905467803253630": "03a3c224b84079db06a424e387e220b6eafc6cfa",
+    "refs/heads/kernel-5.5": "470fdeebc4a60c93095267c2861ff2e6e642985b",
+    "refs/heads/main": "0c295b15b6d0fb59a64e13b9e0ef2070818ef2a1",
+    "refs/heads/wpa2-dora-debug": "3a9646ed5ade6c62483c46d4a85f27653bfcb191"
+  },
+  "other_remote_heads_unchanged": true,
+  "local_refs_before": {
+    "refs/heads/kernel-4.19-701905467803253630": "03a3c224b84079db06a424e387e220b6eafc6cfa",
+    "refs/heads/work": "0c295b15b6d0fb59a64e13b9e0ef2070818ef2a1",
+    "refs/remotes/origin/main": "0c295b15b6d0fb59a64e13b9e0ef2070818ef2a1"
+  },
+  "local_refs_before_publication": {
+    "refs/heads/kernel-4.19-701905467803253630": "85850877ef5d1481a89df71ac9af3b74c7d65e40",
+    "refs/heads/work": "0c295b15b6d0fb59a64e13b9e0ef2070818ef2a1",
+    "refs/remotes/origin/main": "0c295b15b6d0fb59a64e13b9e0ef2070818ef2a1"
+  },
+  "other_local_refs_unchanged": true,
+  "allowed_branch_only": "refs/heads/kernel-4.19-701905467803253630",
+  "checked_before_publication_utc": "2026-11-05T02:21:49.232699+00:00"
+}

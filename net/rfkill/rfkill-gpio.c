@@ -20,14 +20,13 @@
 #include <linux/init.h>
 #include <linux/kernel.h>
 #include <linux/module.h>
+#include <linux/mod_devicetable.h>
 #include <linux/rfkill.h>
 #include <linux/platform_device.h>
 #include <linux/clk.h>
 #include <linux/slab.h>
 #include <linux/acpi.h>
 #include <linux/gpio/consumer.h>
-
-#include <linux/rfkill-gpio.h>
 
 struct rfkill_gpio_data {
 	const char		*name;
@@ -81,56 +80,63 @@ static int rfkill_gpio_acpi_probe(struct device *dev,
 	if (!id)
 		return -ENODEV;
 
-	rfkill->name = dev_name(dev);
 	rfkill->type = (unsigned)id->driver_data;
 
-	return acpi_dev_add_driver_gpios(ACPI_COMPANION(dev),
-					 acpi_rfkill_default_gpios);
+	return devm_acpi_dev_add_driver_gpios(dev, acpi_rfkill_default_gpios);
 }
 
 static int rfkill_gpio_probe(struct platform_device *pdev)
 {
-	struct rfkill_gpio_platform_data *pdata = pdev->dev.platform_data;
 	struct rfkill_gpio_data *rfkill;
 	struct gpio_desc *gpio;
+	const char *type_name;
 	int ret;
 
 	rfkill = devm_kzalloc(&pdev->dev, sizeof(*rfkill), GFP_KERNEL);
 	if (!rfkill)
 		return -ENOMEM;
 
+	device_property_read_string(&pdev->dev, "name", &rfkill->name);
+	device_property_read_string(&pdev->dev, "type", &type_name);
+
+	if (!rfkill->name)
+		rfkill->name = dev_name(&pdev->dev);
+
+	rfkill->type = rfkill_find_type(type_name);
+
 	if (ACPI_HANDLE(&pdev->dev)) {
 		ret = rfkill_gpio_acpi_probe(&pdev->dev, rfkill);
 		if (ret)
 			return ret;
-	} else if (pdata) {
-		rfkill->name = pdata->name;
-		rfkill->type = pdata->type;
-	} else {
-		return -ENODEV;
 	}
 
 	rfkill->clk = devm_clk_get(&pdev->dev, NULL);
 
-	gpio = devm_gpiod_get_optional(&pdev->dev, "reset", GPIOD_OUT_LOW);
+	gpio = devm_gpiod_get_optional(&pdev->dev, "reset", GPIOD_ASIS);
 	if (IS_ERR(gpio))
 		return PTR_ERR(gpio);
 
 	rfkill->reset_gpio = gpio;
 
-	gpio = devm_gpiod_get_optional(&pdev->dev, "shutdown", GPIOD_OUT_LOW);
+	gpio = devm_gpiod_get_optional(&pdev->dev, "shutdown", GPIOD_ASIS);
 	if (IS_ERR(gpio))
 		return PTR_ERR(gpio);
 
 	rfkill->shutdown_gpio = gpio;
 
-	/* Make sure at-least one of the GPIO is defined and that
-	 * a name is specified for this instance
-	 */
-	if ((!rfkill->reset_gpio && !rfkill->shutdown_gpio) || !rfkill->name) {
+	/* Make sure at-least one GPIO is defined for this instance */
+	if (!rfkill->reset_gpio && !rfkill->shutdown_gpio) {
 		dev_err(&pdev->dev, "invalid platform data\n");
 		return -EINVAL;
 	}
+
+	ret = gpiod_direction_output(rfkill->reset_gpio, true);
+	if (ret)
+		return ret;
+
+	ret = gpiod_direction_output(rfkill->shutdown_gpio, true);
+	if (ret)
+		return ret;
 
 	rfkill->rfkill_dev = rfkill_alloc(rfkill->name, &pdev->dev,
 					  rfkill->type, &rfkill_gpio_ops,
@@ -161,17 +167,11 @@ static int rfkill_gpio_remove(struct platform_device *pdev)
 	rfkill_unregister(rfkill->rfkill_dev);
 	rfkill_destroy(rfkill->rfkill_dev);
 
-	acpi_dev_remove_driver_gpios(ACPI_COMPANION(&pdev->dev));
-
 	return 0;
 }
 
 #ifdef CONFIG_ACPI
 static const struct acpi_device_id rfkill_acpi_match[] = {
-	{ "BCM2E1A", RFKILL_TYPE_BLUETOOTH },
-	{ "BCM2E3D", RFKILL_TYPE_BLUETOOTH },
-	{ "BCM2E40", RFKILL_TYPE_BLUETOOTH },
-	{ "BCM2E64", RFKILL_TYPE_BLUETOOTH },
 	{ "BCM4752", RFKILL_TYPE_GPS },
 	{ "LNV4752", RFKILL_TYPE_GPS },
 	{ },

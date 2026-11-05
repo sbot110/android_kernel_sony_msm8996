@@ -1,0 +1,17 @@
+{
+  "stage6_checks": 47,
+  "stage7_checks": 52,
+  "missing": [],
+  "changed_existing_checks": [
+    "scripts/dora/check-artifacts.py"
+  ],
+  "existing_checker_change": "Only strengthen required linked symbols; no removed assertion",
+  "added_checks": [
+    "scripts/dora/check-boot-image.py",
+    "scripts/dora/check-cpu-native.py",
+    "scripts/dora/check-spm-transactions.py",
+    "scripts/dora/check-usb-handoff.py",
+    "scripts/dora/check-watchdog.py"
+  ],
+  "default_executions": 79
+}

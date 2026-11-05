@@ -1,0 +1,308 @@
+{
+  "source_commit": "0c295b15b6d0fb59a64e13b9e0ef2070818ef2a1",
+  "source_driver": "drivers/regulator/rpm-smd-regulator.c",
+  "description": "Final Sony DT physical requests; not voltage measurements or inferred electrical wiring. Source proxy is a temporary L12 consumer, not a provider default.",
+  "fixtures": {
+    "msm8996-v3-pmi8996-tone-dora_generic.dtb": {
+      "sha256": "9dc1184db75dead2612cd6adcfc5f74dfc97c8c80253cc332ab88dd576480bdd",
+      "rails": {
+        "s4": {
+          "path": "/soc/qcom,rpm-smd/rpm-regulator-smpa4/regulator-s4",
+          "resource_name": "smpa",
+          "resource_id": 4,
+          "set": 3,
+          "min_uV": 1800000,
+          "max_uV": 1800000,
+          "init_uV": 1800000,
+          "electrical_supply_properties": {},
+          "provider_boot_on": false,
+          "provider_always_on": false,
+          "proxy_enable": false,
+          "proxy_uA": null
+        },
+        "l12": {
+          "path": "/soc/qcom,rpm-smd/rpm-regulator-ldoa12/regulator-l12",
+          "resource_name": "ldoa",
+          "resource_id": 12,
+          "set": 3,
+          "min_uV": 1800000,
+          "max_uV": 1800000,
+          "init_uV": 1800000,
+          "electrical_supply_properties": {},
+          "provider_boot_on": false,
+          "provider_always_on": false,
+          "proxy_enable": true,
+          "proxy_uA": 10000
+        },
+        "l13": {
+          "path": "/soc/qcom,rpm-smd/rpm-regulator-ldoa13/regulator-l13",
+          "resource_name": "ldoa",
+          "resource_id": 13,
+          "set": 3,
+          "min_uV": 1800000,
+          "max_uV": 2950000,
+          "init_uV": 2950000,
+          "electrical_supply_properties": {},
+          "provider_boot_on": false,
+          "provider_always_on": false,
+          "proxy_enable": false,
+          "proxy_uA": null
+        },
+        "l20": {
+          "path": "/soc/qcom,rpm-smd/rpm-regulator-ldoa20/regulator-l20",
+          "resource_name": "ldoa",
+          "resource_id": 20,
+          "set": 3,
+          "min_uV": 2950000,
+          "max_uV": 2950000,
+          "init_uV": 2950000,
+          "electrical_supply_properties": {},
+          "provider_boot_on": false,
+          "provider_always_on": false,
+          "proxy_enable": false,
+          "proxy_uA": null
+        },
+        "l21": {
+          "path": "/soc/qcom,rpm-smd/rpm-regulator-ldoa21/regulator-l21",
+          "resource_name": "ldoa",
+          "resource_id": 21,
+          "set": 3,
+          "min_uV": 2950000,
+          "max_uV": 2950000,
+          "init_uV": 2950000,
+          "electrical_supply_properties": {},
+          "provider_boot_on": false,
+          "provider_always_on": false,
+          "proxy_enable": false,
+          "proxy_uA": null
+        }
+      }
+    },
+    "msm8996-v3-tone-dora_generic.dtb": {
+      "sha256": "03cfed3f4b4f626dd138f44d9b44ed47136efd1a236f3645ce1c5fa41cd008d7",
+      "rails": {
+        "s4": {
+          "path": "/soc/qcom,rpm-smd/rpm-regulator-smpa4/regulator-s4",
+          "resource_name": "smpa",
+          "resource_id": 4,
+          "set": 3,
+          "min_uV": 1800000,
+          "max_uV": 1800000,
+          "init_uV": 1800000,
+          "electrical_supply_properties": {},
+          "provider_boot_on": false,
+          "provider_always_on": false,
+          "proxy_enable": false,
+          "proxy_uA": null
+        },
+        "l12": {
+          "path": "/soc/qcom,rpm-smd/rpm-regulator-ldoa12/regulator-l12",
+          "resource_name": "ldoa",
+          "resource_id": 12,
+          "set": 3,
+          "min_uV": 1800000,
+          "max_uV": 1800000,
+          "init_uV": 1800000,
+          "electrical_supply_properties": {},
+          "provider_boot_on": false,
+          "provider_always_on": false,
+          "proxy_enable": true,
+          "proxy_uA": 10000
+        },
+        "l13": {
+          "path": "/soc/qcom,rpm-smd/rpm-regulator-ldoa13/regulator-l13",
+          "resource_name": "ldoa",
+          "resource_id": 13,
+          "set": 3,
+          "min_uV": 1800000,
+          "max_uV": 2950000,
+          "init_uV": 2950000,
+          "electrical_supply_properties": {},
+          "provider_boot_on": false,
+          "provider_always_on": false,
+          "proxy_enable": false,
+          "proxy_uA": null
+        },
+        "l20": {
+          "path": "/soc/qcom,rpm-smd/rpm-regulator-ldoa20/regulator-l20",
+          "resource_name": "ldoa",
+          "resource_id": 20,
+          "set": 3,
+          "min_uV": 2950000,
+          "max_uV": 2950000,
+          "init_uV": 2950000,
+          "electrical_supply_properties": {},
+          "provider_boot_on": false,
+          "provider_always_on": false,
+          "proxy_enable": false,
+          "proxy_uA": null
+        },
+        "l21": {
+          "path": "/soc/qcom,rpm-smd/rpm-regulator-ldoa21/regulator-l21",
+          "resource_name": "ldoa",
+          "resource_id": 21,
+          "set": 3,
+          "min_uV": 2950000,
+          "max_uV": 2950000,
+          "init_uV": 2950000,
+          "electrical_supply_properties": {},
+          "provider_boot_on": false,
+          "provider_always_on": false,
+          "proxy_enable": false,
+          "proxy_uA": null
+        }
+      }
+    },
+    "msm8996-v3.0-pmi8996-tone-dora_generic.dtb": {
+      "sha256": "b6c92a0ae4eccc79efd9b0de66caa308e3d24324928b252236935b4538469cae",
+      "rails": {
+        "s4": {
+          "path": "/soc/qcom,rpm-smd/rpm-regulator-smpa4/regulator-s4",
+          "resource_name": "smpa",
+          "resource_id": 4,
+          "set": 3,
+          "min_uV": 1800000,
+          "max_uV": 1800000,
+          "init_uV": 1800000,
+          "electrical_supply_properties": {},
+          "provider_boot_on": false,
+          "provider_always_on": false,
+          "proxy_enable": false,
+          "proxy_uA": null
+        },
+        "l12": {
+          "path": "/soc/qcom,rpm-smd/rpm-regulator-ldoa12/regulator-l12",
+          "resource_name": "ldoa",
+          "resource_id": 12,
+          "set": 3,
+          "min_uV": 1800000,
+          "max_uV": 1800000,
+          "init_uV": 1800000,
+          "electrical_supply_properties": {},
+          "provider_boot_on": false,
+          "provider_always_on": false,
+          "proxy_enable": true,
+          "proxy_uA": 10000
+        },
+        "l13": {
+          "path": "/soc/qcom,rpm-smd/rpm-regulator-ldoa13/regulator-l13",
+          "resource_name": "ldoa",
+          "resource_id": 13,
+          "set": 3,
+          "min_uV": 1800000,
+          "max_uV": 2950000,
+          "init_uV": 2950000,
+          "electrical_supply_properties": {},
+          "provider_boot_on": false,
+          "provider_always_on": false,
+          "proxy_enable": false,
+          "proxy_uA": null
+        },
+        "l20": {
+          "path": "/soc/qcom,rpm-smd/rpm-regulator-ldoa20/regulator-l20",
+          "resource_name": "ldoa",
+          "resource_id": 20,
+          "set": 3,
+          "min_uV": 2950000,
+          "max_uV": 2950000,
+          "init_uV": 2950000,
+          "electrical_supply_properties": {},
+          "provider_boot_on": false,
+          "provider_always_on": false,
+          "proxy_enable": false,
+          "proxy_uA": null
+        },
+        "l21": {
+          "path": "/soc/qcom,rpm-smd/rpm-regulator-ldoa21/regulator-l21",
+          "resource_name": "ldoa",
+          "resource_id": 21,
+          "set": 3,
+          "min_uV": 2950000,
+          "max_uV": 2950000,
+          "init_uV": 2950000,
+          "electrical_supply_properties": {},
+          "provider_boot_on": false,
+          "provider_always_on": false,
+          "proxy_enable": false,
+          "proxy_uA": null
+        }
+      }
+    },
+    "msm8996-v3.0-tone-dora_generic.dtb": {
+      "sha256": "ba3cb5cac73b3210f5d9ca876b85a0635ac2daa694634dcab556b256408f4eb0",
+      "rails": {
+        "s4": {
+          "path": "/soc/qcom,rpm-smd/rpm-regulator-smpa4/regulator-s4",
+          "resource_name": "smpa",
+          "resource_id": 4,
+          "set": 3,
+          "min_uV": 1800000,
+          "max_uV": 1800000,
+          "init_uV": 1800000,
+          "electrical_supply_properties": {},
+          "provider_boot_on": false,
+          "provider_always_on": false,
+          "proxy_enable": false,
+          "proxy_uA": null
+        },
+        "l12": {
+          "path": "/soc/qcom,rpm-smd/rpm-regulator-ldoa12/regulator-l12",
+          "resource_name": "ldoa",
+          "resource_id": 12,
+          "set": 3,
+          "min_uV": 1800000,
+          "max_uV": 1800000,
+          "init_uV": 1800000,
+          "electrical_supply_properties": {},
+          "provider_boot_on": false,
+          "provider_always_on": false,
+          "proxy_enable": true,
+          "proxy_uA": 10000
+        },
+        "l13": {
+          "path": "/soc/qcom,rpm-smd/rpm-regulator-ldoa13/regulator-l13",
+          "resource_name": "ldoa",
+          "resource_id": 13,
+          "set": 3,
+          "min_uV": 1800000,
+          "max_uV": 2950000,
+          "init_uV": 2950000,
+          "electrical_supply_properties": {},
+          "provider_boot_on": false,
+          "provider_always_on": false,
+          "proxy_enable": false,
+          "proxy_uA": null
+        },
+        "l20": {
+          "path": "/soc/qcom,rpm-smd/rpm-regulator-ldoa20/regulator-l20",
+          "resource_name": "ldoa",
+          "resource_id": 20,
+          "set": 3,
+          "min_uV": 2950000,
+          "max_uV": 2950000,
+          "init_uV": 2950000,
+          "electrical_supply_properties": {},
+          "provider_boot_on": false,
+          "provider_always_on": false,
+          "proxy_enable": false,
+          "proxy_uA": null
+        },
+        "l21": {
+          "path": "/soc/qcom,rpm-smd/rpm-regulator-ldoa21/regulator-l21",
+          "resource_name": "ldoa",
+          "resource_id": 21,
+          "set": 3,
+          "min_uV": 2950000,
+          "max_uV": 2950000,
+          "init_uV": 2950000,
+          "electrical_supply_properties": {},
+          "provider_boot_on": false,
+          "provider_always_on": false,
+          "proxy_enable": false,
+          "proxy_uA": null
+        }
+      }
+    }
+  },
+  "source_driver_sha256": "d9aeda126ca1bdd17db8de31b8e348accff3cbd090d134c5b86fd237d55eb201"
+}

@@ -1,0 +1,1 @@
+sha256sum --check --status SHA256SUMS: exit0

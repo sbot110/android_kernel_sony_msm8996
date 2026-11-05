@@ -208,6 +208,7 @@ int diUnmount(struct inode *ipimap, int mounterror)
 	 * free in-memory control structure
 	 */
 	kfree(imap);
+	JFS_IP(ipimap)->i_imap = NULL;
 
 	return (0);
 }
@@ -491,13 +492,7 @@ struct inode *diReadSpecial(struct super_block *sb, ino_t inum, int secondary)
 	/* release the page */
 	release_metapage(mp);
 
-	/*
-	 * __mark_inode_dirty expects inodes to be hashed.  Since we don't
-	 * want special inodes in the fileset inode space, we make them
-	 * appear hashed, but do not put on any lists.  hlist_del()
-	 * will work fine and require no locking.
-	 */
-	hlist_add_fake(&ip->i_hash);
+	inode_fake_hash(ip);
 
 	return (ip);
 }
@@ -534,8 +529,7 @@ void diWriteSpecial(struct inode *ip, int secondary)
 	/* read the page of fixed disk inode (AIT) in raw mode */
 	mp = read_metapage(ip, address << sbi->l2nbperpage, PSIZE, 1);
 	if (mp == NULL) {
-		jfs_err("diWriteSpecial: failed to read aggregate inode "
-			"extent!");
+		jfs_err("diWriteSpecial: failed to read aggregate inode extent!");
 		return;
 	}
 
@@ -1341,7 +1335,7 @@ diInitInode(struct inode *ip, int iagno, int ino, int extno, struct iag * iagp)
 int diAlloc(struct inode *pip, bool dir, struct inode *ip)
 {
 	int rc, ino, iagno, addext, extno, bitno, sword;
-	int nwords, rem, i, agno;
+	int nwords, rem, i, agno, dn_numag;
 	u32 mask, inosmap, extsmap;
 	struct inode *ipimap;
 	struct metapage *mp;
@@ -1377,6 +1371,9 @@ int diAlloc(struct inode *pip, bool dir, struct inode *ip)
 
 	/* get the ag number of this iag */
 	agno = BLKTOAG(JFS_IP(pip)->agstart, JFS_SBI(pip->i_sb));
+	dn_numag = JFS_SBI(pip->i_sb)->bmap->db_numag;
+	if (agno < 0 || agno > dn_numag)
+		return -EIO;
 
 	if (atomic_read(&JFS_SBI(pip->i_sb)->bmap->db_active[agno])) {
 		/*
@@ -2197,6 +2194,9 @@ static int diNewExt(struct inomap * imap, struct iag * iagp, int extno)
 	/* get the ag and iag numbers for this iag.
 	 */
 	agno = BLKTOAG(le64_to_cpu(iagp->agstart), sbi);
+	if (agno >= MAXAG || agno < 0)
+		return -EIO;
+
 	iagno = le32_to_cpu(iagp->iagnum);
 
 	/* check if this is the last free extent within the
@@ -3149,7 +3149,6 @@ static void copy_to_dinode(struct dinode * dip, struct inode *ip)
 	else
 		dip->di_gid = cpu_to_le32(from_kgid(&init_user_ns,
 						    jfs_ip->saved_gid));
-	jfs_get_inode_flags(jfs_ip);
 	/*
 	 * mode2 is only needed for storing the higher order bits.
 	 * Trust i_mode for the lower order ones

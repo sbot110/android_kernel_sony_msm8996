@@ -216,7 +216,11 @@ static void fixture(void)
  invalid=maps;invalid.apcc[1]=invalid.apcc[0];assert(msm8996_cpu_native_shared_init(&shared,&invalid,&p,&power_ops,&shared)==-EINVAL);
  assert(!msm8996_cpu_native_shared_init(&shared,&maps,&p,&power_ops,&shared) && !mmio_writes);
  assert(msm8996_cpu_native_shared_init(&shared,&maps,&p,&power_ops,&shared)==-EBUSY);
- for(i=0;i<3;i++)assert(!msm8996_cpu_native_bind(&nodes[i],&shared,i,&txns[i]));
+ assert(!msm8996_cpu_native_bind(&nodes[0],&shared,0,&txns[0]));
+ assert(msm8996_cpu_native_bind(&nodes[0],&shared,1,&txns[1])==-EBUSY);
+ assert(msm8996_cpu_native_bind(&nodes[1],&shared,1,&txns[0])==-EBUSY);
+ assert(nodes[0].domain==0 && txns[0].data==&nodes[0] && !shared.bound[1]);
+ for(i=1;i<3;i++)assert(!msm8996_cpu_native_bind(&nodes[i],&shared,i,&txns[i]));
  assert(msm8996_cpu_native_bind(&nodes[0],&shared,0,&txns[0])==-EBUSY);
  created=true;
 }
@@ -313,6 +317,12 @@ int main(void)
  assert(msm8996_cpu_transaction_bootstrap(&txns[0])==-EIO && !guard && before==mmio_writes);
  fixture();apcc[0][0x18/4]^=1;before=mmio_writes;
  assert(msm8996_cpu_transaction_bootstrap(&txns[0])==-EOPNOTSUPP && !guard && before==mmio_writes);
+ fixture();apcc[1][4/4]=200;before=mmio_writes;
+ assert(msm8996_cpu_transaction_bootstrap(&txns[0])==-ERANGE && !guard && before==mmio_writes);
+ fixture();apcc[0][0x20/4]|=BIT(16);before=mmio_writes;
+ assert(msm8996_cpu_transaction_bootstrap(&txns[0])==-EOPNOTSUPP && !guard && before==mmio_writes);
+ fixture();cbf[0xf030/4]|=BIT(16);before=mmio_writes;
+ assert(msm8996_cpu_transaction_bootstrap(&txns[2])==-EOPNOTSUPP && !guard && before==mmio_writes);
  fixture();apcc[0][0x10/4]|=BIT(24);before=mmio_writes;
  assert(msm8996_cpu_transaction_bootstrap(&txns[0])==-EOPNOTSUPP && !guard && before==mmio_writes);
  fixture();cbf[0xf018/4]=(cbf[0xf018/4]&~GENMASK(9,8))|3U<<8;before=mmio_writes;

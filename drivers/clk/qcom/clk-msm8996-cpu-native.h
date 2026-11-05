@@ -41,6 +41,8 @@ struct msm8996_cpu_native_shared {
 	struct msm8996_cpu_native *owner;
 	bool initialized, frozen;
 	bool bound[3];
+	struct msm8996_cpu_native *binding[3];
+	struct msm8996_cpu_transaction *transaction[3];
 	unsigned long suspend_rate[3];
 };
 

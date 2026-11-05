@@ -196,6 +196,7 @@ static int native_enter(void *data)
 {
 	struct msm8996_cpu_native *n = data;
 	struct msm8996_cpu_native_shared *s = n->shared;
+	struct msm8996_cpu_plan plan;
 	unsigned int i;
 	int ret;
 
@@ -208,6 +209,10 @@ static int native_enter(void *data)
 		goto out;
 	for (i = 0; i < 3; i++) {
 		ret = native_read(s, i, &n->peer_rate[i]);
+		if (!ret)
+			ret = msm8996_cpu_plan_lookup(s->plans.domain[i],
+				s->plans.count[i], s->plans.speed_bin,
+				n->peer_rate[i], true, &plan);
 		if (ret)
 			goto leave;
 	}
@@ -291,7 +296,7 @@ static int native_primary_valid(struct msm8996_cpu_native *n)
 	    (user & (BIT(0) | BIT(3))) != (BIT(0) | BIT(3)) ||
 	    readl_relaxed(base + (cbf ? 0x20 : 0x18)) != 0x200d4828 ||
 	    readl_relaxed(base + (cbf ? 0x24 : 0x1c)) != 6 ||
-	    (test & ~BIT(16)) != 0x1c000000 ||
+	    test != 0x1c000000 ||
 	    (readl_relaxed(base) & (FSM | LOCK | 7)) != (FSM | LOCK | 7))
 		return -EOPNOTSUPP;
 	return 0;
@@ -660,6 +665,7 @@ int msm8996_cpu_native_bind(struct msm8996_cpu_native *n,
 	struct msm8996_cpu_transaction_policy policy = {
 		.aux_rate = 300000000, .do_half_rate = true,
 	};
+	unsigned int i;
 	int ret;
 
 	if (!n || !s || !txn || !s->initialized || s != native_owner || d > 2)
@@ -669,13 +675,25 @@ int msm8996_cpu_native_bind(struct msm8996_cpu_native *n,
 		ret = -EBUSY;
 		goto out;
 	}
+	/* Rebinding an object would silently redirect the old engine's data,
+	 * or reinitialize a mutex still owned by another domain/consumer.
+	 */
+	for (i = 0; i < 3; i++) {
+		if (s->binding[i] == n || s->transaction[i] == txn) {
+			ret = -EBUSY;
+			goto out;
+		}
+	}
 	n->shared = s;
 	n->domain = d;
 	policy.has_acd = d != 2;
 	policy.has_alt_pll = d == 1;
 	ret = msm8996_cpu_transaction_init(txn, &native_ops, n, &policy);
-	if (!ret)
+	if (!ret) {
 		s->bound[d] = true;
+		s->binding[d] = n;
+		s->transaction[d] = txn;
+	}
 out:
 	mutex_unlock(&s->lock);
 	return ret;

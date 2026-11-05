@@ -1,216 +1,223 @@
-Dora Linux 4.19.318 / stage4 verified build report
-===============================================
-Date: 2026-11-03. F8131 Single SIM / F8132 Dual SIM/DSDS, LOS21 / Android 14.
+Dora Linux 4.19.318 / Stage 5 verified source and build report
+============================================================
+Clean build: 2026-11-04; publication audit: 2026-11-05. F8131 Single SIM / F8132 Dual SIM/DSDS, LOS21 / Android14.
 
 BUILDABLE: YES
 BOOT TEST READY: NO
 RUNTIME VERIFIED: NO
 
-Initial HEAD: 8d7ab8a3baeb73cfaea264f3f7758e32cffce097
-Validated source/config/scripts HEAD: e7d77288f8f1fb7865c21d5178a82bce9e90d67e
-The later evidence/report commit changes documentation only. Its exact
-published SHA and post-push branch verification are given in the final reply;
-this file cannot embed the SHA of its own containing commit.
+Initial HEAD: 03a3c224b84079db06a424e387e220b6eafc6cfa
+Validated kernel/config/check code: 85850877ef5d1481a89df71ac9af3b74c7d65e40
+The final evidence commit updates documentation and trims one extra blank
+line at the physical checker's EOF; no function body, kernel, DT or config
+changes. Its SHA and post-push branch verification are in the final reply;
+a report cannot contain the SHA of its own containing commit.
 
-Real source changes and commits
-------------------------------
-c3683dd5aaf1bb84387f70044c939389342021b8 dora: restore vendor SquashFS labels and firmware VFAT dependencies
-9d34f99b3328a81f6754d2363a00594fc5ae5214 dora: serialize CPU power transactions and exclude competing APCC owners
-cb4eeb87e3f6320a7fa025abf6c6c90be18adff7 dora: restore real SDHC1 eMMC and hybrid SDHC2 hardware descriptions
-4b91836b72ba689b8019e1401591daecf324c76d regulator: add acknowledged MSM8996 logical RPM corner frontend
-3d2d99fb2e4e4025254ef50e555a8c45869dab20 mmc: restore Dora host ownership and fail closed on uncertain power
-1add6b0445f67b2c15a7d6154d2dbc33b88c560f clk: preserve voltage leases and errors across failed CCF transactions
-efecf30105e3946da3790417a5ea6496fbbe72ab clk: qcom: couple MSM8996 GCC and MMCC to verified Sony corner plans
-edc02a0de7958ccc27527e57c25a446223995b0b dora: validate exclusive clock power providers and all 32 build checks
-4877fb09ba9ea8b478fce5671267818ff1f1c5ff dora: document eMMC correction and remaining physical power gates
-f7259ecc02f55a2d9f3f7c6503eb41f0948675e5 regulator: keep exported SPM registration alive and retry failures
-204baefd036f3009d4a921433bd41528d79ee4c2 dora: provide live typed CX supply for active GCC and MMCC
-e7d77288f8f1fb7865c21d5178a82bce9e90d67e dora: record external permissive cmdline and prepare unapplied device patch
+Source/config/check commits
+--------------------------
+d1817fb2b0aeda0b03b3809205219243ce09b431 clk: qcom: validate MSM8996 boot CPU sources and AUX handoff
+b9114392d29a769008298b4e358a06a3f71e3496 sony: fix minidump accounting and bound warning-prone input paths
+251d385472e02ddde080feaeed814b3cb1d6687f regulator: add locked aggregate load replay for acknowledged recovery
+28028972704531a01d457027f29b0814f4a684c9 soc: qcom: serialize RPM resource ownership across frontends
+be1501418f00242cb1065e679a190b2fb52e178f regulator: qcom: retire native RPM consumers without stale callbacks
+6a48af59df28c3f389b703998759dbd0cb3a1768 regulator: qcom: add acknowledged physical ACTIVE and SLEEP transactions
+d1ad4d49180199ee6c59f5829910d716d3f00144 arm64: dts: dora: restore Sony physical RPM input and BOTH contracts
+349232cf504a4691c3d304cc90015150125c7144 clk: expose completed handoff accounting for temporary voltage leases
+41c884bbea0a08d131afaf6dbd9cacee85befcb1 clk: qcom: force physical L12 ACKs and qualify bootstrap load release
+b58b6f23dba48a6c7f9f3176cf68384e1f133814 regulator: qcom: keep the entire physical bank frozen after failed resume
+7eeda012360307f6364dcb5f4b9df4faf749f931 mmc: dora: require physical ACKs and quarantine clock and power failures
+3a3f850eca52e71698b2c1cd1dfbada695b411b8 regulator: qcom: order RPM replay before early MMC resume
+07df1291e27b0a0ae82dd10db5bc5f305a7c0c08 arm64: dts: dora: isolate experimental SDHC1 diagnostic variants
+85850877ef5d1481a89df71ac9af3b74c7d65e40 dora: run all 44 checks while keeping diagnostic DTBs out of default images
 
-The complete changed-file list is validation-stage4/changed-files.txt.
-Original 20 checks are retained; build.sh now invokes all 32 check-*.py.
-No kernel base replacement, history rewrite, new branch or PR occurred.
-Sony 4.4 main/work and all other local/remote refs matched their initial
-SHAs before publication; exact post-push verification is recorded in the
-final reply (branch-audit-before-publication.json retains the snapshots).
+119 changed files; 14 source/config/check commits plus one final evidence
+commit (15 total). The complete changed-file list is
+validation-stage5/changed-files.txt.
+Only kernel-4.19-701905467803253630 was used. No new branch, force push,
+history rewrite, PR, device/vendor edit, boot.img or phone/partition write.
 
-Storage architecture correction
--------------------------------
-Dora boot storage is SDHC1 eMMC at 7464900.sdhci; SDHC2 74a4900.sdhci is
-MicroSD/hybrid UIM2. Evidence: all four FINAL Sony4.4 DTs, early fstab
-system and oem paths, pinned tone-common fstab/init/ueventd. mmcblk0 and
-bootdevice runtime details are user-reported; raw old logs are not available
-here. No UFS-equipped F8131/F8132 variant is evidenced. Both unused UFS
-host and PHY stay disabled, independent of clock coupling.
+Physical RPM implementation
+---------------------------
+S4/L12/L13/L20/L21 use qcom-rpm-physical.c through the existing native bank,
+real PM8994 descriptors and supply phandles. Literal uv/ma/swen keys follow
+Sony4.4 0c295b15b6d0fb59a64e13b9e0ef2070818ef2a1: UV in microvolts,
+load in truncated milliamps saturated at8191, SWEN0/1. All five final Sony
+resources use BOTH qcom,set3; no AO/floor mode is guessed for these rails.
+The core aggregates consumer voltage/load/enable; system load is added once.
+New regulator_sync_load replays aggregate load under the real core lock.
 
-Full evidence and source references: dora-storage-audit.md.
-SDHC1/2 retain real clocks, IRQs, rails, pads, bus vectors and HS200/HS400
-plans. mmc0/mmc1 aliases are stable across probe order. GPIO29/UIM2 belongs
-to its removable host; internal eMMC never owns it. Original partition
-labels/table/data are not changed. Both MMC hosts remain gated pending
-physical UV/SWEN/load/SLEEP replay and qualification; partition discovery,
-mounts, existing userdata encryption and data integrity are NOT verified.
+Registration sends no physical request. Typed readiness before retaining
+consumer state permits deferred retry until the whole bank is activated.
+First enable requires explicit voltage and load. Initial get_voltage returns
+ENODATA, is_enabled returns the documented unknown-status EINVAL; neither
+fabricates the boot voltage or OFF. Successful transactions require real
+correlated transport ACKs for ACTIVE and SLEEP. Known baseline, pending
+request and quarantine are separate. Any uncertain write latches the first
+error, attempts only a known baseline rollback, and stays quarantined.
+Explicit recovery replays an existing BOTH baseline; an unknown initial
+transaction has no invented zero baseline. Failed bank resume keeps every
+resource frozen until a successful complete ACK pass. PM/removal/mutation
+use bank-to-resource locking; final-rdev references keep callback data alive.
 
-RPM, clocks and CPU
--------------------
-Production qcom-rpm-corner.c implements logical 1..7 -> corn/vfc wire 0..6,
-ACTIVE/SLEEP BOTH/AO/floor max aggregation, real correlated transport ACK,
-rollback/quarantine, forced-sync and final-rdev lifetime. Native S1/S2 UV
-owners are disabled. No logical value is sent under the physical UV key.
+Shared endpoint/type/id claims cover native/corner/physical frontends.
+Attempted writes retain bounded tombstones across removal/reprobe, with
+transport/node/module references. Reprobe cannot reset uncertainty or steal
+another owner. Native callbacks also validate selectors/loads, wait on their
+lock for outstanding writes, reject offline requests and hold final-rdev
+lifetime. Builtin native parent handles may retain an inert registration on
+retirement to avoid the old core freeing an upstream handle prematurely.
+Pure-legacy module hotremove and generic registration-failure supply cleanup
+remain unqualified outside this builtin Dora opt-in scope.
 
-All 56 GCC / 49 MMCC fmax maps are independently checked against Sony Git source
-and final v3 overrides; no invented rates/voltages are substituted. GCC SDCC1
-LOW ceiling is 50 MHz, NOMINAL 400 MHz, actual table 384 MHz; GPLL4 main NOM 384 MHz.
-SDCC2 original 40/80 MHz entries restored. Fixed GPLL0 read-only 600 MHz and
-critical auxiliary ownership retained; raw EARLY numeric bypasses closed.
-Readonly postdivider round/recalc width 0 disagreement and read errors fixed.
+The original five rails and their resource ancestors have no Linux electrical
+input edge. Their input dependencies are delegated to RPM, as the original
+Sony driver does. The inherited upstream L20/L21 2.95V -> S5 2.15V dependency
+was therefore removed, without guessing another Vin or creating a dummy
+regulator. S4 provider always-on was removed; source eMMC IO retention remains
+a consumer policy. References/hashes: dora-rpm-physical-dt.json and binding.
+ACK means RPM processed a request; it does NOT measure a physical voltage,
+settling, temperature, current, or the behavior of firmware on a phone.
 
-CCF prepare/rate/parent/PM/notifier/teardown failures retain safe voltage
-leases and original errors. Unknown partial hardware does not receive an
-invented rollback. Required late handoff is tracked; orphaned state fails
-closed. Physical L12 uncertain ACK permanently quarantines its class;
-physical MMC/cache divergence also blocks further power/clock enables.
-Source-derived HIGH can remain held for unowned boot PLLs; runtime ownership
-and suspend are unverified. Typed CX is active because active GCC/MMCC must
-have a live mandatory provider. MX, GPU/CPR/PMI-S2, MMC and display remain gated.
+SDHC1 qualification and isolated diagnostics
+------------------------------------------
+Boot storage remains SDHC1 eMMC7464900.sdhci (mmc0,8bit,nonremovable).
+SDHC2 74a4900.sdhci is MicroSD/hybridUIM2 (mmc1); no UFS Dora variant is
+evidenced. Both UFS host/PHY stay disabled. Source/fstab evidence, firmware
+paths and unchanged labels/table are recorded in dora-storage-audit.md.
 
-CPU transaction engine tests all 12 Sony plans, ACD/lease/PLL order, readback,
-rollback and concurrency; hardware MMIO/CPR/SPM adapter remains UNBOUND.
-Native RPM S8/S9/S10/S11 competing owners are disabled. Active APCC/CBF is
-observational only; maxcpus=2, CPU_FREQ=n, CPU_IDLE=n are retained.
-Exported spm_regulator_init now survives init-memory reclamation, serializes
-registration and retries actual failures; the prior section mismatch is fixed.
+L20=2.95V,HPM570000uA; S4=1.8V,HPM325000uA with retained IO/HPM policy.
+MMC requires typed readiness before bus/clock/MMIO bootstrap. Enabled load,
+voltage and enable operations force current aggregate BOTH ACKs; an enable
+reference is recorded before a post-enable ACK can fail. Even cache-hit,
+already-on and runtime-resume skip paths cannot bypass this gate.
 
-Two full-build attempts (no hidden failures)
--------------------------------------------
-Attempt 1 source 4877fb09ba9ea8b478fce5671267818ff1f1c5ff used a NEW empty OUT.
-vmlinux/Image.gz linked, but overall script exit 1: active GCC pointed to a
-disabled CX supplier. It is NOT counted as a successful build. One modpost
-mismatch exposed exported SPM __init text. Both real source problems were
-fixed, not ignored by relaxing provider checks. Attempt 1 log/status retained.
+Clock/NoC/pinctrl prerequisites precede timing/DLL changes. A failure stops
+SDCLK and latches the first host fault, publishes no successful clock, and
+blocks request, command and CQE dispatch. Power IRQ clear/pin/voltage/wait,
+restore, DLL and SDCLK timeout errors feed the same latch. Uncleared IRQ
+sources are masked; IRQs are not reenabled after failed restore. Fault cleanup
+never accesses a gated controller and retains uncertain rail ownership.
+Backend recovery alone cannot clear the host fault or reconcile its counts.
 
-Attempt 2 source e7d77288f8f1fb7865c21d5178a82bce9e90d67e:
-  source /workspace/work/toolchain/env.sh
-  OUT_DIR=/workspace/work/dora-stage4-clean2-20261103.6FUiPC JOBS=4 scripts/dora/build.sh
-Started: 2026-11-03T12:12:32Z
-Finished: 2026-11-03T12:33:05Z
-OUT_DIR was newly created EMPTY. Overall exit:0.
+Both physical and corner providers replay in resume_early. Explicit bound
+clock-provider links establish SDHC->GCC->CX ordering, supplementing real
+regulator child/parent and NoC/RPM links. Normal-phase bank replay would run
+later than host resume_early and permanently fault the host; the test rejects
+that old phase and missing supplier/ref/defer behavior.
 
-vmlinux, System.map, Image, Image.gz, four DTBs and Image.gz-dtb checked.
-Resolved config: 290 explicit assignments / 114 required built-ins, plus 31
-Android/vendor filesystem requirements. ARM64 / COMPAT Binder/ION/fscrypt
-headers and actual ION/SquashFS functions checked. All32scripts pass,
-including actual-source fault/concurrency tests for RPM, CCF, CPU and MMC.
-Four compiled DTBs pass original data, provider/gate/clock/power/pin/panel/
-NoC checks and immutable original Sony variant comparison. Explicit active
-policy enables ONLY CX; unsafe GPU/MX/CPU/display/MMC mutations are rejected.
+All twelve requested source conditions are covered in
+ dora-sdhc1-qualification.md.
+Source qualification permits SEPARATE EXPERIMENTAL DT artifacts. The default
+four DTBs keep SDHC1/SDHC2 disabled. Four qcom/diagnostic/* variants inherit
+their real base; exact full-tree/header/reservation comparison permits ONLY
+root model, diagnostic marker and SDHC1status=okay to differ. SDHC2/UFS and
+all unrelated gates/data stay equal. Diagnostic targets are unlisted in
+dtb-y/default Image lists and compile in a fresh separate O= tree. The normal
+config/kernel/fourDTBs/Image.gz-dtb hashes are preserved. The complete optional builder exited 0 in a fresh separate output:
+/workspace/work/dora-stage5-clean-20261104.R9EGIZ/diagnostic-sdhc1
+All four full-tree comparisons and negative fixtures passed. Normal config,
+DTBs and kernel/image hashes remained unchanged. No diagnostic kernel
+image or boot.img was produced. See dora-sdhc1-diagnostic.txt and
+validation-stage5/diagnostic-SHA256SUMS.
 
-Artifact checker confirms AArch64 ELF, ARM64 Image header, exact gzip
-roundtrip and 25 linked implementation symbols. Seven actual bad
-artifact copies (header, truncation, reorder, duplicate, trailer, missing
-RPM implementation, trailing gzip) rejected; canonical artifacts untouched.
-Independent default host dtc decode exit 0 for each DTB. All SHA256 rechecked.
-Legacy text bindings use driver-specific source/DT checkers; formal YAML
-dt-schema validation was not executed.
-Git diff --check passes. BCMDHD source/WPA2 fixes remain unchanged.
-
-Additional CCF AddressSanitizer/UBSan run exits0. LeakSanitizer is unavailable
-under this environment's tracing: its earlier optional attempt failed;
-leak detection was disabled for the final ASan/UBSan run, not the state tests.
-No phone, real RPM firmware, voltage measurements or IRQ scheduling tested.
-
-Ordered appended DTBs
----------------------
-qcom/msm8996-v3.0-sony-xperia-tone-dora.dtb: offset=8953321 size=190054
-qcom/msm8996-v3.0-pmi8996-sony-xperia-tone-dora.dtb: offset=9143375 size=190054
-qcom/msm8996-sony-xperia-tone-dora.dtb: offset=9333429 size=190570
-qcom/msm8996-v3.1-pmi8996-sony-xperia-tone-dora.dtb: offset=9523999 size=190570
-These exact bytes/IDs/order do NOT prove Sony bootloader selection.
-
-Artifact sizes and SHA256
-------------------------
-vmlinux  24624488 bytes  b15f5b13c9a481abdc55950398ab99905ab5f975dd6d07d5e2cd12720bf75dfe
-.config  137400 bytes  5d347c289bebcc7f92594fe9f066da6d4043a236ec6dac52773a22541b5db56e
-System.map  3757460 bytes  490269e47ac0076326b3dd0ae060427919dbe6cff9dcd312f1dc3e4f36af8ede
-arch/arm64/boot/Image  19659264 bytes  6d986d6a99d3f922f759b0048472f22bfcd1bb3a3120fdf74a3d403709fc8cf0
-arch/arm64/boot/Image.gz  8953321 bytes  7c694496bc554da5a2ca3707e42659ab18250c99f595f9ecb5ee2c23b2e10b43
-arch/arm64/boot/dts/qcom/msm8996-v3.0-sony-xperia-tone-dora.dtb  190054 bytes  e68324dde4c26c1f04861d502edc2f0368836be82bad6e4fa68ace5adeb7980a
-arch/arm64/boot/dts/qcom/msm8996-v3.0-pmi8996-sony-xperia-tone-dora.dtb  190054 bytes  37cbc07bcafa90cb858cebb40517c7abf2c3a78d67d872d4ad17362d1560bb86
-arch/arm64/boot/dts/qcom/msm8996-sony-xperia-tone-dora.dtb  190570 bytes  3f4bbd4d89b07cc07f4011fac43c9ef7a8d831fe80fd05df398a3c257203ff23
-arch/arm64/boot/dts/qcom/msm8996-v3.1-pmi8996-sony-xperia-tone-dora.dtb  190570 bytes  8c074109c51cfd469763872628bfb1574eabd84591948967bd17f9630978cbdd
-arch/arm64/boot/Image.gz-dtb  9714569 bytes  3685627fda28c5e87c0dcb5891c1f413723f775d4e521779628906380c9b9b56
-
-Toolchain/logs/warnings
-----------------------
-AArch64 and ARM32 GCC 12.2.0-14, binutils 2.40; host GCC 14.2.0-19,
-bison 3.8.2, flex 2.6.4, host dtc 1.6.1. Exact versions in toolchain.txt.
-Full successful journal: validation-stage4/full-build.log.gz.
-Failed first attempt and its detailed modpost diagnosis are also retained.
-Final detailed modpost exit 0, no diagnostics (modpost-final.log).
-Source/config/hash evidence: validation-stage4/summary.json, final.config,
-SHA256SUMS, artifact-validation.json and original-variant-check.log.
-
-Compiler/linker diagnostics: 97 warning lines;
-new versus normalized stage 3 messages:0.
-Independent default dtc: 116 diagnostics total across four DTBs.
-Complete lists retained; these are not a warning-free build.
-
-Priority functional/security audit before affected hardware activation:
-- peripheral-loader.c prepare_minidump_segments pointer decrement warning:
-  invalid minidump count/recovery logic remains unresolved;
-- dhd_linux.c variable-length command stack buffer needs bounds review;
-- SDHCI store_mask_and_match ignores kstrtoul return (pre-existing);
-- ARM32 vDSO GNU-stack metadata and type-mismatched diagnostic varargs
-  require review; warnings do not by themselves prove an exploit or boot cause.
-Lower-priority build hygiene: repeated equivalent BITS_TO_BYTES redefinitions,
-unused helpers/ignored qualifiers and redundant-address comparisons.
-No warning was hidden using new compiler flags or false providers.
-
-Variants and models
--------------------
-v3.0+PMI8994, v3.0+PMI8996, v3.1+PMI8994 and v3.1+PMI8996 all compile and
-pass final-source comparisons. SoC246/board8, revisions0x30000/0x30001;
-PMIC words0x20009+0x2000a or0x10013; real GPU7/8corners, BCL/flash differences
-and final IBB32 retained. No model-to-PMIC/panel/stepping assumption.
-
-F8131: shared source/DT/tests only; cold boot, eMMC, SingleSIM/radio/audio,
-charging, panel/touch/GPU and suspend NOT verified.
-F8132: same limits plus hybrid MicroSD/UIM2, both SIMs/DSDS and switching
-NOT verified. Host UIM2 tests do not establish electrical/SIM operation.
-
-LOS21 and unapplied external patch
----------------------------------
-Binder/BinderFS, BPF/JIT/cgroups/PSI, SELinux/seccomp, fscrypt, ext4/F2FS,
-SquashFS/LZ4/xattrs, VFAT NLS, dm-verity, ION/dma-buf and USB gadget config
-retained/checked. New options fix concrete vendor-label/firmware-mount gaps,
-not full Android runtime. BPF program-side map flags remain a semantic gap.
-Old bpfloader1/BoringSSL-self-check/vold failures remain UNRESOLVED without
-new target logs. No security self-test, SELinux or verity bypass added.
-
-Pinned tone-common already contained androidboot.selinux=permissive. The
-prepared patches/tone-common-remove-permissive-cmdline.patch removes exactly
-that line; apply-check and scratch-only apply exit 0. Device/vendor repos are
-UNMODIFIED. This patch is NOT applied there; real enforcing/policy remains
-unverified. Boot metadata base0x80000000/pages4096/tags0x01e00000/64MiB comes
-from pinned BoardConfig, not a real boot-image/partition inspection.
-
-No boot.img was created. No device flashing, formatting or critical partition
-writes occurred. SMBcharger is unbound, but bootloader charging/current state
-is unknown; unbound does not mean physical charging is stopped.
-
-Remaining P0 and next concrete stage
+Clocks, CPU and bounded safety fixes
 -----------------------------------
-1. Implement acknowledged physical RPM UV/SWEN/load replay and SLEEP semantics
-   for MMC rails/L12; generic cached rollback is insufficient. Keep ownership
-   exclusive, preserve unknown bootstrap votes, test applied-lost-ACK recovery.
-2. Qualify integrated boot clock/PLL handoff and only then activate SDHC1
-   separately; test GPT/by-name, HS200/HS400/data integrity without formatting.
-3. Bind real APCC/CBF/ACD/CPR/SPM/fuse/thermal adapter to the CPU transaction
-   engine; retain 2 CPU/DVFS/idle restrictions until justified by source+phone.
-4. Complete L12/DSI/incell, GPU CX/MX/PMI-S2 and USB/DPDM/charging safety.
-5. Actual working boot header/ramdisk/cmdline/DTB selection, firmware/vendor
-   compatibility and separate F8131/F8132 logs are still required.
+56 GCC/49 MMCC final Sony v3 fmax plans, source GPLL4/SDCC tables and fixed
+critical GPLL0 remain unchanged. L12 requires explicit1.8V, source temporary
+10mA bootstrap and fresh BOTH ACK before clock work. It drops the temporary
+load only after known ownership + completed CCF handoff accounting; late
+probe and late-init callers recheck idempotence under the class lock.
+Failed release restores the cached10mA request and keeps the fault/lease.
+Physical baseline recovery is not automatic CCF ownership/count recovery.
+Partial clock-registration teardown can permanently orphan a held HIGH
+lease; qualified same-owner reattachment is still an availability blocker.
 
-Source progress is substantial; this is NOT a completed hardware port and
-NOT BOOT TEST READY. Full compatibility matrix: dora-compatibility.md.
-Exact remaining contracts: dora-hardware-blockers.md.
+Read-only APCC/CBF now resolves Sony GPLL0/2 AUX, including mux0x3c, before
+publication and checks stable selected-source/PLL lock/output snapshots.
+No CPU frequency/voltage is programmed. The existing transaction engine and
+12 fuse plans remain; real ACD/CPR/SPM/HMSS/Kryo/APM/PLL adapter is unbound.
+maxcpus=2, CPU_FREQ=n and CPU_IDLE=n remain. Four-CPU/DVFS/suspend/thermal
+operation is NOT established by host callbacks or DT nodes.
+
+Fixed the minidump pointer-count decrement, packed aux offsets/sparse unmap,
+DHD variable stack allocation (bounded8192-byte heap+overflow/NULL/error
+handling), SDHCI const-input/debug parser+runtime-PM errors, ARM32 nonexecuting
+GNU-stack metadata and three SLUB varargs mismatches. VDSO code/ABI content
+was checked separately against Stage4; no hardware ioctl ABI was replaced.
+
+Clean build and automatic checks
+--------------------------------
+OUT_DIR=/workspace/work/dora-stage5-clean-20261104.R9EGIZ
+JOBS=4 scripts/dora/build.sh
+StartedUTC: 2026-11-04T13:27:17Z
+FinishedUTC: 2026-11-04T13:55:43Z
+Full build.sh return code: 0 (captured by shell if statement).
+The long-session monitor reported1 after the outer wrapper printed exit0;
+this monitoring discrepancy is retained in execution-monitor.txt. Independent
+artifact/linked-symbol/hash checks and the diagnostic pipeline returned0.
+All 44 check scripts are invoked, preserving the original32;
+71 script-command executions in the default pipeline exited0.
+The resolved .config has291explicit assignments and116required builtins.
+vmlinux/System.map/Image/Image.gz/all4normalDTBs/Image.gz-dtb are verified.
+ARM64 image/ELF/gzip, exact ordered append, linked implementation symbols,
+artifact hashes and git diff --check were checked. Toolchain versions and
+full logs/config/artifact-validation/hash recheck are in validation-stage5/.
+Image.gz-dtb: 9723199 bytes
+SHA256: 4a0c884bfd3c177da6311ecaa5e31ca467a2ca2abec88207901c9a86a91edb68
+
+New production-code tests exercise load aggregation, native resource lifetime,
+shared tuple ownership, physical transactions+PM+retirement/concurrency,
+MMC cache/IRQ/clock/PM/order and diagnostic delta controls. Selected ASan/UBSan
+runs pass (detect_leaks=0 because ptrace/LSan is unavailable; allocation/ref
+balance assertions remain). Clock faults reject19unsafe mutations; IRQ8,
+PM7, physical7, native8, plus adapter/source/DT/parser mutations.
+Models execute production C functions against explicit transport/MMIO/core
+boundaries; they neither emulate a phone nor establish real electrical safety.
+
+Compiler/linker warnings: 90 vs Stage4 97.
+Normalized added warnings: 0; removed: 7.
+The removed seven correspond to GNU-stack1, SLUB3, kstrtoul1, DHDVLA1 and
+minidump1. New power/clock integration objects had no compiler diagnostics.
+Remaining warnings are nonfatal for compilation, but include real legacy
+format/address/debug risks; they are not all declared harmless or repaired.
+See compiler-warnings.txt and warning comparison files. No warning option or
+host/DT validation was disabled. Independent dtc warnings total
+116 across four normal trees, recorded separately; these
+legacy format/unit-address warnings remain review items. Structural checks
+and matching old warnings do not establish correct runtime bindings.
+
+Four variants and model/Android limits
+-------------------------------------
+Original order: v3.0/PMI8994, v3.0/PMI8996, v3.1/PMI8994, v3.1/PMI8996.
+SoC246/board8; msm revisions0x30000/0x30001; PMIC0x20009 with0x2000a or
+0x10013. Real GPU7/8corner plans, BCL550000/0, flash6P7_US/27_US and IBB32
+remain. No model is mapped forcibly to a stepping, PMIC or LCD panel.
+F8131 Single SIM: common source/DT+tests only; no boot/radio runtime.
+F8132 DSDS: same, preserving host-local MicroSD/UIM2 controls; no tray,
+dual-SIM, voice/data/audio/runtime test. ss/dsds is not forced by the kernel.
+
+Binder/BinderFS/BPF/JIT/cgroups/PSI/SELinux/seccomp/fscrypt/filesystems,
+SquashFSxattrs/VFATNLS, ION/dma-buf and USB config/ABI checks pass. LOS21 and
+vendor runtime remain unverified. BPF program-side readonly/wronly map flags
+are not faked in UAPI; their implementation gap is still documented. Old
+bpfloader exit1/BoringSSLselfcheck/voldfailed cannot be called fixed without
+new binary/verifier/init/fs_mgr/crypto logs. No security check was disabled.
+The previous external permissive-cmdline patch remains UNAPPLIED; no device/
+vendor repository was changed. A real bootheader/cmdline/ramdisk/partition
+size/DTB-selection check is still required before producing a boot.img.
+
+Remaining P0/P1 and next concrete stage
+---------------------------------------
+- CPU hardware adapter/sharedS8-S11/CPR/SPM/ACD/thermal and suspend validation.
+- CCF orphaned-HIGH/clock-level recovery and real boot ownership measurement.
+- Full USB/DPDM/BC1.2/VBUS/ID and charging/FG/JEITA/thermal safety qualification;
+  charger DTdisabled does not prove firmware physically stopped charging.
+- Display/DSIPHY/incell/touch, GPU independentCX/MX/PMIS2/CPR/secureABI,
+  firmware/audio/modem/DSDS and vendor integration. Gates remain explicit.
+- On-phone eMMC enumeration/IRQ/DMA/tuning/GPT/by-name/data integrity,
+  existing-userdata encryption, cold/warm shutdown and suspend evidence.
+- Real Sony boot format/selection + LOS21 ramdisk/cmdline; full hardware P0s
+  prevent BOOT TEST READY. First finish the source CPU/power dependencies and
+  validate the real diagnostic boot chain with a controlled ramdisk/log plan.
+
+No firmware/userdata/modem/persist/TA write, format, flash or boot occurred.

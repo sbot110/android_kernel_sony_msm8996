@@ -1,0 +1,7 @@
+{
+  "path": "scripts/dora/check-rpm-physical.py",
+  "change": "remove extra blank line at EOF",
+  "ast_equal": true,
+  "built_script_sha256": "f622fa345f2b91684a5d64cdb099b2a8626dfbc23e96ccc3f44a6c0effb79521",
+  "final_script_sha256": "f43b41c1cc9470190248e4132ac3e56b02bde48edbea5af2eb50e4db02242a5f"
+}

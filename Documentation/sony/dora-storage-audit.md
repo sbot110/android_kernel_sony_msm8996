@@ -97,8 +97,10 @@ provider-specific UV/SWEN/load replay/ACK для BOTH sets. Explicit recovery
 разрешён только при наличии ранее подтверждённого полного baseline; неизвестная
 первая транзакция не восстанавливается предположением. Наличие этого API не
 снимает host-local quarantine автоматически и не доказывает напряжение на PMIC.
-SDHC1/2 пока safety-gated до проверки настоящего GCC CX coupling, включая
-родительский GPLL4, подготовку clocks, ACK и ошибки voltage transactions.
+Проверки исходной цепочки GCC CX/GPLL4, clock preparation, ACK/voltage
+errors и PM ordering завершены на этапе 5. Основные SDHC1/2 остаются gated
+до аппаратной проверки и подготовки полного boot chain; отдельные
+experimental SDHC1 DT описаны ниже.
 UFS остаётся отключённым независимо от этого. Не включается DVFS, четыре
 CPU или незавершённая зарядная цепочка ради обнаружения block device.
 
@@ -151,6 +153,9 @@ voltage/load/enable requests. Static system loads, дублирующие client
 `--reference-dir` и `--reference-commit`. Эти проверки не измеряют voltage,
 не подтверждают RPM firmware input handling и не выдают успешную компиляцию
 за обнаружение mmcblk0. Основные SDHC1/SDHC2 остаются `disabled`; UFS host
-и PHY также остаются отключёнными. Отдельный активный diagnostic DT требует
-дополнительной квалификации полного power/clock handoff и не создаётся
-только на основании наличия новых providers.
+и PHY также остаются отключёнными. Отдельные экспериментальные SDHC1 DT описаны в
+[dora-sdhc1-diagnostic.txt](dora-sdhc1-diagnostic.txt). Source qualification
+прошла после исправлений clock/IRQ/PM error chains; полный протокол —
+[dora-sdhc1-qualification.md](dora-sdhc1-qualification.md). Их компиляция
+и точный delta-контроль не подтверждают обнаружение eMMC или безопасность
+полного boot.img. Основные четыре DTB остаются без активации обоих SDHC.

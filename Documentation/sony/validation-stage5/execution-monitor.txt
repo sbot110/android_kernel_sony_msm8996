@@ -1,0 +1,6 @@
+The clean build.sh return code was captured as 0 by the shell if statement.
+Its final success message, all validation outputs and artifact hashes exist.
+The unified long-session monitor reported exit_code=1 after the outer wrapper
+printed exit=0. This monitoring discrepancy is retained here; it is not used
+as a kernel build return code. Independent linked-symbol/image/hash checks
+returned 0. The separate diagnostic pipeline and its monitor both returned0.

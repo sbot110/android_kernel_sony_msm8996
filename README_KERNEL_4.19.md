@@ -5,7 +5,29 @@
 Ни одна модель не загружалась с этим ядром. Точные проверенные SHA, результаты
 чистой сборки и ограничения: [отчёт](Documentation/sony/dora-build-validation.txt).
 
-## Изменения этапа 4
+## Изменения этапа 5
+
+Добавлен физический RPM backend для S4/L12/L13/L20/L21: UV, load и SWEN,
+ACTIVE/SLEEP ACK, известный baseline, sticky quarantine и отдельный replay.
+Общий registry исключает конкурирующих владельцев и сохраняет tombstone
+после попытки записи; reprobe не стирает неопределённость. Regulator core
+получил replay полного aggregate load, без подмены запросов потребителей.
+
+Оба SDHC требуют typed physical ACK. L12 clock consumer явно запрашивает
+исходные 1,8 В / временные 10 мА; cached enable не заменяет wire ACK.
+Исправлены неверный upstream input L20/L21→S5 и provider always-on S4;
+исходное делегирование input-зависимостей RPM проверяется по всем четырём
+итоговым Sony DT. [Контракты](Documentation/sony/dora-rpm-physical-binding.txt).
+
+Исправлены read-only CPU AUX observation, minidump segment accounting,
+неограниченный DHD VLA, SDHCI debug parser/PM errors и ARM32 stack metadata.
+CPU adapter, DVFS, дисплей и зарядка остаются отдельными незавершёнными
+цепочками. Добавлены отдельные experimental SDHC1 DT с отключённым SDHC2, вне
+основных четырёх DTB и Image.gz-dtb; [описание](Documentation/sony/dora-sdhc1-diagnostic.txt).
+Точные activation qualification и результаты сборки приведены
+в [отчёте](Documentation/sony/dora-build-validation.txt).
+
+## Сохранённые изменения этапа 4
 
 Внутренняя память Dora — **SDHC1 eMMC, `7464900.sdhci`**. Это подтверждают
 все четыре итоговых Sony DTB, early-mount fstab, pinned tone-common init и
@@ -68,9 +90,9 @@ PMIC, stepping или одной панели. Наличие четырёх FDT
 
 | Цепочка | Следующее обязательное действие |
 | --- | --- |
-| eMMC / physical RPM | Завершить подтверждённый replay UV/SWEN/load и SLEEP для физических rails; проверить integrated boot-clock handoff, затем отдельно снимать MMC gates. Нужны HS200/HS400/data-integrity, GPT/by-name и encrypted userdata tests без форматирования. |
+| eMMC / physical RPM | Physical UV/SWEN/load/BOTH replay реализован; source qualification отдельного experimental SDHC1 DT пройдена; проверить boot chain и аппаратные результаты до активации основного DTS. Нужны HS200/HS400/data-integrity, GPT/by-name и encrypted userdata tests без форматирования. |
 | CPU / CPR / SAW | Подключить qualified native APCC/CBF/ACD/CPR/SPM adapter к transaction engine, согласовать fuse/binning, S8–S11 ownership, thermal/hotplug/LPM; проверить на телефоне. |
-| MMCC / MDSS | Подтвердить physical L12/SLEEP recovery, DSI PHY analog ownership, incell/touch sequencing, затем отдельно активировать дисплей. |
+| MMCC / MDSS | Typed L12 replay реализован; квалифицировать clock-level recovery, DSI PHY analog ownership и incell/touch sequencing до активации дисплея. |
 | Adreno 530 | Завершить независимые CX/MX/PMI S2/CPR, SMMU и secure-buffer/firmware/vendor ABI dependencies. GPU отключён. |
 | Зарядка / USB | Настоящие DPDM/PHY ownership, BC1.2, VBUS, MicroUSB ID/ADC и safety paths. Фиктивного DPDM regulator нет. |
 | Android boot | Проверить настоящий boot header/cmdline/DTB selection/ramdisk и device/vendor ABI; LOS21 runtime не запускался. |
@@ -89,7 +111,7 @@ headers и Python 3. Указать новый пустой OUT_DIR:
 OUT_DIR="$PWD/out/dora-clean" JOBS=4 scripts/dora/build.sh
 ```
 
-Скрипт проверяет ветку, итоговую .config, выполняет все 32 check-*.py,
+Скрипт проверяет ветку, итоговую .config, выполняет все 44 check-*.py (включая исходные 32),
 собирает vmlinux, System.map, Image, Image.gz и четыре DTB. Проверяются
 ARM64/ELF/gzip, linked implementation symbols и точный порядок appended DTB;
 создаются Image.gz-dtb, toolchain.txt, config.log, build.log,

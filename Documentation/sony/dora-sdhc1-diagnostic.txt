@@ -1,6 +1,8 @@
 Experimental SDHC1-only Dora device trees
 
-Source-qualification: PENDING (root integration audit; no activation qualification).
+Source-qualification: PASS for separate experimental DT artifacts only.
+See dora-sdhc1-qualification.md and the final clean-build report.
+This is not BOOT TEST READY or runtime verification.
 
 The four qcom/diagnostic/*-sdhc1-diagnostic.dts files inherit the corresponding
 real normal DTS, including each SoC/PMIC variant override. Their only changes
@@ -39,5 +41,5 @@ documented property changes and records hashes with qualification=not_assessed.
 
 The optional build is never called by the default build. Its output must not
 be copied into the normal DTB directory or appended to the normal Image.gz-dtb.
-This file's qualification line and final source SHA/test evidence must be
-updated by the integrating owner after its independent final audit passes.
+The completed source qualification, validated source SHA and clean-build/DT
+evidence are recorded in dora-build-validation.txt and validation-stage5/.

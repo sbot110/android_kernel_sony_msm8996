@@ -1,0 +1,51 @@
+Stage 5 bounded warning fixes, branch kernel-4.19-701905467803253630
+Agent made no commits, branch changes, pushes or hardware operations.
+
+Owned source changes:
+- drivers/soc/qcom/peripheral-loader.c: decrement the invalid segment count,
+  append auxiliary packed segments cumulatively, unmap every sparse mapping.
+- drivers/net/wireless/bcmdhd/dhd_linux.c, dhd_iovar only: bounded 8192-byte
+  ioctl envelope, checked heap allocation, builder/ioctl cleanup, preserve GET
+  copyback and SET input, accept NULL zero-length data safely.
+- drivers/mmc/host/sdhci-msm.c, store_mask_and_match only: copy read-only
+  sysfs input; check all conversions; require four u32 values; reject shifts
+  >=32 and testbus>127 before PM/MMIO. Other host helpers are root-owned.
+- arch/arm64/kernel/vdso32/sigreturn.S: zero-size nonexecuting GNU-stack marker.
+- mm/slub.c, alloc_trace_locations only: match existing diagnostic types
+  (void * symbolic address, unsigned long count, unsigned int sizes).
+
+New actual-production host regression tests:
+- scripts/dora/check-minidump.py
+- scripts/dora/check-warning-inputs.py
+All original 32 check scripts were preserved by this agent.
+
+Validation:
+0: tone_dora_defconfig into /tmp/dora-stage5-warnfixes.
+2: first targeted make attempted unsupported direct vdso.so.raw target.
+0: corrected targeted cross-build with local toolchain env.sh, ARCH=arm64,
+   drivers/soc/qcom/peripheral-loader.o,
+   drivers/net/wireless/bcmdhd/dhd_linux.o,
+   drivers/mmc/host/sdhci-msm.o, mm/slub.o,
+   arch/arm64/kernel/vdso32/; zero compiler/linker warnings/errors.
+0: normal minidump host regression.
+0: ASan/UBSan minidump regression (ASAN_OPTIONS=detect_leaks=0).
+0: default UBSan DHD/parser host regression and --self-test mutations.
+0: ASan/UBSan DHD/parser regression and --self-test mutations
+   (ASAN_OPTIONS=detect_leaks=0, DORA_SANITIZERS=address,undefined).
+0: GNU-stack metadata, sigreturn code/unwind byte identity, complete vDSO32
+   dynsym/address and program-header identity versus stage4 clean baseline.
+0: git diff --check.
+
+Mutation sensitivity:
+- original minidump pointer decrement rejected at compile (unused-value).
+- noncumulative aux packing and stop-at-first-hole cleanup rejected by asserts.
+- ignored sysfs numeric failure, leaked DHD command buffer and VLA rejected.
+The minidump mutations were in-memory ephemeral tests by the test agent;
+the DHD/parser mutations are repeatable via --self-test.
+
+LeakSanitizer itself cannot operate under the environment ptrace; initial
+sanitizer attempts exit1 from this runtime restriction. Address/undefined
+sanitizers pass with leak scanning disabled; explicit allocation/free counts
+remain asserted by the DHD/parser test. No hardware behavior is established.
+Full integration build, firmware tables, WLAN, actual subsystem dumps and
+SDHCI runtime behavior remain root/device validation gates.

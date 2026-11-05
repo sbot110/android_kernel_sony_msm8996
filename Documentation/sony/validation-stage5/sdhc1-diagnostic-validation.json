@@ -1,0 +1,82 @@
+{
+  "qualification": "not_assessed",
+  "config_sha256": "881bcb0d1ca79e0c79c99166bbb07b1d4a7af4389229f366c5e5f2393a47806c",
+  "variants": [
+    {
+      "variant": "v3.0-pmi8994",
+      "normal_sha256": "f66e1fb68d187907333b109aba3b8af774ed6767baa2cb69972c5a05ec34fe32",
+      "diagnostic_sha256": "ab40706298d19c5393b613fa8efe634487df09b41be893bcb393e9ca5010cc0d",
+      "changed_properties": [
+        [
+          "/",
+          "model"
+        ],
+        [
+          "/",
+          "sony,sdhc1-diagnostic"
+        ],
+        [
+          "/soc/sdhci@7464900",
+          "status"
+        ]
+      ]
+    },
+    {
+      "variant": "v3.0-pmi8996",
+      "normal_sha256": "1553976b2dc4ce5347b5edffe7936ca114ce0ccd4e678e67c3eb0d090c50eed8",
+      "diagnostic_sha256": "9523f938b4adbc37d10dc4ead7a2d5cb64f618ad111e0251bc400ecb84b7b8c3",
+      "changed_properties": [
+        [
+          "/",
+          "model"
+        ],
+        [
+          "/",
+          "sony,sdhc1-diagnostic"
+        ],
+        [
+          "/soc/sdhci@7464900",
+          "status"
+        ]
+      ]
+    },
+    {
+      "variant": "v3.1-pmi8994",
+      "normal_sha256": "01fdf575318295597c67c0283311e83ba29028e009c2787ac74756a9d8e1b6ba",
+      "diagnostic_sha256": "4984fc9baaca136cdf2133e2e43a0e13a910487c54fb7cf7f92089e9ee183a4f",
+      "changed_properties": [
+        [
+          "/",
+          "model"
+        ],
+        [
+          "/",
+          "sony,sdhc1-diagnostic"
+        ],
+        [
+          "/soc/sdhci@7464900",
+          "status"
+        ]
+      ]
+    },
+    {
+      "variant": "v3.1-pmi8996",
+      "normal_sha256": "eb8f99e73725aa903e5e8928869d9dfae884135262b23c122f8c290ff5890b88",
+      "diagnostic_sha256": "3af380bd270fcd6e8b283dc377de79c4b0d367a61c6d288355d791a1cb7c21f1",
+      "changed_properties": [
+        [
+          "/",
+          "model"
+        ],
+        [
+          "/",
+          "sony,sdhc1-diagnostic"
+        ],
+        [
+          "/soc/sdhci@7464900",
+          "status"
+        ]
+      ]
+    }
+  ]
+}

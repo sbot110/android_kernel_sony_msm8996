@@ -1,0 +1,58 @@
+Stage 5 native module opt-in bank preflight followup
+
+Frozen files owned in this task:
+- drivers/regulator/qcom_smd-regulator.c: only rpm_reg_probe preflight added.
+  SHA256 ed34188850c376c4ced4581bae81cba7645c954d0175a6afcd2d48b5a7ac7851
+- scripts/dora/check-rpm-native.py: mixed-bank module ordering negatives and
+  preflight-removal regression added, previous callback/lifetime cases kept.
+  SHA256 c9f4e25db213bc56339649c208705a3e244e6918c44c7bed046611a9376ce369
+No commits, branch changes, existing warning/MMC fixes or source defconfig edits.
+
+Confirmed problem: module probe iterated/registers legacy children before
+encountering a later opt-in child and rejecting unsupported transactional mode.
+Legacy machine constraints can already send a vote during registration.
+Fix: scan every available child before RPM lookup/child initialization when
+CONFIG_REGULATOR_QCOM_SMD_RPM is not builtin. Any transactional opt-in returns
+-EINVAL and releases the current OF iterator node reference immediately.
+The existing per-child validation remains in place; legacy-only modules retain
+their original registration and constraint-vote path.
+
+Validation exits:
+0: builtin native object crosscompile (native-preflight-build.log), no warnings.
+0: actual module native object crosscompile (native-module-build.log), no
+   warnings; final temporary O=.config contains CONFIG_REGULATOR_QCOM_SMD_RPM=m
+   and build output is CC [M]. Source defconfig was not changed.
+0: python3 scripts/dora/check-rpm-native.py --self-test
+0: ASAN_OPTIONS=detect_leaks=0 DORA_SANITIZERS=address,undefined
+   python3 scripts/dora/check-rpm-native.py --self-test
+0: git diff --check.
+Detailed test logs: native-preflight-host.log and native-preflight-sanitized.log.
+
+New production-code cases exercise legacy->opt-in and opt-in->legacy child
+orders with registration-time voting enabled. Both reject with zero endpoint
+lookup, allocation, claim, legacy/physical publication, activation or transport,
+and one explicit OF node put. A legacy-only module still registers and sends
+the requested constraint vote. Removing only the probe preflight (leaving
+per-child opt-in rejection) is rejected by the new negative. All seven earlier
+selector/load/offline/final-rdev/parent-retention/lock mutations also reject;
+the last-consumer-vs-removal and blocked-write retirement cases still pass.
+
+Retained-parent/lifetime review boundaries:
+- Builtin supplied registrations intentionally remain inert after retirement;
+  immutable desc.supply_name covers unresolved and concurrently resolving
+  supplies, while preserved common tuple claims bound repeated reprobes.
+  The registry also compares stable OF endpoint paths and retains its RPM/OF
+  references, so a new transport generation cannot silently reset that guard.
+- Parentless callback storage remains tied to final rdev device release.
+- This is not a provider release/reset contract, a physical rail disable, or
+  proof that regulator-core supply preambles perform no upstream operations.
+- Pure legacy module RPMSG hotremove with surviving consumers is still outside
+  Dora's builtin qualification: core unregister can free an upstream supply
+  handle before a surviving child's next core supply preamble. Normal rmmod
+  module pinning does not establish safety for that separate hotremove path.
+  The opt-in preflight fixes partial mixed-bank publication, not this old core
+  module-removal boundary.
+- Failed native registration after upstream supply resolution remains the
+  existing opaque regulator-core failure-cleanup boundary. The harness executes
+  native production helpers but models these core APIs; it does not claim to
+  repair that core failure path, nor to validate firmware or real removal.

@@ -1,7 +1,7 @@
-# Dora Linux 4.19: блокеры после этапа 4
+# Dora Linux 4.19: блокеры после этапа 5
 
-Обновлено: 2026-11-03. Начальный HEAD этапа:
-`8d7ab8a3baeb73cfaea264f3f7758e32cffce097`.
+Обновлено: 2026-11-05. Начальный HEAD этапа:
+`03a3c224b84079db06a424e387e220b6eafc6cfa`.
 Эталон Sony 4.4.302: `0c295b15b6d0fb59a64e13b9e0ef2070818ef2a1`.
 
 Ни F8131, ни F8132 не загружались с этим ядром. Первая диагностическая
@@ -31,6 +31,26 @@ maxcpus=2 и выключенные CPU_FREQ/CPU_IDLE сохранены.
 1080p60, GPU/PMIC variant data и предыдущие BCMDHD WPA2/ION/USB/UFS fixes.
 Не включены AUO120, dynamic switching, GPU или незавершённая зарядка.
 
+Этап 5 добавляет физические S4/L12/L13/L20/L21 UV/MA/SWEN requests,
+полные ACTIVE/SLEEP ACK, typed readiness/sync, отдельное recovery известного
+baseline и bank-wide PM freeze/unfreeze. Unknown initial state не заменяется
+нулевым baseline. Общее владение tuple распространяется на native, corner и
+physical frontends; reprobe не снимает tombstone после попытки записи.
+Regulator core исполняет replay aggregate load под настоящим lock.
+
+Все четыре DT восстанавливают исходное RPM-managed input delegation.
+Неверная связь L20/L21 2,95 В с native S5 2,15 В удалена; другой VIN не
+угадывается. Provider always-on S4 удалён; исходная eMMC IO retention
+остаётся consumer policy. L12 явно получает 1,8 В / временные 10 мА и
+свежий BOTH ACK перед clock operation. Удаление proxy load требует
+завершённого CCF handoff и известного ownership, с восстановлением cached
+10 мА и quarantine при ошибке. Это протокол запросов, не измерение voltage.
+
+Read-only APCC теперь распознаёт исходный AUX mux 0x3c, ждёт GPLL0 provider
+и отвергает нестабильные/незалоченные PLL snapshots. Частоты и напряжения
+не программируются. Исправлены minidump count/aux offsets/cleanup, DHD VLA,
+SDHCI debug input/PM handling и ARM32 GNU-stack/SLUB varargs.
+
 ## Четыре варианта данных
 
 | SoC | PMIC | msm revision | pmic-id | GPU CPR corners | BCL derating | Flash ramp |
@@ -48,14 +68,14 @@ GPU floor/ceiling/fuse/aging/corner mapping и PMIC overrides сверены п�
 activation guards, не подтверждение runtime поддержки или выбора загрузчиком.
 F8131/F8132 не связаны жёстко с stepping, PMIC или панелью.
 
-## Нерешённые P0
+## Ограничения и нерешённые P0
 
 | Зависимость | Точная граница и следующее действие |
 | --- | --- |
-| eMMC / physical rails | `sdhci-msm.c` power_error и bus vote quarantine запрещают продолжение после uncertain ACK. `qcom_smd-regulator.c:rpm_reg_write_active` не даёт consumer API для полного UV/SWEN/load replay и SLEEP. Нужен настоящий provider contract, затем проверка интегрированной цепочки и снятие CX/SDHC gates. Cached rollback не является восстановлением PMIC. |
-| GCC/MMCC bootstrap | `clk-msm8996-voltage.h:msm8996_voltage_ownership` сохраняет HIGH, если работающий PLL/parent не имеет доказанного counted owner/rate. Нужно подтвердить реальный boot handoff и поведение late/deferred probe; не угадывать idle состояние. Typed CX frontend включён: активный GCC не должен ссылаться на disabled supply. |
+| eMMC / physical rails | `qcom-rpm-physical.c` реализует UV/MA/SWEN BOTH replay. `sdhci-msm.c` сохраняет host quarantine после uncertain ACK. Source qualification clock/IRQ/PM/shutdown завершена; добавлены отдельные experimental SDHC1 DT. Нужны аппаратные CID/GPT/by-name/HS200/HS400/data-integrity тесты и проверка полного boot chain. Основные SDHC отключены; cached rollback не измеряет PMIC. |
+| GCC/MMCC bootstrap | `clk-msm8996-voltage.h:msm8996_voltage_ownership` сохраняет HIGH, если работающий PLL/parent не имеет доказанного counted owner/rate. Нужно подтвердить реальный boot handoff; partial-registration unwind с held HIGH помечает class orphaned и блокирует повторную регистрацию. Для reattach требуется отдельный qualified same-owner протокол; автоматическое снятие quarantine не добавлено. Typed CX frontend включён: активный GCC не должен ссылаться на disabled supply. |
 | CPU DVFS / четыре CPU | `clk-cpu-8996.c` остаётся observational provider. Новый `clk-msm8996-cpu-transaction.c` не имеет MMIO/CPR/SPM adapter. Нужны native ACD/CBF/PLL callbacks, fuse/binning, S8–S11/SPM ownership, HMSS/Kryo/APM и thermal/hotplug/LPM. |
-| MDSS / MMCC analog | `msm8996_voltage_apply` permanently quarantines uncertain L12 operation: digital ACK не подтверждает physical SWEN. Нужны L12/SLEEP replay, DSI PHY analog/panel/incell ownership, затем display activation и реальные измерения. |
+| MDSS / MMCC analog | `msm8996_voltage_apply` получает typed L12 BOTH ACK и quarantines uncertain operation. Отдельный backend baseline recovery не восстанавливает clock ownership/counts. Нужны qualified clock-level recovery, DSI PHY analog/panel/incell ownership и реальные измерения до display activation. |
 | GPU Adreno 530 | Gated child provider/MMSS CPR/PMI S2, независимый MX и CX, retention/SMMU/secure firmware и userspace ABI остаются неполными. Нельзя применять SDM845 планы. |
 | USB / зарядка | Не завершены DPDM/PHY ownership, BC1.2/VBUS, MicroUSB ID/ADC и SMBcharger safety paths. Нет fake fixed DPDM; JEITA/thermal/current protections не отключены. |
 | Android boot | Не предоставлены фактический рабочий boot.img, LOS21 ramdisk и новые runtime логи. Требуются boot header/partition size/cmdline/DTB-selection/vendor checks. Сохранённая DT bootargs сама не доказывает итоговую cmdline загрузчика. |
@@ -67,7 +87,7 @@ Generic UFS host/PHY recovery остаётся отдельной задачей
 
 ## Независимые проверки и физические пределы
 
-32 check-*.py включены в build.sh; сохранены исходные 20 проверок. Новые
+Все check-*.py включены в build.sh; исходные 32 проверки сохранены. Точное число и результаты — в протоколе сборки. Новые
 тесты выполняют MMC alias/UIM2/provider/power helpers, physical/cache ACK
 расхождения, RPM corner aggregation/rollback/lifetime/concurrency, CCF
 transactions, CPU transaction engine и реальные Android ABI/filesystem
@@ -83,3 +103,5 @@ owners, неверные supplies/endpoint/corners и обход maxcpus.
 SMBcharger не привязан в DT. Это не доказывает, что загрузчик прекратил
 физическую зарядку: исходное PMIC состояние и токи не измерены. Разделы
 userdata/modem/TA/persist не менялись; прошивки и форматирования не было.
+
+SDHC1 source qualification и точные error/PM зависимости: [протокол](dora-sdhc1-qualification.md). Экспериментальные DT не входят в основной Image.gz-dtb и не создают boot.img. При host fault SDCLK останавливается, неопределённые rail votes удерживаются; это не доказательство физического выключения питания.

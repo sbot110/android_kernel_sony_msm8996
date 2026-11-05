@@ -1,7 +1,7 @@
 # Dora F8131/F8132 — матрица совместимости Linux 4.19
 
-Обновлено: 2026-11-03. Этап 4 начат от
-`8d7ab8a3baeb73cfaea264f3f7758e32cffce097`.
+Обновлено: 2026-11-05. Этап 5 начат от
+`03a3c224b84079db06a424e387e220b6eafc6cfa`.
 Точные проверенные SHA и результат чистой сборки:
 [протокол](dora-build-validation.txt). BOOT TEST READY: **NO**;
 RUNTIME VERIFIED: **NO** для обеих моделей.
@@ -52,9 +52,9 @@ PMIC, stepping или панель.** Подробнее: [GPU/варианты]
 
 | Подсистема | F8131 | F8132 | Подтверждённое состояние и следующий blocker |
 | --- | --- | --- | --- |
-| SDHC1 eMMC / SDHC2 | Hardware/driver tests; gated | То же + host-local hybrid UIM2 | Internal 7464900.sdhci, removable 74a4900.sdhci; реальные clocks/rails/pads/vectors. Требуются physical RPM replay/SLEEP и gated activation, GPT/HS400/encryption tests. UFS host/PHY отключены. |
+| SDHC1 eMMC / SDHC2 | Hardware/driver tests; gated | То же + host-local hybrid UIM2 | Internal 7464900.sdhci, removable 74a4900.sdhci; реальные clocks/rails/pads/vectors. Typed physical UV/load/SWEN/BOTH replay добавлен; gated activation, GPT/HS400/encryption tests не подтверждены. UFS host/PHY отключены. |
 | CPU / CBF / CPR / SAW | Read-only provider; transaction engine tests | То же | ACD/lease/PLL engine добавлен, MMIO/CPR/SPM adapter не подключён; S8–S11 native RPM owners исключены. maxcpus=2, cpufreq/cpuidle выключены. |
-| MDSS / DSI / все 5 панелей | Граф/данные; gated | То же | MMCC fmax/CX contract добавлен; physical L12/SLEEP/recovery и incell ownership требуют завершения до activation. |
+| MDSS / DSI / все 5 панелей | Граф/данные; gated | То же | MMCC fmax/CX contract добавлен; Typed L12 BOTH replay добавлен; clock-level recovery, DSI PHY и incell ownership требуют квалификации до activation. |
 | Adreno 530 / KGSL | Данные/child clocks; отключено | То же | Реальные variant CPR/fuse/frequency планы и исправлен provider cycle. Нет полного CX/MX/PMI S2/retention/SMMU/secure ABI контракта. |
 | BCM4359 C0 | Код/PCIe DT; runtime нет | То же | Sony BCMDHD и WPA2/AKM/cipher fixes сохранены. Нужны link training, DMA/IOMMU, firmware/NVRAM, CCMP/reconnect/suspend/wakeup. |
 | Clearpad / incell | Код; нет полной touch DT связи | То же | Sony MDSS/incell API есть; I2C12/controller/питание и согласование с panel sequencing ещё не завершены. |
@@ -103,7 +103,7 @@ pclk=149506560; escclk=19200000
 
 ## Android 14 и границы ABI
 
-Проверка итоговой `.config` охватывает 290 явных назначений и 114
+Проверка итоговой `.config` охватывает 291 явное назначение и 116
 обязательных built-in, включая Binder/BinderFS, BPF/JIT/cgroup BPF,
 PSI/cgroups, SELinux, seccomp, namespaces, memfd/ashmem, fscrypt,
 ext4/F2FS, dm-verity/FEC, loop, OverlayFS, ION/dma-buf/fences и USB gadget.
@@ -118,8 +118,8 @@ binary/verifier/init/fs_mgr/crypto логи нового ядра. Механи�
 
 ## Условия следующего этапа
 
-Сначала завершить physical RPM UV/SWEN/load/SLEEP replay и аппаратный
-CPU adapter, проверить интегрированный boot clock handoff; затем отдельно
+Physical RPM UV/SWEN/load/SLEEP replay добавлен. Следует завершить аппаратный
+CPU adapter и проверить интегрированный boot clock handoff; затем отдельно
 снимать соответствующие safety gates и повторять все проверки. Logical RPM
 corner frontend и GCC/MMCC fmax contracts уже реализованы и тестируются.
 Boot format/ramdisk/DTB selection проверяются по настоящим образам, без
@@ -134,3 +134,5 @@ persist, modem или userdata на этом этапе не выполняло�
 SMBcharger не привязан в DT. Это не доказывает, что загрузчик остановил
 физическую зарядку: исходное состояние PMIC и реальные токи не измерялись.
 Безопасная зарядка и обычное использование не подтверждены.
+
+Этап 5: software qualification цепочки SDHC1 завершена, отдельно собраны четыре experimental SDHC1-only DTB вне основного образа. Основные оба SDHC остаются отключены. Physical RPM backend охватывает S4/L12/L13/L20/L21; его ACK/replay не измеряет напряжение и не снимает host/clock quarantine. Полный протокол и SHA: [dora-build-validation.txt](dora-build-validation.txt).

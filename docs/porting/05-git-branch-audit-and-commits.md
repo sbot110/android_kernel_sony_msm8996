@@ -20,12 +20,16 @@
 ## 2. Линейная история коммитов в ветке `kernel-5.5`
 
 ```text
-<HEAD>    docs: porting: add full 5.15.220 build verification (09) and update Stage B/F audit reports (05,07,08,10)
+<HEAD-G1> docs: porting: update boot checklist (13) and document Stage G.1 fixes (14), build verification (15) and safety audit (16)
+<G1-KRN>  kernel: dora: fix Fuel Gauge charge state, SRAM boundary reads, wake IRQ lifecycle, Kryo clock error handling and Wi-Fi reprobe
+d6368815b docs: porting: document Stage G power audit (11), LineageOS 21 compatibility (12) and first boot readiness (13)
+a49663785 kernel: dora: fix P0 regulator mapping, Kryo OPP/ACD init, SPMI battery telemetry and LineageOS 21 HAL contracts
+470fdeebc docs: porting: add full 5.15.220 build verification (09) and update Stage B/F audit reports (05,07,08,10)
 e0510458c kernel: dora: fix retail earlycon SError, rmi_i2c double wake IRQ, FPC1145 standby power and capless USB/UIM2 pinconf
 a87c4bc73 kernel: dora: fix FPC1145 Sony 0x45 ABI, Sharp SLEEP_OUT, sdhc1 BCR, WLED CABC, CPUFREQ_DT and brcmfmac HAL paths
 f7d2d7afc docs: porting: document P0 kernel audit fixes, initrd/PSI/THIS_MODULE and updated artifacts
 c47e99b8d kernel: dora: fix built-in THIS_MODULE deref, initrd XZ, PSI, rmi4 wakeup and brcmfmac paths
-54f7a7200 docs: porting: add Sony Dora F8131/F8132 Linux 5.15 porting, WSL build and Git audit reports  [origin/kernel-5.5]
+54f7a7200 docs: porting: add Sony Dora F8131/F8132 Linux 5.15 porting, WSL build and Git audit reports
 be3e328ff build: dora: fix -Werror comment globs, build-in wireless/NFC/Venus and add S1 build script
 c8aa1039f arm64: configs: add dora_defconfig for LineageOS 21/22 (Android 14/15)
 9e1713fb0 platform: somc: dora: port peripherals, F8132 hybrid UIM2/SD, FPC1145, Wi-Fi/BT/NFC/Audio

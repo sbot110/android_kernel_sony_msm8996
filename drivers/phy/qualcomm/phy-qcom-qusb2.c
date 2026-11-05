@@ -414,6 +414,7 @@ struct override_params {
  * @ref_clk: phy reference clock
  * @iface_clk: phy interface clock
  * @phy_reset: phy reset control
+ * @vdd: optional core digital supply (e.g. pm8994_l28 0.925V on MSM8996)
  * @vregs: regulator supplies bulk data
  *
  * @tcsr: TCSR syscon register map
@@ -434,6 +435,7 @@ struct qusb2_phy {
 	struct clk *ref_clk;
 	struct clk *iface_clk;
 	struct reset_control *phy_reset;
+	struct regulator *vdd;
 	struct regulator_bulk_data vregs[QUSB2_NUM_VREGS];
 
 	struct regmap *tcsr;
@@ -733,10 +735,19 @@ static int qusb2_phy_init(struct phy *phy)
 
 	dev_vdbg(&phy->dev, "%s(): Initializing QUSB2 phy\n", __func__);
 
-	/* turn on regulator supplies */
+	/* turn on optional core vdd supply and bulk supplies */
+	if (qphy->vdd) {
+		ret = regulator_enable(qphy->vdd);
+		if (ret)
+			return ret;
+	}
+
 	ret = regulator_bulk_enable(ARRAY_SIZE(qphy->vregs), qphy->vregs);
-	if (ret)
+	if (ret) {
+		if (qphy->vdd)
+			regulator_disable(qphy->vdd);
 		return ret;
+	}
 
 	ret = clk_prepare_enable(qphy->iface_clk);
 	if (ret) {
@@ -870,6 +881,8 @@ disable_iface_clk:
 	clk_disable_unprepare(qphy->iface_clk);
 poweroff_phy:
 	regulator_bulk_disable(ARRAY_SIZE(qphy->vregs), qphy->vregs);
+	if (qphy->vdd)
+		regulator_disable(qphy->vdd);
 
 	return ret;
 }
@@ -891,6 +904,8 @@ static int qusb2_phy_exit(struct phy *phy)
 	clk_disable_unprepare(qphy->iface_clk);
 
 	regulator_bulk_disable(ARRAY_SIZE(qphy->vregs), qphy->vregs);
+	if (qphy->vdd)
+		regulator_disable(qphy->vdd);
 
 	qphy->phy_initialized = false;
 
@@ -990,6 +1005,14 @@ static int qusb2_phy_probe(struct platform_device *pdev)
 	if (IS_ERR(qphy->phy_reset)) {
 		dev_err(dev, "failed to get phy core reset\n");
 		return PTR_ERR(qphy->phy_reset);
+	}
+
+	qphy->vdd = devm_regulator_get_optional(dev, "vdd");
+	if (IS_ERR(qphy->vdd)) {
+		ret = PTR_ERR(qphy->vdd);
+		if (ret != -ENODEV)
+			return dev_err_probe(dev, ret, "failed to get optional vdd supply\n");
+		qphy->vdd = NULL;
 	}
 
 	num = ARRAY_SIZE(qphy->vregs);

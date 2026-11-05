@@ -849,4 +849,14 @@ config CHARGER_SURFACE
 	  Microsoft Surface devices, i.e. Surface Pro 7, Surface Laptop 3,
 	  Surface Book 3, and Surface Laptop Go.
 
+config CHARGER_QCOM_PMI8994
+	tristate "Qualcomm PMI8994/PMI8996 SMBCHG and Fuel Gauge telemetry driver"
+	depends on MFD_SPMI_PMIC || COMPILE_TEST
+	depends on REGMAP
+	help
+	  Say Y or M here to enable real SPMI hardware battery, fuel gauge SRAM
+	  (RIF/IMA), JEITA health, and USB charger telemetry on Qualcomm PMI8994
+	  and PMI8996 PMICs (such as Sony Xperia X Performance / MSM8996) while
+	  preserving hardware/bootloader charging safety limits.
+
 endif # POWER_SUPPLY

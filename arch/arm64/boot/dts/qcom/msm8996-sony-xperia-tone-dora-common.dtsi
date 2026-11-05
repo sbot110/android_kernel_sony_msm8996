@@ -143,20 +143,6 @@
 		enable-gpios = <&pmi8994_gpios 1 GPIO_ACTIVE_HIGH>;
 	};
 
-	/* FPC1145 / FPC1020 side-button fingerprint sensor (SPI0 owned by QSEE TZ) */
-	fpc1145 {
-		compatible = "fpc,fpc1145", "fpc,fpc1020";
-		pinctrl-names = "default";
-		pinctrl-0 = <&fpc_rst_default &fpc_irq_default>;
-		reset-gpios = <&tlmm 21 GPIO_ACTIVE_LOW>;
-		irq-gpios = <&tlmm 132 GPIO_ACTIVE_HIGH>;
-		vcc_spi-supply = <&pm8994_s4>;
-		vdd_ana-supply = <&pm8994_l18>;
-		vdd_io-supply = <&pm8994_l18>;
-		wakeup-source;
-		status = "okay";
-	};
-
 	/* Sony Dora platform bridge: SIM1 detect, remoteproc boot & Clearpad wakeup */
 	somc_dora_platform: somc-dora-platform {
 		compatible = "somc,dora-platform";
@@ -168,6 +154,33 @@
 		somc,touch-i2c = <&clearpad_ts>;
 		status = "okay";
 	};
+};
+
+/*
+ * Instantiate FPC1145 under &soc so LineageOS 21 init.qcom.rc & fingerprint HAL
+ * find /sys/devices/platform/soc/fpc1145_device/{irq,wakeup_enable,clk_enable,spi_prepare}.
+ */
+&soc {
+	fpc1145_device {
+		compatible = "fpc,fpc1145", "fpc,fpc1020";
+		pinctrl-names = "default";
+		pinctrl-0 = <&fpc_rst_default &fpc_irq_default>;
+		reset-gpios = <&tlmm 21 GPIO_ACTIVE_LOW>;
+		irq-gpios = <&tlmm 132 GPIO_ACTIVE_HIGH>;
+		vcc_spi-supply = <&pm8994_s4>;
+		vdd_ana-supply = <&pm8994_l18>;
+		vdd_io-supply = <&pm8994_l18>;
+		wakeup-source;
+		status = "okay";
+	};
+};
+
+/* Real PMI8994 / PMI8996 SMBCHG + FG telemetry for Sony Dora LIP1621ERPC (2700 mAh, 4.35 V) */
+&pmi8994_fg_chg {
+	status = "okay";
+	qcom,design-capacity-uah = <2700000>;
+	qcom,design-vmax-uv = <4350000>;
+	qcom,design-vmin-uv = <3400000>;
 };
 
 /*
@@ -578,7 +591,7 @@
 
 	zap-shader {
 		memory-region = <&zap_shader_region>;
-		firmware-name = "qcom/msm8996/a530_zap.mdt";
+		firmware-name = "a530_zap.mdt";
 	};
 };
 

@@ -30,5 +30,6 @@ bool mmc_can_gpio_ro(struct mmc_host *host);
 int mmc_gpiod_request_uim2(struct mmc_host *host);
 void mmc_gpio_set_uim2_en(struct mmc_host *host, int val);
 void mmc_gpio_tray_close_set_uim2(struct mmc_host *host, int val);
+int mmc_uim2_slot_get_state(int *tray_closed, int *uim2_mux_en);
 
 #endif

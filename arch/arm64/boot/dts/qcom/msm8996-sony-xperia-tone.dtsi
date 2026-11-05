@@ -184,6 +184,7 @@
 &hsusb_phy1 {
 	status = "okay";
 
+	vdd-supply = <&pm8994_l28>;
 	vdda-pll-supply = <&pm8994_l12>;
 	vdda-phy-dpdm-supply = <&pm8994_l24>;
 };
@@ -195,7 +196,7 @@
 &pcie0 {
 	status = "okay";
 	perst-gpio = <&tlmm 35 GPIO_ACTIVE_LOW>;
-	wake-gpio = <&tlmm 37 GPIO_ACTIVE_HIGH>;
+	wake-gpio = <&tlmm 37 GPIO_ACTIVE_LOW>;
 	vddpe-3v3-supply = <&wlan_en>;
 	vdda-supply = <&pm8994_l28>;
 };
@@ -589,8 +590,32 @@
 	};
 };
 
-&pmi8994_spmi_regulators {
+&pm8994_spmi_regulators {
 	qcom,saw-reg = <&saw3>;
+	vdd_s9-supply = <&vph_pwr>;
+	vdd_s10-supply = <&vph_pwr>;
+	vdd_s11-supply = <&vph_pwr>;
+
+	pm8994_s9: s9 {
+		qcom,saw-slave;
+	};
+
+	pm8994_s10: s10 {
+		qcom,saw-slave;
+	};
+
+	vdd_apcc:
+	pm8994_s11: s11 {
+		qcom,saw-leader;
+		regulator-name = "vdd_apcc";
+		regulator-always-on;
+		regulator-min-microvolt = <470000>;
+		regulator-max-microvolt = <1140000>;
+	};
+};
+
+&pmi8994_spmi_regulators {
+	vdd_s2-supply = <&vph_pwr>;
 
 	vdd_gfx:
 	pmi8994_s2: s2 {
@@ -599,21 +624,6 @@
 		regulator-max-microvolt = <1015000>;
 		regulator-name = "vdd_gfx";
 		regulator-always-on;
-	};
-
-	pmi8994_s9: s9 {
-		qcom,saw-slave;
-	};
-
-	pmi8994_s10: s10 {
-		qcom,saw-slave;
-	};
-
-	pmi8994_s11: s11 {
-		qcom,saw-leader;
-		regulator-always-on;
-		regulator-min-microvolt = <470000>;
-		regulator-max-microvolt = <1140000>;
 	};
 };
 
@@ -907,7 +917,7 @@
 		function = "gpio";
 		drive-strength = <2>;
 		bias-pull-down;
-		input-high;
+		input-enable;
 	};
 
 	wl_reg_on: wl-reg-on {

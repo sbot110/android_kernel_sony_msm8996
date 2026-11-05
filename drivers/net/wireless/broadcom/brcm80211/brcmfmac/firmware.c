@@ -617,6 +617,7 @@ static char *brcm_alt_fw_path(const char *path, const char *board_type)
 #if IS_ENABLED(CONFIG_SOMC_DORA_PLATFORM)
 extern void somc_dora_get_bcmdhd_fw_path(char *buf, size_t len);
 extern void somc_dora_get_bcmdhd_nvram_path(char *buf, size_t len);
+extern int somc_dora_get_bcmdhd_op_mode(void);
 
 /*
  * Strip Android /vendor or /oem firmware root prefixes so request_firmware_direct()
@@ -660,25 +661,36 @@ static const char *brcmf_sony_rel_fw_path(const char *raw, char *buf, size_t len
 static int brcmf_fw_request_sony_binary(const struct firmware **fw,
 					struct device *dev)
 {
+	const char *default_bin = "wlan/bcmdhd/fw_bcmdhd.bin";
 	int ret = -ENOENT;
 
+	*fw = NULL;
 #if IS_ENABLED(CONFIG_SOMC_DORA_PLATFORM)
 	{
 		char raw_path[256];
 		char rel_path[256];
 		const char *cand;
+		int op_mode = somc_dora_get_bcmdhd_op_mode();
+
+		/* SoftAP / HostAPD op_mode bit 1 selects fw_bcmdhd_apsta.bin */
+		if (op_mode & 0x02)
+			default_bin = "wlan/bcmdhd/fw_bcmdhd_apsta.bin";
 
 		somc_dora_get_bcmdhd_fw_path(raw_path, sizeof(raw_path));
 		cand = brcmf_sony_rel_fw_path(raw_path, rel_path, sizeof(rel_path));
 		if (cand) {
+			if ((op_mode & 0x02) &&
+			    !strcmp(cand, "wlan/bcmdhd/fw_bcmdhd.bin"))
+				cand = default_bin;
 			ret = request_firmware_direct(fw, cand, dev);
 			if (ret == 0)
 				return 0;
+			*fw = NULL;
 		}
 	}
 #endif
 
-	return request_firmware_direct(fw, "wlan/bcmdhd/fw_bcmdhd.bin", dev);
+	return request_firmware_direct(fw, default_bin, dev);
 }
 
 static int brcmf_fw_request_sony_nvram(const struct firmware **fw,
@@ -691,6 +703,8 @@ static int brcmf_fw_request_sony_nvram(const struct firmware **fw,
 	};
 	size_t i;
 	int ret = -ENOENT;
+
+	*fw = NULL;
 
 #if IS_ENABLED(CONFIG_SOMC_DORA_PLATFORM)
 	{
@@ -719,6 +733,8 @@ static int brcmf_fw_request_firmware(const struct firmware **fw,
 {
 	struct brcmf_fw_item *cur = &fwctx->req->items[fwctx->curpos];
 	int ret;
+
+	*fw = NULL;
 
 	/* Files can be board-specific, first try a board-specific path */
 	if (cur->type == BRCMF_FW_TYPE_NVRAM && fwctx->req->board_type) {
@@ -766,6 +782,7 @@ static void brcmf_fw_request_done(const struct firmware *fw, void *ctx)
 	ret = brcmf_fw_complete_request(fw, fwctx);
 
 	while (ret == 0 && ++fwctx->curpos < fwctx->req->n_items) {
+		fw = NULL;
 		brcmf_fw_request_firmware(&fw, fwctx);
 		ret = brcmf_fw_complete_request(fw, ctx);
 	}

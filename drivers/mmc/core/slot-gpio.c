@@ -12,6 +12,7 @@
 #include <linux/mmc/host.h>
 #include <linux/mmc/slot-gpio.h>
 #include <linux/module.h>
+#include <linux/mutex.h>
 #include <linux/slab.h>
 
 #include <trace/hooks/mmc.h>
@@ -289,10 +290,24 @@ EXPORT_SYMBOL(mmc_can_gpio_ro);
  * Keep UIM2_DET_EN (GPIO 29) low during SD probe or tray eject; assert high
  * only when tray is closed (CD active) and no MicroSD card responds.
  */
+static DEFINE_MUTEX(mmc_uim2_host_lock);
+static struct mmc_host *mmc_uim2_registered_host;
+
+static void mmc_uim2_unregister_host(void *data)
+{
+	struct mmc_host *host = data;
+
+	mutex_lock(&mmc_uim2_host_lock);
+	if (mmc_uim2_registered_host == host)
+		mmc_uim2_registered_host = NULL;
+	mutex_unlock(&mmc_uim2_host_lock);
+}
+
 int mmc_gpiod_request_uim2(struct mmc_host *host)
 {
 	struct mmc_gpio *ctx = host->slot.handler_priv;
 	struct gpio_desc *desc;
+	int ret;
 
 	if (!ctx)
 		return -EINVAL;
@@ -302,9 +317,50 @@ int mmc_gpiod_request_uim2(struct mmc_host *host)
 		return PTR_ERR(desc);
 
 	ctx->uim2_gpio = desc;
+	if (desc) {
+		mutex_lock(&mmc_uim2_host_lock);
+		mmc_uim2_registered_host = host;
+		mutex_unlock(&mmc_uim2_host_lock);
+
+		ret = devm_add_action_or_reset(host->parent,
+					       mmc_uim2_unregister_host, host);
+		if (ret)
+			return ret;
+	}
 	return 0;
 }
 EXPORT_SYMBOL(mmc_gpiod_request_uim2);
+
+int mmc_uim2_slot_get_state(int *tray_closed, int *uim2_mux_en)
+{
+	struct mmc_host *host;
+	struct mmc_gpio *ctx;
+	int cd_val, uim2_val;
+
+	mutex_lock(&mmc_uim2_host_lock);
+	host = mmc_uim2_registered_host;
+	if (!host || !host->slot.handler_priv) {
+		mutex_unlock(&mmc_uim2_host_lock);
+		return -ENODEV;
+	}
+	ctx = host->slot.handler_priv;
+	if (!ctx->uim2_gpio) {
+		mutex_unlock(&mmc_uim2_host_lock);
+		return -ENODEV;
+	}
+
+	cd_val = mmc_gpio_get_cd(host);
+	uim2_val = gpiod_get_value_cansleep(ctx->uim2_gpio);
+	mutex_unlock(&mmc_uim2_host_lock);
+
+	if (tray_closed)
+		*tray_closed = (cd_val >= 0) ? cd_val : -1;
+	if (uim2_mux_en)
+		*uim2_mux_en = (uim2_val >= 0) ? uim2_val : -1;
+
+	return 0;
+}
+EXPORT_SYMBOL_GPL(mmc_uim2_slot_get_state);
 
 void mmc_gpio_set_uim2_en(struct mmc_host *host, int val)
 {

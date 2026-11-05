@@ -32,11 +32,13 @@
 #include <linux/kernel.h>
 #include <linux/kobject.h>
 #include <linux/miscdevice.h>
+#include <linux/mmc/slot-gpio.h>
 #include <linux/module.h>
 #include <linux/moduleparam.h>
 #include <linux/mutex.h>
 #include <linux/of.h>
 #include <linux/of_device.h>
+#include <linux/pci.h>
 #include <linux/platform_device.h>
 #include <linux/pm_wakeup.h>
 #include <linux/poll.h>
@@ -48,6 +50,7 @@
 #include <linux/sysfs.h>
 #include <linux/uaccess.h>
 #include <linux/wait.h>
+#include <linux/workqueue.h>
 
 #undef MODULE_PARAM_PREFIX
 #define MODULE_PARAM_PREFIX "bcmdhd."
@@ -97,12 +100,66 @@ static DEFINE_SPINLOCK(bcmdhd_param_lock);
 static char bcmdhd_fw_path[256] = "/vendor/etc/firmware/wlan/bcmdhd/fw_bcmdhd.bin";
 static char bcmdhd_nvram_path[256] = "/vendor/etc/wifi/bcmdhd.cal";
 static int bcmdhd_op_mode;
+static atomic_t bcmdhd_force_rebind = ATOMIC_INIT(0);
+
+static bool somc_dora_is_bcm4359_pci(struct pci_dev *pdev)
+{
+	if (pdev->vendor != 0x14e4)
+		return false;
+
+	switch (pdev->device) {
+	case 0x4415:
+	case 0x4416:
+	case 0x4417:
+	case 0x43ef:
+	case 4359:
+		return true;
+	default:
+		return false;
+	}
+}
+
+static int somc_dora_wifi_pci_iter(struct device *dev, void *data)
+{
+	struct pci_dev *pdev = to_pci_dev(dev);
+	bool force_rebind = *(bool *)data;
+	int ret;
+
+	if (!somc_dora_is_bcm4359_pci(pdev))
+		return 0;
+
+	if (!dev->driver) {
+		ret = device_attach(dev);
+		if (ret < 0)
+			dev_dbg(dev, "deferred brcmfmac attach failed: %d\n", ret);
+	} else if (force_rebind && !strcmp(dev->driver->name, "brcmfmac")) {
+		ret = device_reprobe(dev);
+		if (ret < 0)
+			dev_warn(dev, "brcmfmac op_mode reprobe failed: %d\n", ret);
+	}
+
+	return 0;
+}
+
+static void somc_dora_wifi_reprobe_work_fn(struct work_struct *work)
+{
+	bool force_rebind = atomic_xchg(&bcmdhd_force_rebind, 0) != 0;
+
+#if IS_ENABLED(CONFIG_PCI)
+	bus_for_each_dev(&pci_bus_type, NULL, &force_rebind,
+			 somc_dora_wifi_pci_iter);
+#endif
+}
+
+static DECLARE_DELAYED_WORK(somc_dora_wifi_reprobe_work,
+			    somc_dora_wifi_reprobe_work_fn);
 
 static int bcmdhd_path_param_set(const char *val, const struct kernel_param *kp)
 {
 	char *dst = kp->arg;
 	unsigned long flags;
 	size_t len;
+	bool changed;
 
 	if (!val)
 		return -EINVAL;
@@ -112,9 +169,18 @@ static int bcmdhd_path_param_set(const char *val, const struct kernel_param *kp)
 		return -ENOSPC;
 
 	spin_lock_irqsave(&bcmdhd_param_lock, flags);
+	changed = (strncmp(dst, val, len) != 0 || dst[len] != '\0');
 	memcpy(dst, val, len);
 	dst[len] = '\0';
 	spin_unlock_irqrestore(&bcmdhd_param_lock, flags);
+
+	if (dst == bcmdhd_fw_path) {
+		if (changed)
+			atomic_set(&bcmdhd_force_rebind, 1);
+		mod_delayed_work(system_wq, &somc_dora_wifi_reprobe_work,
+				 msecs_to_jiffies(50));
+	}
+
 	return 0;
 }
 
@@ -135,9 +201,49 @@ static const struct kernel_param_ops bcmdhd_path_param_ops = {
 	.get = bcmdhd_path_param_get,
 };
 
+static int bcmdhd_op_mode_param_set(const char *val,
+				    const struct kernel_param *kp)
+{
+	int new_mode, old_mode;
+	unsigned long flags;
+	int ret;
+
+	ret = kstrtoint(val, 0, &new_mode);
+	if (ret)
+		return ret;
+
+	spin_lock_irqsave(&bcmdhd_param_lock, flags);
+	old_mode = bcmdhd_op_mode;
+	bcmdhd_op_mode = new_mode;
+	spin_unlock_irqrestore(&bcmdhd_param_lock, flags);
+
+	if (old_mode != new_mode)
+		atomic_set(&bcmdhd_force_rebind, 1);
+	mod_delayed_work(system_wq, &somc_dora_wifi_reprobe_work,
+			 msecs_to_jiffies(50));
+	return 0;
+}
+
+static int bcmdhd_op_mode_param_get(char *buffer,
+				    const struct kernel_param *kp)
+{
+	unsigned long flags;
+	int mode;
+
+	spin_lock_irqsave(&bcmdhd_param_lock, flags);
+	mode = bcmdhd_op_mode;
+	spin_unlock_irqrestore(&bcmdhd_param_lock, flags);
+	return scnprintf(buffer, PAGE_SIZE, "%d\n", mode);
+}
+
+static const struct kernel_param_ops bcmdhd_op_mode_param_ops = {
+	.set = bcmdhd_op_mode_param_set,
+	.get = bcmdhd_op_mode_param_get,
+};
+
 module_param_cb(firmware_path, &bcmdhd_path_param_ops, bcmdhd_fw_path, 0660);
 module_param_cb(nvram_path, &bcmdhd_path_param_ops, bcmdhd_nvram_path, 0660);
-module_param_named(op_mode, bcmdhd_op_mode, int, 0660);
+module_param_cb(op_mode, &bcmdhd_op_mode_param_ops, &bcmdhd_op_mode, 0660);
 
 void somc_dora_get_bcmdhd_fw_path(char *buf, size_t size)
 {
@@ -163,15 +269,23 @@ void somc_dora_get_bcmdhd_nvram_path(char *buf, size_t size)
 }
 EXPORT_SYMBOL_GPL(somc_dora_get_bcmdhd_nvram_path);
 
+int somc_dora_get_bcmdhd_op_mode(void)
+{
+	unsigned long flags;
+	int mode;
+
+	spin_lock_irqsave(&bcmdhd_param_lock, flags);
+	mode = bcmdhd_op_mode;
+	spin_unlock_irqrestore(&bcmdhd_param_lock, flags);
+	return mode;
+}
+EXPORT_SYMBOL_GPL(somc_dora_get_bcmdhd_op_mode);
+
 struct somc_dora_plat {
 	struct device *dev;
 	struct gpio_desc *sim1_gpiod;
-	struct gpio_desc *uim2_gpiod;
 	int sim1_irq;
-	int uim2_irq;
 	bool sim1_wake_enabled;
-	bool uim2_wake_enabled;
-
 	struct device *clearpad_compat_dev;
 	struct kobject *boot_adsp_kobj;
 	struct kobject *boot_slpi_kobj;
@@ -180,9 +294,6 @@ struct somc_dora_plat {
 
 	struct mutex lock;
 	bool wakeup_gesture;
-	bool post_probe_start;
-	bool cover_mode_enabled;
-	bool glove_mode;
 	u32 cover_win[4]; /* left, top, right, bottom */
 	bool adsp_ref_held;
 	bool slpi_ref_held;
@@ -190,7 +301,7 @@ struct somc_dora_plat {
 
 static struct somc_dora_plat *g_dora_plat;
 
-/* --- SIM1 / Hybrid UIM2 (F8131 Single SIM vs F8132 Dual SIM) --- */
+/* --- SIM1 + MMC-owned Hybrid UIM2/SD state (F8131 SS vs F8132 DSDS) --- */
 
 static ssize_t sim1_present_show(struct device *dev,
 				 struct device_attribute *attr, char *buf)
@@ -204,15 +315,25 @@ static ssize_t sim1_present_show(struct device *dev,
 }
 static DEVICE_ATTR_RO(sim1_present);
 
+static ssize_t tray_closed_show(struct device *dev,
+				struct device_attribute *attr, char *buf)
+{
+	int tray_closed = -1;
+
+	if (mmc_uim2_slot_get_state(&tray_closed, NULL) || tray_closed < 0)
+		return sysfs_emit(buf, "unknown\n");
+	return sysfs_emit(buf, "%d\n", tray_closed);
+}
+static DEVICE_ATTR_RO(tray_closed);
+
 static ssize_t uim2_present_show(struct device *dev,
 				 struct device_attribute *attr, char *buf)
 {
-	struct somc_dora_plat *plat = dev_get_drvdata(dev);
-	int val = plat->uim2_gpiod ? gpiod_get_value_cansleep(plat->uim2_gpiod) : -ENODEV;
+	int uim2_en = -1;
 
-	if (val < 0)
+	if (mmc_uim2_slot_get_state(NULL, &uim2_en) || uim2_en < 0)
 		return sysfs_emit(buf, "unknown\n");
-	return sysfs_emit(buf, "%d\n", val);
+	return sysfs_emit(buf, "%d\n", uim2_en);
 }
 static DEVICE_ATTR_RO(uim2_present);
 
@@ -221,15 +342,18 @@ static ssize_t sim_slot_summary_show(struct device *dev,
 {
 	struct somc_dora_plat *plat = dev_get_drvdata(dev);
 	int s1 = plat->sim1_gpiod ? gpiod_get_value_cansleep(plat->sim1_gpiod) : -1;
-	int s2 = plat->uim2_gpiod ? gpiod_get_value_cansleep(plat->uim2_gpiod) : -1;
+	int tray = -1, uim2 = -1;
 
-	return sysfs_emit(buf, "sim1=%d uim2_hybrid=%d (F8131=SS, F8132=DSDS via LTALabel)\n",
-			  s1, s2);
+	mmc_uim2_slot_get_state(&tray, &uim2);
+	return sysfs_emit(buf,
+			  "sim1=%d tray_closed=%d uim2_mux_en=%d (F8131=SS, F8132=DSDS via LTALabel)\n",
+			  s1, tray, uim2);
 }
 static DEVICE_ATTR_RO(sim_slot_summary);
 
 static struct attribute *dora_sim_attrs[] = {
 	&dev_attr_sim1_present.attr,
+	&dev_attr_tray_closed.attr,
 	&dev_attr_uim2_present.attr,
 	&dev_attr_sim_slot_summary.attr,
 	NULL,
@@ -241,8 +365,7 @@ static irqreturn_t dora_sim_det_isr(int irq, void *data)
 	struct somc_dora_plat *plat = data;
 
 	pm_wakeup_dev_event(plat->dev, 1000, true);
-	sysfs_notify(&plat->dev->kobj, NULL,
-		     (irq == plat->sim1_irq) ? "sim1_present" : "uim2_present");
+	sysfs_notify(&plat->dev->kobj, NULL, "sim1_present");
 	return IRQ_HANDLED;
 }
 
@@ -320,35 +443,107 @@ static ssize_t wakeup_gesture_store(struct device *dev,
 }
 static DEVICE_ATTR_RW(wakeup_gesture);
 
-#define CLEARPAD_BOOL_ATTR(_name, _field)					\
-static ssize_t _name##_show(struct device *dev,					\
-			    struct device_attribute *attr, char *buf)		\
-{										\
-	struct somc_dora_plat *p = dev_get_drvdata(dev);			\
-	bool val;								\
-	mutex_lock(&p->lock);							\
-	val = p->_field;							\
-	mutex_unlock(&p->lock);							\
-	return sysfs_emit(buf, "%u\n", val ? 1 : 0);				\
-}										\
-static ssize_t _name##_store(struct device *dev,				\
-			     struct device_attribute *attr,			\
-			     const char *buf, size_t count)			\
-{										\
-	struct somc_dora_plat *p = dev_get_drvdata(dev);			\
-	bool v;									\
-	if (kstrtobool(buf, &v))						\
-		return -EINVAL;							\
-	mutex_lock(&p->lock);							\
-	p->_field = v;								\
-	mutex_unlock(&p->lock);							\
-	return count;								\
-}										\
-static DEVICE_ATTR_RW(_name)
+static ssize_t post_probe_start_show(struct device *dev,
+				     struct device_attribute *attr, char *buf)
+{
+	struct somc_dora_plat *plat = dev_get_drvdata(dev);
+	bool bound = false;
+#if IS_ENABLED(CONFIG_I2C)
+	struct device_node *ts_np;
+	struct i2c_client *ts_client;
 
-CLEARPAD_BOOL_ATTR(post_probe_start, post_probe_start);
-CLEARPAD_BOOL_ATTR(cover_mode_enabled, cover_mode_enabled);
-CLEARPAD_BOOL_ATTR(glove, glove_mode);
+	if (plat && plat->dev && plat->dev->of_node) {
+		ts_np = of_parse_phandle(plat->dev->of_node, "somc,touch-i2c", 0);
+		if (ts_np) {
+			ts_client = of_find_i2c_device_by_node(ts_np);
+			of_node_put(ts_np);
+			if (ts_client) {
+				bound = (ts_client->dev.driver != NULL);
+				put_device(&ts_client->dev);
+			}
+		}
+	}
+#endif
+	return sysfs_emit(buf, "%u\n", bound ? 1 : 0);
+}
+
+static ssize_t post_probe_start_store(struct device *dev,
+				      struct device_attribute *attr,
+				      const char *buf, size_t count)
+{
+	struct somc_dora_plat *plat = dev_get_drvdata(dev);
+	bool v;
+#if IS_ENABLED(CONFIG_I2C)
+	struct device_node *ts_np;
+	struct i2c_client *ts_client;
+	int ret;
+#endif
+
+	if (kstrtobool(buf, &v))
+		return -EINVAL;
+	if (!v)
+		return count;
+
+#if IS_ENABLED(CONFIG_I2C)
+	if (!plat || !plat->dev || !plat->dev->of_node)
+		return -ENODEV;
+
+	ts_np = of_parse_phandle(plat->dev->of_node, "somc,touch-i2c", 0);
+	if (!ts_np)
+		return -ENODEV;
+
+	ts_client = of_find_i2c_device_by_node(ts_np);
+	of_node_put(ts_np);
+	if (!ts_client)
+		return -ENODEV;
+
+	if (!ts_client->dev.driver) {
+		ret = device_attach(&ts_client->dev);
+		if (ret < 0) {
+			put_device(&ts_client->dev);
+			return ret;
+		}
+		if (ret == 0 || !ts_client->dev.driver) {
+			put_device(&ts_client->dev);
+			return -ENODEV;
+		}
+	}
+
+	put_device(&ts_client->dev);
+	return count;
+#else
+	return -ENODEV;
+#endif
+}
+static DEVICE_ATTR_RW(post_probe_start);
+
+static ssize_t clearpad_unimplemented_show(struct device *dev,
+					   struct device_attribute *attr,
+					   char *buf)
+{
+	return sysfs_emit(buf, "0\n");
+}
+
+static ssize_t clearpad_unimplemented_store(struct device *dev,
+					    struct device_attribute *attr,
+					    const char *buf, size_t count)
+{
+	bool v;
+
+	if (kstrtobool(buf, &v))
+		return -EINVAL;
+	/* RMI4 F12 register-level glove/cover mode is not supported in mainline rmi4-f12 */
+	if (v)
+		return -EOPNOTSUPP;
+	return count;
+}
+
+static struct device_attribute dev_attr_cover_mode_enabled =
+	__ATTR(cover_mode_enabled, 0664, clearpad_unimplemented_show,
+	       clearpad_unimplemented_store);
+static struct device_attribute dev_attr_glove =
+	__ATTR(glove, 0664, clearpad_unimplemented_show,
+	       clearpad_unimplemented_store);
 
 #define CLEARPAD_WIN_ATTR(_name, _idx)						\
 static ssize_t _name##_show(struct device *dev,					\
@@ -545,11 +740,6 @@ static int somc_dora_plat_probe(struct platform_device *pdev)
 		return dev_err_probe(dev, PTR_ERR(plat->sim1_gpiod),
 				     "failed to get sim1-det gpio\n");
 
-	plat->uim2_gpiod = devm_gpiod_get_optional(dev, "uim2-det", GPIOD_IN);
-	if (IS_ERR(plat->uim2_gpiod))
-		return dev_err_probe(dev, PTR_ERR(plat->uim2_gpiod),
-				     "failed to get uim2-det gpio\n");
-
 	device_init_wakeup(dev, true);
 	WRITE_ONCE(g_dora_plat, plat);
 
@@ -562,18 +752,6 @@ static int somc_dora_plat_probe(struct platform_device *pdev)
 				"dora-sim1-det", plat);
 			if (!ret && !enable_irq_wake(plat->sim1_irq))
 				plat->sim1_wake_enabled = true;
-		}
-	}
-
-	if (plat->uim2_gpiod) {
-		plat->uim2_irq = gpiod_to_irq(plat->uim2_gpiod);
-		if (plat->uim2_irq > 0) {
-			ret = devm_request_threaded_irq(dev, plat->uim2_irq,
-				NULL, dora_sim_det_isr,
-				IRQF_TRIGGER_RISING | IRQF_TRIGGER_FALLING | IRQF_ONESHOT,
-				"dora-uim2-det", plat);
-			if (!ret && !enable_irq_wake(plat->uim2_irq))
-				plat->uim2_wake_enabled = true;
 		}
 	}
 
@@ -616,9 +794,8 @@ static int somc_dora_plat_probe(struct platform_device *pdev)
 		}
 	}
 
-	dev_info(dev, "Sony Dora platform ready (sim1=%d, uim2_hybrid=%d)\n",
-		 plat->sim1_gpiod ? gpiod_get_value_cansleep(plat->sim1_gpiod) : -1,
-		 plat->uim2_gpiod ? gpiod_get_value_cansleep(plat->uim2_gpiod) : -1);
+	dev_info(dev, "Sony Dora platform ready (sim1=%d, uim2=mmc-slot-owned)\n",
+		 plat->sim1_gpiod ? gpiod_get_value_cansleep(plat->sim1_gpiod) : -1);
 	return 0;
 }
 
@@ -648,8 +825,6 @@ static int somc_dora_plat_remove(struct platform_device *pdev)
 					&plat->adsp_ref_held);
 	mutex_unlock(&plat->lock);
 
-	if (plat->uim2_wake_enabled)
-		disable_irq_wake(plat->uim2_irq);
 	if (plat->sim1_wake_enabled)
 		disable_irq_wake(plat->sim1_irq);
 
@@ -693,6 +868,7 @@ struct fpc1145_tee_data {
 	bool irq_enabled;
 	bool wake_irq_active;
 	bool misc_registered;
+	bool soc_link_created;
 };
 
 static int fpc1145_power_set(struct fpc1145_tee_data *fpc, bool enable)
@@ -1103,12 +1279,35 @@ static ssize_t regulator_enable_store(struct device *dev,
 }
 static DEVICE_ATTR_WO(regulator_enable);
 
+static ssize_t spi_prepare_store(struct device *dev,
+				 struct device_attribute *attr,
+				 const char *buf, size_t count)
+{
+	struct fpc1145_tee_data *fpc = dev_get_drvdata(dev);
+	bool en;
+	int ret;
+
+	if (sysfs_streq(buf, "enable") || sysfs_streq(buf, "1"))
+		en = true;
+	else if (sysfs_streq(buf, "disable") || sysfs_streq(buf, "0"))
+		en = false;
+	else
+		return -EINVAL;
+
+	mutex_lock(&fpc->lock);
+	ret = fpc1145_device_prepare(fpc, en);
+	mutex_unlock(&fpc->lock);
+	return ret ? ret : count;
+}
+static DEVICE_ATTR_WO(spi_prepare);
+
 static struct attribute *fpc1145_attrs[] = {
 	&dev_attr_hw_reset.attr,
 	&dev_attr_irq.attr,
 	&dev_attr_wakeup_enable.attr,
 	&dev_attr_clk_enable.attr,
 	&dev_attr_regulator_enable.attr,
+	&dev_attr_spi_prepare.attr,
 	NULL,
 };
 ATTRIBUTE_GROUPS(fpc1145);
@@ -1205,6 +1404,18 @@ static int fpc1145_tee_probe(struct platform_device *pdev)
 		fpc->misc_registered = true;
 	}
 
+	/*
+	 * LineageOS 21 init.qcom.rc & fingerprint.msm8996.so access
+	 * /sys/devices/platform/soc/fpc1145_device/<attr>. Expose the exact
+	 * "fpc1145_device" symlink under /sys/devices/platform/soc/ when the
+	 * OF-instantiated platform device is named "soc:fpc1145_device".
+	 */
+	if (dev->parent && strcmp(dev_name(dev), "fpc1145_device") != 0) {
+		if (!sysfs_create_link(&dev->parent->kobj, &dev->kobj,
+				       "fpc1145_device"))
+			fpc->soc_link_created = true;
+	}
+
 	dev_info(dev, "Sony Dora FPC1145 TEE fingerprint interface ready (irq=%d, misc=%d)\n",
 		 fpc->irq, fpc->misc_registered);
 	return 0;
@@ -1213,6 +1424,9 @@ static int fpc1145_tee_probe(struct platform_device *pdev)
 static int fpc1145_tee_remove(struct platform_device *pdev)
 {
 	struct fpc1145_tee_data *fpc = platform_get_drvdata(pdev);
+
+	if (fpc->soc_link_created && pdev->dev.parent)
+		sysfs_remove_link(&pdev->dev.parent->kobj, "fpc1145_device");
 
 	if (fpc->misc_registered)
 		misc_deregister(&fpc->miscdev);
@@ -1294,6 +1508,7 @@ module_init(somc_dora_init);
 
 static void __exit somc_dora_exit(void)
 {
+	cancel_delayed_work_sync(&somc_dora_wifi_reprobe_work);
 	platform_unregister_drivers(somc_dora_drivers,
 				    ARRAY_SIZE(somc_dora_drivers));
 }

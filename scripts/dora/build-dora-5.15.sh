@@ -117,9 +117,10 @@ done
 
 echo "[dora-build] Step 5/5: Verifying Sony S1 64 MiB boot.img budget and staging modules..."
 IMG_BYTES="$(stat -c '%s' "${IMAGE_GZ_DTB}")"
-MAX_BOOT_BUDGET=$((48 * 1024 * 1024)) # Leave >=16 MiB headroom for XZ ramdisk inside 64 MiB boot
+# BoardConfigCommon.mk sets BOARD_KERNEL_BASE=0x80000000,KERNEL_OFFSET=0x80000,TAGS_OFFSET=0x01E00000 (30 MiB)
+MAX_BOOT_BUDGET=$((30 * 1024 * 1024))
 if (( IMG_BYTES > MAX_BOOT_BUDGET )); then
-  echo "ERROR: Image.gz-dtb (${IMG_BYTES} bytes) exceeds safe 48 MiB budget for 64 MiB boot partition!" >&2
+  echo "ERROR: Image.gz-dtb (${IMG_BYTES} bytes) exceeds Sony S1 30 MiB tags offset (0x01E00000)!" >&2
   exit 1
 fi
 

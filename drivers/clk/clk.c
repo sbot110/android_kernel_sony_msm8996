@@ -1079,7 +1079,8 @@ bool clk_vdd_class_handoff_done(struct clk_vdd_class *vdd)
 	 */
 	clk_prepare_lock();
 	mutex_lock(&vdd_class_list_lock);
-	if (!vdd_class_handoff_completed || vdd->orphaned || !vdd->num_clocks)
+	if (!vdd_class_handoff_completed || vdd->orphaned || !vdd->num_clocks ||
+	    vdd->error || vdd->enable_uncertain)
 		goto out;
 	list_for_each_entry(v, &clk_handoff_vdd_list, list)
 		if (v->vdd_class == vdd && v->vote_held)
@@ -1216,9 +1217,10 @@ static void clk_detach_vdd_core(struct clk_core *core)
 			vdd->error = -ESHUTDOWN;
 		vdd->orphaned = true;
 		vdd->orphaned_handoff = false;
-		vdd->recovery_level = max(core->vdd_class_vote_held ?
-			core->vdd_class_vote : 0, core->new_vdd_class_vote_held ?
-			core->new_vdd_class_vote : 0);
+		vdd->recovery_level = max(vdd->recovery_level,
+			max(core->vdd_class_vote_held ? core->vdd_class_vote : 0,
+			    core->new_vdd_class_vote_held ?
+				core->new_vdd_class_vote : 0));
 		mutex_unlock(&vdd->lock);
 		pr_err("%s: orphaned safety voltage lease on unregister\n", core->name);
 	}

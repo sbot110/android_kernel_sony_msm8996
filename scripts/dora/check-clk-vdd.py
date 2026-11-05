@@ -248,6 +248,8 @@ int main(void)
  assert(clk_vdd_class_init(&vdd)==0 && vdd.num_clocks==1);
  assert(!clk_vdd_class_handoff_done(&vdd));
  vdd_class_handoff_completed=true;assert(clk_vdd_class_handoff_done(&vdd));
+ vdd.error=-ETIMEDOUT;assert(!clk_vdd_class_handoff_done(&vdd));vdd.error=0;
+ vdd.enable_uncertain=true;assert(!clk_vdd_class_handoff_done(&vdd));vdd.enable_uncertain=false;
  vdd.orphaned=true;assert(!clk_vdd_class_handoff_done(&vdd));vdd.orphaned=false;
  clk_vdd_class_deinit(&vdd);assert(!clk_vdd_class_handoff_done(&vdd));
  reset();vdd.skip_handoff=false;vdd_class_handoff_completed=true;
@@ -312,7 +314,9 @@ int main(void)
  /* Failed release survives until real retry; unregister detaches global node. */
  reset();prepare();rail.off_error=-EIO;clk_core_unprepare(&clk);
  assert(!list_empty(&clk_rate_change_list) && clk.vdd_class_vote_held);
+ vdd.recovery_level=2;
  clk_detach_vdd_core(&clk);assert(list_empty(&clk_rate_change_list) && vdd.orphaned && votes[1]==1);
+ assert(vdd.recovery_level==2); /* A later lower owner cannot erase the older floor. */
  rail.off_error=0;assert(clk_vote_vdd_level(&vdd,2)==-ESHUTDOWN);
  reset();vdd.skip_handoff=false;alloc_error=1;
  assert(clk_vdd_class_init(&vdd)==-ENOMEM && !votes[2] && !rail.enables);

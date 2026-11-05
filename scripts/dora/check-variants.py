@@ -181,13 +181,13 @@ def validate(nodes, expected=None, mode="gated"):
     for prop, target in (("vdd-gfx-supply", PATHS["gfx-cpr"] + "/thread@0/regulator"),
                          ("vdd-mx-supply", PATHS["mx-resource"] + "/regulator-s2-corner"),
                          ("qcom,rpm", "/rpm-glink/rpm_requests"),
-                         ("nvmem-cells", "/soc/qfprom@74000/cpu-speedbin@130")):
+                         ("nvmem-cells", "/soc/qfprom@74000/cpu-speedbin@133")):
         if refs[cells(clock[prop])[0]] != target:
             raise ValueError("GPU child provider mismatch: " + prop)
     if cells(clock["#clock-cells"]) != (1,) or clock["nvmem-cell-names"] != b"speed-bin\0":
         raise ValueError("GPU child clock/NVMEM binding mismatch")
-    fuse = nodes["/soc/qfprom@74000/cpu-speedbin@130"]["props"]
-    if cells(fuse["reg"]) != (0x130, 4) or cells(fuse["bits"]) != (29, 3):
+    fuse = nodes["/soc/qfprom@74000/cpu-speedbin@133"]["props"]
+    if cells(fuse["reg"]) != (0x133, 1) or cells(fuse["bits"]) != (5, 3):
         raise ValueError("GPU speed-bin fuse location does not match Sony clock driver")
     for usid in (2, 3):
         compat = nodes["/soc/qcom,spmi@400f000/pmic@%d" % usid]["props"]["compatible"]
@@ -223,7 +223,9 @@ def selftest(nodes, mode="gated"):
         ("/chosen", "bootargs", b"maxcpus=2 maxcpus=4\0"),
         ("/chosen", "bootargs", b"maxcpus=2 boot_cpus=2-3\0"),
         (PATHS["gfx-cpr"], "clocks", b"\0" * 24),
-        ("/soc/qfprom@74000/cpu-speedbin@130", "bits", struct.pack(">II", 0, 3)),
+        ("/soc/qfprom@74000/cpu-speedbin@133", "bits", struct.pack(">II", 0, 3)),
+        ("/soc/qfprom@74000/cpu-speedbin@133", "bits", struct.pack(">II", 29, 3)),
+        ("/soc/qfprom@74000/cpu-speedbin@133", "reg", struct.pack(">II", 0x130, 4)),
         ("/soc/qcom,spmi@400f000/pmic@3/qpnp-labibb-regulator/qcom,ibb@dc00",
          "qcom,qpnp-ibb-discharge-resistor", struct.pack(">I", 300)),
         ("/", "qcom,pmic-id", struct.pack(">IIII", 0, 0, 0, 0)),

@@ -20,6 +20,11 @@ bit offset0..7, and nvmem_shift_read_buffer_in_place() operates on bytes.
 The corrected reg=<0x133 1>,bits=<5 3> describes exactly the same fuse bits.
 The adapter consumes the already-extracted one-byte value, without a second
 shift. This does not change any Sony frequency/voltage table or fuse value.
+The gated GPU child shares the same cell. Its existing byte-wise read_plan
+accepts a one-byte extracted bin; check-variants.py now strictly validates
+the corrected binding and also rejects the old offset/bits fixture. The
+first clean pipeline exposed that stale checker; its failure is retained
+separately from the subsequent corrected clean run.
 
 Hardware chain and remaining boundary
 -------------------------------------

@@ -291,6 +291,8 @@ static int msm_spm_dev_init(struct msm_spm_device *dev,
 	int i, ret = -ENOMEM;
 	uint32_t offset = 0;
 
+	if (dev->initialized)
+		return -EBUSY;
 	dev->cpu_vdd = VDD_DEFAULT;
 	dev->num_modes = data->num_modes;
 	dev->modes = kmalloc_array(
@@ -313,7 +315,7 @@ static int msm_spm_dev_init(struct msm_spm_device *dev,
 		dev->modes[i].ctl = data->modes[i].ctl | ((offset & 0x1FF)
 						<< 4);
 		ret = msm_spm_drv_write_seq_data(&dev->reg_data,
-						data->modes[i].cmd, &offset);
+			data->modes[i].cmd, data->modes[i].cmd_len, &offset);
 		if (ret < 0)
 			goto spm_failed_init;
 
@@ -327,7 +329,11 @@ static int msm_spm_dev_init(struct msm_spm_device *dev,
 	return 0;
 
 spm_failed_init:
+	kfree(dev->reg_data.reg_seq_entry_shadow);
+	dev->reg_data.reg_seq_entry_shadow = NULL;
+	dev->reg_data.seq_entries = 0;
 	kfree(dev->modes);
+	dev->modes = NULL;
 spm_failed_malloc:
 	return ret;
 }
@@ -685,20 +691,24 @@ static struct msm_spm_device *msm_spm_get_device(struct platform_device *pdev)
 
 	if ((cpu >= 0) && cpu < num_possible_cpus())
 		dev = &per_cpu(msm_cpu_spm_device, cpu);
-	else if (cpu == num_possible_cpus())
+	else if (cpu == num_possible_cpus()) {
 		dev = devm_kzalloc(&pdev->dev, sizeof(struct msm_spm_device),
 					GFP_KERNEL);
+		if (!dev)
+			return ERR_PTR(-ENOMEM);
+	}
 
 	if (!dev)
 		return NULL;
+	if (dev->initialized)
+		return ERR_PTR(-EBUSY);
 
 	if (of_property_read_string(pdev->dev.of_node, key, &val)) {
 		pr_err("%s(): Cannot find a required node key:%s\n",
 				__func__, key);
-		return NULL;
+		return ERR_PTR(-EINVAL);
 	}
 	dev->name = val;
-	list_add(&dev->list, &spm_list);
 
 	return dev;
 }
@@ -775,6 +785,8 @@ static int msm_spm_dev_probe(struct platform_device *pdev)
 	};
 
 	dev = msm_spm_get_device(pdev);
+	if (IS_ERR(dev))
+		return PTR_ERR(dev);
 	if (!dev) {
 		/*
 		 * For partial goods support some CPUs might not be available
@@ -785,8 +797,7 @@ static int msm_spm_dev_probe(struct platform_device *pdev)
 	get_cpumask(node, &dev->mask);
 
 	memset(&spm_data, 0, sizeof(struct msm_spm_platform_data));
-	memset(&modes, 0,
-		(MSM_SPM_MODE_NR - 2) * sizeof(struct msm_spm_seq_entry));
+	memset(modes, 0, sizeof(modes));
 
 	key = "qcom,saw2-ver-reg";
 	ret = of_property_read_u32(node, key, &val);
@@ -913,16 +924,24 @@ static int msm_spm_dev_probe(struct platform_device *pdev)
 
 		if (i == ARRAY_SIZE(mode_of_data)) {
 			pr_err("Mode name invalid %s\n", name);
-			break;
+			ret = -EINVAL;
+			of_node_put(n);
+			goto fail;
+		}
+		if (mode_count >= ARRAY_SIZE(modes)) {
+			ret = -E2BIG;
+			of_node_put(n);
+			goto fail;
 		}
 
 		modes[mode_count].mode = mode_of_data[i].id;
 		modes[mode_count].cmd =
 			(uint8_t *)of_get_property(n, "qcom,sequence", &len);
-		if (!modes[mode_count].cmd) {
+		if (!modes[mode_count].cmd || len <= 0) {
 			pr_err("cmd is empty\n");
 			continue;
 		}
+		modes[mode_count].cmd_len = len;
 
 		bit_set = of_property_read_bool(n, "qcom,pc_mode");
 		modes[mode_count].ctl |= bit_set ? BIT(PC_MODE_BIT) : 0;
@@ -953,9 +972,13 @@ static int msm_spm_dev_probe(struct platform_device *pdev)
 	dev->allow_rpm_hs = of_property_read_bool(pdev->dev.of_node, key);
 
 	ret = msm_spm_dev_init(dev, &spm_data);
-	if (ret)
+	if (ret) {
 		pr_err("SPM modes programming is not available from HLOS\n");
+		goto fail;
+	}
 
+	/* Failed probes must never leave a global pointer into devres memory. */
+	list_add(&dev->list, &spm_list);
 	platform_set_drvdata(pdev, dev);
 
 	for_each_cpu(cpu, &dev->mask)
@@ -993,6 +1016,8 @@ static int msm_spm_dev_remove(struct platform_device *pdev)
 {
 	struct msm_spm_device *dev = platform_get_drvdata(pdev);
 
+	if (!dev)
+		return 0;
 	list_del(&dev->list);
 	return 0;
 }

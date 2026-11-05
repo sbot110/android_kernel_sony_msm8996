@@ -814,6 +814,8 @@ struct cpr3_controller {
 	bool			cpr_enabled;
 	bool			last_corner_was_closed_loop;
 	bool			cpr_suspended;
+	/* First uncertain shared-power transition; never auto-cleared. */
+	int			power_error;
 	struct dentry		*debugfs;
 
 	int			aging_ref_volt;

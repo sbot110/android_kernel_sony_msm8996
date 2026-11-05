@@ -98,6 +98,11 @@ struct msm_apm_ctrl_dev {
 	struct device		*dev;
 	enum msm_apm_supply	supply;
 	spinlock_t		lock;
+	/* Serialize public consumers across the complete secure/MMIO sequence. */
+	struct mutex		transaction_lock;
+	int			error;
+	bool			retired;
+	struct resource		resource;
 	void __iomem		*reg_base;
 	void __iomem		*apcs_csr_base;
 	void __iomem		**apcs_spm_events_addr;
@@ -763,9 +768,44 @@ static int msm_apm_switch_to_apcc(struct msm_apm_ctrl_dev *ctrl_dev)
  *
  * Returns the supply currently selected by the APM.
  */
+static int msm_apm_read_supply(struct msm_apm_ctrl_dev *ctrl_dev)
+{
+	u32 mode, status;
+
+	/* Other SoCs retain their existing implementation; these register
+	 * contracts are the Sony MSM8996/pro maps, not inferred from SDM845.
+	 */
+	if (ctrl_dev->msm_id != MSM8996_ID && ctrl_dev->msm_id != MSM8996PRO_ID)
+		return ctrl_dev->supply;
+	mode = readl_relaxed(ctrl_dev->reg_base + APCC_APM_MODE);
+	status = readl_relaxed(ctrl_dev->reg_base + APCC_APM_CTL_STS);
+	rmb();
+	if (mode != readl_relaxed(ctrl_dev->reg_base + APCC_APM_MODE) ||
+	    status != readl_relaxed(ctrl_dev->reg_base + APCC_APM_CTL_STS))
+		return -EAGAIN;
+	status &= MSM_APM_CTL_STS_MASK;
+	if (mode == MSM_APM_APCC_MODE_VAL && status == MSM_APM_APCC_DONE_VAL)
+		return MSM_APM_SUPPLY_APCC;
+	if (mode == MSM_APM_MX_MODE_VAL && status == MSM_APM_MX_DONE_VAL)
+		return MSM_APM_SUPPLY_MX;
+	return -EIO;
+}
+
 int msm_apm_get_supply(struct msm_apm_ctrl_dev *ctrl_dev)
 {
-	return ctrl_dev->supply;
+	int ret;
+
+	if (IS_ERR_OR_NULL(ctrl_dev))
+		return -EINVAL;
+	mutex_lock(&ctrl_dev->transaction_lock);
+	ret = ctrl_dev->error;
+	if (!ret) {
+		ret = msm_apm_read_supply(ctrl_dev);
+		if (ret < 0)
+			ctrl_dev->error = ret;
+	}
+	mutex_unlock(&ctrl_dev->transaction_lock);
+	return ret;
 }
 EXPORT_SYMBOL(msm_apm_get_supply);
 
@@ -784,6 +824,21 @@ int msm_apm_set_supply(struct msm_apm_ctrl_dev *ctrl_dev,
 {
 	int ret;
 
+	if (IS_ERR_OR_NULL(ctrl_dev))
+		return -EINVAL;
+	if (supply != MSM_APM_SUPPLY_APCC && supply != MSM_APM_SUPPLY_MX)
+		return -EPERM;
+	mutex_lock(&ctrl_dev->transaction_lock);
+	ret = ctrl_dev->error;
+	if (ret)
+		goto out;
+	ret = msm_apm_read_supply(ctrl_dev);
+	if (ret < 0)
+		goto fault;
+	if (ret == (int)supply) {
+		ret = 0;
+		goto out;
+	}
 	switch (supply) {
 	case MSM_APM_SUPPLY_APCC:
 		ret = msm_apm_switch_to_apcc(ctrl_dev);
@@ -796,6 +851,19 @@ int msm_apm_set_supply(struct msm_apm_ctrl_dev *ctrl_dev,
 		break;
 	}
 
+	if (!ret) {
+		ret = msm_apm_read_supply(ctrl_dev);
+		if (ret >= 0)
+			ret = ret == (int)supply ? 0 : -EIO;
+	}
+fault:
+	/* A timeout/SMC error can follow applied writes. Never retry from a
+	 * cached supply or clear this state because a later sample looks OK.
+	 */
+	if (ret)
+		ctrl_dev->error = ret;
+out:
+	mutex_unlock(&ctrl_dev->transaction_lock);
 	return ret;
 }
 EXPORT_SYMBOL(msm_apm_set_supply);
@@ -833,7 +901,7 @@ struct msm_apm_ctrl_dev *msm_apm_ctrl_dev_get(struct device *dev)
 	mutex_lock(&apm_ctrl_list_mutex);
 	list_for_each_entry(ctrl_dev, &apm_ctrl_list, list) {
 		if (ctrl_dev->dev && ctrl_dev->dev->of_node == ctrl_node) {
-			dev_found = ctrl_dev;
+			dev_found = ctrl_dev->retired ? ERR_PTR(-ESHUTDOWN) : ctrl_dev;
 			break;
 		}
 	}
@@ -858,16 +926,19 @@ static ssize_t apm_supply_dbg_read(struct file *filep, char __user *ubuf,
 {
 	struct msm_apm_ctrl_dev *ctrl_dev = filep->private_data;
 	char buf[10];
-	int len;
+	int len, supply;
 
 	if (!ctrl_dev) {
 		pr_err("invalid apm ctrl handle\n");
 		return -ENODEV;
 	}
 
-	if (ctrl_dev->supply == MSM_APM_SUPPLY_APCC)
+	supply = msm_apm_get_supply(ctrl_dev);
+	if (supply < 0)
+		return supply;
+	if (supply == MSM_APM_SUPPLY_APCC)
 		len = snprintf(buf, sizeof(buf), "APCC\n");
-	else if (ctrl_dev->supply == MSM_APM_SUPPLY_MX)
+	else if (supply == MSM_APM_SUPPLY_MX)
 		len = snprintf(buf, sizeof(buf), "MX\n");
 	else
 		len = snprintf(buf, sizeof(buf), "ERR\n");
@@ -959,6 +1030,8 @@ static int msm_apm_probe(struct platform_device *pdev)
 {
 	struct device *dev = &pdev->dev;
 	struct msm_apm_ctrl_dev *ctrl;
+	struct msm_apm_ctrl_dev *old;
+	struct resource *res;
 	const struct of_device_id *match;
 	int ret = 0;
 
@@ -973,15 +1046,35 @@ static int msm_apm_probe(struct platform_device *pdev)
 	if (!match)
 		return -ENODEV;
 
-	ctrl = devm_kzalloc(dev, sizeof(*ctrl), GFP_KERNEL);
-	if (!ctrl)
-		return -ENOMEM;
+	res = platform_get_resource_byname(pdev, IORESOURCE_MEM, "pm-apcc-glb");
+	if (!res || res->end < res->start || resource_size(res) <
+	    ((uintptr_t)match->data == MSM8953_ID ?
+		MSM8953_APCC_APM_CTL_STS : APCC_APM_CTL_STS) + sizeof(u32))
+		return -EINVAL;
+	mutex_lock(&apm_ctrl_list_mutex);
+	list_for_each_entry(old, &apm_ctrl_list, list) {
+		if (old->dev->of_node == dev->of_node ||
+		    (res->start <= old->resource.end && old->resource.start <= res->end)) {
+			ret = old->retired ? -ESHUTDOWN : -EBUSY;
+			goto unlock;
+		}
+	}
+	/* Public raw handles have no put operation. Published descriptors must
+	 * therefore survive retirement; the retired guard drains MMIO users
+	 * before devres mappings disappear and rejects reprobe of that bank.
+	 */
+	ctrl = kzalloc(sizeof(*ctrl), GFP_KERNEL);
+	if (!ctrl) {
+		ret = -ENOMEM;
+		goto unlock;
+	}
 
 	INIT_LIST_HEAD(&ctrl->list);
 	spin_lock_init(&ctrl->lock);
+	mutex_init(&ctrl->transaction_lock);
+	ctrl->resource = *res;
 	ctrl->dev = dev;
 	ctrl->msm_id = (uintptr_t)match->data;
-	platform_set_drvdata(pdev, ctrl);
 
 	switch (ctrl->msm_id) {
 	case MSM8996_ID:
@@ -989,7 +1082,7 @@ static int msm_apm_probe(struct platform_device *pdev)
 		ret = msm_apm_ctrl_devm_ioremap(pdev, ctrl);
 		if (ret) {
 			dev_err(dev, "Failed to add APM controller device\n");
-			return ret;
+			goto free;
 		}
 		break;
 	case MSM8953_ID:
@@ -997,22 +1090,34 @@ static int msm_apm_probe(struct platform_device *pdev)
 		if (ret) {
 			dev_err(dev, "Failed to initialize APM controller device: ret=%d\n",
 				ret);
-			return ret;
+			goto free;
 		}
 		break;
 	default:
 		dev_err(dev, "unable to add APM controller device for msm_id:%d\n",
 			ctrl->msm_id);
-		return -ENODEV;
+		ret = -ENODEV;
+		goto free;
 	}
 
+	ret = msm_apm_read_supply(ctrl);
+	if (ret < 0)
+		goto free;
+	ctrl->supply = ret;
+	get_device(dev);
+	__module_get(THIS_MODULE);
+	platform_set_drvdata(pdev, ctrl);
 	apm_debugfs_init(ctrl);
-	mutex_lock(&apm_ctrl_list_mutex);
 	list_add_tail(&ctrl->list, &apm_ctrl_list);
 	mutex_unlock(&apm_ctrl_list_mutex);
 
 	dev_dbg(dev, "MSM Array Power Mux driver probe successful");
 
+	return 0;
+free:
+	kfree(ctrl);
+unlock:
+	mutex_unlock(&apm_ctrl_list_mutex);
 	return ret;
 }
 
@@ -1023,9 +1128,14 @@ static int msm_apm_remove(struct platform_device *pdev)
 	ctrl_dev = platform_get_drvdata(pdev);
 	if (ctrl_dev) {
 		mutex_lock(&apm_ctrl_list_mutex);
-		list_del(&ctrl_dev->list);
+		mutex_lock(&ctrl_dev->transaction_lock);
+		ctrl_dev->retired = true;
+		if (!ctrl_dev->error)
+			ctrl_dev->error = -ESHUTDOWN;
+		mutex_unlock(&ctrl_dev->transaction_lock);
 		mutex_unlock(&apm_ctrl_list_mutex);
 		apm_debugfs_deinit(ctrl_dev);
+		platform_set_drvdata(pdev, NULL);
 	}
 
 	return 0;

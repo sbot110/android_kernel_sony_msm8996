@@ -364,15 +364,14 @@ int msm_spm_drv_avs_clear_irq(struct msm_spm_driver_data *dev,
 
 void msm_spm_drv_flush_seq_entry(struct msm_spm_driver_data *dev)
 {
-	int i;
-	int num_spm_entry = msm_spm_drv_get_num_spm_entry(dev);
+	uint32_t i;
 
-	if (!dev) {
+	if (!dev || !dev->reg_seq_entry_shadow) {
 		__WARN();
 		return;
 	}
 
-	for (i = 0; i < num_spm_entry; i++) {
+	for (i = 0; i < dev->seq_entries; i++) {
 		__raw_writel(dev->reg_seq_entry_shadow[i],
 			dev->reg_base_addr
 			+ dev->reg_offsets[MSM_SPM_REG_SAW_SEQ_ENTRY]
@@ -394,33 +393,27 @@ void dump_regs(struct msm_spm_driver_data *dev, int cpu)
 }
 
 int msm_spm_drv_write_seq_data(struct msm_spm_driver_data *dev,
-		uint8_t *cmd, uint32_t *offset)
+		uint8_t *cmd, uint32_t cmd_len, uint32_t *offset)
 {
-	uint32_t cmd_w;
-	uint32_t offset_w = *offset / 4;
-	uint8_t last_cmd;
+	uint8_t *end;
+	size_t length, capacity;
+	uint32_t i, shift, *word;
 
-	if (!cmd)
+	if (!dev || !cmd || !cmd_len || !offset || !dev->reg_seq_entry_shadow)
 		return -EINVAL;
-
-	while (1) {
-		int i;
-
-		cmd_w = 0;
-		last_cmd = 0;
-		cmd_w = dev->reg_seq_entry_shadow[offset_w];
-
-		for (i = (*offset % 4); i < 4; i++) {
-			last_cmd = *(cmd++);
-			cmd_w |=  last_cmd << (i * 8);
-			(*offset)++;
-			if (last_cmd == 0x0f)
-				break;
-		}
-
-		dev->reg_seq_entry_shadow[offset_w++] = cmd_w;
-		if (last_cmd == 0x0f)
-			break;
+	end = memchr(cmd, 0x0f, cmd_len);
+	if (!end)
+		return -EINVAL;
+	length = end - cmd + 1;
+	capacity = (size_t)dev->seq_entries * sizeof(uint32_t);
+	if (*offset > capacity || length > capacity - *offset)
+		return -E2BIG;
+	/* Validate the entire program before changing shadow data or offset. */
+	for (i = 0; i < length; i++) {
+		word = &dev->reg_seq_entry_shadow[*offset / 4];
+		shift = (*offset % 4) * 8;
+		*word = (*word & ~(0xffU << shift)) | ((uint32_t)cmd[i] << shift);
+		(*offset)++;
 	}
 
 	return 0;
@@ -766,6 +759,7 @@ int msm_spm_drv_init(struct msm_spm_driver_data *dev,
 
 	if (!dev->reg_seq_entry_shadow)
 		return -ENOMEM;
+	dev->seq_entries = num_spm_entry;
 
 	return 0;
 }

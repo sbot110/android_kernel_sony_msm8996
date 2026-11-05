@@ -54,6 +54,7 @@ enum {
 struct msm_spm_seq_entry {
 	uint32_t mode;
 	uint8_t *cmd;
+	uint32_t cmd_len;
 	uint32_t ctl;
 };
 
@@ -94,6 +95,7 @@ struct msm_spm_driver_data {
 	uint32_t avs_timeout_us;
 	uint32_t reg_shadow[MSM_SPM_REG_NR];
 	uint32_t *reg_seq_entry_shadow;
+	uint32_t seq_entries;
 	uint32_t *reg_offsets;
 };
 
@@ -110,7 +112,7 @@ void dump_regs(struct msm_spm_driver_data *dev, int cpu);
 uint32_t msm_spm_drv_get_sts_curr_pmic_data(
 		struct msm_spm_driver_data *dev);
 int msm_spm_drv_write_seq_data(struct msm_spm_driver_data *dev,
-		uint8_t *cmd, uint32_t *offset);
+		uint8_t *cmd, uint32_t cmd_len, uint32_t *offset);
 void msm_spm_drv_flush_seq_entry(struct msm_spm_driver_data *dev);
 int msm_spm_drv_set_spm_enable(struct msm_spm_driver_data *dev,
 		bool enable);

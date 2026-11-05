@@ -23,7 +23,6 @@
 #include <linux/regulator/of_regulator.h>
 #include <linux/regulator/spm-regulator.h>
 #include <soc/qcom/spm.h>
-#include <linux/arm-smccc.h>
 
 #if defined(CONFIG_ARM64) || (defined(CONFIG_ARM) && defined(CONFIG_ARM_PSCI))
 #else
@@ -166,6 +165,9 @@ static const struct voltage_range hf_range1 = {1550000, 1550000, 3125000,
 #define ULT_SMPS_RANGE_SPLIT 0x60
 
 struct spm_vreg {
+	/* Main and AVS rdevs have different regulator-core locks. */
+	struct mutex			lock;
+	bool				quarantined;
 	struct regulator_desc		rdesc;
 	struct regulator_dev		*rdev;
 	struct platform_device		*pdev;
@@ -186,6 +188,7 @@ struct spm_vreg {
 	bool				bypass_spm;
 	struct regulator_desc		avs_rdesc;
 	struct regulator_dev		*avs_rdev;
+	bool				has_avs;
 	int				avs_min_uV;
 	int				avs_max_uV;
 	bool				avs_enabled;
@@ -194,7 +197,7 @@ struct spm_vreg {
 
 static inline bool spm_regulator_using_avs(struct spm_vreg *vreg)
 {
-	return vreg->avs_rdev && !vreg->bypass_spm;
+	return vreg->has_avs && !vreg->bypass_spm;
 }
 
 static int spm_regulator_uv_to_vlevel(struct spm_vreg *vreg, int uV)
@@ -252,7 +255,8 @@ static unsigned int spm_regulator_vlevel_to_selector(struct spm_vreg *vreg,
 
 static int qpnp_smps_read_voltage(struct spm_vreg *vreg)
 {
-	int rc;
+	int rc, uV;
+	unsigned int vlevel;
 	u8 val[2] = {0};
 
 	if (vreg->regulator_type == QPNP_TYPE_FTS426
@@ -267,7 +271,7 @@ static int qpnp_smps_read_voltage(struct spm_vreg *vreg)
 			return rc;
 		}
 
-		vreg->last_set_vlevel = ((unsigned int)val[1] << 8) | val[0];
+		vlevel = ((unsigned int)val[1] << 8) | val[0];
 	} else {
 		rc = regmap_bulk_read(vreg->regmap,
 			vreg->spmi_base_addr + QPNP_SMPS_REG_VOLTAGE_SETPOINT,
@@ -277,12 +281,15 @@ static int qpnp_smps_read_voltage(struct spm_vreg *vreg)
 				__func__, rc);
 			return rc;
 		}
-		vreg->last_set_vlevel = val[0];
+		vlevel = val[0];
 	}
 
-	vreg->last_set_uV = spm_regulator_vlevel_to_uv(vreg,
-						vreg->last_set_vlevel);
-	return rc;
+	uV = spm_regulator_vlevel_to_uv(vreg, vlevel);
+	if (uV < vreg->range->set_point_min_uV || uV > vreg->range->max_uV)
+		return -ERANGE;
+	vreg->last_set_vlevel = vlevel;
+	vreg->last_set_uV = uV;
+	return 0;
 }
 
 static int qpnp_smps_write_voltage(struct spm_vreg *vreg, unsigned int vlevel)
@@ -353,62 +360,72 @@ static int qpnp_smps_set_mode(struct spm_vreg *vreg, u8 mode)
 	return rc;
 }
 
-static int spm_regulator_get_voltage(struct regulator_dev *rdev)
+/*
+ * A failed transaction may already have reached the shared PMIC gang.  Do not
+ * replace the SPM owner with direct SPMI writes or retry from cached state.
+ * There is deliberately no automatic quarantine recovery.
+ */
+static int spm_regulator_fault(struct spm_vreg *vreg, int rc)
+{
+	vreg->quarantined = true;
+	return rc < 0 ? rc : -EIO;
+}
+
+static int spm_regulator_get_voltage_locked(struct regulator_dev *rdev)
 {
 	struct spm_vreg *vreg = rdev_get_drvdata(rdev);
-	int vlevel, rc;
+	int vlevel, uV, rc;
+
+	if (vreg->quarantined)
+		return -EIO;
 
 	if (spm_regulator_using_avs(vreg)) {
 		vlevel = msm_spm_get_vdd(vreg->cpu_num);
+		if (vlevel < 0)
+			return spm_regulator_fault(vreg, vlevel);
 
-		if (vlevel < 0) {
-			pr_debug("%s: msm_spm_get_vdd failed, rc=%d; falling back on SPMI read\n",
-				vreg->rdesc.name, vlevel);
-
-			rc = qpnp_smps_read_voltage(vreg);
-			if (rc) {
-				pr_err("%s: voltage read failed, rc=%d\n",
-				       vreg->rdesc.name, rc);
-				return rc;
-			}
-
-			return vreg->last_set_uV;
-		}
-
+		uV = spm_regulator_vlevel_to_uv(vreg, vlevel);
+		if (uV < vreg->range->set_point_min_uV || uV > vreg->range->max_uV)
+			return spm_regulator_fault(vreg, -ERANGE);
 		vreg->last_set_vlevel = vlevel;
-		vreg->last_set_uV = spm_regulator_vlevel_to_uv(vreg, vlevel);
-
-		return vreg->last_set_uV;
+		vreg->last_set_uV = uV;
 	} else {
-		return vreg->uV;
+		/* The requested (possibly offline) value is not a hardware readback. */
+		rc = qpnp_smps_read_voltage(vreg);
+		if (rc)
+			return spm_regulator_fault(vreg, rc);
 	}
-};
+
+	return vreg->last_set_uV;
+}
+
+static int spm_regulator_get_voltage(struct regulator_dev *rdev)
+{
+	struct spm_vreg *vreg = rdev_get_drvdata(rdev);
+	int rc;
+
+	mutex_lock(&vreg->lock);
+	rc = spm_regulator_get_voltage_locked(rdev);
+	mutex_unlock(&vreg->lock);
+	return rc;
+}
 
 static int spm_regulator_write_voltage(struct spm_vreg *vreg, int uV)
 {
 	unsigned int vlevel = spm_regulator_uv_to_vlevel(vreg, uV);
-	bool spm_failed = false;
 	int rc = 0;
 	u32 slew_delay;
 
-	if (likely(!vreg->bypass_spm)) {
-		/* Set voltage control register via SPM. */
-		rc = msm_spm_set_vdd(vreg->cpu_num, vlevel);
-		if (rc) {
-			pr_debug("%s: msm_spm_set_vdd failed, rc=%d; falling back on SPMI write\n",
-				vreg->rdesc.name, rc);
-			spm_failed = true;
-		}
-	}
+	if (vreg->quarantined)
+		return -EIO;
 
-	if (unlikely(vreg->bypass_spm || spm_failed)) {
+	if (!vreg->bypass_spm)
+		/* SPM validates the sent voltage and idle FSM before returning. */
+		rc = msm_spm_set_vdd(vreg->cpu_num, vlevel);
+	else
 		rc = qpnp_smps_write_voltage(vreg, vlevel);
-		if (rc) {
-			pr_err("%s: voltage write failed, rc=%d\n",
-				vreg->rdesc.name, rc);
-			return rc;
-		}
-	}
+	if (rc)
+		return spm_regulator_fault(vreg, rc);
 
 	if (uV > vreg->last_set_uV) {
 		/* Wait for voltage stepping to complete. */
@@ -422,6 +439,14 @@ static int spm_regulator_write_voltage(struct spm_vreg *vreg, int uV)
 		slew_delay = DIV_ROUND_UP(vreg->last_set_uV - uV,
 				vreg->step_rate) + FTS2P5_SETTLING_DELAY_US;
 		udelay(slew_delay);
+	}
+
+	if (vreg->bypass_spm) {
+		rc = qpnp_smps_read_voltage(vreg);
+		if (rc)
+			return spm_regulator_fault(vreg, rc);
+		if (vreg->last_set_vlevel != vlevel)
+			return spm_regulator_fault(vreg, -EIO);
 	}
 
 	vreg->last_set_uV = uV;
@@ -453,22 +478,25 @@ static int _spm_regulator_set_voltage(struct regulator_dev *rdev)
 	int rc = 0;
 	int uV;
 
-	rc = spm_regulator_get_voltage(rdev);
+	rc = spm_regulator_get_voltage_locked(rdev);
 	if (rc < 0)
 		return rc;
+
+	if (!vreg->max_step_uV || vreg->step_rate <= 0)
+		return -EINVAL;
 
 	if (vreg->vlevel == vreg->last_set_vlevel)
 		return 0;
 
 	pwm_required = (vreg->regulator_type == QPNP_TYPE_FTS2)
-			&& (vreg->init_mode != QPNP_LOGICAL_MODE_PWM)
+			&& (vreg->mode != QPNP_LOGICAL_MODE_PWM)
 			&& vreg->uV > vreg->last_set_uV;
 
 	if (pwm_required) {
 		/* Switch to PWM mode so that voltage ramping is fast. */
 		rc = qpnp_smps_set_mode(vreg, QPNP_LOGICAL_MODE_PWM);
 		if (rc)
-			return rc;
+			return spm_regulator_fault(vreg, rc);
 	}
 
 	do {
@@ -484,24 +512,29 @@ static int _spm_regulator_set_voltage(struct regulator_dev *rdev)
 	if (pwm_required) {
 		/* Wait for mode transition to complete. */
 		udelay(QPNP_FTS2_MODE_CHANGE_DELAY - QPNP_SPMI_WRITE_MIN_DELAY);
-		/* Switch to AUTO mode so that power consumption is lowered. */
-		rc = qpnp_smps_set_mode(vreg, QPNP_LOGICAL_MODE_AUTO);
+		/* Restore the requested mode after the temporary PWM vote. */
+		rc = qpnp_smps_set_mode(vreg, vreg->mode);
 		if (rc)
-			return rc;
+			return spm_regulator_fault(vreg, rc);
 	}
 
 	rc = spm_regulator_recalibrate(vreg);
+	if (rc)
+		return spm_regulator_fault(vreg, rc);
 
-	return rc;
+	return 0;
 }
 
-static int spm_regulator_set_voltage(struct regulator_dev *rdev, int min_uV,
+static int spm_regulator_set_voltage_locked(struct regulator_dev *rdev, int min_uV,
 					int max_uV, unsigned int *selector)
 {
 	struct spm_vreg *vreg = rdev_get_drvdata(rdev);
 	const struct voltage_range *range = vreg->range;
 	int uV = min_uV;
 	unsigned int vlevel;
+
+	if (vreg->quarantined)
+		return -EIO;
 
 	if (uV < range->set_point_min_uV && max_uV >= range->set_point_min_uV)
 		uV = range->set_point_min_uV;
@@ -532,6 +565,18 @@ static int spm_regulator_set_voltage(struct regulator_dev *rdev, int min_uV,
 	return _spm_regulator_set_voltage(rdev);
 }
 
+static int spm_regulator_set_voltage(struct regulator_dev *rdev, int min_uV,
+				   int max_uV, unsigned int *selector)
+{
+	struct spm_vreg *vreg = rdev_get_drvdata(rdev);
+	int rc;
+
+	mutex_lock(&vreg->lock);
+	rc = spm_regulator_set_voltage_locked(rdev, min_uV, max_uV, selector);
+	mutex_unlock(&vreg->lock);
+	return rc;
+}
+
 static int spm_regulator_list_voltage(struct regulator_dev *rdev,
 					unsigned int selector)
 {
@@ -543,10 +588,13 @@ static int spm_regulator_list_voltage(struct regulator_dev *rdev,
 	return selector * vreg->range->step_uV + vreg->range->set_point_min_uV;
 }
 
-static int spm_regulator_enable(struct regulator_dev *rdev)
+static int spm_regulator_enable_locked(struct regulator_dev *rdev)
 {
 	struct spm_vreg *vreg = rdev_get_drvdata(rdev);
 	int rc;
+
+	if (vreg->quarantined)
+		return -EIO;
 
 	rc = _spm_regulator_set_voltage(rdev);
 
@@ -556,33 +604,88 @@ static int spm_regulator_enable(struct regulator_dev *rdev)
 	return rc;
 }
 
-static int spm_regulator_disable(struct regulator_dev *rdev)
+static int spm_regulator_enable(struct regulator_dev *rdev)
 {
 	struct spm_vreg *vreg = rdev_get_drvdata(rdev);
+	int rc;
+
+	mutex_lock(&vreg->lock);
+	rc = spm_regulator_enable_locked(rdev);
+	mutex_unlock(&vreg->lock);
+	return rc;
+}
+
+static int spm_regulator_disable_locked(struct regulator_dev *rdev)
+{
+	struct spm_vreg *vreg = rdev_get_drvdata(rdev);
+
+	if (vreg->quarantined)
+		return -EIO;
 
 	vreg->online = false;
 
 	return 0;
 }
 
-static int spm_regulator_is_enabled(struct regulator_dev *rdev)
+static int spm_regulator_disable(struct regulator_dev *rdev)
 {
 	struct spm_vreg *vreg = rdev_get_drvdata(rdev);
+	int rc;
+
+	mutex_lock(&vreg->lock);
+	rc = spm_regulator_disable_locked(rdev);
+	mutex_unlock(&vreg->lock);
+	return rc;
+}
+
+static int spm_regulator_is_enabled_locked(struct regulator_dev *rdev)
+{
+	struct spm_vreg *vreg = rdev_get_drvdata(rdev);
+
+	if (vreg->quarantined)
+		return -EIO;
 
 	return vreg->online;
 }
 
-static unsigned int spm_regulator_get_mode(struct regulator_dev *rdev)
+static int spm_regulator_is_enabled(struct regulator_dev *rdev)
 {
 	struct spm_vreg *vreg = rdev_get_drvdata(rdev);
+	int rc;
+
+	mutex_lock(&vreg->lock);
+	rc = spm_regulator_is_enabled_locked(rdev);
+	mutex_unlock(&vreg->lock);
+	return rc;
+}
+
+static unsigned int spm_regulator_get_mode_locked(struct regulator_dev *rdev)
+{
+	struct spm_vreg *vreg = rdev_get_drvdata(rdev);
+
+	if (vreg->quarantined)
+		return 0;
 
 	return vreg->mode == QPNP_LOGICAL_MODE_PWM
 			? REGULATOR_MODE_NORMAL : REGULATOR_MODE_IDLE;
 }
 
-static int spm_regulator_set_mode(struct regulator_dev *rdev, unsigned int mode)
+static unsigned int spm_regulator_get_mode(struct regulator_dev *rdev)
 {
 	struct spm_vreg *vreg = rdev_get_drvdata(rdev);
+	unsigned int rc;
+
+	mutex_lock(&vreg->lock);
+	rc = spm_regulator_get_mode_locked(rdev);
+	mutex_unlock(&vreg->lock);
+	return rc;
+}
+
+static int spm_regulator_set_mode_locked(struct regulator_dev *rdev, unsigned int mode)
+{
+	struct spm_vreg *vreg = rdev_get_drvdata(rdev);
+	enum qpnp_logical_mode requested;
+	int rc;
 
 	/*
 	 * Map REGULATOR_MODE_NORMAL to PWM mode and REGULATOR_MODE_IDLE to
@@ -590,10 +693,26 @@ static int spm_regulator_set_mode(struct regulator_dev *rdev, unsigned int mode)
 	 * in the case that qcom,mode has been specified as "pwm" in device
 	 * tree.
 	 */
-	vreg->mode = (mode == REGULATOR_MODE_NORMAL) ? QPNP_LOGICAL_MODE_PWM
-						     : vreg->init_mode;
+	if (vreg->quarantined)
+		return -EIO;
+	requested = (mode == REGULATOR_MODE_NORMAL) ? QPNP_LOGICAL_MODE_PWM
+						 : vreg->init_mode;
+	rc = qpnp_smps_set_mode(vreg, requested);
+	if (rc)
+		return spm_regulator_fault(vreg, rc);
+	vreg->mode = requested;
+	return 0;
+}
 
-	return qpnp_smps_set_mode(vreg, vreg->mode);
+static int spm_regulator_set_mode(struct regulator_dev *rdev, unsigned int mode)
+{
+	struct spm_vreg *vreg = rdev_get_drvdata(rdev);
+	int rc;
+
+	mutex_lock(&vreg->lock);
+	rc = spm_regulator_set_mode_locked(rdev, mode);
+	mutex_unlock(&vreg->lock);
+	return rc;
 }
 
 static struct regulator_ops spm_regulator_ops = {
@@ -607,13 +726,16 @@ static struct regulator_ops spm_regulator_ops = {
 	.is_enabled	= spm_regulator_is_enabled,
 };
 
-static int spm_regulator_avs_set_voltage(struct regulator_dev *rdev, int min_uV,
+static int spm_regulator_avs_set_voltage_locked(struct regulator_dev *rdev, int min_uV,
 					int max_uV, unsigned int *selector)
 {
 	struct spm_vreg *vreg = rdev_get_drvdata(rdev);
 	const struct voltage_range *range = vreg->range;
 	unsigned int vlevel_min, vlevel_max;
 	int uV, avs_min_uV, avs_max_uV, rc;
+
+	if (vreg->quarantined)
+		return -EIO;
 
 	uV = min_uV;
 
@@ -648,10 +770,11 @@ static int spm_regulator_avs_set_voltage(struct regulator_dev *rdev, int min_uV,
 		return -EINVAL;
 	}
 
+	uV -= (uV - range->min_uV) % range->step_uV;
 	vlevel_max = spm_regulator_uv_to_vlevel(vreg, uV);
 	avs_max_uV = spm_regulator_vlevel_to_uv(vreg, vlevel_max);
 
-	if (avs_max_uV < min_uV) {
+	if (avs_max_uV < avs_min_uV) {
 		pr_err("%s: request v=[%d, %d] cannot be met by any set point\n",
 			vreg->avs_rdesc.name, min_uV, max_uV);
 		return -EINVAL;
@@ -663,7 +786,7 @@ static int spm_regulator_avs_set_voltage(struct regulator_dev *rdev, int min_uV,
 		if (rc) {
 			pr_err("%s: AVS limit setting failed, rc=%d\n",
 				vreg->avs_rdesc.name, rc);
-			return rc;
+			return spm_regulator_fault(vreg, rc);
 		}
 	}
 
@@ -674,11 +797,59 @@ static int spm_regulator_avs_set_voltage(struct regulator_dev *rdev, int min_uV,
 	return 0;
 }
 
-static int spm_regulator_avs_get_voltage(struct regulator_dev *rdev)
+static int spm_regulator_avs_set_voltage(struct regulator_dev *rdev, int min_uV,
+				       int max_uV, unsigned int *selector)
+{
+	struct spm_vreg *vreg = rdev_get_drvdata(rdev);
+	int rc;
+
+	mutex_lock(&vreg->lock);
+	rc = spm_regulator_avs_set_voltage_locked(rdev, min_uV, max_uV, selector);
+	mutex_unlock(&vreg->lock);
+	return rc;
+}
+
+static int spm_regulator_avs_get_voltage_locked(struct regulator_dev *rdev)
 {
 	struct spm_vreg *vreg = rdev_get_drvdata(rdev);
 
+	if (vreg->quarantined)
+		return -EIO;
+
 	return vreg->avs_min_uV;
+}
+
+static int spm_regulator_avs_get_voltage(struct regulator_dev *rdev)
+{
+	struct spm_vreg *vreg = rdev_get_drvdata(rdev);
+	int rc;
+
+	mutex_lock(&vreg->lock);
+	rc = spm_regulator_avs_get_voltage_locked(rdev);
+	mutex_unlock(&vreg->lock);
+	return rc;
+}
+
+static int spm_regulator_avs_enable_locked(struct regulator_dev *rdev)
+{
+	struct spm_vreg *vreg = rdev_get_drvdata(rdev);
+	int rc;
+
+	if (vreg->quarantined)
+		return -EIO;
+
+	if (likely(!vreg->bypass_spm)) {
+		rc = msm_spm_avs_enable(vreg->cpu_num);
+		if (rc) {
+			pr_err("%s: AVS enable failed, rc=%d\n",
+				vreg->avs_rdesc.name, rc);
+			return spm_regulator_fault(vreg, rc);
+		}
+	}
+
+	vreg->avs_enabled = true;
+
+	return 0;
 }
 
 static int spm_regulator_avs_enable(struct regulator_dev *rdev)
@@ -686,16 +857,30 @@ static int spm_regulator_avs_enable(struct regulator_dev *rdev)
 	struct spm_vreg *vreg = rdev_get_drvdata(rdev);
 	int rc;
 
+	mutex_lock(&vreg->lock);
+	rc = spm_regulator_avs_enable_locked(rdev);
+	mutex_unlock(&vreg->lock);
+	return rc;
+}
+
+static int spm_regulator_avs_disable_locked(struct regulator_dev *rdev)
+{
+	struct spm_vreg *vreg = rdev_get_drvdata(rdev);
+	int rc;
+
+	if (vreg->quarantined)
+		return -EIO;
+
 	if (likely(!vreg->bypass_spm)) {
-		rc = msm_spm_avs_enable(vreg->cpu_num);
+		rc = msm_spm_avs_disable(vreg->cpu_num);
 		if (rc) {
-			pr_err("%s: AVS enable failed, rc=%d\n",
+			pr_err("%s: AVS disable failed, rc=%d\n",
 				vreg->avs_rdesc.name, rc);
-			return rc;
+			return spm_regulator_fault(vreg, rc);
 		}
 	}
 
-	vreg->avs_enabled = true;
+	vreg->avs_enabled = false;
 
 	return 0;
 }
@@ -705,25 +890,31 @@ static int spm_regulator_avs_disable(struct regulator_dev *rdev)
 	struct spm_vreg *vreg = rdev_get_drvdata(rdev);
 	int rc;
 
-	if (likely(!vreg->bypass_spm)) {
-		rc = msm_spm_avs_disable(vreg->cpu_num);
-		if (rc) {
-			pr_err("%s: AVS disable failed, rc=%d\n",
-				vreg->avs_rdesc.name, rc);
-			return rc;
-		}
-	}
+	mutex_lock(&vreg->lock);
+	rc = spm_regulator_avs_disable_locked(rdev);
+	mutex_unlock(&vreg->lock);
+	return rc;
+}
 
-	vreg->avs_enabled = false;
+static int spm_regulator_avs_is_enabled_locked(struct regulator_dev *rdev)
+{
+	struct spm_vreg *vreg = rdev_get_drvdata(rdev);
 
-	return 0;
+	if (vreg->quarantined)
+		return -EIO;
+
+	return vreg->avs_enabled;
 }
 
 static int spm_regulator_avs_is_enabled(struct regulator_dev *rdev)
 {
 	struct spm_vreg *vreg = rdev_get_drvdata(rdev);
+	int rc;
 
-	return vreg->avs_enabled;
+	mutex_lock(&vreg->lock);
+	rc = spm_regulator_avs_is_enabled_locked(rdev);
+	mutex_unlock(&vreg->lock);
+	return rc;
 }
 
 static struct regulator_ops spm_regulator_avs_ops = {
@@ -849,8 +1040,7 @@ static int qpnp_smps_init_voltage(struct spm_vreg *vreg)
 	if (!vreg->bypass_spm) {
 		rc = msm_spm_set_vdd(vreg->cpu_num, vreg->vlevel);
 		if (rc)
-			pr_err("%s: msm_spm_set_vdd failed, rc=%d\n",
-			       vreg->rdesc.name, rc);
+			return rc;
 	}
 
 	return 0;
@@ -884,11 +1074,13 @@ static int qpnp_smps_init_mode(struct spm_vreg *vreg)
 		rc = regmap_read(vreg->regmap,
 				 vreg->spmi_base_addr + QPNP_SMPS_REG_MODE,
 				 &val);
-		if (rc)
+		if (rc) {
 			dev_err(&vreg->pdev->dev,
 				"%s: could not read mode register, rc=%d\n",
 				__func__, rc);
-			 vreg->init_mode = qpnp_regval_to_mode(vreg, val);
+			return rc;
+		}
+		vreg->init_mode = qpnp_regval_to_mode(vreg, val);
 	}
 
 	vreg->mode = vreg->init_mode;
@@ -1078,7 +1270,8 @@ static int spm_regulator_avs_register(struct spm_vreg *vreg,
 	init_data = of_get_regulator_init_data(dev, avs_node, &vreg->avs_rdesc);
 	if (!init_data) {
 		dev_err(dev, "%s: unable to allocate memory\n", __func__);
-		return -ENOMEM;
+		rc = -ENOMEM;
+		goto put_node;
 	}
 	init_data->constraints.input_uV = init_data->constraints.max_uV;
 	init_data->constraints.valid_ops_mask |= REGULATOR_CHANGE_STATUS
@@ -1087,7 +1280,8 @@ static int spm_regulator_avs_register(struct spm_vreg *vreg,
 	if (!init_data->constraints.name) {
 		dev_err(dev, "%s: AVS node is missing regulator name\n",
 			__func__);
-		return -EINVAL;
+		rc = -EINVAL;
+		goto put_node;
 	}
 
 	vreg->avs_rdesc.name	= init_data->constraints.name;
@@ -1106,16 +1300,20 @@ static int spm_regulator_avs_register(struct spm_vreg *vreg,
 	vreg->avs_rdev = regulator_register(&vreg->avs_rdesc, &reg_config);
 	if (IS_ERR(vreg->avs_rdev)) {
 		rc = PTR_ERR(vreg->avs_rdev);
+		vreg->avs_rdev = NULL;
 		dev_err(dev, "%s: AVS regulator_register failed, rc=%d\n",
 			__func__, rc);
-		return rc;
+		goto put_node;
 	}
 
 	if (vreg->bypass_spm)
 		pr_debug("%s: SPM bypassed so AVS regulator calls are no-ops\n",
 			vreg->avs_rdesc.name);
 
-	return 0;
+	rc = 0;
+put_node:
+	of_node_put(avs_node);
+	return rc;
 }
 
 static int spm_regulator_probe(struct platform_device *pdev)
@@ -1154,8 +1352,11 @@ static int spm_regulator_probe(struct platform_device *pdev)
 		dev_err(&pdev->dev, "Couldn't get parent's regmap\n");
 		return -EINVAL;
 	}
+	mutex_init(&vreg->lock);
 	vreg->pdev = pdev;
 	vreg->bypass_spm = bypass_spm;
+	/* Publish the readback source before either rdev can serve consumers. */
+	vreg->has_avs = of_get_available_child_count(node) != 0;
 
 	rc = of_property_read_u32(pdev->dev.of_node, "reg", &base);
 	if (rc < 0) {
@@ -1164,6 +1365,8 @@ static int spm_regulator_probe(struct platform_device *pdev)
 			pdev->dev.of_node->full_name, rc);
 		return rc;
 	}
+	if (base > U16_MAX - QPNP_FTS_REG_VOLTAGE_LLS_VALID)
+		return -EINVAL;
 	vreg->spmi_base_addr = base;
 
 	rc = qpnp_smps_check_type(vreg);
@@ -1251,6 +1454,10 @@ static int spm_regulator_probe(struct platform_device *pdev)
 		vreg->max_step_uV = SPM_REGULATOR_MAX_STEP_UV;
 
 	vreg->max_step_uV = rounddown(vreg->max_step_uV, vreg->range->step_uV);
+	if (!vreg->max_step_uV) {
+		dev_err(&pdev->dev, "max voltage step is smaller than one setpoint\n");
+		return -EINVAL;
+	}
 	pr_debug("%s: max single voltage step size=%u uV\n",
 		vreg->rdesc.name, vreg->max_step_uV);
 

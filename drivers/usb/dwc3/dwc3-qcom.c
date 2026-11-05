@@ -436,6 +436,17 @@ static int dwc3_qcom_probe(struct platform_device *pdev)
 	int			ret, i;
 	bool			ignore_pipe_clk;
 
+	/* The Sony PHY gate is too late: this parent resets the controller,
+	 * selects UTMI and forces VBUS before the child PHY can reject init.
+	 * Keep firmware USB/charging ownership intact until the common handoff
+	 * exists. No DT bypass property or guessed PMIC owner is provided.
+	 */
+	if (of_machine_is_compatible("sony,dora-row") ||
+	    of_machine_is_compatible("somc,dora-row")) {
+		dev_err(dev, "Dora USB parent blocked: charging handoff unavailable\n");
+		return -EOPNOTSUPP;
+	}
+
 	qcom = devm_kzalloc(&pdev->dev, sizeof(*qcom), GFP_KERNEL);
 	if (!qcom)
 		return -ENOMEM;

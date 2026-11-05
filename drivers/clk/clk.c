@@ -997,7 +997,7 @@ int clk_vdd_class_reattach(struct clk_vdd_class *vdd, const void *owner)
 	if (!vdd->orphaned_handoff || vdd->num_clocks ||
 	    vdd->error != -ESHUTDOWN || vdd->enable_uncertain ||
 	    !vdd->require_handoff || vdd->skip_handoff || !vdd->sync_vdd ||
-	    vdd->num_levels < 2 ||
+	    vdd->num_levels < 2 || !vdd->level_votes ||
 	    vdd->cur_level != (unsigned long)(vdd->num_levels - 1))
 		goto out;
 	for (i = 0; i < vdd->num_levels; i++)
@@ -1017,6 +1017,8 @@ int clk_vdd_class_reattach(struct clk_vdd_class *vdd, const void *owner)
 	ret = vdd->sync_vdd(vdd, vdd->num_levels - 1);
 	if (ret) {
 		vdd->orphaned_handoff = false;
+		vdd->error = ret;
+		vdd->recovery_level = vdd->num_levels - 1;
 		kfree(v);
 		goto out;
 	}

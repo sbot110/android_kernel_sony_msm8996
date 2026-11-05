@@ -29,7 +29,10 @@ common = common.replace("#define mutex_lock(x) ((void)(x))", "#define mutex_lock
 common = common.replace("#define mutex_unlock(x) ((void)(x))", "#define mutex_unlock(x) assert(!pthread_mutex_unlock(&(x)->value))")
 common = common.replace("static void clk_prepare_lock(void) {}", "static void clk_prepare_lock(void) {mutex_lock(&prepare_lock);}")
 common = common.replace("static void clk_prepare_unlock(void) {}", "static void clk_prepare_unlock(void) {mutex_unlock(&prepare_lock);}")
-common = common.replace("memset(&vdd,0,sizeof(vdd));", "memset(&vdd,0,sizeof(vdd));assert(!pthread_mutex_init(&vdd.lock.value,NULL));")
+common = common.replace("static struct clk_vdd_class vdd;", "static struct clk_vdd_class vdd;static bool vdd_lock_initialized;")
+common = common.replace("memset(&vdd,0,sizeof(vdd));",
+                        "if(vdd_lock_initialized)assert(!pthread_mutex_destroy(&vdd.lock.value));"
+                        "memset(&vdd,0,sizeof(vdd));assert(!pthread_mutex_init(&vdd.lock.value,NULL));vdd_lock_initialized=true;")
 gcc = (ROOT / "drivers/clk/qcom/gcc-msm8996.c").read_text()
 start = gcc.index("static int gcc_msm8996_probe(")
 end = gcc.index("\nstatic struct platform_driver", start)
@@ -151,6 +154,7 @@ int main(void)
  assert(votes[2]==1 && !votes[1] && rail.enables==1);clk_vdd_class_deinit(&vdd);
  /* Lost ACK is sticky: later good transport cannot clear the quarantine. */
  ack_error=-ETIMEDOUT;assert(clk_vdd_class_reattach(&vdd,&p.dev)==-ETIMEDOUT);
+ assert(vdd.error==-ETIMEDOUT && !vdd.orphaned_handoff);
  ack_error=0;assert(clk_vdd_class_reattach(&vdd,&p.dev)==-ESHUTDOWN && votes[2]==1);
  setup();assert(!gcc_msm8996_probe(&p));assert(!clk_vote_vdd_level(&vdd,1));
  registered[live-1].vdd_class_vote_held=true;registered[live-1].vdd_class_vote=1;
@@ -180,7 +184,12 @@ with tempfile.TemporaryDirectory(prefix="dora-clock-reattach-") as tmp:
         }
         for name, (old, new) in mutations.items():
             assert old in common, name
-            c.write_text(common.replace(old, new, 1) + model + probe + tests)
+            changed = common.replace(old, new, 1)
+            if name == "sticky quarantine":
+                # Both independent quarantine checks must be removed to
+                # simulate this regression after preserving the ACK errno.
+                changed = changed.replace("vdd->error != -ESHUTDOWN || ", "", 1)
+            c.write_text(changed + model + probe + tests)
             subprocess.run(command, check=True, capture_output=True)
             result = subprocess.run([str(binary)], capture_output=True)
             if result.returncode == 0:

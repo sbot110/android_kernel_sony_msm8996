@@ -943,6 +943,7 @@ done:
 static void clk_vdd_class_deinit(struct clk_vdd_class *vdd)
 {
 	struct clk_handoff_vdd *v, *tmp;
+	int i;
 
 	mutex_lock(&vdd_class_list_lock);
 	if (WARN_ON(!vdd->num_clocks))
@@ -957,8 +958,19 @@ static void clk_vdd_class_deinit(struct clk_vdd_class *vdd)
 			 * coverage. Keep the explicit high lease; provider teardown
 			 * must not guess that firmware hardware is now inactive.
 			 */
+			mutex_lock(&vdd->lock);
+			vdd->orphaned_handoff = vdd->handoff_owner &&
+				!vdd->orphaned && !vdd->error &&
+				!vdd->enable_uncertain && vdd->sync_vdd &&
+				vdd->cur_level == (unsigned long)(vdd->num_levels - 1);
+			for (i = 0; i < vdd->num_levels; i++)
+				if (vdd->level_votes[i] !=
+				    (i == vdd->num_levels - 1))
+					vdd->orphaned_handoff = false;
 			vdd->orphaned = true;
-			vdd->error = -ESHUTDOWN;
+			if (!vdd->error)
+				vdd->error = -ESHUTDOWN;
+			mutex_unlock(&vdd->lock);
 			pr_err("%s: orphaned handoff voltage lease\n", vdd->class_name);
 		}
 		/* No global pointer may outlive the provider-owned class. */
@@ -968,6 +980,59 @@ static void clk_vdd_class_deinit(struct clk_vdd_class *vdd)
 out:
 	mutex_unlock(&vdd_class_list_lock);
 }
+
+int clk_vdd_class_reattach(struct clk_vdd_class *vdd, const void *owner)
+{
+	struct clk_handoff_vdd *v;
+	int i, ret = 0;
+
+	if (!vdd || !owner || vdd->handoff_owner != owner)
+		return -EPERM;
+	clk_prepare_lock();
+	mutex_lock(&vdd_class_list_lock);
+	mutex_lock(&vdd->lock);
+	if (!vdd->orphaned)
+		goto out;
+	ret = -ESHUTDOWN;
+	if (!vdd->orphaned_handoff || vdd->num_clocks ||
+	    vdd->error != -ESHUTDOWN || vdd->enable_uncertain ||
+	    !vdd->require_handoff || vdd->skip_handoff || !vdd->sync_vdd ||
+	    vdd->num_levels < 2 ||
+	    vdd->cur_level != (unsigned long)(vdd->num_levels - 1))
+		goto out;
+	for (i = 0; i < vdd->num_levels; i++)
+		if (vdd->level_votes[i] != (i == vdd->num_levels - 1))
+			goto out;
+	list_for_each_entry(v, &clk_handoff_vdd_list, list)
+		if (v->vdd_class == vdd)
+			goto out;
+	v = kzalloc(sizeof(*v), GFP_KERNEL);
+	if (!v) {
+		ret = -ENOMEM;
+		goto out;
+	}
+	/* Bypass only the CCF lifecycle tombstone, never the typed provider's
+	 * quarantine. Reuse the exact count/handles and force fresh ACKs.
+	 */
+	ret = vdd->sync_vdd(vdd, vdd->num_levels - 1);
+	if (ret) {
+		vdd->orphaned_handoff = false;
+		kfree(v);
+		goto out;
+	}
+	v->vdd_class = vdd;
+	v->vote_held = true;
+	list_add_tail(&v->list, &clk_handoff_vdd_list);
+	vdd->orphaned_handoff = false;
+	vdd->orphaned = false;
+	vdd->error = 0;
+out:
+	mutex_unlock(&vdd->lock);
+	mutex_unlock(&vdd_class_list_lock);
+	clk_prepare_unlock();
+	return ret;
+}
+EXPORT_SYMBOL_GPL(clk_vdd_class_reattach);
 
 int clk_vdd_class_release_handoff(struct clk_vdd_class *vdd)
 {
@@ -1145,8 +1210,10 @@ static void clk_detach_vdd_core(struct clk_core *core)
 		return;
 	if (core->vdd_class_vote_held || core->new_vdd_class_vote_held) {
 		mutex_lock(&vdd->lock);
-		vdd->error = -ESHUTDOWN;
+		if (!vdd->error)
+			vdd->error = -ESHUTDOWN;
 		vdd->orphaned = true;
+		vdd->orphaned_handoff = false;
 		vdd->recovery_level = max(core->vdd_class_vote_held ?
 			core->vdd_class_vote : 0, core->new_vdd_class_vote_held ?
 			core->new_vdd_class_vote : 0);

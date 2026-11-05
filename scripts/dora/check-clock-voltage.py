@@ -135,10 +135,12 @@ struct clk_vdd_class {
     const char *class_name;unsigned num_levels;int *level_votes,cur_level;
     int (*set_vdd)(struct clk_vdd_class *,int);
     int (*sync_vdd)(struct clk_vdd_class *,int);
-    bool skip_handoff,require_handoff;struct mutex lock;
+    bool skip_handoff,require_handoff;const void *handoff_owner;struct mutex lock;
 };
 struct clk_init_data {struct clk_vdd_class *vdd_class;unsigned long *rate_max;unsigned num_rate_max,flags;};
 struct clk_hw {const struct clk_init_data *init;bool enabled,prepared;unsigned long rate;struct clk_hw *parent;};
+static int clk_vdd_class_reattach(struct clk_vdd_class *v,const void *owner)
+{ assert(v->handoff_owner==owner);return 0; }
 /* API boundaries only: the actual core aggregation and RPM transaction engines
  * have separate source-executing tests. Cached load changes on every call,
  * including a failed or quarantined callback. Lost ACK delivery is selectable.

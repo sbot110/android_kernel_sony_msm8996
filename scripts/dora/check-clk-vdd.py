@@ -187,7 +187,7 @@ match = re.search(r'enum clk_vdd_action \{.*?\n\};', source, re.S)
 assert match
 common += match[0] + '\n'
 names = ['clk_find_vdd_level','clk_apply_vdd_level','clk_sync_vdd','clk_update_vdd',
- 'clk_vote_vdd_level','clk_unvote_vdd_level','clk_vote_rate_vdd','clk_vdd_class_init','clk_vdd_class_deinit','clk_vdd_class_release_handoff','clk_vdd_class_handoff_done',
+ 'clk_vote_vdd_level','clk_unvote_vdd_level','clk_vote_rate_vdd','clk_vdd_class_init','clk_vdd_class_deinit','clk_vdd_class_reattach','clk_vdd_class_release_handoff','clk_vdd_class_handoff_done',
  'clk_sync_core_vdd','clk_drop_vdd_vote','clk_promote_vdd_vote','clk_finish_vdd_vote','clk_detach_vdd_core',
  'clk_retry_vdd_votes','clk_release_unprepared_vdd','clk_core_prepare','clk_core_unprepare',
  '__clk_set_parent_before','__clk_set_parent_after','clk_reconcile_parent','clk_parent_failed','__clk_set_parent',
@@ -333,14 +333,40 @@ int main(void)
  assert(clk_vdd_class_release_handoff(&vdd)==0 && votes[2]==1 && !list_empty(&clk_handoff_vdd_list));
  assert(!clk_vdd_class_handoff_done(&vdd));
  clk_vdd_class_deinit(&vdd);
+ /* Only the sole, healthy bootstrap vote can return to its pinned owner. */
+ reset();vdd.skip_handoff=false;vdd.require_handoff=true;vdd.handoff_owner=&rail;
+ assert(!clk_vdd_class_init(&vdd));assert(!clk_vdd_class_init(&vdd));
+ clk_vdd_class_deinit(&vdd);assert(!vdd.orphaned);
+ clk_vdd_class_deinit(&vdd);assert(vdd.orphaned_handoff && votes[2]==1);
+ assert(clk_vdd_class_reattach(&vdd,&clk)==-EPERM && vdd.orphaned);
+ alloc_error=1;assert(clk_vdd_class_reattach(&vdd,&rail)==-ENOMEM);
+ alloc_error=0;{int calls=ack_calls;assert(!clk_vdd_class_reattach(&vdd,&rail));
+ assert(ack_calls==calls+1 && votes[2]==1 && rail.enables==1 && !vdd.orphaned);}
+ assert(!clk_vdd_class_init(&vdd) && votes[2]==1);
+ clk_vdd_class_deinit(&vdd);ack_error=-ETIMEDOUT;
+ assert(clk_vdd_class_reattach(&vdd,&rail)==-ETIMEDOUT && vdd.orphaned && votes[2]==1);
+ ack_error=0;assert(clk_vdd_class_reattach(&vdd,&rail)==-ESHUTDOWN);
+ reset();vdd.skip_handoff=false;vdd.require_handoff=true;vdd.handoff_owner=&rail;
+ assert(!clk_vdd_class_init(&vdd));assert(!clk_vote_vdd_level(&vdd,1));
+ clk_vdd_class_deinit(&vdd);
+ assert(!vdd.orphaned_handoff && clk_vdd_class_reattach(&vdd,&rail)==-ESHUTDOWN);
+ reset();vdd.skip_handoff=false;vdd.require_handoff=true;vdd.handoff_owner=&rail;
+ assert(!clk_vdd_class_init(&vdd));vdd.error=-EIO;clk_vdd_class_deinit(&vdd);
+ assert(vdd.error==-EIO && !vdd.orphaned_handoff);
+ assert(clk_vdd_class_reattach(&vdd,&rail)==-ESHUTDOWN);
  puts("PASS: actual CCF leases, ACK quarantine, bootstrap sentinel, PM balance, unprepared writes, mux readback, notifier abort and teardown");
  return 0;
 }
 '''
-with tempfile.TemporaryDirectory(prefix='dora-clk-vdd-') as scratch:
-    c,binary=Path(scratch)/'ccf.c',Path(scratch)/'ccf'
-    c.write_text(common)
-    subprocess.run([os.environ.get('HOSTCC','cc'),'-std=gnu11','-O1','-Wall','-Wextra','-Werror',
-                    '-Wno-unused-function','-Wno-unused-parameter','-Wno-unused-value',*(['-fsanitize=address,undefined','-fno-omit-frame-pointer'] if os.environ.get('CCF_TEST_SANITIZE') else []),str(c),'-o',str(binary)],check=True)
-    subprocess.run([str(binary)],check=True)
-print('Host state model only; physical RPM/PLL behavior and IRQ races remain unverified.')
+def main():
+    with tempfile.TemporaryDirectory(prefix='dora-clk-vdd-') as scratch:
+        c,binary=Path(scratch)/'ccf.c',Path(scratch)/'ccf'
+        c.write_text(common)
+        subprocess.run([os.environ.get('HOSTCC','cc'),'-std=gnu11','-O1','-Wall','-Wextra','-Werror',
+                        '-Wno-unused-function','-Wno-unused-parameter','-Wno-unused-value',*(['-fsanitize=address,undefined','-fno-omit-frame-pointer'] if os.environ.get('CCF_TEST_SANITIZE') else []),str(c),'-o',str(binary)],check=True)
+        subprocess.run([str(binary)],check=True)
+    print('Host state model only; physical RPM/PLL behavior and IRQ races remain unverified.')
+
+
+if __name__ == "__main__":
+    main()

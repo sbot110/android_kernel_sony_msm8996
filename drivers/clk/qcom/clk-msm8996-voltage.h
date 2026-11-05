@@ -207,6 +207,9 @@ static int msm8996_voltage_init(struct device *dev,
 		if (voltage->dev != dev)
 			return -EBUSY;
 		voltage->ownership_known = false;
+		ret = clk_vdd_class_reattach(&voltage->vdd, dev);
+		if (ret)
+			return ret;
 		return msm8996_voltage_set(&voltage->vdd, MSM8996_VOLTAGE_HIGH);
 	}
 	dig = regulator_get(dev, digital);
@@ -237,6 +240,7 @@ static int msm8996_voltage_init(struct device *dev,
 	 * dynamically removed after a failed probe; retries reuse this ref.
 	 */
 	voltage->dev = get_device(dev);
+	voltage->vdd.handoff_owner = voltage->dev;
 	voltage->vdd.level_votes = voltage->votes;
 	voltage->vdd.set_vdd = msm8996_voltage_set;
 	voltage->vdd.sync_vdd = msm8996_voltage_sync;

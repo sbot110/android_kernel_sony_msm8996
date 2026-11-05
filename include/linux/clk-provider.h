@@ -324,6 +324,8 @@ struct regulator;
  * @recovery_level: conservative level required before clearing quarantine
  * @enable_uncertain: generic enable state requires provider-qualified replay
  * @orphaned: unreleasable lease lost its provider; no automatic recovery
+ * @handoff_owner: pinned, persistent provider opting into handoff reattachment
+ * @orphaned_handoff: only a clean bootstrap vote was lost during unwind
  * @num_clocks: registered clocks keeping the class handoff record alive
  * @lock: lock to protect this struct
  */
@@ -344,6 +346,8 @@ struct clk_vdd_class {
 	int recovery_level;
 	bool enable_uncertain;
 	bool orphaned;
+	const void *handoff_owner;
+	bool orphaned_handoff;
 	unsigned int num_clocks;
 	struct mutex lock;
 };
@@ -352,6 +356,12 @@ struct clk_vdd_class {
  * late bootstrap lease. Before global handoff this retains the ordinary lease.
  */
 int clk_vdd_class_release_handoff(struct clk_vdd_class *vdd);
+
+/* Reattach only an intact, sole HIGH bootstrap lease to its original owner.
+ * This does not recover hardware quarantine or lost per-clock references.
+ * The owner/class must remain alive across probe failure. No class lock held.
+ */
+int clk_vdd_class_reattach(struct clk_vdd_class *vdd, const void *owner);
 
 /* True only after global cleanup and this live class's handoff vote release.
  * This reports CCF accounting, not hardware ownership, idle state or rail ACK.

@@ -40,6 +40,7 @@ python3 "$root/scripts/dora/check-config.py" "$out/.config"
 python3 "$root/scripts/dora/check-android-abi.py" "$out/.config" --selftest
 python3 "$root/scripts/dora/check-cpu-clocks.py" --config "$out/.config"
 python3 "$root/scripts/dora/check-cpu-transactions.py"
+python3 "$root/scripts/dora/check-cpu-hardware.py"
 python3 "$root/scripts/dora/check-spmi-ownership.py"
 python3 "$root/scripts/dora/check-mmc-alias.py"
 python3 "$root/scripts/dora/check-mmc-uim2.py"
@@ -58,6 +59,7 @@ python3 "$root/scripts/dora/check-rpm-pm-order.py" --self-test
 python3 "$root/scripts/dora/check-rpm-corners.py"
 python3 "$root/scripts/dora/check-clock-voltage.py" --self-test
 python3 "$root/scripts/dora/check-clk-vdd.py"
+python3 "$root/scripts/dora/check-clock-reattach.py" --self-test
 python3 "$root/scripts/dora/check-panels.py"
 python3 "$root/scripts/dora/check-panel-selection.py"
 python3 "$root/scripts/dora/check-ufs-phy.py"

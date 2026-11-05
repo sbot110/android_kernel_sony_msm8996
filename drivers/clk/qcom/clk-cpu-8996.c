@@ -20,6 +20,7 @@
 #include <linux/platform_device.h>
 
 #include "clk-msm8996-boot.h"
+#include "clk-msm8996-cpu-hw.h"
 
 struct msm8996_boot_clk {
 	struct clk_hw hw;
@@ -139,6 +140,7 @@ static int msm8996_boot_probe(struct platform_device *pdev)
 	struct clk_hw_onecell_data *data;
 	struct msm8996_boot_clk *clks;
 	struct clk_init_data init = { };
+	struct msm8996_cpu_hw_plans plans;
 	const char *parent;
 	struct clk *xo, *aux;
 	struct resource *res;
@@ -165,6 +167,17 @@ static int msm8996_boot_probe(struct platform_device *pdev)
 	aux = devm_clk_get(dev, "aux");
 	if (IS_ERR(aux))
 		return PTR_ERR(aux);
+	/* Optional on other boards; Dora supplies the real QFPROM cell.
+	 * Resolve and validate all three source plans before publishing clocks.
+	 * A fuse/provider error cannot become a guessed bin0 or voltage vote.
+	 */
+	if (!cbf && of_property_read_bool(dev->of_node, "nvmem-cells")) {
+		ret = msm8996_cpu_hw_read_plans(dev, &plans);
+		if (ret)
+			return ret;
+		dev_info(dev, "QFPROM CPU speed bin %u; CPR/SPM ownership unavailable\n",
+			 plans.speed_bin);
+	}
 	parent = __clk_get_name(xo);
 	count = cbf ? 1 : 2;
 	data = devm_kzalloc(dev, sizeof(*data) + count * sizeof(data->hws[0]),

@@ -65,6 +65,14 @@ def validate(nodes):
                 raise ValueError("Sony CPU data changed: " + path + ":" + key)
     apcc_path = "/soc/clock-controller@6400000"
     apcc = nodes[apcc_path]["props"]
+    fuse_path = "/soc/qfprom@74000/cpu-speedbin@133"
+    fuse = nodes[fuse_path]["props"]
+    if (cells(fuse.get("reg", b"")) != (0x133, 1) or
+            cells(fuse.get("bits", b"")) != (5, 3) or
+            apcc.get("nvmem-cell-names") != b"speedbin\0" or
+            len(cells(apcc.get("nvmem-cells", b""))) != 1 or
+            phandles.get(cells(apcc["nvmem-cells"])[0]) != fuse_path):
+        raise ValueError("incorrect byte-relative QFPROM speed-bin dependency")
     def observer_inputs(props):
         # Native adaptation: XO plus the same measured GPLL0 main source
         # used by Sony sys_apcsaux_clk_gcc; the observer applies /2 itself.
@@ -105,6 +113,10 @@ def selftest(nodes):
         ("/soc/clock-controller@6400000", "qcom,pwrcl-speedbin1-v0", b"\0" * 8),
         ("/soc/clock-controller@6400000", "clock-names", b"xo\0"),
         ("/soc/clock-controller@6400000", "clocks", struct.pack(">III", 0, 0, 0)),
+        ("/soc/clock-controller@6400000", "nvmem-cells", None),
+        ("/soc/clock-controller@6400000", "nvmem-cell-names", b"wrong\0"),
+        ("/soc/qfprom@74000/cpu-speedbin@133", "bits", struct.pack(">II", 29, 3)),
+        ("/soc/qfprom@74000/cpu-speedbin@133", "reg", struct.pack(">II", 0x130, 4)),
         ("/soc/clock-controller@9a11000", "clock-names", b"xo\0"),
         ("/soc/clock-controller@9a11000", "clocks", struct.pack(">III", 0, 0, 0)),
         ("/chosen", "bootargs", b"\0"),

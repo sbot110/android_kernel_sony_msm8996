@@ -170,6 +170,12 @@ static unsigned long clk_get_rate(struct clk *clock)
 #define dev_info(...) ((void)0)
 #define of_clk_hw_onecell_get NULL
 struct device { void *of_node; };
+struct msm8996_cpu_hw_plans { unsigned speed_bin; };
+static bool fuse_present;
+static int fuse_error;
+static unsigned fuse_reads;
+static bool of_property_read_bool(void *node,const char *name)
+{ (void)node;assert(!strcmp(name,"nvmem-cells"));return fuse_present; }
 struct platform_device { struct device dev; };
 struct resource { unsigned long size; };
 struct clk_ops { unsigned long (*recalc_rate)(struct clk_hw *, unsigned long); };
@@ -185,6 +191,8 @@ static struct clk probe_xo = { .rate = 19200000 }, probe_aux = { .rate = 6000000
 static bool probe_cbf;
 static int aux_error;
 static unsigned registrations, providers;
+static int msm8996_cpu_hw_read_plans(struct device *dev,struct msm8996_cpu_hw_plans *plans)
+{ (void)dev;assert(!registrations && !providers);plans->speed_bin=2;fuse_reads++;return fuse_error; }
 static struct resource resource = { .size = sizeof(registers) };
 static void *allocations[8];
 static unsigned allocation_count;
@@ -357,6 +365,13 @@ int main(void)
         assert(registrations == (i ? 1 : 2) && providers == 1);
         while (allocation_count) free(allocations[--allocation_count]);
     }
+    reset(false,0);probe_cbf=false;registrations=providers=0;fuse_present=true;
+    fuse_error=-EPROBE_DEFER;
+    assert(msm8996_boot_probe(&pdev)==-EPROBE_DEFER && fuse_reads==1);
+    assert(!registrations && !providers && !allocation_count);
+    fuse_error=-EINVAL;assert(msm8996_boot_probe(&pdev)==-EINVAL && fuse_reads==2);
+    fuse_error=0;assert(!msm8996_boot_probe(&pdev) && fuse_reads==3);
+    while(allocation_count)free(allocations[--allocation_count]);
     return 0;
 }
 '''

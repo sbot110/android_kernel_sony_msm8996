@@ -13,6 +13,8 @@
 	/* Sony sys_apcsaux_clk is GPLL0 main output divided by two. */
 	clocks = <&xo_board>, <&gcc GPLL0>;
 	clock-names = "xo", "aux";
+	nvmem-cells = <&sony_cpu_speedbin>;
+	nvmem-cell-names = "speedbin";
 	qcom,pwrcl-speedbin0-v0 =
 		<0 0>,
 		<307200000 1>,
@@ -262,9 +264,10 @@
 &CPU3 { clocks = <&kryocc 1>; };
 
 &{/soc/qfprom@74000} {
-	sony_cpu_speedbin: cpu-speedbin@130 {
-		reg = <0x130 4>;
-		bits = <29 3>;
+	/* NVMEM bit offsets are byte-relative (0..7). Sony EFUSE[31:29]. */
+	sony_cpu_speedbin: cpu-speedbin@133 {
+		reg = <0x133 1>;
+		bits = <5 3>;
 	};
 };
 

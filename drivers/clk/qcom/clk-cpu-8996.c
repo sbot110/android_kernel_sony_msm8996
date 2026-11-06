@@ -8,6 +8,7 @@
  */
 
 #include <linux/clk.h>
+#include <linux/cpuhotplug.h>
 #include <linux/clk-provider.h>
 #include <linux/delay.h>
 #include <linux/io.h>
@@ -341,14 +342,20 @@ static struct clk_regmap *cpu_msm8996_clks[] = {
 
 static DEFINE_SPINLOCK(qcom_clk_acd_lock);
 static void __iomem *base;
+static enum cpuhp_state qcom_cpu_clk_cpuhp_state;
 
 void qcom_cpu_clk_msm8996_acd_init(void __iomem *reg_base)
 {
 	u64 l2acdtd;
+	u64 mpidr;
+	u32 cluster;
 	unsigned long flags;
 
 	if (!reg_base)
 		return;
+
+	mpidr = read_cpuid_mpidr();
+	cluster = mpidr & CPU_CLUSTER_AFFINITY_MASK;
 
 	spin_lock_irqsave(&qcom_clk_acd_lock, flags);
 
@@ -360,15 +367,32 @@ void qcom_cpu_clk_msm8996_acd_init(void __iomem *reg_base)
 		kryo_l2_set_indirect_reg(L2ACDCR_REG, L2ACDCR_INIT_VAL);
 	}
 
-	/* Always configure SSSCTL on both clusters to ensure secondary cluster readiness */
-	writel(0xf, reg_base + PWRCL_REG_OFFSET + SSSCTL_OFFSET);
-	writel(0xf, reg_base + PERFCL_REG_OFFSET + SSSCTL_OFFSET);
+	/*
+	 * Hardware safety rule: SSSCTL must only be written AFTER L2ACDCR
+	 * is programmed in the cluster's local L2 controller, and only for
+	 * the currently executing cluster.
+	 */
+	if (cluster == PERFCL_CLUSTER_ID)
+		writel(0xf, reg_base + PERFCL_REG_OFFSET + SSSCTL_OFFSET);
+	else
+		writel(0xf, reg_base + PWRCL_REG_OFFSET + SSSCTL_OFFSET);
 
 	spin_unlock_irqrestore(&qcom_clk_acd_lock, flags);
 }
 
+static int qcom_cpu_clk_msm8996_cpu_online(unsigned int cpu)
+{
+	if (base)
+		qcom_cpu_clk_msm8996_acd_init(base);
+	return 0;
+}
+
 static void qcom_cpu_clk_msm8996_unregister_fixed(void)
 {
+	if (qcom_cpu_clk_cpuhp_state > 0) {
+		cpuhp_remove_state(qcom_cpu_clk_cpuhp_state);
+		qcom_cpu_clk_cpuhp_state = 0;
+	}
 	if (!IS_ERR_OR_NULL(perfcl_pmux.pll_acd)) {
 		clk_hw_unregister(perfcl_pmux.pll_acd);
 		perfcl_pmux.pll_acd = NULL;
@@ -482,6 +506,14 @@ static int qcom_cpu_clk_msm8996_register_clks(struct device *dev,
 
 	qcom_cpu_clk_msm8996_acd_init(base);
 
+	ret = cpuhp_setup_state(CPUHP_AP_ONLINE_DYN, "clk/qcom/cpu8996:online",
+				qcom_cpu_clk_msm8996_cpu_online, NULL);
+	if (ret < 0) {
+		dev_err(dev, "Failed to register cpuhp state: %d\n", ret);
+		goto err_unreg;
+	}
+	qcom_cpu_clk_cpuhp_state = ret;
+
 	/* Park secondary muxes on PLL/2 so sub-600 MHz OPPs are ready */
 	ret = clk_cpu_8996_mux_set_parent(&pwrcl_smux.clkr.hw, SMUX_PLL_DIV2_INDEX);
 	if (ret)
@@ -565,7 +597,9 @@ static int cpu_clk_notifier_cb(struct notifier_block *nb, unsigned long event,
 		}
 		break;
 	case ABORT_RATE_CHANGE:
-		clk_cpu_8996_mux_set_parent(&smux->clkr.hw, SMUX_PLL_DIV2_INDEX);
+		ret = clk_cpu_8996_mux_set_parent(&smux->clkr.hw, SMUX_PLL_DIV2_INDEX);
+		if (ret)
+			break;
 		ret = clk_cpu_8996_mux_set_parent(&cpuclk->clkr.hw,
 						  cnd->old_rate < DIV_2_THRESHOLD ?
 						  DIV_2_INDEX : ACD_INDEX);

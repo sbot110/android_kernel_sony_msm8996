@@ -446,75 +446,117 @@ out_unlock:
 	return ret;
 }
 
-static bool pmi8994_is_battery_present(struct pmi8994_fg_chg *chip)
+static int pmi8994_get_battery_presence(struct pmi8994_fg_chg *chip, bool *present)
 {
 	u8 rt = 0;
+	int ret;
 
-	if (pmi8994_read_u8(chip, chip->bat_if_base + INT_RT_STS_OFFSET, &rt))
-		return true;
+	if (!chip || !present)
+		return -EINVAL;
 
-	return !(rt & BAT_IF_RT_BATT_MISSING);
+	*present = false;
+	ret = pmi8994_read_u8(chip, chip->bat_if_base + INT_RT_STS_OFFSET, &rt);
+	if (ret)
+		return ret;
+
+	*present = !(rt & BAT_IF_RT_BATT_MISSING);
+	return 0;
 }
 
-static bool pmi8994_is_usb_present(struct pmi8994_fg_chg *chip)
+static int pmi8994_is_usb_present(struct pmi8994_fg_chg *chip, bool *present)
 {
 	u8 rt = 0;
+	int ret;
 
-	if (pmi8994_read_u8(chip, chip->usb_base + INT_RT_STS_OFFSET, &rt))
-		return false;
+	if (!chip || !present)
+		return -EINVAL;
+
+	*present = false;
+	ret = pmi8994_read_u8(chip, chip->usb_base + INT_RT_STS_OFFSET, &rt);
+	if (ret)
+		return ret;
 
 	if (rt & (USB_RT_USBIN_UV | USB_RT_USBIN_OV))
-		return false;
+		return 0;
 
-	if (rt & USB_RT_USBIN_SRC_DET)
-		return true;
+	if (rt & USB_RT_USBIN_SRC_DET) {
+		*present = true;
+		return 0;
+	}
 
 	if (chip->usbin_chan) {
 		int uv = 0;
 		if (iio_read_channel_processed(chip->usbin_chan, &uv) >= 0 &&
 		    uv > 4000000)
-			return true;
+			*present = true;
 	}
-	return false;
+	return 0;
 }
 
 static int pmi8994_get_batt_status(struct pmi8994_fg_chg *chip)
 {
-	u8 chgr_rt = 0, chgr_sts = 0, soc_rt = 0, chg_type;
-	bool usb_present;
+	u8 chgr_rt = 0, chgr_sts = 0, soc_rt = 0, bat_rt = 0, misc_rt = 0;
+	u8 chg_type;
+	bool batt_present = false, usb_present = false;
+	int ret;
 
-	if (!pmi8994_is_battery_present(chip))
+	ret = pmi8994_get_battery_presence(chip, &batt_present);
+	if (ret || !batt_present)
 		return POWER_SUPPLY_STATUS_UNKNOWN;
 
-	usb_present = pmi8994_is_usb_present(chip);
+	ret = pmi8994_is_usb_present(chip, &usb_present);
+	if (ret)
+		return POWER_SUPPLY_STATUS_UNKNOWN;
 	if (!usb_present)
 		return POWER_SUPPLY_STATUS_DISCHARGING;
 
-	pmi8994_read_u8(chip, chip->chgr_base + INT_RT_STS_OFFSET, &chgr_rt);
-	pmi8994_read_u8(chip, chip->fg_soc_base + INT_RT_STS_OFFSET, &soc_rt);
+	ret = pmi8994_read_u8(chip, chip->chgr_base + INT_RT_STS_OFFSET, &chgr_rt);
+	if (ret)
+		return POWER_SUPPLY_STATUS_UNKNOWN;
 
-	/* Full condition: TCC reached or SOC 100% full */
+	ret = pmi8994_read_u8(chip, chip->fg_soc_base + INT_RT_STS_OFFSET, &soc_rt);
+	if (ret)
+		return POWER_SUPPLY_STATUS_UNKNOWN;
+
+	ret = pmi8994_read_u8(chip, chip->chgr_base + CHGR_STS_OFFSET, &chgr_sts);
+	if (ret)
+		return POWER_SUPPLY_STATUS_UNKNOWN;
+
+	ret = pmi8994_read_u8(chip, chip->bat_if_base + INT_RT_STS_OFFSET, &bat_rt);
+	if (ret)
+		return POWER_SUPPLY_STATUS_UNKNOWN;
+
+	ret = pmi8994_read_u8(chip, chip->misc_base + INT_RT_STS_OFFSET, &misc_rt);
+	if (ret)
+		return POWER_SUPPLY_STATUS_UNKNOWN;
+
+	/* Priority 1: Critical hardware safety trip (thermal shutdown or overvoltage) */
+	if ((misc_rt & MISC_RT_TEMP_SHUTDOWN) ||
+	    (bat_rt & (BAT_IF_RT_HOT | BAT_IF_RT_COLD | BAT_IF_RT_BATT_OV)))
+		return POWER_SUPPLY_STATUS_NOT_CHARGING;
+
+	/* Priority 2: Charge termination / full battery (TCC reached or SOC 100%) */
 	if ((chgr_rt & CHGR_RT_BAT_TCC_REACHED) || (soc_rt & FG_SOC_RT_FULL_SOC))
 		return POWER_SUPPLY_STATUS_FULL;
 
-	if (pmi8994_read_u8(chip, chip->chgr_base + CHGR_STS_OFFSET, &chgr_sts))
-		return POWER_SUPPLY_STATUS_UNKNOWN;
+	/* Priority 3: Hardware charging inhibit (float voltage window or soft JEITA) */
+	if (chgr_rt & CHGR_RT_CHG_INHIBIT)
+		return POWER_SUPPLY_STATUS_NOT_CHARGING;
 
+	/* Priority 4: Active charging states */
 	chg_type = (chgr_sts & CHGR_CHG_TYPE_MASK) >> CHGR_CHG_TYPE_SHIFT;
 	switch (chg_type) {
 	case CHG_TYPE_PRE:
 	case CHG_TYPE_FAST:
 	case CHG_TYPE_TAPER:
 		return POWER_SUPPLY_STATUS_CHARGING;
+	case CHG_TYPE_NONE:
+		return POWER_SUPPLY_STATUS_NOT_CHARGING;
 	default:
 		break;
 	}
 
-	/* Inhibit condition: JEITA soft limits or top-off voltage window */
-	if (chgr_rt & CHGR_RT_CHG_INHIBIT)
-		return POWER_SUPPLY_STATUS_NOT_CHARGING;
-
-	return POWER_SUPPLY_STATUS_NOT_CHARGING;
+	return POWER_SUPPLY_STATUS_UNKNOWN;
 }
 
 static int pmi8994_get_batt_health(struct pmi8994_fg_chg *chip)
@@ -571,89 +613,121 @@ static int pmi8994_batt_get_prop(struct power_supply *psy,
 	int ret;
 
 	switch (psp) {
-	case POWER_SUPPLY_PROP_STATUS:
-		val->intval = pmi8994_get_batt_status(chip);
-		return 0;
-	case POWER_SUPPLY_PROP_HEALTH:
-		val->intval = pmi8994_get_batt_health(chip);
-		return 0;
-	case POWER_SUPPLY_PROP_PRESENT:
-		val->intval = pmi8994_is_battery_present(chip) ? 1 : 0;
-		return 0;
-	case POWER_SUPPLY_PROP_TECHNOLOGY:
-		val->intval = POWER_SUPPLY_TECHNOLOGY_LION;
-		return 0;
-	case POWER_SUPPLY_PROP_CAPACITY:
-		if (!pmi8994_is_battery_present(chip))
+		case POWER_SUPPLY_PROP_STATUS:
+			val->intval = pmi8994_get_batt_status(chip);
+			return 0;
+		case POWER_SUPPLY_PROP_HEALTH:
+			val->intval = pmi8994_get_batt_health(chip);
+			return 0;
+		case POWER_SUPPLY_PROP_PRESENT:
+			{
+				bool present = false;
+				ret = pmi8994_get_battery_presence(chip, &present);
+				if (ret)
+					return ret;
+				val->intval = present ? 1 : 0;
+			}
+			return 0;
+		case POWER_SUPPLY_PROP_TECHNOLOGY:
+			val->intval = POWER_SUPPLY_TECHNOLOGY_LION;
+			return 0;
+		case POWER_SUPPLY_PROP_CAPACITY:
+			{
+				bool present = false;
+				ret = pmi8994_get_battery_presence(chip, &present);
+				if (ret || !present)
+					return -ENODATA;
+			}
+			ret = pmi8994_read_u8(chip,
+					      chip->fg_soc_base + FG_SOC_MONOTONIC_SOC,
+					      &reg);
+			if (ret)
+				return ret;
+			val->intval = clamp_t(int, DIV_ROUND_CLOSEST((int)reg * 100, 255),
+					      0, 100);
+			return 0;
+		case POWER_SUPPLY_PROP_VOLTAGE_NOW:
+			{
+				bool present = false;
+				ret = pmi8994_get_battery_presence(chip, &present);
+				if (ret || !present)
+					return -ENODATA;
+			}
+			ret = pmi8994_refresh_sram_cache(chip);
+			if (ret && !chip->cache.valid)
+				return ret;
+			if (chip->cache.vbat_uv <= 0)
+				return -ENODATA;
+			val->intval = chip->cache.vbat_uv;
+			return 0;
+		case POWER_SUPPLY_PROP_VOLTAGE_OCV:
+			{
+				bool present = false;
+				ret = pmi8994_get_battery_presence(chip, &present);
+				if (ret || !present)
+					return -ENODATA;
+			}
+			ret = pmi8994_refresh_sram_cache(chip);
+			if (ret && !chip->cache.valid)
+				return ret;
+			val->intval = chip->cache.ocv_uv ? chip->cache.ocv_uv :
+							   chip->cache.vbat_uv;
+			return 0;
+		case POWER_SUPPLY_PROP_VOLTAGE_MAX_DESIGN:
+			val->intval = chip->design_vmax_uv;
+			return 0;
+		case POWER_SUPPLY_PROP_VOLTAGE_MIN_DESIGN:
+			val->intval = chip->design_vmin_uv;
+			return 0;
+		case POWER_SUPPLY_PROP_CURRENT_NOW:
+			{
+				bool present = false;
+				ret = pmi8994_get_battery_presence(chip, &present);
+				if (ret || !present)
+					return -ENODATA;
+			}
+			ret = pmi8994_refresh_sram_cache(chip);
+			if (ret && !chip->cache.valid)
+				return ret;
+			val->intval = chip->cache.ibat_ua;
+			return 0;
+		case POWER_SUPPLY_PROP_CHARGE_FULL_DESIGN:
+			val->intval = chip->design_capacity_uah;
+			return 0;
+		case POWER_SUPPLY_PROP_CHARGE_COUNTER:
+			/*
+			 * Stage G.2 Audit: Hardware Coulomb Counter (CC_CHARGE) in SRAM
+			 * reports raw uncalibrated Q28 integration units. Without factory
+			 * Rsense resistor calibration, temperature compensation curves,
+			 * and clock trim, converting to true microampere-hours is not
+			 * mathematically verifiable. Per Stage G.2 mandate, return -ENODATA
+			 * rather than presenting an artificial uncalibrated approximation.
+			 */
 			return -ENODATA;
-		ret = pmi8994_read_u8(chip,
-				      chip->fg_soc_base + FG_SOC_MONOTONIC_SOC,
-				      &reg);
-		if (ret)
-			return ret;
-		val->intval = clamp_t(int, DIV_ROUND_CLOSEST((int)reg * 100, 255),
-				      0, 100);
-		return 0;
-	case POWER_SUPPLY_PROP_VOLTAGE_NOW:
-		if (!pmi8994_is_battery_present(chip))
-			return -ENODATA;
-		ret = pmi8994_refresh_sram_cache(chip);
-		if (ret && !chip->cache.valid)
-			return ret;
-		val->intval = chip->cache.vbat_uv;
-		return 0;
-	case POWER_SUPPLY_PROP_VOLTAGE_OCV:
-		if (!pmi8994_is_battery_present(chip))
-			return -ENODATA;
-		ret = pmi8994_refresh_sram_cache(chip);
-		if (ret && !chip->cache.valid)
-			return ret;
-		val->intval = chip->cache.ocv_uv ? chip->cache.ocv_uv :
-						   chip->cache.vbat_uv;
-		return 0;
-	case POWER_SUPPLY_PROP_VOLTAGE_MAX_DESIGN:
-		val->intval = chip->design_vmax_uv;
-		return 0;
-	case POWER_SUPPLY_PROP_VOLTAGE_MIN_DESIGN:
-		val->intval = chip->design_vmin_uv;
-		return 0;
-	case POWER_SUPPLY_PROP_CURRENT_NOW:
-		if (!pmi8994_is_battery_present(chip))
-			return -ENODATA;
-		ret = pmi8994_refresh_sram_cache(chip);
-		if (ret && !chip->cache.valid)
-			return ret;
-		val->intval = chip->cache.ibat_ua;
-		return 0;
-	case POWER_SUPPLY_PROP_CHARGE_FULL_DESIGN:
-		val->intval = chip->design_capacity_uah;
-		return 0;
-	case POWER_SUPPLY_PROP_CHARGE_COUNTER:
-		if (!pmi8994_is_battery_present(chip))
-			return -ENODATA;
-		ret = pmi8994_refresh_sram_cache(chip);
-		if (ret && !chip->cache.valid)
-			return ret;
-		if (!chip->cache.charge_counter_valid)
-			return -ENODATA;
-		val->intval = chip->cache.charge_counter_uah;
-		return 0;
-	case POWER_SUPPLY_PROP_TEMP:
-		if (!pmi8994_is_battery_present(chip))
-			return -ENODATA;
-		ret = pmi8994_refresh_sram_cache(chip);
-		if (ret && !chip->cache.valid)
-			return ret;
-		val->intval = chip->cache.temp_decidegc;
-		return 0;
-	case POWER_SUPPLY_PROP_CYCLE_COUNT:
-		if (!pmi8994_is_battery_present(chip))
-			return -ENODATA;
-		ret = pmi8994_refresh_sram_cache(chip);
-		if (ret && !chip->cache.valid)
-			return ret;
-		val->intval = chip->cache.cycle_count;
-		return 0;
+		case POWER_SUPPLY_PROP_TEMP:
+			{
+				bool present = false;
+				ret = pmi8994_get_battery_presence(chip, &present);
+				if (ret || !present)
+					return -ENODATA;
+			}
+			ret = pmi8994_refresh_sram_cache(chip);
+			if (ret && !chip->cache.valid)
+				return ret;
+			val->intval = chip->cache.temp_decidegc;
+			return 0;
+		case POWER_SUPPLY_PROP_CYCLE_COUNT:
+			{
+				bool present = false;
+				ret = pmi8994_get_battery_presence(chip, &present);
+				if (ret || !present)
+					return -ENODATA;
+			}
+			ret = pmi8994_refresh_sram_cache(chip);
+			if (ret && !chip->cache.valid)
+				return ret;
+			val->intval = chip->cache.cycle_count;
+			return 0;
 	case POWER_SUPPLY_PROP_CHARGE_TYPE:
 		ret = pmi8994_read_u8(chip, chip->chgr_base + CHGR_STS_OFFSET, &reg);
 		if (ret)
@@ -700,31 +774,49 @@ static int pmi8994_usb_get_prop(struct power_supply *psy,
 	int ret, uv = 0;
 
 	switch (psp) {
-	case POWER_SUPPLY_PROP_ONLINE:
-	case POWER_SUPPLY_PROP_PRESENT:
-		val->intval = pmi8994_is_usb_present(chip) ? 1 : 0;
-		return 0;
-	case POWER_SUPPLY_PROP_USB_TYPE:
-		ret = pmi8994_read_u8(chip,
-				      chip->usb_base + USB_APSD_DG_STS_OFFSET,
-				      &reg);
-		if (ret || !pmi8994_is_usb_present(chip)) {
-			val->intval = POWER_SUPPLY_USB_TYPE_UNKNOWN;
+		case POWER_SUPPLY_PROP_ONLINE:
+		case POWER_SUPPLY_PROP_PRESENT:
+			{
+				bool present = false;
+				ret = pmi8994_is_usb_present(chip, &present);
+				if (ret)
+					return ret;
+				val->intval = present ? 1 : 0;
+			}
 			return 0;
-		}
-		if (reg & (APSD_STS_DCP | APSD_STS_HVDCP))
-			val->intval = POWER_SUPPLY_USB_TYPE_DCP;
-		else if (reg & APSD_STS_CDP)
-			val->intval = POWER_SUPPLY_USB_TYPE_CDP;
-		else if (reg & APSD_STS_SDP)
-			val->intval = POWER_SUPPLY_USB_TYPE_SDP;
-		else
-			val->intval = POWER_SUPPLY_USB_TYPE_UNKNOWN;
-		return 0;
+		case POWER_SUPPLY_PROP_USB_TYPE:
+			{
+				bool present = false;
+				pmi8994_is_usb_present(chip, &present);
+				if (!present) {
+					val->intval = POWER_SUPPLY_USB_TYPE_UNKNOWN;
+					return 0;
+				}
+			}
+			ret = pmi8994_read_u8(chip,
+					      chip->usb_base + USB_APSD_DG_STS_OFFSET,
+					      &reg);
+			if (ret) {
+				val->intval = POWER_SUPPLY_USB_TYPE_UNKNOWN;
+				return 0;
+			}
+			if (reg & (APSD_STS_DCP | APSD_STS_HVDCP))
+				val->intval = POWER_SUPPLY_USB_TYPE_DCP;
+			else if (reg & APSD_STS_CDP)
+				val->intval = POWER_SUPPLY_USB_TYPE_CDP;
+			else if (reg & APSD_STS_SDP)
+				val->intval = POWER_SUPPLY_USB_TYPE_SDP;
+			else
+				val->intval = POWER_SUPPLY_USB_TYPE_UNKNOWN;
+			return 0;
 	case POWER_SUPPLY_PROP_VOLTAGE_NOW:
-		if (!pmi8994_is_usb_present(chip)) {
-			val->intval = 0;
-			return 0;
+		{
+			bool present = false;
+			pmi8994_is_usb_present(chip, &present);
+			if (!present) {
+				val->intval = 0;
+				return 0;
+			}
 		}
 		if (chip->usbin_chan &&
 		    iio_read_channel_processed(chip->usbin_chan, &uv) >= 0) {
@@ -734,9 +826,13 @@ static int pmi8994_usb_get_prop(struct power_supply *psy,
 		val->intval = 5000000;
 		return 0;
 	case POWER_SUPPLY_PROP_CURRENT_MAX:
-		if (!pmi8994_is_usb_present(chip)) {
-			val->intval = 0;
-			return 0;
+		{
+			bool present = false;
+			pmi8994_is_usb_present(chip, &present);
+			if (!present) {
+				val->intval = 0;
+				return 0;
+			}
 		}
 		ret = pmi8994_read_u8(chip,
 				      chip->usb_base + USB_ICL_STS_1_OFFSET,
@@ -854,6 +950,10 @@ static int pmi8994_fg_chg_probe(struct platform_device *pdev)
 	mutex_init(&chip->sram_lock);
 	INIT_DELAYED_WORK(&chip->notify_work, pmi8994_notify_work_fn);
 	platform_set_drvdata(pdev, chip);
+
+	ret = devm_add_action_or_reset(dev, pmi8994_cancel_work, chip);
+	if (ret)
+		return ret;
 
 	chip->regmap = dev_get_regmap(dev->parent, NULL);
 	if (!chip->regmap)

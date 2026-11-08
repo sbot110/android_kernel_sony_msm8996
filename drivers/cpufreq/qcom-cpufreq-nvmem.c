@@ -313,11 +313,41 @@ static int qcom_cpufreq_probe(struct platform_device *pdev)
 
 		for_each_possible_cpu(i) {
 			struct device *cdev = get_cpu_device(i);
+			struct device_node *opp, *table;
+			bool calibrated = true;
 
 			if (!cdev || !cdev->of_node ||
 			    !of_find_property(cdev->of_node, "cpu-supply", NULL)) {
 				dev_warn(cpu_dev,
 					 "Kryo cpufreq disabled: CPU%u has no verified cpu-supply; CPR integration required\n",
+					 i);
+				of_node_put(np);
+				return -ENODEV;
+			}
+
+			/*
+			 * A supply phandle alone does not make clock scaling
+			 * safe. Every selectable OPP must also have a voltage
+			 * specification; otherwise cpufreq-dt can request a
+			 * higher frequency without raising VDD_APCC.
+			 */
+			table = dev_pm_opp_of_get_opp_desc_node(cdev);
+			if (!table) {
+				calibrated = false;
+			} else {
+				for_each_available_child_of_node(table, opp) {
+					if (!of_find_property(opp, "opp-microvolt",
+							      NULL)) {
+						calibrated = false;
+						of_node_put(opp);
+						break;
+					}
+				}
+				of_node_put(table);
+			}
+			if (!calibrated) {
+				dev_warn(cpu_dev,
+					 "Kryo cpufreq disabled: CPU%u OPP voltage calibration is missing\n",
 					 i);
 				of_node_put(np);
 				return -ENODEV;

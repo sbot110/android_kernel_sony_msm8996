@@ -190,6 +190,18 @@ static int qcom_cpufreq_kryo_name_version(struct device *cpu_dev,
 	if (IS_ERR(speedbin))
 		return PTR_ERR(speedbin);
 
+	/*
+	 * The MSM8996 OPP hardware mask is a single u32. Reject malformed
+	 * or unsupported efuse bins instead of shifting outside that mask
+	 * or silently selecting an unrelated set of voltage/frequency OPPs.
+	 */
+	if (len < 1 || *speedbin > 2) {
+		dev_err(cpu_dev, "Invalid Kryo speedbin (length %zu, bin %u)\n",
+			len, len ? *speedbin : 0);
+		kfree(speedbin);
+		return -EINVAL;
+	}
+
 	switch (msm8996_version) {
 	case MSM8996_V3:
 		drv->versions = 1 << (unsigned int)(*speedbin);

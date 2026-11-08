@@ -179,3 +179,4 @@ qcom-cpr3-hmss-port-y := cpr3-port/cpr3-regulator.o \
 	cpr3-port/cpr3-util.o cpr3-port/cpr3-hmss-regulator.o
 
 ccflags-$(CONFIG_REGULATOR_DEBUG) += -DDEBUG
+obj-$(CONFIG_REGULATOR_MEM_ACC) += mem-acc-regulator.o

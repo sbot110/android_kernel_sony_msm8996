@@ -3318,6 +3318,42 @@
 			qcom,clock-source-override;
 		};
 
+		apc0_pwrcl_mem_acc_vreg: apc0-pwrcl-mem-acc-regulator@99e00c0 {
+			compatible = "qcom,mem-acc-regulator";
+			reg = <0x099e00c0 0x4>;
+			reg-names = "acc-sel-l1";
+			regulator-name = "apc0_pwrcl_mem_acc_corner";
+			regulator-min-microvolt = <1>;
+			regulator-max-microvolt = <2>;
+			qcom,corner-acc-map = <0x2 0x0>;
+			qcom,acc-sel-l1-bit-pos = <0>;
+			qcom,acc-sel-l1-bit-size = <2>;
+		};
+
+		apc1_perfcl_mem_acc_vreg: apc1-perfcl-mem-acc-regulator@99e00c0 {
+			compatible = "qcom,mem-acc-regulator";
+			reg = <0x099e00c0 0x4>;
+			reg-names = "acc-sel-l1";
+			regulator-name = "apc1_perfcl_mem_acc_corner";
+			regulator-min-microvolt = <1>;
+			regulator-max-microvolt = <2>;
+			qcom,corner-acc-map = <0x2 0x0>;
+			qcom,acc-sel-l1-bit-pos = <2>;
+			qcom,acc-sel-l1-bit-size = <2>;
+		};
+
+		apcc_l3_mem_acc_vreg: apcc-l3-mem-acc-regulator@99e00c0 {
+			compatible = "qcom,mem-acc-regulator";
+			reg = <0x099e00c0 0x4>;
+			reg-names = "acc-sel-l1";
+			regulator-name = "apcc_l3_mem_acc_corner";
+			regulator-min-microvolt = <1>;
+			regulator-max-microvolt = <2>;
+			qcom,corner-acc-map = <0x1 0x0>;
+			qcom,acc-sel-l1-bit-pos = <4>;
+			qcom,acc-sel-l1-bit-size = <1>;
+		};
+
 		intc: interrupt-controller@9bc0000 {
 			compatible = "qcom,msm8996-gic-v3", "arm,gic-v3";
 			#interrupt-cells = <3>;

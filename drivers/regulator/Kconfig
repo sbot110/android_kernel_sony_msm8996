@@ -1437,5 +1437,15 @@ config REGULATOR_QCOM_CPR3_HMSS_PORT
 	  MEM-ACC, LDO and regulator API adaptation is outstanding.
 	  Keep disabled while the MSM8996 cpufreq safety gate is active.
 
+
+config REGULATOR_MEM_ACC
+	tristate "Qualcomm Technologies, Inc. MEM-ACC regulator driver"
+	depends on ARCH_QCOM || COMPILE_TEST
+	default y if ARCH_QCOM
+	help
+	  This driver supports configuring the memory accelerator (MEM-ACC)
+	  settings for L1/L2/L3 caches and CPU memory arrays across voltage
+	  corners on Qualcomm MSM8996 SoCs.
+
 endif
 

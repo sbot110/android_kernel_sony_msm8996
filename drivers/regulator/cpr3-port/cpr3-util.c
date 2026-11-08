@@ -226,7 +226,13 @@ int cpr3_read_fuse_param(void __iomem *fuse_base_addr,
 
 		fuse_val = readq_relaxed(fuse_base_addr
 					 + param->row * BYTES_PER_FUSE_ROW);
-		val = (fuse_val >> param->bit_start) & ((1ULL << bits) - 1);
+		/*
+		 * A full-width fuse segment is legal. Avoid shifting by 64,
+		 * which is undefined in C and can corrupt calibration data.
+		 */
+		val = fuse_val >> param->bit_start;
+		if (bits < 64)
+			val &= GENMASK_ULL(bits - 1, 0);
 		*param_value |= val << bits_total;
 		bits_total += bits;
 

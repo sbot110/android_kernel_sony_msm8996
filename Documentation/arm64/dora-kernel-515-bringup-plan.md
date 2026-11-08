@@ -36,6 +36,57 @@ until their dependencies and hardware ownership are proven.
 - Do not remove the MSM8996 CPUFreq fail-closed guard before voltage
   and clock transitions are demonstrated safe.
 
+## Gate 1A (P0): implement the missing SPM voltage/AVS backend
+
+This is a mandatory implementation milestone, not a documentation-only audit.
+
+1. Compare Sony 4.4 SPM and SAW3 register definitions, CPU affinity,
+   VCTL/PMIC_DATA/AVS_CTL/AVS_LIMIT register layout and interrupt flow
+   against the existing Linux 5.15 `drivers/regulator/qcom_spmi-regulator.c`.
+2. Review upstream SAW/SPM regulator work (2024 SAW2 regulator series)
+   and 2026 SAW control/locking fixes as reference designs; **do not**
+   transplant SAW2 register offsets into SAW3 without verification.
+3. Implement a single MSM8996-matched backend for
+   `msm_spm_probe_done`, `msm_spm_set_vdd`, `msm_spm_get_vdd`,
+   `msm_spm_avs_enable/disable/set_limit` and the AVS IRQ functions
+   actually used by CPR3. Resolve backend selection and symbol linkage.
+4. Verify PMIC acknowledgement, timeouts, readback and CPU-affine
+   execution; propagate failures without switching to a second writer.
+5. Audit atomic vs sleeping contexts: no sleeping regmap locks in an
+   IPI or spinlocked SAW critical section. Preserve unrelated SAW
+   register bits and serialize VCTL/AVS operations.
+6. Add targeted build and failure-path tests, then review the backend
+   against Sony 4.4 and MSM8996-specific DT resources.
+
+## Gate 1B (P0): complete remaining power-chain components
+
+- **APM:** correct LMH/SCM lock coordination, secure override protocol,
+  switch sequencing and rollback, voltage supply ownership.
+- **MEM-ACC:** secure fuse service implementation or verified nonsecure
+  alternative, bounded QFPROM mapping, corner state and rollback.
+- **SPM regulator:** adapt regulator API, SPMI access, AVS enable/limits,
+  voltage stepping, recalibration, suspend and error recovery.
+- **CPR3 HMSS:** port all required source and headers, fuse corners,
+  quotient/RO tables, IRQ, thread and regulator aggregation logic.
+- **Kryo/APCC:** validate PLL/clock transitions, OPP voltages, speedbins,
+  MEM-ACC/APM sequencing and cpufreq safety handoff.
+- **RPM/PMIC:** verify S11 rail ownership, votes and parent supplies;
+  reject duplicate regulator writers.
+- **Device Tree:** integrate verified supply phandles, SAW3/APM/MEM-ACC/
+  CPR3 nodes and per-device differences, keeping experimental nodes
+  disabled until dependencies are proven.
+- **Kconfig/Makefile:** introduce explicit, testable dependencies; remove
+  the `BROKEN` gate only after all required objects compile and their
+  voltage paths have been reviewed, not merely to silence configuration.
+- **Verification:** compile each driver, check symbol resolution, DT
+  bindings, error unwinding and a conservative first-boot configuration.
+
+Reference material: Linux SAW2 regulator patch series (Jan 2024),
+`https://lists.openwall.net/linux-kernel/2024/01/02/74`; Qualcomm
+SAW control/locking fix series (Oct 2026),
+`https://lkml.iu.edu/2610.2/07335.html`. These are design references,
+not proof of MSM8996 compatibility or of inclusion in Linux 5.15.
+
 ## Gate 2 (P0): early boot hardware
 
 - Check eMMC/SDHCI, RPM/RPMCC, GCC/MMCC, PMIC SPMI, pinctrl, regulators,

@@ -66,3 +66,33 @@ partial binning, and fallback paths before enabling the controller.
 **Do not** remove `depends on BROKEN`, enable `apcc_cpr`, add
 unverified `opp-microvolt` values, or lift the CPUFreq guard before
 all gates pass.
+
+## Linux 5.15 API equivalence investigation
+
+The live kernel exports `qcom_scm_io_readl(phys_addr_t, unsigned int *)`
+and `qcom_scm_io_writel(phys_addr_t, unsigned int)` from
+`drivers/firmware/qcom_scm.c`. These are **not** drop-in equivalents
+for the Sony MEM-ACC driver's `SCM_SVC_FUSE/SCM_FUSE_READ` command:
+the original request takes a fuse-row address and address type and
+returns two data words plus a secure status. The modern IO service
+uses a different command and single 32-bit result. Replacing it with
+two IO reads would change the TrustZone protocol and is not justified.
+
+The original MEM-ACC function `mem_acc_read_efuse_row()` returns
+`u64`, even on secure-read failure, so it cannot propagate an errno
+to its callers without changing the function signature and call sites.
+Port this interface to an `int` status plus `u64 *` result, audit all
+callers, and reject invalid or unavailable secure fuse reads before
+registering a voltage regulator. Never interpret a failed read as a
+valid zero fuse.
+
+The Sony APM source has real MSM8996 switch sequences. Its staged
+copy now rejects unsupported SoCs and NULL controller pointers instead
+of claiming a successful switch. This is not yet a buildable port.
+The modern SPM/SAW3 interface and regulator ownership still need
+explicit reconciliation: do not issue concurrent voltage votes through
+both legacy SPM and the modern PM8994 regulator without verified
+arbitration.
+
+No live DT supply links, CPR3 activation, CPUFreq unlock or voltage
+values were changed in this investigation.

@@ -1293,7 +1293,15 @@ restore_avs:
 	if (!avs_enabled || req->ret)
 		return;
 
+	/*
+	 * AVS_CTL encodes a lower limit four steps below the confirmed
+	 * selector. Refuse to underflow the unsigned selector field.
+	 */
 	pmic_sts &= 0x3f;
+	if (pmic_sts < 4) {
+		req->ret = -ERANGE;
+		return;
+	}
 	avs_ctl &= ~SAW3_AVS_CTL_CLEAR_MASK;
 	avs_ctl |= ((pmic_sts - 4) << 10);
 	avs_ctl |= (pmic_sts << 17);

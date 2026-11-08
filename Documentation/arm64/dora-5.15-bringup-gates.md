@@ -107,3 +107,30 @@ Current status: shared-rail topology identified, SAW transaction
 serialization implemented; fuse calibration, CPR3 aggregation, MEM-ACC,
 APM and validated OPP voltage tables are NOT IMPLEMENTED. No clean
 build or device boot has been verified.
+
+## CPR3 QFPROM source audit (2026-11-08)
+
+Existing mainline-compatible MSM8996 QFPROM NVMEM:
+`qfprom@74000` with a `speedbin@133` cell (offset 0x133,
+three bits starting at bit 5). The Kryo cpufreq driver reads this
+cell and selects a supported-hardware mask; this is NOT equivalent
+to reading the HMSS CPR3 calibration fuses.
+
+Missing, and intentionally not fabricated:
+* verified per-thread CPR revision, fuse corner, redundancy selector,
+  quotient and voltage calibration cell offsets and bit layouts;
+* HMSS CPR3 thread/loop register mappings and hardware aggregation;
+* APM threshold, MEM-ACC levels and ordering for both clusters;
+* validated OPP voltages for each silicon bin and hardware revision.
+
+Do not infer these values from the PM8994 S11 regulator's voltage
+limits or from frequency-only OPP entries. Do not connect cpu-supply
+to bypass the current cpufreq guard. The 5.15 tree lacks the Qualcomm
+CPR3 framework and HMSS driver; integration requires bringing the
+framework and its SoC-specific bindings forward as a coherent unit.
+
+Before enabling CPUFreq: verify QFPROM fields against the original
+Sony/Qualcomm 4.4 DTS and source, validate both CPR thread tables,
+APM/MEM-ACC sequencing and regulator aggregation, perform a clean
+kernel/DTB build, and capture boot-time voltage/frequency evidence
+from a device. Until then, the fail-closed CPUFreq path is mandatory.

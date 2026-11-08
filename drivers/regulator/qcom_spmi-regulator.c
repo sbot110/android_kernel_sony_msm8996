@@ -1386,6 +1386,42 @@ spmi_regulator_saw_set_voltage(struct regulator_dev *rdev, unsigned selector)
 	return ret;
 }
 
+/* Read the voltage acknowledged by SAW3, not the PMIC vote register. */
+static int spmi_regulator_saw_get_voltage(struct regulator_dev *rdev)
+{
+	struct spmi_regulator *vreg = rdev_get_drvdata(rdev);
+	const struct spmi_voltage_range *range;
+	unsigned int status;
+	int ret;
+
+	if (IS_ERR_OR_NULL(saw_regmap))
+		return -ENODEV;
+
+	mutex_lock(&saw_voltage_lock);
+	if (saw_voltage_state_uncertain) {
+		ret = -EIO;
+		goto out;
+	}
+
+	ret = regmap_read(saw_regmap, SAW3_PMIC_STS, &status);
+	if (ret)
+		goto out;
+
+	/* The SAW writer supports only the zero hardware range. */
+	if (!vreg->set_points || vreg->set_points->count != 1 ||
+	    vreg->set_points->range->range_sel != 0) {
+		ret = -EINVAL;
+		goto out;
+	}
+
+	range = vreg->set_points->range;
+	ret = spmi_hw_selector_to_sw(vreg, status & SAW3_VCTL_DATA_MASK,
+				     range);
+out:
+	mutex_unlock(&saw_voltage_lock);
+	return ret;
+}
+
 static const struct regulator_ops spmi_smps_ops = {
 	.enable			= regulator_enable_regmap,
 	.disable		= regulator_disable_regmap,
@@ -2321,6 +2357,8 @@ static int qcom_spmi_regulator_probe(struct platform_device *pdev)
 
 				saw_ops->set_voltage_sel =
 					spmi_regulator_saw_set_voltage;
+				saw_ops->get_voltage_sel =
+					spmi_regulator_saw_get_voltage;
 				vreg->desc.ops = saw_ops;
 			}
 		}

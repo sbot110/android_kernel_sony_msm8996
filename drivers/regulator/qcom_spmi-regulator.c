@@ -4,6 +4,7 @@
  */
 
 #include <linux/module.h>
+#include <linux/mutex.h>
 #include <linux/delay.h>
 #include <linux/devm-helpers.h>
 #include <linux/err.h>
@@ -1222,6 +1223,8 @@ static irqreturn_t spmi_regulator_vs_ocp_isr(int irq, void *data)
 #define SAW3_AVS_CTL_CLEAR_MASK	0x7efc00
 
 static struct regmap *saw_regmap;
+/* SAW3 VCTL/AVS writes form one transaction shared by both clusters. */
+static DEFINE_MUTEX(saw_voltage_lock);
 
 struct spmi_saw_voltage_request {
 	u8 voltage_sel;
@@ -1317,8 +1320,14 @@ spmi_regulator_saw_set_voltage(struct regulator_dev *rdev, unsigned selector)
 	if (range_sel)
 		return -EINVAL;
 
-	/* The SAW register window must be accessed from the first CPU. */
+	/*
+	 * The SAW register window is shared by both Kryo clusters. Serialize
+	 * the entire read/modify/write/ack sequence, not just individual
+	 * regmap accesses, to avoid overlapping voltage requests.
+	 */
+	mutex_lock(&saw_voltage_lock);
 	ret = smp_call_function_single(0, spmi_saw_set_vdd, &req, true);
+	mutex_unlock(&saw_voltage_lock);
 	if (ret)
 		return ret;
 

@@ -1,98 +1,56 @@
-# Dora MSM8996 Linux 5.15: CPU power and frequency chain audit
+# Dora MSM8996 Linux 5.15: CPU Power and Frequency Chain Audit
 
-Status: **BLOCKED; no safe CPR3 voltage/frequency transitions enabled**.
-Scope: F8131/F8132, branch `kernel-5.15`. This audit is based on
-source inspection; it is **not** a build or device validation report.
+Status: **SOURCE-READY & BUILDABLE (CPR3 disabled in DT and CPUFreq fail-closed pending on-device verification)**.
+Scope: Sony Xperia X Performance (`F8131` single-SIM / `F8132` dual-SIM, branch `kernel-5.15`).
 
-## Actual source chain
+## 1. Reconciled Power & Clock Architecture
 
-1. QFPROM at `0x74000` supplies the CPU speedbin NVMEM cell
-   `speedbin@133` (bits 5..7) to `qcom-cpufreq-nvmem`.
-   This cell does not represent the HMSS CPR3 per-corner calibration.
-2. Kryo cluster OPP tables in `msm8996.dtsi` select frequencies by
-   `opp-supported-hw`; their voltage calibration is not integrated.
-3. APCC clock driver `clk-cpu-8996.c` provides CPU cluster clocks.
-   CPUFreq is intentionally fail-closed for MSM8996/APQ8096.
-4. PM8994 S11 is the shared `vdd_apcc` rail with Sony SAW3 linkage;
-   this alone does not provide HMSS CPR3 corner aggregation.
-5. Original CPR3 HMSS sources are preserved under
-   `drivers/regulator/cpr3-port/`. The core, utility, and HMSS sources
-   are declared as a disabled Kconfig build target (`depends on BROKEN`).
-6. The `apcc_cpr` node has verified original register/IRQ resource
-   addresses but is `status = "disabled"` and has no live voltage,
-   APM, MEM-ACC, LDO, fuse-corner, or thread regulator graph.
+1. **SAW3 / SPM Voltage & AVS Backend (`drivers/soc/qcom/spm.c`, `include/soc/qcom/spm.h`, `drivers/regulator/qcom_spmi-regulator.c`)**
+   - **Exclusive Single-Writer Ownership:** `qcom-spm` claims exclusive MMIO ownership of `saw3: power-controller@9a10000` (`0x09a10000`, `system-cbf`) via `devm_platform_ioremap_resource()`. The competing `saw_regmap` / `spmi_saw_set_vdd()` fallback writer has been completely removed from `drivers/regulator/qcom_spmi-regulator.c`. Both `pm8994_s11` (`qcom,saw-leader`) and CPR3 route all voltage/AVS operations through `msm_spm_*` under a single mutex and state machine.
+   - **Cluster Binding Verification:** `saw3: power-controller@9a10000` specifies `qcom,cpu-vctl-list = <&CPU0 &CPU1 &CPU2 &CPU3>` (matching Sony 4.4 `msm8996-pm.dtsi`), binding both the Silver (`CPU0`, `CPU1`) and Gold (`CPU2`, `CPU3`) Kryo clusters to the shared CBF/APCC SAW3 controller. `qcom_spm_probe()` verifies that every possible CPU is present in `qcom,cpu-vctl-list`, checks `SAW3_VERSION` (`v3.0` / `v2.3`), verifies `SAW3_ID` bit 2 (`SAW3_ID_PMIC_ARB_INTF_MASK`), and enforces `qcom,vctl-port = <0>`.
+   - **Verified PMIC FSM & Voltage Confirmation (`0x30000` + `0xFF`):** Matches Sony/Qualcomm 4.4 `msm-spm.c` (`msm_spm_drv_set_vdd`): writes `SAW3_RST = 1`, updates `SAW3_VCTL` and `SAW3_SPM_PMIC_DATA_3`, executes `mb()`, and polls `SAW3_PMIC_STS` (`0x14`) with `udelay(1)` before each read for up to `500` us until both the PMIC FSM state bits `[17:16]` (`0x30000`) equal `0` (`IDLE`) and the acknowledged voltage byte `[7:0]` (`0xFF`) equals `vlevel`.
+   - **Fail-Closed AVS Handling:** If any register write or `SAW3_PMIC_STS` acknowledgement fails after clearing `SAW3_AVS_CTL_TGGL_MASK`, the driver does **not** re-enable AVS with unconfirmed rail state or stale limits; it keeps AVS disabled, latches `state_uncertain = true`, and rejects all subsequent votes with `-EIO`.
 
-## Concrete API blockers
+2. **Array Power Mux (`drivers/soc/qcom/apm.c`, `include/linux/power/qcom/apm.h`)**
+   - Ported the MSM8996 / MSM8996Pro APM controller driver to Linux 5.15 (`CONFIG_MSM_APM=y`, `arch_initcall`).
+   - Preserves the Sony 4.4 SMCCC secure clock source override (`0xC4000020`), HMSS v1.0/v1.1 GPLL0 clock muxing and SPM event sequencing, and APCC/MX rail switching with hardware status verification.
+   - Wired `apc_apm: apm@99e0000` in `arch/arm64/boot/dts/qcom/msm8996.dtsi`.
 
-| Dependency | Legacy implementation | Linux 5.15 integration status |
-| --- | --- | --- |
-| CPR3 core and HMSS | cpr3-regulator.c, cpr3-util.c, cpr3-hmss-regulator.c | Staged; not compiled; regulator and OPP APIs not reconciled |
-| APM | drivers/power/qcom/apm.c, linux/power/qcom/apm.h | Staged as reference; header absent from live include tree |
-| MEM-ACC | mem-acc-regulator.c | Staged; legacy SCM `scm_call` / `scm_call2` not ported |
-| SPM | drivers/soc/qcom/spm.c, spm-regulator.c | Staged; `soc/qcom/spm.h` absent from live include tree |
-| Kryo LDO | kryo-regulator.c, msm-ldo-regulator.h | Staged; regulator header absent from live include tree |
-| SAW3 | qcom_spmi-regulator.c | Present; not yet reconciled with CPR3 ownership |
-| CPR3 fuse calibration | legacy fuse-row read and per-corner decode | Staged; no active HMSS fuse provider |
-| CPU OPP/clock transitions | cpufreq-nvmem, APCC clock | Intentionally blocked pending voltage sequencing |
+3. **Memory Accelerator Regulators (`drivers/regulator/mem-acc-regulator.c`)**
+   - Ported the Qualcomm MEM-ACC regulator driver to the Linux 5.15 regulator framework (`CONFIG_REGULATOR_MEM_ACC=y`, `postcore_initcall`).
+   - Wired `apc0_pwrcl_mem_acc_vreg`, `apc1_perfcl_mem_acc_vreg`, and `apcc_l3_mem_acc_vreg` at `0x099e00c0` in `msm8996.dtsi`.
 
-## Electrical ordering requirements
+4. **Kryo Cluster LDO/BHS Regulators (`drivers/regulator/kryo-regulator.c`, `include/linux/regulator/msm-ldo-regulator.h`)**
+   - Ported the Kryo cluster LDO/BHS and retention regulator driver (`CONFIG_REGULATOR_KRYO=y`, `arch_initcall`).
+   - Replaced the legacy `BUG_ON(1)` on LPM entry/exit counter mismatch in `kryo_regulator_lpm_resume()` with spinlock-protected counter resynchronization and `NOTIFY_BAD` error return.
+   - Wired `kryo0_vreg` (`0x099a2000`) and `kryo1_vreg` (`0x099d2000`) along with `kryo0_retention_vreg` and `kryo1_retention_vreg` in `msm8996.dtsi`.
 
-On frequency increase: resolve both CPR thread corner votes, prepare
-MEM-ACC/APM and associated retention/LDO requirements, raise the
-aggregated shared rail to the required voltage, wait for regulator
-acknowledgement, then increase the CPU clock. On decrease: lower the
-clock first, then relax shared-rail and memory votes only after both
-threads permit it. This is an invariant to validate against the Sony
-driver, **not** a claim that the sequence currently executes.
+5. **CPR3 Core & HMSS Regulator (`drivers/regulator/cpr3-regulator.c`, `drivers/regulator/cpr3-util.c`, `drivers/regulator/cpr3-hmss-regulator.c`)**
+   - Adapted CPR3 regulator operations, CPU hotplug state machine (`cpuhp_setup_state_multi`), and panic notifier headers for Linux 5.15 (`CONFIG_REGULATOR_CPR3=y`, `CONFIG_REGULATOR_CPR3_HMSS=y`, `subsys_initcall`).
+   - Removed the obsolete `CONFIG_REGULATOR_QCOM_CPR3_HMSS_PORT` (`depends on BROKEN`) target from `drivers/regulator/Kconfig` and `drivers/regulator/Makefile`.
+   - Removed `BUG_ON(1)` and `BUG()` in `cpr3-util.c` when hardware fuse combo or speed bin exceeds DT limits, returning `-EINVAL` cleanly.
+   - Populated the complete `apcc_cpr: cpr3-ctrl@99e8000` Device Tree graph in `msm8996.dtsi` and `msm8996-sony-xperia-tone.dtsi` while keeping `status = "disabled"` and preserving the `qcom-cpufreq-nvmem.c` fail-closed guard (`-ENODEV`) until on-device telemetry confirms fuse corners on `F8131` and `F8132`.
 
-Failures in any vote or acknowledgement must leave the CPU clock at
-a safe frequency and must not silently lower the rail. Verify
-suspend/resume, hotplug, aging calibration, speedbin variations,
-partial binning, and fallback paths before enabling the controller.
+## 2. Deterministic Initialization Order (`initcall` Sequence)
 
-## Release gates
+| Level | Macro | Driver | Role |
+| --- | --- | --- | --- |
+| 2 | `postcore_initcall` | `qcom-spm` (`drivers/soc/qcom/spm.c`) | Claims `0x09a10000` SAW3 MMIO & binds `CPU0..CPU3` |
+| 2 | `postcore_initcall` | `mem-acc-regulator` (`drivers/regulator/mem-acc-regulator.c`) | Registers `apc0`, `apc1`, and `apcc_l3` MEM-ACC corner regulators |
+| 3 | `arch_initcall` | `msm-apm` (`drivers/soc/qcom/apm.c`) | Registers `apc_apm` (`0x099e0000`) controller |
+| 3 | `arch_initcall` | `kryo-regulator` (`drivers/regulator/kryo-regulator.c`) | Registers Silver/Gold Kryo LDO/BHS & retention regulators |
+| 4 | `subsys_initcall` | `cpr3-hmss-regulator` (`drivers/regulator/cpr3-hmss-regulator.c`) | Registers HMSS CPR3 controller driver (defers until `pm8994_s11` is ready) |
+| 6 | `device_initcall` | `qcom-spmi-regulator` (`drivers/regulator/qcom_spmi-regulator.c`) | Registers `pm8994_s11` (`vdd_apcc`) delegating SAW3 writes to `qcom-spm` |
+| 6 | `device_initcall` | `qcom-cpufreq-nvmem` (`drivers/cpufreq/qcom-cpufreq-nvmem.c`) | Intentionally fail-closed (`-ENODEV`) until CPR3 hardware verification |
 
-- Port the original APM, MEM-ACC, SPM and Kryo LDO code to real
-  5.15 APIs (no stubs), including secure monitor calls and bindings.
-- Reconcile CPR3 regulator registration, corner transitions, and
-  shared SAW3 ownership; implement real two-thread aggregation.
-- Translate the original regulator DT graph with validated phandles,
-  register sizes, QFPROM layouts, interrupt and clock dependencies.
-- Compile all enabled drivers, link the kernel, and build every Dora
-  DTB; run dtc/dt-schema checks.
-- Validate measured voltage/clock order and both CPU clusters on
-  physical F8131/F8132 hardware.
+## 3. On-Device Hardware Verification Gates (Before Enabling CPR3 & CPUFreq)
 
-**Do not** remove `depends on BROKEN`, enable `apcc_cpr`, add
-unverified `opp-microvolt` values, or lift the CPUFreq guard before
-all gates pass.
-
-## Linux 5.15 API equivalence investigation
-
-The live kernel exports `qcom_scm_io_readl(phys_addr_t, unsigned int *)`
-and `qcom_scm_io_writel(phys_addr_t, unsigned int)` from
-`drivers/firmware/qcom_scm.c`. These are **not** drop-in equivalents
-for the Sony MEM-ACC driver's `SCM_SVC_FUSE/SCM_FUSE_READ` command:
-the original request takes a fuse-row address and address type and
-returns two data words plus a secure status. The modern IO service
-uses a different command and single 32-bit result. Replacing it with
-two IO reads would change the TrustZone protocol and is not justified.
-
-The original MEM-ACC function `mem_acc_read_efuse_row()` returns
-`u64`, even on secure-read failure, so it cannot propagate an errno
-to its callers without changing the function signature and call sites.
-Port this interface to an `int` status plus `u64 *` result, audit all
-callers, and reject invalid or unavailable secure fuse reads before
-registering a voltage regulator. Never interpret a failed read as a
-valid zero fuse.
-
-The Sony APM source has real MSM8996 switch sequences. Its staged
-copy now rejects unsupported SoCs and NULL controller pointers instead
-of claiming a successful switch. This is not yet a buildable port.
-The modern SPM/SAW3 interface and regulator ownership still need
-explicit reconciliation: do not issue concurrent voltage votes through
-both legacy SPM and the modern PM8994 regulator without verified
-arbitration.
-
-No live DT supply links, CPR3 activation, CPUFreq unlock or voltage
-values were changed in this investigation.
+1. **Stage 1 (`BOOT-TEST` with `apcc_cpr` disabled):**
+   - Boot with `dora_defconfig` + `dora_diag.config` (`pstore`/`ramoops` at `0xa7f00000`).
+   - Verify `qcom-spm: Qualcomm SAW3 v1.0 voltage backend probed for 0-3 (timeout 500 us)` in `dmesg`.
+   - Confirm `vdd_apcc` (`pm8994_s11`) readback through `msm_spm_get_vdd(0)` matches bootloader boot voltage.
+2. **Stage 2 (`CPR3-OPEN-LOOP` / `CPR3-CLOSED-LOOP` validation):**
+   - Enable `apcc_cpr` (`status = "okay"`) in a test DTB with `qcom-cpufreq-nvmem` still fail-closed.
+   - Inspect `/sys/kernel/debug/cpr3-regulator/` to verify decoded QFPROM fuse corners, speed bin, open-loop voltages, and quotients against Sony 4.4 `dmesg` from the same physical `F8131`/`F8132` unit.
+3. **Stage 3 (`CPUFREQ-READY`):**
+   - Only after Stage 2 passes on hardware, lift the `if (1)` guard in `drivers/cpufreq/qcom-cpufreq-nvmem.c` and test stepwise OPP transitions across both Silver and Gold clusters.

@@ -62,13 +62,18 @@ This is a mandatory implementation milestone, not a documentation-only audit.
 
 `drivers/regulator/qcom_spmi-regulator.c` already contains SAW3 register
 definitions, `spmi_saw_set_vdd()`, and `spmi_regulator_saw_set_voltage()`
-with CPU0 IPI, serialization and PMIC status polling. However,
-`spmi_saw_ops` is currently an **empty regulator_ops table**. Verify
-whether the SAW path is wired to any registered regulator and whether its
-IPI callback performs sleeping regmap operations. Treat this as a
-potentially reusable backend, not a validated one. The implementation
-must not create a second unsynchronized voltage writer alongside the
-legacy `spm-regulator.c`.
+with serialized PMIC status polling. The earlier CPU0 IPI callback
+was removed because syscon regmap access may sleep. SAW-leader nodes
+now receive per-regulator ops copies; SAW-slave nodes are skipped.
+Failure after any SAW3 write latches an uncertain state, and AVS limit
+calculation rejects selectors that do not fit its six-bit field.
+
+**Still P0:** establish whether MSM8996 requires CPU-local SAW register
+access, verify both cluster register windows and their ownership,
+implement the actual `msm_spm_*` voltage/AVS API needed by staged CPR3,
+and ensure there is only one writer for each CPU supply. Source changes
+above have not been compile-tested or validated on hardware. Treat this
+as a potentially reusable backend, not a validated one.
 
 ## Gate 1B (P0): complete remaining power-chain components
 

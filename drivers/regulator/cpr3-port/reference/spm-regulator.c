@@ -471,7 +471,7 @@ static int _spm_regulator_set_voltage(struct regulator_dev *rdev)
 
 		rc = spm_regulator_write_voltage(vreg, uV);
 		if (rc)
-			return rc;
+			goto restore_mode;
 	} while (vreg->last_set_uV != vreg->uV);
 
 	if (pwm_required) {
@@ -484,6 +484,22 @@ static int _spm_regulator_set_voltage(struct regulator_dev *rdev)
 	}
 
 	rc = spm_regulator_recalibrate(vreg);
+
+	return rc;
+
+restore_mode:
+	/*
+	 * A failed voltage step must not strand the FTS2 rail in the
+	 * temporary PWM mode. Preserve the original transition error.
+	 */
+	if (pwm_required) {
+		int mode_rc;
+
+		mode_rc = qpnp_smps_set_mode(vreg, QPNP_LOGICAL_MODE_AUTO);
+		if (mode_rc)
+			pr_err("%s: failed to restore AUTO mode: %d\n",
+			       vreg->rdesc.name, mode_rc);
+	}
 
 	return rc;
 }

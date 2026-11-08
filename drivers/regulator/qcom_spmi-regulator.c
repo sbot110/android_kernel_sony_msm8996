@@ -1298,6 +1298,15 @@ static int spmi_saw_set_vdd(struct spmi_saw_voltage_request *req)
 		return ret;
 	}
 
+	/*
+	 * Do not derive the AVS limit from a truncated PMIC status value:
+	 * the acknowledgement has already been matched to voltage_sel.
+	 */
+	if (avs_enabled && (req->voltage_sel & ~0x3f)) {
+		ret = -ERANGE;
+		return ret;
+	}
+
 restore_avs:
 	/*
 	 * Only restore AVS after the requested voltage was acknowledged.
@@ -2193,6 +2202,7 @@ static int qcom_spmi_regulator_probe(struct platform_device *pdev)
 	struct device *dev = &pdev->dev;
 	struct device_node *node = pdev->dev.of_node;
 	struct device_node *syscon, *reg_node;
+	struct regmap *candidate;
 	struct property *reg_prop;
 	int ret, lenp;
 	struct list_head *vreg_list;
@@ -2215,8 +2225,6 @@ static int qcom_spmi_regulator_probe(struct platform_device *pdev)
 		syscon = of_parse_phandle(node, "qcom,saw-reg", 0);
 		if (!syscon)
 			return -EINVAL;
-
-		struct regmap *candidate;
 
 		candidate = syscon_node_to_regmap(syscon);
 		of_node_put(syscon);

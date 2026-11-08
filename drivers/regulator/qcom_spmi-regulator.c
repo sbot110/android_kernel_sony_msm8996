@@ -1223,77 +1223,106 @@ static irqreturn_t spmi_regulator_vs_ocp_isr(int irq, void *data)
 
 static struct regmap *saw_regmap;
 
+struct spmi_saw_voltage_request {
+	u8 voltage_sel;
+	int ret;
+};
+
 static void spmi_saw_set_vdd(void *data)
 {
-	u32 vctl, data3, avs_ctl, pmic_sts;
-	bool avs_enabled = false;
-	unsigned long timeout;
-	u8 voltage_sel = *(u8 *)data;
+	struct spmi_saw_voltage_request *req = data;
+	u32 vctl, data3, avs_ctl, pmic_sts = 0;
+	bool avs_enabled;
+	unsigned int retries;
+	int ret;
 
-	regmap_read(saw_regmap, SAW3_AVS_CTL, &avs_ctl);
-	regmap_read(saw_regmap, SAW3_VCTL, &vctl);
-	regmap_read(saw_regmap, SAW3_SPM_PMIC_DATA_3, &data3);
+	req->ret = regmap_read(saw_regmap, SAW3_AVS_CTL, &avs_ctl);
+	if (req->ret)
+		return;
+	req->ret = regmap_read(saw_regmap, SAW3_VCTL, &vctl);
+	if (req->ret)
+		return;
+	req->ret = regmap_read(saw_regmap, SAW3_SPM_PMIC_DATA_3, &data3);
+	if (req->ret)
+		return;
 
-	/* select the band */
-	vctl &= ~SAW3_VCTL_CLEAR_MASK;
-	vctl |= (u32)voltage_sel;
+	vctl = (vctl & ~SAW3_VCTL_CLEAR_MASK) | req->voltage_sel;
+	data3 = (data3 & ~SAW3_VCTL_CLEAR_MASK) | req->voltage_sel;
 
-	data3 &= ~SAW3_VCTL_CLEAR_MASK;
-	data3 |= (u32)voltage_sel;
-
-	/* If AVS is enabled, switch it off during the voltage change */
-	avs_enabled = SAW3_AVS_CTL_EN_MASK & avs_ctl;
+	avs_enabled = !!(avs_ctl & SAW3_AVS_CTL_EN_MASK);
 	if (avs_enabled) {
-		avs_ctl &= ~SAW3_AVS_CTL_TGGL_MASK;
-		regmap_write(saw_regmap, SAW3_AVS_CTL, avs_ctl);
+		req->ret = regmap_write(saw_regmap, SAW3_AVS_CTL,
+					avs_ctl & ~SAW3_AVS_CTL_TGGL_MASK);
+		if (req->ret)
+			return;
 	}
 
-	regmap_write(saw_regmap, SAW3_RST, 1);
-	regmap_write(saw_regmap, SAW3_VCTL, vctl);
-	regmap_write(saw_regmap, SAW3_SPM_PMIC_DATA_3, data3);
+	req->ret = regmap_write(saw_regmap, SAW3_RST, 1);
+	if (req->ret)
+		goto restore_avs;
+	req->ret = regmap_write(saw_regmap, SAW3_VCTL, vctl);
+	if (req->ret)
+		goto restore_avs;
+	req->ret = regmap_write(saw_regmap, SAW3_SPM_PMIC_DATA_3, data3);
+	if (req->ret)
+		goto restore_avs;
 
-	timeout = jiffies + usecs_to_jiffies(100);
-	do {
-		regmap_read(saw_regmap, SAW3_PMIC_STS, &pmic_sts);
+	/* Bound the polling even when jiffies do not advance on this CPU. */
+	for (retries = 0; retries < 100; retries++) {
+		req->ret = regmap_read(saw_regmap, SAW3_PMIC_STS, &pmic_sts);
+		if (req->ret)
+			goto restore_avs;
 		pmic_sts &= SAW3_VCTL_DATA_MASK;
-		if (pmic_sts == (u32)voltage_sel)
+		if (pmic_sts == req->voltage_sel)
 			break;
-
-		cpu_relax();
-
-	} while (time_before(jiffies, timeout));
-
-	/* After successful voltage change, switch the AVS back on */
-	if (avs_enabled) {
-		pmic_sts &= 0x3f;
-		avs_ctl &= ~SAW3_AVS_CTL_CLEAR_MASK;
-		avs_ctl |= ((pmic_sts - 4) << 10);
-		avs_ctl |= (pmic_sts << 17);
-		avs_ctl |= SAW3_AVS_CTL_TGGL_MASK;
-		regmap_write(saw_regmap, SAW3_AVS_CTL, avs_ctl);
+		udelay(1);
 	}
+	if (retries == 100)
+		req->ret = -ETIMEDOUT;
+
+restore_avs:
+	/*
+	 * Only restore AVS after the requested voltage was acknowledged.
+	 * Re-enabling it with an unconfirmed selector can be unsafe.
+	 */
+	if (!avs_enabled || req->ret)
+		return;
+
+	pmic_sts &= 0x3f;
+	avs_ctl &= ~SAW3_AVS_CTL_CLEAR_MASK;
+	avs_ctl |= ((pmic_sts - 4) << 10);
+	avs_ctl |= (pmic_sts << 17);
+	avs_ctl |= SAW3_AVS_CTL_TGGL_MASK;
+	ret = regmap_write(saw_regmap, SAW3_AVS_CTL, avs_ctl);
+	if (ret)
+		req->ret = ret;
 }
 
 static int
 spmi_regulator_saw_set_voltage(struct regulator_dev *rdev, unsigned selector)
 {
 	struct spmi_regulator *vreg = rdev_get_drvdata(rdev);
+	struct spmi_saw_voltage_request req = {};
+	u8 range_sel;
 	int ret;
-	u8 range_sel, voltage_sel;
 
-	ret = spmi_sw_selector_to_hw(vreg, selector, &range_sel, &voltage_sel);
+	if (IS_ERR_OR_NULL(saw_regmap))
+		return -ENODEV;
+
+	ret = spmi_sw_selector_to_hw(vreg, selector, &range_sel,
+				     &req.voltage_sel);
 	if (ret)
 		return ret;
 
-	if (0 != range_sel) {
-		dev_dbg(&rdev->dev, "range_sel = %02X voltage_sel = %02X", \
-			range_sel, voltage_sel);
+	if (range_sel)
 		return -EINVAL;
-	}
 
-	/* Always do the SAW register writes on the first CPU */
-	return smp_call_function_single(0, spmi_saw_set_vdd, \
-					&voltage_sel, true);
+	/* The SAW register window must be accessed from the first CPU. */
+	ret = smp_call_function_single(0, spmi_saw_set_vdd, &req, true);
+	if (ret)
+		return ret;
+
+	return req.ret;
 }
 
 static struct regulator_ops spmi_saw_ops = {};

@@ -208,6 +208,7 @@ static int clk_cpu_8996_mux_determine_rate(struct clk_hw *hw,
 {
 	struct clk_cpu_8996_mux *cpuclk = to_clk_cpu_8996_mux_hw(hw);
 	struct clk_hw *parent = cpuclk->pll;
+	long rounded_rate;
 
 	if (cpuclk->pll_div_2 && req->rate < DIV_2_THRESHOLD) {
 		if (req->rate < (DIV_2_THRESHOLD / 2))
@@ -218,7 +219,11 @@ static int clk_cpu_8996_mux_determine_rate(struct clk_hw *hw,
 		parent = cpuclk->pll_acd;
 	}
 
-	req->best_parent_rate = clk_hw_round_rate(parent, req->rate);
+	rounded_rate = clk_hw_round_rate(parent, req->rate);
+	if (rounded_rate < 0)
+		return rounded_rate;
+
+	req->best_parent_rate = rounded_rate;
 	req->best_parent_hw = parent;
 
 	return 0;
@@ -421,8 +426,10 @@ static int qcom_cpu_clk_msm8996_register_clks(struct device *dev,
 						       CLK_SET_RATE_PARENT,
 						       1, 2);
 	if (IS_ERR(perfcl_smux.pll)) {
-		dev_err(dev, "Failed to initialize perfcl_pll_main\n");
-		return PTR_ERR(perfcl_smux.pll);
+		ret = PTR_ERR(perfcl_smux.pll);
+		perfcl_smux.pll = NULL;
+		dev_err(dev, "Failed to initialize perfcl_pll_main: %d\n", ret);
+		return ret;
 	}
 
 	pwrcl_smux.pll = clk_hw_register_fixed_factor(dev, "pwrcl_pll_main",

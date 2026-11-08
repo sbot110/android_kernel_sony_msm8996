@@ -731,6 +731,10 @@ static int msm_apm_switch_to_mx(struct msm_apm_ctrl_dev *ctrl_dev)
 	case MSM8953_ID:
 		ret = msm8953_apm_switch_to_mx(ctrl_dev);
 		break;
+	default:
+		/* Never report success without executing a rail switch. */
+		ret = -EOPNOTSUPP;
+		break;
 	}
 
 	return ret;
@@ -750,6 +754,9 @@ static int msm_apm_switch_to_apcc(struct msm_apm_ctrl_dev *ctrl_dev)
 	case MSM8953_ID:
 		ret = msm8953_apm_switch_to_apcc(ctrl_dev);
 		break;
+	default:
+		ret = -EOPNOTSUPP;
+		break;
 	}
 
 	return ret;
@@ -764,6 +771,9 @@ static int msm_apm_switch_to_apcc(struct msm_apm_ctrl_dev *ctrl_dev)
  */
 int msm_apm_get_supply(struct msm_apm_ctrl_dev *ctrl_dev)
 {
+	if (!ctrl_dev)
+		return -EINVAL;
+
 	return ctrl_dev->supply;
 }
 EXPORT_SYMBOL(msm_apm_get_supply);
@@ -782,6 +792,9 @@ int msm_apm_set_supply(struct msm_apm_ctrl_dev *ctrl_dev,
 		       enum msm_apm_supply supply)
 {
 	int ret;
+
+	if (!ctrl_dev)
+		return -EINVAL;
 
 	switch (supply) {
 	case MSM_APM_SUPPLY_APCC:

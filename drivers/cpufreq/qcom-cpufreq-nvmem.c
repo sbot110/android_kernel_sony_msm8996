@@ -150,6 +150,8 @@ static enum _msm8996_version qcom_cpufreq_get_msm_id(void)
 	msm_id = qcom_smem_get(QCOM_SMEM_HOST_ANY, MSM_ID_SMEM, &len);
 	if (IS_ERR(msm_id))
 		return NUM_OF_MSM8996_VERSIONS;
+	if (len < 2 * sizeof(*msm_id))
+		return NUM_OF_MSM8996_VERSIONS;
 
 	/* The first 4 bytes are format, next to them is the actual msm-id */
 	msm_id++;
@@ -191,11 +193,10 @@ static int qcom_cpufreq_kryo_name_version(struct device *cpu_dev,
 		return PTR_ERR(speedbin);
 
 	/*
-	 * The MSM8996 OPP hardware mask is a single u32. Reject malformed
-	 * or unsupported efuse bins instead of shifting outside that mask
-	 * or silently selecting an unrelated set of voltage/frequency OPPs.
+	 * The MSM8996 OPP tables expose four speed bins per silicon revision.
+	 * Reject malformed efuse values instead of selecting an unrelated OPP.
 	 */
-	if (len < 1 || *speedbin > 2) {
+	if (len < 1 || *speedbin > 3) {
 		dev_err(cpu_dev, "Invalid Kryo speedbin (length %zu, bin %u)\n",
 			len, len ? *speedbin : 0);
 		kfree(speedbin);
@@ -210,8 +211,8 @@ static int qcom_cpufreq_kryo_name_version(struct device *cpu_dev,
 		drv->versions = 1 << ((unsigned int)(*speedbin) + 4);
 		break;
 	default:
-		BUG();
-		break;
+		kfree(speedbin);
+		return -ENODEV;
 	}
 
 	kfree(speedbin);

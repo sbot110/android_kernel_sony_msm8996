@@ -1225,10 +1225,16 @@ static irqreturn_t spmi_regulator_vs_ocp_isr(int irq, void *data)
 static struct regmap *saw_regmap;
 /* SAW3 VCTL/AVS writes form one transaction shared by both clusters. */
 static DEFINE_MUTEX(saw_voltage_lock);
+/*
+ * A failed transaction after a SAW3 register write may leave the
+ * actual CPU rail voltage unknown. Do not issue another vote blindly.
+ * Protected by saw_voltage_lock; reset only on driver reinitialization.
+ */
+static bool saw_voltage_state_uncertain;
 
 struct spmi_saw_voltage_request {
 	u8 voltage_sel;
-	int ret;
+	bool write_started;
 };
 
 static int spmi_saw_set_vdd(struct spmi_saw_voltage_request *req)
@@ -1259,6 +1265,8 @@ static int spmi_saw_set_vdd(struct spmi_saw_voltage_request *req)
 			return ret;
 	}
 
+	/* From this point an error can leave the hardware state unknown. */
+	req->write_started = true;
 	ret = regmap_write(saw_regmap, SAW3_RST, 1);
 	if (ret)
 		goto restore_avs;
@@ -1334,6 +1342,10 @@ spmi_regulator_saw_set_voltage(struct regulator_dev *rdev, unsigned selector)
 	 * regmap accesses, to avoid overlapping voltage requests.
 	 */
 	mutex_lock(&saw_voltage_lock);
+	if (saw_voltage_state_uncertain) {
+		mutex_unlock(&saw_voltage_lock);
+		return -EIO;
+	}
 	/*
 	 * syscon regmap accesses may sleep. Do not issue them from an
 	 * smp_call_function_single() IPI callback (atomic context).
@@ -1341,6 +1353,12 @@ spmi_regulator_saw_set_voltage(struct regulator_dev *rdev, unsigned selector)
 	 * CPU-affinity requirements gated until proven for MSM8996.
 	 */
 	ret = spmi_saw_set_vdd(&req);
+	if (ret && req.write_started) {
+		saw_voltage_state_uncertain = true;
+		dev_err(vreg->dev,
+			"SAW3 voltage transaction failed (%d); further votes blocked\n",
+			ret);
+	}
 	mutex_unlock(&saw_voltage_lock);
 
 	return ret;

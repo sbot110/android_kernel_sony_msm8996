@@ -299,6 +299,32 @@ static int qcom_cpufreq_probe(struct platform_device *pdev)
 		return -ENOENT;
 	}
 
+	/*
+	 * Dora bring-up safety: the MSM8996 OPP tables currently specify
+	 * frequencies but no voltage corners, and the CPU nodes do not
+	 * expose regulators. Until a verified CPR/RPM voltage path is wired
+	 * up, do not register cpufreq-dt: it would change Kryo clocks with
+	 * no corresponding voltage transition.
+	 *
+	 * Leave bootloader/firmware-selected CPU clocks untouched instead.
+	 */
+	if (of_device_is_compatible(np, "operating-points-v2-kryo-cpu")) {
+		unsigned int i;
+
+		for_each_possible_cpu(i) {
+			struct device *cdev = get_cpu_device(i);
+
+			if (!cdev || !cdev->of_node ||
+			    !of_find_property(cdev->of_node, "cpu-supply", NULL)) {
+				dev_warn(cpu_dev,
+					 "Kryo cpufreq disabled: CPU%u has no verified cpu-supply; CPR integration required\n",
+					 i);
+				of_node_put(np);
+				return -ENODEV;
+			}
+		}
+	}
+
 	drv = kzalloc(sizeof(*drv), GFP_KERNEL);
 	if (!drv) {
 		of_node_put(np);

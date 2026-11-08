@@ -45,3 +45,32 @@ NOT CLEARED for flashing. No successful build, voltage-control validation,
 boot-image comparison or hardware test has been recorded for this branch.
 
 Never overwrite the known-good Lineageos-21 branch or its bootable images.
+
+## CPU audit outcome (2026-11-08)
+
+1. Verified MSM8996 QFPROM speedbin is a three-bit NVMEM cell
+   (`speedbin@133`, `bits = <5 3>`). The existing OPP hardware masks
+   include speed bins 0..3. Fixed the earlier incorrect 0..2 guard so
+   valid speedbin 3 devices are not rejected. MSM ID SMEM length is now
+   validated before reading its second word.
+2. Fixed OPP setup failure paths, matching put APIs, and OF node
+   lifetime in qcom-cpufreq-nvmem.c.
+3. Confirmed the current 5.15 msm8996.dtsi has no `cpu-supply` on
+   CPU0..CPU3 and no `opp-microvolt` on Kryo OPP entries. The Kryo
+   match data does not attach a CPR genpd. Therefore there is no
+   verified voltage transition coordinated with cpufreq-dt.
+4. Added a fail-closed guard to qcom-cpufreq-nvmem.c: if any Kryo CPU
+   lacks a cpu-supply phandle, the driver does not create the
+   cpufreq-dt device. This prevents unsafe runtime frequency changes
+   through this path. It is a bring-up containment measure, NOT a
+   working CPR driver and NOT proof that boot-time voltage is safe.
+
+To lift this block: port or integrate a real MSM8996 HMSS CPR/SPM
+voltage provider; connect CPU0/1 and CPU2/3 to their verified supplies;
+populate speedbin-specific OPP voltage corners from Sony data; validate
+increase-before-frequency/decrease-after-frequency ordering; then
+remove or refine the guard after hardware validation. No voltage
+values may be guessed from frequency tables.
+
+CPU voltage integration remains BLOCKED; clean build and hardware
+testing are still outstanding.

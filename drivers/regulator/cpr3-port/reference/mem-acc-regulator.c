@@ -11,6 +11,7 @@
  */
 #define pr_fmt(fmt)	"ACC: %s: " fmt, __func__
 
+#include <linux/bits.h>
 #include <linux/module.h>
 #include <linux/mutex.h>
 #include <linux/types.h>

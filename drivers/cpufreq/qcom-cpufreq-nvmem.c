@@ -311,6 +311,20 @@ static int qcom_cpufreq_probe(struct platform_device *pdev)
 	if (of_device_is_compatible(np, "operating-points-v2-kryo-cpu")) {
 		unsigned int i;
 
+		/*
+		 * MSM8996's shared SAW3 rail needs the HMSS CPR3 hardware
+		 * aggregator and memory/APM sequencing. Neither is currently
+		 * implemented in this tree. cpu-supply and opp-microvolt alone
+		 * must never silently unlock clock scaling.
+		 */
+		if (of_machine_is_compatible("qcom,msm8996") ||
+		    of_machine_is_compatible("qcom,apq8096")) {
+			dev_warn(cpu_dev,
+				 "Kryo cpufreq disabled: HMSS CPR3/APM/MEM-ACC sequencing not implemented\n");
+			of_node_put(np);
+			return -ENODEV;
+		}
+
 		for_each_possible_cpu(i) {
 			struct device *cdev = get_cpu_device(i);
 			struct device_node *opp, *table;

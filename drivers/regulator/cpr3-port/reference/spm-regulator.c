@@ -1069,6 +1069,7 @@ static int spm_regulator_avs_register(struct spm_vreg *vreg,
 
 	init_data = of_get_regulator_init_data(dev, avs_node, &vreg->avs_rdesc);
 	if (!init_data) {
+		of_node_put(avs_node);
 		dev_err(dev, "%s: unable to allocate memory\n", __func__);
 		return -ENOMEM;
 	}
@@ -1077,6 +1078,7 @@ static int spm_regulator_avs_register(struct spm_vreg *vreg,
 						| REGULATOR_CHANGE_VOLTAGE;
 
 	if (!init_data->constraints.name) {
+		of_node_put(avs_node);
 		dev_err(dev, "%s: AVS node is missing regulator name\n",
 			__func__);
 		return -EINVAL;
@@ -1096,6 +1098,7 @@ static int spm_regulator_avs_register(struct spm_vreg *vreg,
 	reg_config.of_node = avs_node;
 
 	vreg->avs_rdev = regulator_register(&vreg->avs_rdesc, &reg_config);
+	of_node_put(avs_node);
 	if (IS_ERR(vreg->avs_rdev)) {
 		rc = PTR_ERR(vreg->avs_rdev);
 		dev_err(dev, "%s: AVS regulator_register failed, rc=%d\n",

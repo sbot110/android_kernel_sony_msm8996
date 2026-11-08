@@ -678,6 +678,24 @@
 			reg = <0x00068000 0x6000>;
 		};
 
+		/*
+		 * Sony 4.4 MSM8996 HMSS CPR3 controller resource map.
+		 * The original controller needs both CPR threads, calibrated
+		 * fuse corners, SAW3, APM, MEM-ACC, and Kryo LDO sequencing.
+		 * Do not enable until the 5.15 port supplies all dependencies.
+		 */
+		apcc_cpr: cpr3-ctrl@99e8000 {
+			compatible = "qcom,cpr3-msm8996-hmss-regulator";
+			reg = <0x099e8000 0x4000>,
+			      <0x00074000 0x1000>;
+			reg-names = "cpr_ctrl", "fuse_base";
+			interrupts = <GIC_SPI 48 IRQ_TYPE_EDGE_RISING>,
+				     <GIC_SPI 47 IRQ_TYPE_EDGE_RISING>;
+			interrupt-names = "cpr", "ceiling";
+			qcom,cpr-ctrl-name = "apcc";
+			status = "disabled";
+		};
+
 		qfprom@74000 {
 			compatible = "qcom,qfprom";
 			reg = <0x00074000 0x8ff>;

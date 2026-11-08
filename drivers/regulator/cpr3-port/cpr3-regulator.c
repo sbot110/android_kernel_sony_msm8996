@@ -6323,6 +6323,10 @@ int cpr3_regulator_register(struct platform_device *pdev,
 		return -ENXIO;
 	}
 	ctrl->cpr_ctrl_base = devm_ioremap(dev, res->start, resource_size(res));
+	if (!ctrl->cpr_ctrl_base) {
+		cpr3_err(ctrl, "unable to map CPR controller registers\n");
+		return -ENOMEM;
+	}
 
 	if (ctrl->aging_possible_mask) {
 		/*
@@ -6337,6 +6341,10 @@ int cpr3_regulator_register(struct platform_device *pdev,
 		}
 		ctrl->aging_possible_reg = devm_ioremap(dev, res->start,
 							resource_size(res));
+		if (!ctrl->aging_possible_reg) {
+			cpr3_err(ctrl, "unable to map CPR aging registers\n");
+			return -ENOMEM;
+		}
 	}
 
 	if (ctrl->ctrl_type != CPR_CTRL_TYPE_CPRH) {

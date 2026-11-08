@@ -182,6 +182,10 @@ int cpr3_map_fuse_base(struct cpr3_controller *ctrl,
 
 	ctrl->fuse_base = devm_ioremap(&pdev->dev, res->start,
 						resource_size(res));
+	if (!ctrl->fuse_base) {
+		dev_err(&pdev->dev, "unable to map CPR fuse region\n");
+		return -ENOMEM;
+	}
 
 	return 0;
 }

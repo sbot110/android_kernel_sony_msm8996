@@ -1341,9 +1341,6 @@ spmi_regulator_saw_set_voltage(struct regulator_dev *rdev, unsigned selector)
 	u8 range_sel;
 	int ret;
 
-	if (IS_ERR_OR_NULL(saw_regmap))
-		return -ENODEV;
-
 	ret = spmi_sw_selector_to_hw(vreg, selector, &range_sel,
 				     &req.voltage_sel);
 	if (ret)
@@ -1358,6 +1355,15 @@ spmi_regulator_saw_set_voltage(struct regulator_dev *rdev, unsigned selector)
 	 * regmap accesses, to avoid overlapping voltage requests.
 	 */
 	mutex_lock(&saw_voltage_lock);
+	/*
+	 * Probe publishes the shared SAW3 regmap under this same lock.
+	 * Check availability only after acquiring it, before any register
+	 * access, so a concurrent probe cannot race the initial check.
+	 */
+	if (IS_ERR_OR_NULL(saw_regmap)) {
+		mutex_unlock(&saw_voltage_lock);
+		return -ENODEV;
+	}
 	if (saw_voltage_state_uncertain) {
 		mutex_unlock(&saw_voltage_lock);
 		return -EIO;

@@ -299,14 +299,16 @@ static int qcom_cpufreq_probe(struct platform_device *pdev)
 	}
 
 	drv = kzalloc(sizeof(*drv), GFP_KERNEL);
-	if (!drv)
+	if (!drv) {
+		of_node_put(np);
 		return -ENOMEM;
+	}
 
 	match = pdev->dev.platform_data;
 	drv->data = match->data;
 	if (!drv->data) {
 		ret = -ENODEV;
-		goto free_drv;
+		goto put_opp_node;
 	}
 
 	if (drv->data->get_version) {
@@ -317,14 +319,14 @@ static int qcom_cpufreq_probe(struct platform_device *pdev)
 					"Could not get nvmem cell: %ld\n",
 					PTR_ERR(speedbin_nvmem));
 			ret = PTR_ERR(speedbin_nvmem);
-			goto free_drv;
+			goto put_opp_node;
 		}
 
 		ret = drv->data->get_version(cpu_dev,
 							speedbin_nvmem, &pvs_name, drv);
 		if (ret) {
 			nvmem_cell_put(speedbin_nvmem);
-			goto free_drv;
+			goto put_opp_node;
 		}
 		nvmem_cell_put(speedbin_nvmem);
 	}
@@ -370,7 +372,7 @@ static int qcom_cpufreq_probe(struct platform_device *pdev)
 					ret = PTR_ERR(drv->names_opp_tables[cpu]);
 					dev_err(cpu_dev, "Failed to add OPP name %s\n",
 						pvs_name);
-					goto free_opp;
+					goto free_genpd_opp;
 				}
 			}
 
@@ -412,29 +414,27 @@ static int qcom_cpufreq_probe(struct platform_device *pdev)
 
 free_genpd_opp:
 	for_each_possible_cpu(cpu) {
-		if (IS_ERR(drv->genpd_opp_tables[cpu]))
-			break;
-		dev_pm_opp_detach_genpd(drv->genpd_opp_tables[cpu]);
+		if (!IS_ERR_OR_NULL(drv->genpd_opp_tables[cpu]))
+			dev_pm_opp_detach_genpd(drv->genpd_opp_tables[cpu]);
 	}
 	kfree(drv->genpd_opp_tables);
 free_opp:
 	for_each_possible_cpu(cpu) {
-		if (IS_ERR(drv->names_opp_tables[cpu]))
-			break;
-		dev_pm_opp_put_prop_name(drv->names_opp_tables[cpu]);
-	}
-	for_each_possible_cpu(cpu) {
-		if (IS_ERR(drv->hw_opp_tables[cpu]))
-			break;
-		dev_pm_opp_put_supported_hw(drv->hw_opp_tables[cpu]);
+		if (!IS_ERR_OR_NULL(drv->names_opp_tables[cpu]))
+			dev_pm_opp_put_prop_name(drv->names_opp_tables[cpu]);
+		if (!IS_ERR_OR_NULL(drv->hw_opp_tables[cpu]))
+			dev_pm_opp_put_supported_hw(drv->hw_opp_tables[cpu]);
 	}
 	kfree(drv->hw_opp_tables);
 free_opp_names:
 	kfree(drv->names_opp_tables);
 free_drv:
 	kfree(drv);
-
 	return ret;
+
+put_opp_node:
+	of_node_put(np);
+	goto free_drv;
 }
 
 static int qcom_cpufreq_remove(struct platform_device *pdev)
@@ -445,9 +445,12 @@ static int qcom_cpufreq_remove(struct platform_device *pdev)
 	platform_device_unregister(cpufreq_dt_pdev);
 
 	for_each_possible_cpu(cpu) {
-		dev_pm_opp_put_supported_hw(drv->names_opp_tables[cpu]);
-		dev_pm_opp_put_supported_hw(drv->hw_opp_tables[cpu]);
-		dev_pm_opp_detach_genpd(drv->genpd_opp_tables[cpu]);
+		if (!IS_ERR_OR_NULL(drv->names_opp_tables[cpu]))
+			dev_pm_opp_put_prop_name(drv->names_opp_tables[cpu]);
+		if (!IS_ERR_OR_NULL(drv->hw_opp_tables[cpu]))
+			dev_pm_opp_put_supported_hw(drv->hw_opp_tables[cpu]);
+		if (!IS_ERR_OR_NULL(drv->genpd_opp_tables[cpu]))
+			dev_pm_opp_detach_genpd(drv->genpd_opp_tables[cpu]);
 	}
 
 	kfree(drv->names_opp_tables);

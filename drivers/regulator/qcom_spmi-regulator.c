@@ -2205,7 +2205,8 @@ static int qcom_spmi_regulator_probe(struct platform_device *pdev)
 	struct device_node *syscon, *reg_node;
 	struct regmap *candidate;
 	struct property *reg_prop;
-	int ret, lenp;
+	int ret = 0, lenp;
+	bool has_saw;
 	struct list_head *vreg_list;
 
 	vreg_list = devm_kzalloc(dev, sizeof(*vreg_list), GFP_KERNEL);
@@ -2222,7 +2223,8 @@ static int qcom_spmi_regulator_probe(struct platform_device *pdev)
 	if (!match)
 		return -ENODEV;
 
-	if (of_find_property(node, "qcom,saw-reg", &lenp)) {
+	has_saw = of_find_property(node, "qcom,saw-reg", NULL) != NULL;
+	if (has_saw) {
 		syscon = of_parse_phandle(node, "qcom,saw-reg", 0);
 		if (!syscon)
 			return -EINVAL;
@@ -2254,7 +2256,7 @@ static int qcom_spmi_regulator_probe(struct platform_device *pdev)
 
 	for (reg = match->data; reg->name; reg++) {
 
-		if (saw_regmap) {
+		if (has_saw) {
 			reg_node = of_get_child_by_name(node, reg->name);
 			reg_prop = reg_node ?
 				of_find_property(reg_node, "qcom,saw-slave",
@@ -2292,7 +2294,7 @@ static int qcom_spmi_regulator_probe(struct platform_device *pdev)
 		if (ret)
 			continue;
 
-		if (saw_regmap) {
+		if (has_saw) {
 			reg_node = of_get_child_by_name(node, reg->name);
 			reg_prop = reg_node ?
 				of_find_property(reg_node, "qcom,saw-leader",

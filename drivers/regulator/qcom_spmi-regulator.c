@@ -1344,8 +1344,6 @@ spmi_regulator_saw_set_voltage(struct regulator_dev *rdev, unsigned selector)
 	return req.ret;
 }
 
-static struct regulator_ops spmi_saw_ops = {};
-
 static const struct regulator_ops spmi_smps_ops = {
 	.enable			= regulator_enable_regmap,
 	.disable		= regulator_disable_regmap,
@@ -2248,10 +2246,21 @@ static int qcom_spmi_regulator_probe(struct platform_device *pdev)
 						 &lenp) : NULL;
 			of_node_put(reg_node);
 			if (reg_prop) {
-				spmi_saw_ops = *(vreg->desc.ops);
-				spmi_saw_ops.set_voltage_sel =
+				struct regulator_ops *saw_ops;
+
+				/*
+				 * Each registered regulator must own its ops
+				 * table. A global mutable table would let the
+				 * next probe overwrite earlier regulator ops.
+				 */
+				saw_ops = devm_kmemdup(dev, vreg->desc.ops,
+						      sizeof(*saw_ops), GFP_KERNEL);
+				if (!saw_ops)
+					return -ENOMEM;
+
+				saw_ops->set_voltage_sel =
 					spmi_regulator_saw_set_voltage;
-				vreg->desc.ops = &spmi_saw_ops;
+				vreg->desc.ops = saw_ops;
 			}
 		}
 

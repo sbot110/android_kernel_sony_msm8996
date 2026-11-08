@@ -1259,6 +1259,12 @@ static int spmi_saw_set_vdd(struct spmi_saw_voltage_request *req)
 
 	avs_enabled = !!(avs_ctl & SAW3_AVS_CTL_EN_MASK);
 	if (avs_enabled) {
+		/*
+		 * Clearing the AVS toggle is itself a hardware state
+		 * change. Even a failed regmap write can have taken effect.
+		 * Latch an uncertain state before attempting the write.
+		 */
+		req->write_started = true;
 		ret = regmap_write(saw_regmap, SAW3_AVS_CTL,
 					avs_ctl & ~SAW3_AVS_CTL_TGGL_MASK);
 		if (ret)

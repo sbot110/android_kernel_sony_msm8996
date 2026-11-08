@@ -2216,11 +2216,29 @@ static int qcom_spmi_regulator_probe(struct platform_device *pdev)
 		if (!syscon)
 			return -EINVAL;
 
-		saw_regmap = syscon_node_to_regmap(syscon);
+		struct regmap *candidate;
+
+		candidate = syscon_node_to_regmap(syscon);
 		of_node_put(syscon);
-		if (IS_ERR(saw_regmap)) {
-			ret = PTR_ERR(saw_regmap);
+		if (IS_ERR(candidate)) {
+			ret = PTR_ERR(candidate);
 			dev_err(dev, "Failed to acquire SAW regmap: %d\n", ret);
+			return ret;
+		}
+
+		/*
+		 * The voltage transaction currently uses one shared SAW3
+		 * register window. Never silently redirect existing users
+		 * to a different controller when another PMIC probes.
+		 */
+		mutex_lock(&saw_voltage_lock);
+		if (saw_regmap && saw_regmap != candidate)
+			ret = -EBUSY;
+		else
+			saw_regmap = candidate;
+		mutex_unlock(&saw_voltage_lock);
+		if (ret) {
+			dev_err(dev, "Conflicting SAW3 register window\n");
 			return ret;
 		}
 	}

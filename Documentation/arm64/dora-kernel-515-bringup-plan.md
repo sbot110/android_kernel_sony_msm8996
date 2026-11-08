@@ -58,6 +58,18 @@ This is a mandatory implementation milestone, not a documentation-only audit.
 6. Add targeted build and failure-path tests, then review the backend
    against Sony 4.4 and MSM8996-specific DT resources.
 
+### Existing SAW3 code discovered in this branch
+
+`drivers/regulator/qcom_spmi-regulator.c` already contains SAW3 register
+definitions, `spmi_saw_set_vdd()`, and `spmi_regulator_saw_set_voltage()`
+with CPU0 IPI, serialization and PMIC status polling. However,
+`spmi_saw_ops` is currently an **empty regulator_ops table**. Verify
+whether the SAW path is wired to any registered regulator and whether its
+IPI callback performs sleeping regmap operations. Treat this as a
+potentially reusable backend, not a validated one. The implementation
+must not create a second unsynchronized voltage writer alongside the
+legacy `spm-regulator.c`.
+
 ## Gate 1B (P0): complete remaining power-chain components
 
 - **APM:** correct LMH/SCM lock coordination, secure override protocol,

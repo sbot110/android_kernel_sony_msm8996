@@ -197,6 +197,10 @@ static int clk_cpu_8996_mux_set_parent(struct clk_hw *hw, u8 index)
 	u32 mask = GENMASK(cpuclk->width + cpuclk->shift - 1, cpuclk->shift);
 	u32 val;
 
+	/* Reject invalid parent selectors instead of truncating them. */
+	if (index >= BIT(cpuclk->width))
+		return -EINVAL;
+
 	val = index;
 	val <<= cpuclk->shift;
 
@@ -222,6 +226,8 @@ static int clk_cpu_8996_mux_determine_rate(struct clk_hw *hw,
 	rounded_rate = clk_hw_round_rate(parent, req->rate);
 	if (rounded_rate < 0)
 		return rounded_rate;
+	if (!rounded_rate)
+		return -EINVAL;
 
 	req->best_parent_rate = rounded_rate;
 	req->best_parent_hw = parent;

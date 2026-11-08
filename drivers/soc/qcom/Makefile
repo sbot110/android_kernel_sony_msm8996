@@ -28,3 +28,4 @@ obj-$(CONFIG_QCOM_RPMPD) += rpmpd.o
 obj-$(CONFIG_QCOM_KRYO_L2_ACCESSORS) +=	kryo-l2-accessors.o
 
 obj-$(CONFIG_QCOM_SPM) += spm.o
+obj-$(CONFIG_MSM_APM) += apm.o

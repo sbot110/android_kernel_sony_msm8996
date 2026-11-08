@@ -542,15 +542,17 @@ err_unreg:
 
 static int qcom_cpu_clk_msm8996_unregister_clks(void)
 {
-	int ret;
+	int ret, ret_perf;
 
+	/*
+	 * Unregister both notifiers before releasing their clock parents.
+	 * A failure for one notifier must not skip the other cleanup.
+	 */
 	ret = clk_notifier_unregister(pwrcl_pmux.clkr.hw.clk, &pwrcl_pmux.nb);
-	if (ret)
-		return ret;
-
-	ret = clk_notifier_unregister(perfcl_pmux.clkr.hw.clk, &perfcl_pmux.nb);
-	if (ret)
-		return ret;
+	ret_perf = clk_notifier_unregister(perfcl_pmux.clkr.hw.clk,
+					 &perfcl_pmux.nb);
+	if (ret || ret_perf)
+		return ret ? ret : ret_perf;
 
 	qcom_cpu_clk_msm8996_unregister_fixed();
 
@@ -638,7 +640,17 @@ static int qcom_cpu_clk_msm8996_driver_probe(struct platform_device *pdev)
 	data->hws[1] = &perfcl_pmux.clkr.hw;
 	data->num = 2;
 
-	return devm_of_clk_add_hw_provider(dev, of_clk_hw_onecell_get, data);
+	ret = devm_of_clk_add_hw_provider(dev, of_clk_hw_onecell_get, data);
+	if (ret) {
+		int cleanup_ret;
+
+		cleanup_ret = qcom_cpu_clk_msm8996_unregister_clks();
+		if (cleanup_ret)
+			dev_err(dev, "Failed to clean up CPU clocks: %d\n",
+				cleanup_ret);
+	}
+
+	return ret;
 }
 
 static int qcom_cpu_clk_msm8996_driver_remove(struct platform_device *pdev)

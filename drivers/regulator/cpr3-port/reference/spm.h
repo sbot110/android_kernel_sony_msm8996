@@ -92,7 +92,8 @@ static inline int msm_spm_set_vdd(unsigned int cpu, unsigned int vlevel)
 
 static inline int msm_spm_get_vdd(unsigned int cpu)
 {
-	return 0;
+	/* An absent SPM backend must never masquerade as a valid VDD level. */
+	return -ENODEV;
 }
 
 static inline int msm_spm_turn_on_cpu_rail(struct device_node *l2ccc_node,

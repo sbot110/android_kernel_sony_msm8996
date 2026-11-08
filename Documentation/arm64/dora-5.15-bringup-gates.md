@@ -74,3 +74,36 @@ values may be guessed from frequency tables.
 
 CPU voltage integration remains BLOCKED; clean build and hardware
 testing are still outstanding.
+
+## HMSS CPR3 integration investigation
+
+Reference: Qualcomm MSM8996 HMSS CPR3 bindings and msm8996-regulator.dtsi
+in the original Qualcomm kernel source.
+
+The Sony Xperia Tone 5.15 DTS already describes PM8994 S9/S10 as
+SAW followers and S11 as SAW leader, sharing VDD_APCC. This is a
+shared rail for both Kryo clusters, not independent per-cluster
+regulators. The current SAW3 regulator driver was audited and its
+voltage transactions serialized across both clusters.
+
+The original HMSS CPR3 binding additionally requires:
+- hardware fuse-derived open-loop voltages and target quotients;
+- two CPR threads with aggregation of voltage requests;
+- memory-array power mux (APM) and MEM-ACC sequencing;
+- cluster LDO and retention supplies, plus SPM interface;
+- calibrated voltage corners and their speed-bin mapping.
+
+These dependencies are not supplied by the existing qcom-spmi SAW3
+regulator alone. The 470000..1140000 uV S11 range is an electrical
+limit, NOT a frequency-to-voltage table. Do not turn it into one.
+
+The Kryo cpufreq fail-closed guard remains required. Do not connect
+cpu-supply or enable cpufreq until the above mechanisms are implemented
+and tested together. In particular, attaching both CPUs to the shared
+S11 rail without an HMSS aggregator and MEM-ACC/APM handling is not
+a validated substitute for CPR3.
+
+Current status: shared-rail topology identified, SAW transaction
+serialization implemented; fuse calibration, CPR3 aggregation, MEM-ACC,
+APM and validated OPP voltage tables are NOT IMPLEMENTED. No clean
+build or device boot has been verified.

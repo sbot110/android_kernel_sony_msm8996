@@ -1341,6 +1341,14 @@ spmi_regulator_saw_set_voltage(struct regulator_dev *rdev, unsigned selector)
 	u8 range_sel;
 	int ret;
 
+	/*
+	 * The SAW3 transaction has no voltage range field. Require a
+	 * single zero-range mapping, as the SAW3 readback path does.
+	 */
+	if (!vreg->set_points || vreg->set_points->count != 1 ||
+	    vreg->set_points->range->range_sel != 0)
+		return -EINVAL;
+
 	ret = spmi_sw_selector_to_hw(vreg, selector, &range_sel,
 				     &req.voltage_sel);
 	if (ret)

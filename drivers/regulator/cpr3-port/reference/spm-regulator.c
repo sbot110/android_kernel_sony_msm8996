@@ -1056,6 +1056,17 @@ static int spm_regulator_avs_register(struct spm_vreg *vreg,
 	if (!avs_node)
 		return 0;
 
+	/*
+	 * AVS cannot be represented as a functional regulator when the
+	 * SPM controller is bypassed: the legacy implementation silently
+	 * accepted voltage and enable requests without programming hardware.
+	 */
+	if (vreg->bypass_spm) {
+		of_node_put(avs_node);
+		dev_err(dev, "AVS child requires a working SPM controller\n");
+		return -EOPNOTSUPP;
+	}
+
 	init_data = of_get_regulator_init_data(dev, avs_node, &vreg->avs_rdesc);
 	if (!init_data) {
 		dev_err(dev, "%s: unable to allocate memory\n", __func__);
@@ -1091,10 +1102,6 @@ static int spm_regulator_avs_register(struct spm_vreg *vreg,
 			__func__, rc);
 		return rc;
 	}
-
-	if (vreg->bypass_spm)
-		pr_debug("%s: SPM bypassed so AVS regulator calls are no-ops\n",
-			vreg->avs_rdesc.name);
 
 	return 0;
 }

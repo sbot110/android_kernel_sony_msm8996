@@ -39,6 +39,7 @@
 			ftrace-size = <0x20000>;
 			pmsg-size = <0x20000>;
 			ecc-size = <16>;
+			no-map;
 		};
 
 		cont_splash_mem: memory@83401000 {

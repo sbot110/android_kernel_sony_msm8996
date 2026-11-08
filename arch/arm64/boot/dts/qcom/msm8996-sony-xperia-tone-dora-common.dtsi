@@ -206,7 +206,11 @@
 	non-removable;
 	mmc-ddr-1_8v;
 	mmc-hs200-1_8v;
-	mmc-hs400-1_8v;
+	/*
+	 * Bring-up: leave HS400 disabled until SDHCI DMA, tuning and
+	 * suspend/resume have been validated on both F8131 and F8132.
+	 * HS200 remains available; no eMMC partition layout is changed.
+	 */
 };
 
 /*

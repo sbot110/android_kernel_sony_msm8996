@@ -2170,10 +2170,16 @@ static int qcom_spmi_regulator_probe(struct platform_device *pdev)
 
 	if (of_find_property(node, "qcom,saw-reg", &lenp)) {
 		syscon = of_parse_phandle(node, "qcom,saw-reg", 0);
+		if (!syscon)
+			return -EINVAL;
+
 		saw_regmap = syscon_node_to_regmap(syscon);
 		of_node_put(syscon);
-		if (IS_ERR(saw_regmap))
-			dev_err(dev, "ERROR reading SAW regmap\n");
+		if (IS_ERR(saw_regmap)) {
+			ret = PTR_ERR(saw_regmap);
+			dev_err(dev, "Failed to acquire SAW regmap: %d\n", ret);
+			return ret;
+		}
 	}
 
 	for (reg = match->data; reg->name; reg++) {

@@ -359,9 +359,11 @@ static int msm_apm_secure_clock_source_override(
 		ret = __invoke_psci_fn_smc(0xC4000020, 3, enable ?
 					   CLOCK_ASSERT_ENABLE :
 					   CLOCK_ASSERT_DISABLE, 0);
-		if (ret)
+		if (ret) {
 			dev_err(ctrl_dev->dev, "PSCI request to switch to %s clock source failed\n",
 				enable ? "GPLL0" : "original");
+			return ret;
+		}
 	}
 
 	return 0;

@@ -112,53 +112,30 @@ struct mem_acc_regulator {
 
 static DEFINE_MUTEX(mem_acc_memory_mutex);
 
-static u64 mem_acc_read_efuse_row(struct mem_acc_regulator *mem_acc_vreg,
-					u32 row_num, bool use_tz_api)
+/*
+ * The Sony 4.4 SCM_FUSE_READ service has no equivalent in the 5.15
+ * qcom_scm public API. Never substitute QCOM_SCM_SVC_IO_READ: it is a
+ * different TrustZone operation. Fail probe when a secure row is needed.
+ */
+static int mem_acc_read_efuse_row(struct mem_acc_regulator *mem_acc_vreg,
+				 u32 row_num, bool use_tz_api, u64 *result)
 {
-	int rc;
-	u64 efuse_bits;
-	struct scm_desc desc = {0};
-	struct mem_acc_read_req {
-		u32 row_address;
-		int addr_type;
-	} req;
+	if (!result)
+		return -EINVAL;
 
-	struct mem_acc_read_rsp {
-		u32 row_data[2];
-		u32 status;
-	} rsp;
-
-	if (!use_tz_api) {
-		efuse_bits = readq_relaxed(mem_acc_vreg->efuse_base
-			+ row_num * BYTES_PER_FUSE_ROW);
-		return efuse_bits;
+	*result = 0;
+	if (use_tz_api) {
+		dev_err(mem_acc_vreg->dev,
+			"secure MEM-ACC fuse read unsupported by qcom_scm API\n");
+		return -EOPNOTSUPP;
 	}
 
-	desc.args[0] = req.row_address = mem_acc_vreg->efuse_addr +
-					row_num * BYTES_PER_FUSE_ROW;
-	desc.args[1] = req.addr_type = 0;
-	desc.arginfo = SCM_ARGS(2);
-	efuse_bits = 0;
+	if (!mem_acc_vreg->efuse_base)
+		return -ENODEV;
 
-	if (!is_scm_armv8()) {
-		rc = scm_call(SCM_SVC_FUSE, SCM_FUSE_READ,
-			&req, sizeof(req), &rsp, sizeof(rsp));
-	} else {
-		rc = scm_call2(SCM_SIP_FNID(SCM_SVC_FUSE, SCM_FUSE_READ),
-				&desc);
-		rsp.row_data[0] = desc.ret[0];
-		rsp.row_data[1] = desc.ret[1];
-		rsp.status = desc.ret[2];
-	}
-
-	if (rc) {
-		pr_err("read row %d failed, err code = %d", row_num, rc);
-	} else {
-		efuse_bits = ((u64)(rsp.row_data[1]) << 32) +
-				(u64)rsp.row_data[0];
-	}
-
-	return efuse_bits;
+	*result = readq_relaxed(mem_acc_vreg->efuse_base +
+			       row_num * BYTES_PER_FUSE_ROW);
+	return 0;
 }
 
 static inline u32 apc_to_acc_corner(struct mem_acc_regulator *mem_acc_vreg,
@@ -1211,14 +1188,21 @@ static int mem_acc_init(struct platform_device *pdev,
 			return rc;
 		}
 
-		fuse_bits = mem_acc_read_efuse_row(mem_acc_vreg, fuse_sel[0],
-								fuse_sel[3]);
+		rc = mem_acc_read_efuse_row(mem_acc_vreg, fuse_sel[0],
+						 fuse_sel[3], &fuse_bits);
+		if (rc)
+			return rc;
+
+		if (fuse_sel[1] >= 64 || !fuse_sel[2] ||
+		    fuse_sel[2] > 64 - fuse_sel[1])
+			return -EINVAL;
 		/*
 		 * fuse_sel[1] = LSB position in row (shift)
 		 * fuse_sel[2] = num of bits (mask)
 		 */
 		mem_acc_vreg->override_fuse_value = (fuse_bits >> fuse_sel[1]) &
-						((1 << fuse_sel[2]) - 1);
+						(fuse_sel[2] == 64 ? ~0ULL :
+						 GENMASK_ULL(fuse_sel[2] - 1, 0));
 
 		rc = mem_acc_find_override_map_match(pdev, mem_acc_vreg);
 		if (rc) {

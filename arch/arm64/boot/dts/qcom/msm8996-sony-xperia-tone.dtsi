@@ -962,3 +962,7 @@
 	phy-names = "usb2-phy";
 	snps,hird-threshold = /bits/ 8 <0>;
 };
+
+&apcc_cpr {
+	vdd-supply = <&pm8994_s11>;
+};

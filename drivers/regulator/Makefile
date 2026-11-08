@@ -172,11 +172,8 @@ obj-$(CONFIG_REGULATOR_WM8350) += wm8350-regulator.o
 obj-$(CONFIG_REGULATOR_WM8400) += wm8400-regulator.o
 obj-$(CONFIG_REGULATOR_WM8994) += wm8994-regulator.o
 
-# Original MSM8996 CPR3 framework: gated by BROKEN until all
-# APM/MEM-ACC/SPM dependencies are ported and voltage paths verified.
-obj-$(CONFIG_REGULATOR_QCOM_CPR3_HMSS_PORT) += qcom-cpr3-hmss-port.o
-qcom-cpr3-hmss-port-y := cpr3-port/cpr3-regulator.o \
-	cpr3-port/cpr3-util.o cpr3-port/cpr3-hmss-regulator.o
-
 ccflags-$(CONFIG_REGULATOR_DEBUG) += -DDEBUG
 obj-$(CONFIG_REGULATOR_MEM_ACC) += mem-acc-regulator.o
+obj-$(CONFIG_REGULATOR_KRYO) += kryo-regulator.o
+obj-$(CONFIG_REGULATOR_CPR3) += cpr3-regulator.o cpr3-util.o
+obj-$(CONFIG_REGULATOR_CPR3_HMSS) += cpr3-hmss-regulator.o

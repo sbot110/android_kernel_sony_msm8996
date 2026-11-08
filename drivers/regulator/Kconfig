@@ -1423,20 +1423,6 @@ config REGULATOR_QCOM_LABIBB
 	  boost regulator and IBB can be used as a negative boost regulator
 	  for LCD display panel.
 
-# MSM8996 CPR3 port: the original Sony 4.4 sources are staged under
-# cpr3-port/. The legacy APM, SPM and MEM-ACC APIs are not yet compatible
-# with this kernel. Do not expose this option until the complete voltage
-# sequencing path is validated on MSM8996.
-config REGULATOR_QCOM_CPR3_HMSS_PORT
-	bool "Qualcomm MSM8996 HMSS CPR3 (incomplete port)"
-	depends on ARCH_QCOM && OF && REGULATOR
-	depends on BROKEN
-	help
-	  Staged Sony/Qualcomm CPR3 HMSS controller and fuse-calibration
-	  framework. Not buildable or safe to enable yet: APM, SPM,
-	  MEM-ACC, LDO and regulator API adaptation is outstanding.
-	  Keep disabled while the MSM8996 cpufreq safety gate is active.
-
 
 config REGULATOR_MEM_ACC
 	tristate "Qualcomm Technologies, Inc. MEM-ACC regulator driver"
@@ -1446,6 +1432,32 @@ config REGULATOR_MEM_ACC
 	  This driver supports configuring the memory accelerator (MEM-ACC)
 	  settings for L1/L2/L3 caches and CPU memory arrays across voltage
 	  corners on Qualcomm MSM8996 SoCs.
+
+
+config REGULATOR_KRYO
+	tristate "Qualcomm Kryo LDO/BHS CPU cluster regulator driver"
+	depends on ARCH_QCOM || COMPILE_TEST
+	default y if ARCH_QCOM
+	help
+	  This driver supports the Kryo cluster LDO/BHS and retention
+	  regulators on Qualcomm MSM8996 SoCs.
+
+config REGULATOR_CPR3
+	tristate "Qualcomm CPR3 regulator core support"
+	depends on ARCH_QCOM || COMPILE_TEST
+	default y if ARCH_QCOM
+	help
+	  Core driver support for Qualcomm Core Power Reduction v3 (CPR3)
+	  controllers, including dual-thread voltage aggregation, APM
+	  switching, MEM-ACC scaling, and closed-loop sensor operation.
+
+config REGULATOR_CPR3_HMSS
+	tristate "Qualcomm MSM8996 HMSS CPR3 regulator driver"
+	depends on REGULATOR_CPR3
+	default y if ARCH_QCOM
+	help
+	  Platform-specific CPR3 regulator driver for the Qualcomm MSM8996
+	  HMSS (Silver and Gold Kryo CPU clusters and L2/CBF).
 
 endif
 

@@ -495,6 +495,11 @@ static int spm_regulator_set_voltage(struct regulator_dev *rdev, int min_uV,
 	const struct voltage_range *range = vreg->range;
 	int uV = min_uV;
 	unsigned vlevel;
+	int old_uV, rc;
+	unsigned old_vlevel;
+
+	if (min_uV > max_uV)
+		return -EINVAL;
 
 	if (uV < range->set_point_min_uV && max_uV >= range->set_point_min_uV)
 		uV = range->set_point_min_uV;
@@ -515,14 +520,30 @@ static int spm_regulator_set_voltage(struct regulator_dev *rdev, int min_uV,
 		return -EINVAL;
 	}
 
-	*selector = spm_regulator_vlevel_to_selector(vreg, vlevel);
+	/*
+	 * Keep the requested target separate from the last confirmed rail
+	 * voltage. On failure the stepping helper may have completed some
+	 * intermediate steps, which remain tracked by last_set_*.
+	 */
+	old_uV = vreg->uV;
+	old_vlevel = vreg->vlevel;
 	vreg->vlevel = vlevel;
 	vreg->uV = uV;
 
-	if (!vreg->online)
+	if (!vreg->online) {
+		*selector = spm_regulator_vlevel_to_selector(vreg, vlevel);
 		return 0;
+	}
 
-	return _spm_regulator_set_voltage(rdev);
+	rc = _spm_regulator_set_voltage(rdev);
+	if (rc) {
+		vreg->uV = old_uV;
+		vreg->vlevel = old_vlevel;
+		return rc;
+	}
+
+	*selector = spm_regulator_vlevel_to_selector(vreg, vlevel);
+	return 0;
 }
 
 static int spm_regulator_list_voltage(struct regulator_dev *rdev,

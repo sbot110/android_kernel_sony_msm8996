@@ -1258,6 +1258,16 @@ static int spmi_saw_set_vdd(struct spmi_saw_voltage_request *req)
 	data3 = (data3 & ~SAW3_VCTL_CLEAR_MASK) | req->voltage_sel;
 
 	avs_enabled = !!(avs_ctl & SAW3_AVS_CTL_EN_MASK);
+	/*
+	 * AVS_CTL lower/upper limit fields accept six-bit selectors.
+	 * Validate before touching AVS_CTL or the voltage registers:
+	 * a rejected request must not leave AVS disabled or latch an
+	 * unnecessary uncertain hardware state.
+	 */
+	if (avs_enabled && (req->voltage_sel < 4 ||
+			    req->voltage_sel > 0x3f))
+		return -ERANGE;
+
 	if (avs_enabled) {
 		/*
 		 * Clearing the AVS toggle is itself a hardware state
@@ -1295,15 +1305,6 @@ static int spmi_saw_set_vdd(struct spmi_saw_voltage_request *req)
 	}
 	if (retries == 100) {
 		ret = -ETIMEDOUT;
-		return ret;
-	}
-
-	/*
-	 * Do not derive the AVS limit from a truncated PMIC status value:
-	 * the acknowledgement has already been matched to voltage_sel.
-	 */
-	if (avs_enabled && (req->voltage_sel & ~0x3f)) {
-		ret = -ERANGE;
 		return ret;
 	}
 

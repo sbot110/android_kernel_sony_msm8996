@@ -186,6 +186,11 @@ struct spm_vreg {
 	enum qpnp_regulator_uniq_type	regulator_type;
 	u32				cpu_num;
 	bool				bypass_spm;
+	/*
+	 * An unsuccessful SPM voltage vote may have changed the rail.
+	 * Block further votes until the controller is reinitialized.
+	 */
+	bool				voltage_state_uncertain;
 	struct regulator_desc		avs_rdesc;
 	struct regulator_dev		*avs_rdev;
 	int				avs_min_uV;
@@ -383,7 +388,8 @@ static int spm_regulator_write_voltage(struct spm_vreg *vreg, int uV)
 			 * SPM may have partially applied this voltage vote.
 			 * Never switch to a second, unsynchronized PMIC writer.
 			 */
-			pr_err("%s: SPM voltage vote failed, rc=%d\n",
+			vreg->voltage_state_uncertain = true;
+			pr_err("%s: SPM voltage vote failed, rc=%d; blocking further voltage transitions\n",
 			       vreg->rdesc.name, rc);
 			return rc;
 		}
@@ -445,6 +451,9 @@ static int _spm_regulator_set_voltage(struct regulator_dev *rdev)
 	bool pwm_required;
 	int rc = 0;
 	int uV;
+
+	if (vreg->voltage_state_uncertain)
+		return -EIO;
 
 	rc = spm_regulator_get_voltage(rdev);
 	if (IS_ERR_VALUE(rc))

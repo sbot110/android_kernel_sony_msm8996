@@ -345,23 +345,19 @@ static int qpnp_smps_set_mode(struct spm_vreg *vreg, u8 mode)
 static int spm_regulator_get_voltage(struct regulator_dev *rdev)
 {
 	struct spm_vreg *vreg = rdev_get_drvdata(rdev);
-	int vlevel, rc;
+	int vlevel;
 
 	if (spm_regulator_using_avs(vreg)) {
 		vlevel = msm_spm_get_vdd(vreg->cpu_num);
 
-		if (IS_ERR_VALUE(vlevel)) {
-			pr_debug("%s: msm_spm_get_vdd failed, rc=%d; falling back on SPMI read\n",
-				vreg->rdesc.name, vlevel);
-
-			rc = qpnp_smps_read_voltage(vreg);
-			if (rc) {
-				pr_err("%s: voltage read failed, rc=%d\n",
-				       vreg->rdesc.name, rc);
-				return rc;
-			}
-
-			return vreg->last_set_uV;
+		if (vlevel < 0) {
+			/*
+			 * SPM owns the AVS vote. A PMIC readback does not
+			 * establish the SPM controller's effective state.
+			 */
+			pr_err("%s: SPM AVS voltage read failed: %d\n",
+			       vreg->rdesc.name, vlevel);
+			return vlevel;
 		}
 
 		vreg->last_set_vlevel = vlevel;

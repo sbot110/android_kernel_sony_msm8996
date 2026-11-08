@@ -26,8 +26,8 @@
 #include <linux/slab.h>
 #include <linux/string.h>
 #include <linux/power/qcom/apm.h>
-#include <soc/qcom/scm.h>
 #include <linux/arm-smccc.h>
+#include <linux/mutex.h>
 
 /*
  *        VDD_APCC
@@ -350,20 +350,30 @@ static int msm8953_apm_ctrl_init(struct platform_device *pdev,
 	return rc;
 }
 
+/*
+ * The old shared scm_lmh_lock is not exported by the Linux 5.15 SCM
+ * driver. Serialize the MSM8996 APM secure clock override locally;
+ * other legacy LMH users must be audited before enabling this port.
+ */
+static DEFINE_MUTEX(msm8996_apm_scm_lock);
+
 static int msm_apm_secure_clock_source_override(
 			struct msm_apm_ctrl_dev *ctrl_dev, bool enable)
 {
-	int ret;
+	struct arm_smccc_res res;
 
-	if (ctrl_dev->clk_src_override) {
-		ret = __invoke_psci_fn_smc(0xC4000020, 3, enable ?
-					   CLOCK_ASSERT_ENABLE :
-					   CLOCK_ASSERT_DISABLE, 0);
-		if (ret) {
-			dev_err(ctrl_dev->dev, "PSCI request to switch to %s clock source failed\n",
-				enable ? "GPLL0" : "original");
-			return ret;
-		}
+	if (!ctrl_dev->clk_src_override)
+		return 0;
+
+	/* Preserve the Sony MSM8996 firmware function ID and arguments. */
+	arm_smccc_smc(0xC4000020, 3,
+		      enable ? CLOCK_ASSERT_ENABLE : CLOCK_ASSERT_DISABLE,
+		      0, 0, 0, 0, 0, &res);
+	if (res.a0) {
+		dev_err(ctrl_dev->dev,
+			"secure clock override (%s) failed: %ld\n",
+			enable ? "GPLL0" : "original", (long)res.a0);
+		return res.a0 < 0 ? (int)res.a0 : -EIO;
 	}
 
 	return 0;
@@ -400,7 +410,7 @@ static int msm8996_apm_switch_to_mx(struct msm_apm_ctrl_dev *ctrl_dev)
 	unsigned long flags;
 	int i, ret;
 
-	mutex_lock(&scm_lmh_lock);
+	mutex_lock(&msm8996_apm_scm_lock);
 	spin_lock_irqsave(&ctrl_dev->lock, flags);
 
 	ret = msm_apm_secure_clock_source_override(ctrl_dev, true);
@@ -476,7 +486,7 @@ static int msm8996_apm_switch_to_mx(struct msm_apm_ctrl_dev *ctrl_dev)
 
 done:
 	spin_unlock_irqrestore(&ctrl_dev->lock, flags);
-	mutex_unlock(&scm_lmh_lock);
+	mutex_unlock(&msm8996_apm_scm_lock);
 
 	return ret;
 }
@@ -486,7 +496,7 @@ static int msm8996_apm_switch_to_apcc(struct msm_apm_ctrl_dev *ctrl_dev)
 	unsigned long flags;
 	int i, ret;
 
-	mutex_lock(&scm_lmh_lock);
+	mutex_lock(&msm8996_apm_scm_lock);
 	spin_lock_irqsave(&ctrl_dev->lock, flags);
 
 	ret = msm_apm_secure_clock_source_override(ctrl_dev, true);
@@ -562,7 +572,7 @@ static int msm8996_apm_switch_to_apcc(struct msm_apm_ctrl_dev *ctrl_dev)
 
 done:
 	spin_unlock_irqrestore(&ctrl_dev->lock, flags);
-	mutex_unlock(&scm_lmh_lock);
+	mutex_unlock(&msm8996_apm_scm_lock);
 
 	return ret;
 }

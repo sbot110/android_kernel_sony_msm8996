@@ -1280,8 +1280,10 @@ static void spmi_saw_set_vdd(void *data)
 			break;
 		udelay(1);
 	}
-	if (retries == 100)
+	if (retries == 100) {
 		req->ret = -ETIMEDOUT;
+		return;
+	}
 
 restore_avs:
 	/*

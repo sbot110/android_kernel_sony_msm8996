@@ -288,7 +288,9 @@ static int mem_acc_regulator_set_voltage(struct regulator_dev *rdev,
 		} else {
 			for (i = mem_acc_vreg->corner - 1; i >= corner; i--) {
 				pr_debug("DOWN: to corner %d\n", i);
-				update_acc_sel(mem_acc_vreg, i);
+				rc = update_acc_sel(mem_acc_vreg, i);
+				if (rc)
+					goto out_unlock;
 			}
 		}
 	}

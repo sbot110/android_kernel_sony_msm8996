@@ -591,6 +591,21 @@ static int cpu_clk_notifier_cb(struct notifier_block *nb, unsigned long event,
 				break;
 		}
 		ret = clk_cpu_8996_mux_set_parent(&cpuclk->clkr.hw, ALT_INDEX);
+		if (ret && cnd->new_rate < DIV_2_THRESHOLD &&
+		    cnd->old_rate >= DIV_2_THRESHOLD) {
+			/*
+			 * PRE_RATE_CHANGE must not leave SMUX parked on XO if
+			 * switching PMUX to the alternate PLL fails. The
+			 * original high-rate path still needs its PLL/2 input.
+			 */
+			int rollback_ret;
+
+			rollback_ret = clk_cpu_8996_mux_set_parent(&smux->clkr.hw,
+							   SMUX_PLL_DIV2_INDEX);
+			if (rollback_ret)
+				pr_err("msm8996 cpu clock: SMUX rollback failed: %d\n",
+				       rollback_ret);
+		}
 		break;
 	case POST_RATE_CHANGE:
 		if (cnd->new_rate < DIV_2_THRESHOLD) {

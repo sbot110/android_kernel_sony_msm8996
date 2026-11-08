@@ -207,6 +207,9 @@ int cpr3_read_fuse_param(void __iomem *fuse_base_addr,
 	int bits;
 	int bits_total = 0;
 
+	if (!fuse_base_addr || !param || !param_value)
+		return -EINVAL;
+
 	*param_value = 0;
 
 	while (param->row || param->bit_start || param->bit_end) {

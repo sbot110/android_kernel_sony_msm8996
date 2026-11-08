@@ -1289,7 +1289,7 @@ restore_avs:
 	 * Only restore AVS after the requested voltage was acknowledged.
 	 * Re-enabling it with an unconfirmed selector can be unsafe.
 	 */
-	if (!avs_enabled || req->ret)
+	if (!avs_enabled || ret)
 		return ret;
 
 	/*
@@ -1306,8 +1306,7 @@ restore_avs:
 	avs_ctl |= (pmic_sts << 17);
 	avs_ctl |= SAW3_AVS_CTL_TGGL_MASK;
 	ret = regmap_write(saw_regmap, SAW3_AVS_CTL, avs_ctl);
-	if (ret)
-		ret = ret;
+	return ret;
 }
 
 static int

@@ -27,7 +27,6 @@
 #include <linux/regulator/machine.h>
 #include <linux/regulator/of_regulator.h>
 #include <linux/string.h>
-#include <soc/qcom/scm.h>
 
 #define MEM_ACC_DEFAULT_SEL_SIZE	2
 
@@ -74,6 +73,7 @@ struct mem_acc_regulator {
 	struct regulator_dev	*rdev;
 
 	int			corner;
+	bool			transition_failed;
 	bool			mem_acc_supported[MEMORY_MAX];
 	bool			mem_acc_custom_supported[MEMORY_MAX];
 
@@ -269,11 +269,17 @@ static int mem_acc_regulator_set_voltage(struct regulator_dev *rdev,
 	pr_debug("old corner=%d, new corner=%d\n",
 			mem_acc_vreg->corner, corner);
 
-	if (corner == mem_acc_vreg->corner)
-		return 0;
-
-	/* go up or down one level at a time */
+	/*
+	 * A failed secure write may have committed only part of a corner.
+	 * Without readback/rollback, subsequent votes cannot be trusted.
+	 */
 	mutex_lock(&mem_acc_memory_mutex);
+	if (mem_acc_vreg->transition_failed) {
+		rc = -EIO;
+		goto out_unlock;
+	}
+	if (corner == mem_acc_vreg->corner)
+		goto out_unlock;
 
 	if (mem_acc_vreg->flags & MEM_ACC_USE_ADDR_VAL_MAP) {
 		update_acc_reg(mem_acc_vreg, corner);
@@ -282,15 +288,21 @@ static int mem_acc_regulator_set_voltage(struct regulator_dev *rdev,
 			for (i = mem_acc_vreg->corner + 1; i <= corner; i++) {
 				pr_debug("UP: to corner %d\n", i);
 				rc = update_acc_sel(mem_acc_vreg, i);
-				if (rc)
+				if (rc) {
+					mem_acc_vreg->transition_failed = true;
 					goto out_unlock;
+				}
+				mem_acc_vreg->corner = i;
 			}
 		} else {
 			for (i = mem_acc_vreg->corner - 1; i >= corner; i--) {
 				pr_debug("DOWN: to corner %d\n", i);
 				rc = update_acc_sel(mem_acc_vreg, i);
-				if (rc)
+				if (rc) {
+					mem_acc_vreg->transition_failed = true;
 					goto out_unlock;
+				}
+				mem_acc_vreg->corner = i;
 			}
 		}
 	}

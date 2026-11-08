@@ -1231,49 +1231,48 @@ struct spmi_saw_voltage_request {
 	int ret;
 };
 
-static void spmi_saw_set_vdd(void *data)
+static int spmi_saw_set_vdd(struct spmi_saw_voltage_request *req)
 {
-	struct spmi_saw_voltage_request *req = data;
 	u32 vctl, data3, avs_ctl, pmic_sts = 0;
 	bool avs_enabled;
 	unsigned int retries;
 	int ret;
 
-	req->ret = regmap_read(saw_regmap, SAW3_AVS_CTL, &avs_ctl);
-	if (req->ret)
-		return;
-	req->ret = regmap_read(saw_regmap, SAW3_VCTL, &vctl);
-	if (req->ret)
-		return;
-	req->ret = regmap_read(saw_regmap, SAW3_SPM_PMIC_DATA_3, &data3);
-	if (req->ret)
-		return;
+	ret = regmap_read(saw_regmap, SAW3_AVS_CTL, &avs_ctl);
+	if (ret)
+		return ret;
+	ret = regmap_read(saw_regmap, SAW3_VCTL, &vctl);
+	if (ret)
+		return ret;
+	ret = regmap_read(saw_regmap, SAW3_SPM_PMIC_DATA_3, &data3);
+	if (ret)
+		return ret;
 
 	vctl = (vctl & ~SAW3_VCTL_CLEAR_MASK) | req->voltage_sel;
 	data3 = (data3 & ~SAW3_VCTL_CLEAR_MASK) | req->voltage_sel;
 
 	avs_enabled = !!(avs_ctl & SAW3_AVS_CTL_EN_MASK);
 	if (avs_enabled) {
-		req->ret = regmap_write(saw_regmap, SAW3_AVS_CTL,
+		ret = regmap_write(saw_regmap, SAW3_AVS_CTL,
 					avs_ctl & ~SAW3_AVS_CTL_TGGL_MASK);
-		if (req->ret)
-			return;
+		if (ret)
+			return ret;
 	}
 
-	req->ret = regmap_write(saw_regmap, SAW3_RST, 1);
-	if (req->ret)
+	ret = regmap_write(saw_regmap, SAW3_RST, 1);
+	if (ret)
 		goto restore_avs;
-	req->ret = regmap_write(saw_regmap, SAW3_VCTL, vctl);
-	if (req->ret)
+	ret = regmap_write(saw_regmap, SAW3_VCTL, vctl);
+	if (ret)
 		goto restore_avs;
-	req->ret = regmap_write(saw_regmap, SAW3_SPM_PMIC_DATA_3, data3);
-	if (req->ret)
+	ret = regmap_write(saw_regmap, SAW3_SPM_PMIC_DATA_3, data3);
+	if (ret)
 		goto restore_avs;
 
 	/* Bound the polling even when jiffies do not advance on this CPU. */
 	for (retries = 0; retries < 100; retries++) {
-		req->ret = regmap_read(saw_regmap, SAW3_PMIC_STS, &pmic_sts);
-		if (req->ret)
+		ret = regmap_read(saw_regmap, SAW3_PMIC_STS, &pmic_sts);
+		if (ret)
 			goto restore_avs;
 		pmic_sts &= SAW3_VCTL_DATA_MASK;
 		if (pmic_sts == req->voltage_sel)
@@ -1281,8 +1280,8 @@ static void spmi_saw_set_vdd(void *data)
 		udelay(1);
 	}
 	if (retries == 100) {
-		req->ret = -ETIMEDOUT;
-		return;
+		ret = -ETIMEDOUT;
+		return ret;
 	}
 
 restore_avs:
@@ -1291,7 +1290,7 @@ restore_avs:
 	 * Re-enabling it with an unconfirmed selector can be unsafe.
 	 */
 	if (!avs_enabled || req->ret)
-		return;
+		return ret;
 
 	/*
 	 * AVS_CTL encodes a lower limit four steps below the confirmed
@@ -1299,8 +1298,8 @@ restore_avs:
 	 */
 	pmic_sts &= 0x3f;
 	if (pmic_sts < 4) {
-		req->ret = -ERANGE;
-		return;
+		ret = -ERANGE;
+		return ret;
 	}
 	avs_ctl &= ~SAW3_AVS_CTL_CLEAR_MASK;
 	avs_ctl |= ((pmic_sts - 4) << 10);
@@ -1308,7 +1307,7 @@ restore_avs:
 	avs_ctl |= SAW3_AVS_CTL_TGGL_MASK;
 	ret = regmap_write(saw_regmap, SAW3_AVS_CTL, avs_ctl);
 	if (ret)
-		req->ret = ret;
+		ret = ret;
 }
 
 static int
@@ -1336,12 +1335,16 @@ spmi_regulator_saw_set_voltage(struct regulator_dev *rdev, unsigned selector)
 	 * regmap accesses, to avoid overlapping voltage requests.
 	 */
 	mutex_lock(&saw_voltage_lock);
-	ret = smp_call_function_single(0, spmi_saw_set_vdd, &req, true);
+	/*
+	 * syscon regmap accesses may sleep. Do not issue them from an
+	 * smp_call_function_single() IPI callback (atomic context).
+	 * The controller must be accessible from process context; keep
+	 * CPU-affinity requirements gated until proven for MSM8996.
+	 */
+	ret = spmi_saw_set_vdd(&req);
 	mutex_unlock(&saw_voltage_lock);
-	if (ret)
-		return ret;
 
-	return req.ret;
+	return ret;
 }
 
 static const struct regulator_ops spmi_smps_ops = {

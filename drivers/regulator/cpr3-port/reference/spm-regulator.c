@@ -31,10 +31,10 @@
 #include <soc/qcom/spm.h>
 #include <linux/arm-smccc.h>
 
-#if defined(CONFIG_ARM64) || (defined(CONFIG_ARM) && defined(CONFIG_ARM_PSCI))
-#else
-	#define __invoke_psci_fn_smc(a, b, c, d) 0
-#endif
+/*
+ * Never emulate successful secure recalibration on unsupported builds.
+ * The MSM8996 firmware operation is issued through the ARM SMCCC API.
+ */
 
 #define SPM_REGULATOR_DRIVER_NAME "qcom,spm-regulator"
 
@@ -421,18 +421,23 @@ static int spm_regulator_write_voltage(struct spm_vreg *vreg, int uV)
 
 static int spm_regulator_recalibrate(struct spm_vreg *vreg)
 {
-	int rc;
+	struct arm_smccc_res res;
 
 	if (!vreg->recal_cluster_mask)
 		return 0;
 
-	rc = __invoke_psci_fn_smc(0xC4000020, vreg->recal_cluster_mask,
-				  2, 0);
-	if (rc)
-		pr_err("%s: recalibration failed, rc=%d\n", vreg->rdesc.name,
-			rc);
+	if (!IS_ENABLED(CONFIG_ARM64))
+		return -EOPNOTSUPP;
 
-	return rc;
+	arm_smccc_smc(0xC4000020, vreg->recal_cluster_mask,
+		      2, 0, 0, 0, 0, 0, &res);
+	if (res.a0) {
+		pr_err("%s: recalibration failed, status=%ld\n",
+		       vreg->rdesc.name, (long)res.a0);
+		return res.a0 < 0 ? (int)res.a0 : -EIO;
+	}
+
+	return 0;
 }
 
 static int _spm_regulator_set_voltage(struct regulator_dev *rdev)

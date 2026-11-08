@@ -1,3 +1,4 @@
+#include <soc/qcom/spm.h>
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2012-2015, The Linux Foundation. All rights reserved.
@@ -203,23 +204,6 @@ enum spmi_boost_registers {
 
 enum spmi_boost_byp_registers {
 	SPMI_BOOST_BYP_REG_CURRENT_LIMIT	= 0x4b,
-};
-
-enum spmi_saw3_registers {
-	SAW3_SECURE				= 0x00,
-	SAW3_ID					= 0x04,
-	SAW3_SPM_STS				= 0x0C,
-	SAW3_AVS_STS				= 0x10,
-	SAW3_PMIC_STS				= 0x14,
-	SAW3_RST				= 0x18,
-	SAW3_VCTL				= 0x1C,
-	SAW3_AVS_CTL				= 0x20,
-	SAW3_AVS_LIMIT				= 0x24,
-	SAW3_AVS_DLY				= 0x28,
-	SAW3_AVS_HYSTERESIS			= 0x2C,
-	SAW3_SPM_STS2				= 0x38,
-	SAW3_SPM_PMIC_DATA_3			= 0x4C,
-	SAW3_VERSION				= 0xFD0,
 };
 
 /* Used for indexing into ctrl_reg.  These are offets from 0x40 */
@@ -1216,129 +1200,11 @@ static irqreturn_t spmi_regulator_vs_ocp_isr(int irq, void *data)
 	return IRQ_HANDLED;
 }
 
-#define SAW3_VCTL_DATA_MASK	0xFF
-#define SAW3_VCTL_CLEAR_MASK	0x700FF
-#define SAW3_AVS_CTL_EN_MASK	0x1
-#define SAW3_AVS_CTL_TGGL_MASK	0x8000000
-#define SAW3_AVS_CTL_CLEAR_MASK	0x7efc00
-
-static struct regmap *saw_regmap;
-/* SAW3 VCTL/AVS writes form one transaction shared by both clusters. */
-static DEFINE_MUTEX(saw_voltage_lock);
-/*
- * A failed transaction after a SAW3 register write may leave the
- * actual CPU rail voltage unknown. Do not issue another vote blindly.
- * Protected by saw_voltage_lock; reset only on driver reinitialization.
- */
-static bool saw_voltage_state_uncertain;
-
-struct spmi_saw_voltage_request {
-	u8 voltage_sel;
-	bool write_started;
-};
-
-static int spmi_saw_set_vdd(struct spmi_saw_voltage_request *req)
-{
-	u32 vctl, data3, avs_ctl, pmic_sts = 0;
-	bool avs_enabled;
-	unsigned int retries;
-	int ret;
-
-	ret = regmap_read(saw_regmap, SAW3_AVS_CTL, &avs_ctl);
-	if (ret)
-		return ret;
-	ret = regmap_read(saw_regmap, SAW3_VCTL, &vctl);
-	if (ret)
-		return ret;
-	ret = regmap_read(saw_regmap, SAW3_SPM_PMIC_DATA_3, &data3);
-	if (ret)
-		return ret;
-
-	vctl = (vctl & ~SAW3_VCTL_CLEAR_MASK) | req->voltage_sel;
-	data3 = (data3 & ~SAW3_VCTL_CLEAR_MASK) | req->voltage_sel;
-
-	avs_enabled = !!(avs_ctl & SAW3_AVS_CTL_EN_MASK);
-	/*
-	 * AVS_CTL lower/upper limit fields accept six-bit selectors.
-	 * Validate before touching AVS_CTL or the voltage registers:
-	 * a rejected request must not leave AVS disabled or latch an
-	 * unnecessary uncertain hardware state.
-	 */
-	if (avs_enabled && (req->voltage_sel < 4 ||
-			    req->voltage_sel > 0x3f))
-		return -ERANGE;
-
-	if (avs_enabled) {
-		/*
-		 * Clearing the AVS toggle is itself a hardware state
-		 * change. Even a failed regmap write can have taken effect.
-		 * Latch an uncertain state before attempting the write.
-		 */
-		req->write_started = true;
-		ret = regmap_write(saw_regmap, SAW3_AVS_CTL,
-					avs_ctl & ~SAW3_AVS_CTL_TGGL_MASK);
-		if (ret)
-			return ret;
-	}
-
-	/* From this point an error can leave the hardware state unknown. */
-	req->write_started = true;
-	ret = regmap_write(saw_regmap, SAW3_RST, 1);
-	if (ret)
-		goto restore_avs;
-	ret = regmap_write(saw_regmap, SAW3_VCTL, vctl);
-	if (ret)
-		goto restore_avs;
-	ret = regmap_write(saw_regmap, SAW3_SPM_PMIC_DATA_3, data3);
-	if (ret)
-		goto restore_avs;
-
-	/* Bound the polling even when jiffies do not advance on this CPU. */
-	for (retries = 0; retries < 100; retries++) {
-		ret = regmap_read(saw_regmap, SAW3_PMIC_STS, &pmic_sts);
-		if (ret)
-			goto restore_avs;
-		pmic_sts &= SAW3_VCTL_DATA_MASK;
-		if (pmic_sts == req->voltage_sel)
-			break;
-		udelay(1);
-	}
-	if (retries == 100) {
-		ret = -ETIMEDOUT;
-		return ret;
-	}
-
-restore_avs:
-	/*
-	 * Only restore AVS after the requested voltage was acknowledged.
-	 * Re-enabling it with an unconfirmed selector can be unsafe.
-	 */
-	if (!avs_enabled || ret)
-		return ret;
-
-	/*
-	 * AVS_CTL encodes a lower limit four steps below the confirmed
-	 * selector. Refuse to underflow the unsigned selector field.
-	 */
-	pmic_sts &= 0x3f;
-	if (pmic_sts < 4) {
-		ret = -ERANGE;
-		return ret;
-	}
-	avs_ctl &= ~SAW3_AVS_CTL_CLEAR_MASK;
-	avs_ctl |= ((pmic_sts - 4) << 10);
-	avs_ctl |= (pmic_sts << 17);
-	avs_ctl |= SAW3_AVS_CTL_TGGL_MASK;
-	ret = regmap_write(saw_regmap, SAW3_AVS_CTL, avs_ctl);
-	return ret;
-}
-
 static int
 spmi_regulator_saw_set_voltage(struct regulator_dev *rdev, unsigned selector)
 {
 	struct spmi_regulator *vreg = rdev_get_drvdata(rdev);
-	struct spmi_saw_voltage_request req = {};
-	u8 range_sel;
+	u8 range_sel, hw_sel;
 	int ret;
 
 	/*
@@ -1349,8 +1215,7 @@ spmi_regulator_saw_set_voltage(struct regulator_dev *rdev, unsigned selector)
 	    vreg->set_points->range->range_sel != 0)
 		return -EINVAL;
 
-	ret = spmi_sw_selector_to_hw(vreg, selector, &range_sel,
-				     &req.voltage_sel);
+	ret = spmi_sw_selector_to_hw(vreg, selector, &range_sel, &hw_sel);
 	if (ret)
 		return ret;
 
@@ -1358,76 +1223,38 @@ spmi_regulator_saw_set_voltage(struct regulator_dev *rdev, unsigned selector)
 		return -EINVAL;
 
 	/*
-	 * The SAW register window is shared by both Kryo clusters. Serialize
-	 * the entire read/modify/write/ack sequence, not just individual
-	 * regmap accesses, to avoid overlapping voltage requests.
+	 * Delegate exclusively to the authoritative Qualcomm SPM/SAW3 driver.
+	 * Never maintain a second register writer for the shared SAW3 block.
 	 */
-	mutex_lock(&saw_voltage_lock);
-	/*
-	 * Probe publishes the shared SAW3 regmap under this same lock.
-	 * Check availability only after acquiring it, before any register
-	 * access, so a concurrent probe cannot race the initial check.
-	 */
-	if (IS_ERR_OR_NULL(saw_regmap)) {
-		mutex_unlock(&saw_voltage_lock);
-		return -ENODEV;
-	}
-	if (saw_voltage_state_uncertain) {
-		mutex_unlock(&saw_voltage_lock);
-		return -EIO;
-	}
-	/*
-	 * syscon regmap accesses may sleep. Do not issue them from an
-	 * smp_call_function_single() IPI callback (atomic context).
-	 * The controller must be accessible from process context; keep
-	 * CPU-affinity requirements gated until proven for MSM8996.
-	 */
-	ret = spmi_saw_set_vdd(&req);
-	if (ret && req.write_started) {
-		saw_voltage_state_uncertain = true;
-		dev_err(vreg->dev,
-			"SAW3 voltage transaction failed (%d); further votes blocked\n",
-			ret);
-	}
-	mutex_unlock(&saw_voltage_lock);
+	ret = msm_spm_probe_done();
+	if (ret)
+		return ret;
 
-	return ret;
+	return msm_spm_set_vdd(0, hw_sel);
 }
 
-/* Read the voltage acknowledged by SAW3, not the PMIC vote register. */
+/* Read the voltage acknowledged by the authoritative SPM/SAW3 backend. */
 static int spmi_regulator_saw_get_voltage(struct regulator_dev *rdev)
 {
 	struct spmi_regulator *vreg = rdev_get_drvdata(rdev);
 	const struct spmi_voltage_range *range;
-	unsigned int status;
 	int ret;
-
-	if (IS_ERR_OR_NULL(saw_regmap))
-		return -ENODEV;
-
-	mutex_lock(&saw_voltage_lock);
-	if (saw_voltage_state_uncertain) {
-		ret = -EIO;
-		goto out;
-	}
-
-	ret = regmap_read(saw_regmap, SAW3_PMIC_STS, &status);
-	if (ret)
-		goto out;
 
 	/* The SAW writer supports only the zero hardware range. */
 	if (!vreg->set_points || vreg->set_points->count != 1 ||
-	    vreg->set_points->range->range_sel != 0) {
-		ret = -EINVAL;
-		goto out;
-	}
+	    vreg->set_points->range->range_sel != 0)
+		return -EINVAL;
+
+	ret = msm_spm_probe_done();
+	if (ret)
+		return ret;
+
+	ret = msm_spm_get_vdd(0);
+	if (ret < 0)
+		return ret;
 
 	range = vreg->set_points->range;
-	ret = spmi_hw_selector_to_sw(vreg, status & SAW3_VCTL_DATA_MASK,
-				     range);
-out:
-	mutex_unlock(&saw_voltage_lock);
-	return ret;
+	return spmi_hw_selector_to_sw(vreg, ret, range);
 }
 
 static const struct regulator_ops spmi_smps_ops = {
@@ -2252,8 +2079,7 @@ static int qcom_spmi_regulator_probe(struct platform_device *pdev)
 	const char *name;
 	struct device *dev = &pdev->dev;
 	struct device_node *node = pdev->dev.of_node;
-	struct device_node *syscon, *reg_node;
-	struct regmap *candidate;
+	struct device_node *saw_np, *reg_node;
 	struct property *reg_prop;
 	int ret = 0, lenp;
 	bool has_saw;
@@ -2275,33 +2101,21 @@ static int qcom_spmi_regulator_probe(struct platform_device *pdev)
 
 	has_saw = of_find_property(node, "qcom,saw-reg", NULL) != NULL;
 	if (has_saw) {
-		syscon = of_parse_phandle(node, "qcom,saw-reg", 0);
-		if (!syscon)
+		saw_np = of_parse_phandle(node, "qcom,saw-reg", 0);
+		if (!saw_np)
 			return -EINVAL;
 
-		candidate = syscon_node_to_regmap(syscon);
-		of_node_put(syscon);
-		if (IS_ERR(candidate)) {
-			ret = PTR_ERR(candidate);
-			dev_err(dev, "Failed to acquire SAW regmap: %d\n", ret);
-			return ret;
-		}
-
-		/*
-		 * The voltage transaction currently uses one shared SAW3
-		 * register window. Never silently redirect existing users
-		 * to a different controller when another PMIC probes.
-		 */
-		mutex_lock(&saw_voltage_lock);
-		if (saw_regmap && saw_regmap != candidate)
-			ret = -EBUSY;
-		else
-			saw_regmap = candidate;
-		mutex_unlock(&saw_voltage_lock);
+		ret = msm_spm_probe_done();
 		if (ret) {
-			dev_err(dev, "Conflicting SAW3 register window\n");
+			of_node_put(saw_np);
 			return ret;
 		}
+		if (!msm_spm_is_saw_node(saw_np)) {
+			of_node_put(saw_np);
+			dev_err(dev, "qcom,saw-reg does not match active SPM/SAW3 controller\n");
+			return -EINVAL;
+		}
+		of_node_put(saw_np);
 	}
 
 	for (reg = match->data; reg->name; reg++) {

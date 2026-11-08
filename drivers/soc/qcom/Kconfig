@@ -211,4 +211,22 @@ config QCOM_APR
 	  application processor and QDSP6. APR is
 	  used by audio driver to configure QDSP6
 	  ASM, ADM and AFE modules.
+
+config QCOM_SPM
+	tristate "Qualcomm Subsystem Power Manager (SPM / SAW3) driver"
+	depends on ARCH_QCOM || COMPILE_TEST
+	default y if ARCH_QCOM
+	select REGMAP
+	help
+	  Enable support for Qualcomm SPM (Subsystem Power Manager) and
+	  SAW (Subsystem Auto Voltage / Sensor Power Manager) controllers.
+	  Provides voltage scaling and AVS interfaces for CPU clusters.
+
+config MSM_SPM
+	bool "Legacy MSM_SPM compatibility symbol"
+	depends on QCOM_SPM
+	default y
+	help
+	  Compatibility config symbol for drivers referencing CONFIG_MSM_SPM.
+
 endmenu

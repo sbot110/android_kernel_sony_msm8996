@@ -12,6 +12,7 @@
 #define pr_fmt(fmt)	"ACC: %s: " fmt, __func__
 
 #include <linux/bits.h>
+#include <linux/qcom_scm.h>
 #include <linux/module.h>
 #include <linux/mutex.h>
 #include <linux/types.h>
@@ -168,22 +169,25 @@ static void __update_acc_sel(struct mem_acc_regulator *mem_acc_vreg,
 	writel_relaxed(acc_data, mem_acc_vreg->acc_sel_base[mem_type]);
 }
 
-static void __update_acc_type(struct mem_acc_regulator *mem_acc_vreg,
+static int __update_acc_type(struct mem_acc_regulator *mem_acc_vreg,
 				int corner)
 {
 	int i, rc;
 
 	for (i = 0; i < MEM_ACC_TYPE_MAX; i++) {
 		if (mem_acc_vreg->mem_acc_type_addr[i]) {
-			rc = scm_io_write(mem_acc_vreg->mem_acc_type_addr[i],
+			rc = qcom_scm_io_writel(mem_acc_vreg->mem_acc_type_addr[i],
 				mem_acc_vreg->mem_acc_type_data[corner - 1 + i *
 				mem_acc_vreg->num_corners]);
-			if (rc)
-				pr_err("scm_io_write: %pa failure rc:%d\n",
-					&(mem_acc_vreg->mem_acc_type_addr[i]),
-					rc);
+			if (rc) {
+				pr_err("qcom_scm_io_writel: %pa failed: %d\n",
+				       &mem_acc_vreg->mem_acc_type_addr[i], rc);
+				return rc;
+			}
 		}
 	}
+
+	return 0;
 }
 
 static void __update_acc_custom(struct mem_acc_regulator *mem_acc_vreg,
@@ -196,9 +200,9 @@ static void __update_acc_custom(struct mem_acc_regulator *mem_acc_vreg,
 		mem_type, mem_acc_vreg->acc_custom_data[mem_type][corner-1]);
 }
 
-static void update_acc_sel(struct mem_acc_regulator *mem_acc_vreg, int corner)
+static int update_acc_sel(struct mem_acc_regulator *mem_acc_vreg, int corner)
 {
-	int i;
+	int i, rc;
 
 	for (i = 0; i < MEMORY_MAX; i++) {
 		if (mem_acc_vreg->mem_acc_supported[i])
@@ -207,8 +211,13 @@ static void update_acc_sel(struct mem_acc_regulator *mem_acc_vreg, int corner)
 			__update_acc_custom(mem_acc_vreg, corner, i);
 	}
 
-	if (mem_acc_vreg->mem_acc_type_data)
-		__update_acc_type(mem_acc_vreg, corner);
+	if (mem_acc_vreg->mem_acc_type_data) {
+		rc = __update_acc_type(mem_acc_vreg, corner);
+		if (rc)
+			return rc;
+	}
+
+	return 0;
 }
 
 static void update_acc_reg(struct mem_acc_regulator *mem_acc_vreg, int corner)
@@ -250,9 +259,9 @@ static int mem_acc_regulator_set_voltage(struct regulator_dev *rdev,
 		int corner, int corner_max, unsigned int *selector)
 {
 	struct mem_acc_regulator *mem_acc_vreg = rdev_get_drvdata(rdev);
-	int i;
+	int i, rc = 0;
 
-	if (corner > mem_acc_vreg->num_corners) {
+	if (corner < 1 || corner > mem_acc_vreg->num_corners) {
 		pr_err("Invalid corner=%d requested\n", corner);
 		return -EINVAL;
 	}
@@ -272,7 +281,9 @@ static int mem_acc_regulator_set_voltage(struct regulator_dev *rdev,
 		if (corner > mem_acc_vreg->corner) {
 			for (i = mem_acc_vreg->corner + 1; i <= corner; i++) {
 				pr_debug("UP: to corner %d\n", i);
-				update_acc_sel(mem_acc_vreg, i);
+				rc = update_acc_sel(mem_acc_vreg, i);
+				if (rc)
+					goto out_unlock;
 			}
 		} else {
 			for (i = mem_acc_vreg->corner - 1; i >= corner; i--) {
@@ -282,10 +293,13 @@ static int mem_acc_regulator_set_voltage(struct regulator_dev *rdev,
 		}
 	}
 
+out_unlock:
 	mutex_unlock(&mem_acc_memory_mutex);
 
-	pr_debug("new voltage corner set %d\n", corner);
+	if (rc)
+		return rc;
 
+	pr_debug("new voltage corner set %d\n", corner);
 	mem_acc_vreg->corner = corner;
 
 	return 0;

@@ -1240,6 +1240,19 @@ static int spm_regulator_probe(struct platform_device *pdev)
 	if (vreg->max_step_uV > SPM_REGULATOR_MAX_STEP_UV)
 		vreg->max_step_uV = SPM_REGULATOR_MAX_STEP_UV;
 
+	/*
+	 * The voltage stepping loop must always make forward progress.
+	 * A zero or sub-step DT value rounds down to zero and otherwise
+	 * causes an infinite loop while a CPU voltage transition is pending.
+	 */
+	if (!vreg->range->step_uV ||
+	    vreg->max_step_uV < vreg->range->step_uV) {
+		dev_err(&pdev->dev,
+			"invalid maximum voltage step %u uV (rail step %u uV)\n",
+			vreg->max_step_uV, vreg->range->step_uV);
+		return -EINVAL;
+	}
+
 	vreg->max_step_uV = rounddown(vreg->max_step_uV, vreg->range->step_uV);
 	pr_debug("%s: max single voltage step size=%u uV\n",
 		vreg->rdesc.name, vreg->max_step_uV);

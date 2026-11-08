@@ -2186,8 +2186,9 @@ static int qcom_spmi_regulator_probe(struct platform_device *pdev)
 
 		if (saw_regmap) {
 			reg_node = of_get_child_by_name(node, reg->name);
-			reg_prop = of_find_property(reg_node, "qcom,saw-slave",
-						    &lenp);
+			reg_prop = reg_node ?
+				of_find_property(reg_node, "qcom,saw-slave",
+						 &lenp) : NULL;
 			of_node_put(reg_node);
 			if (reg_prop)
 				continue;
@@ -2223,8 +2224,9 @@ static int qcom_spmi_regulator_probe(struct platform_device *pdev)
 
 		if (saw_regmap) {
 			reg_node = of_get_child_by_name(node, reg->name);
-			reg_prop = of_find_property(reg_node, "qcom,saw-leader",
-						    &lenp);
+			reg_prop = reg_node ?
+				of_find_property(reg_node, "qcom,saw-leader",
+						 &lenp) : NULL;
 			of_node_put(reg_node);
 			if (reg_prop) {
 				spmi_saw_ops = *(vreg->desc.ops);

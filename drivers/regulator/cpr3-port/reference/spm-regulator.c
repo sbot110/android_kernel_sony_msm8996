@@ -376,7 +376,6 @@ static int spm_regulator_get_voltage(struct regulator_dev *rdev)
 static int spm_regulator_write_voltage(struct spm_vreg *vreg, int uV)
 {
 	unsigned vlevel = spm_regulator_uv_to_vlevel(vreg, uV);
-	bool spm_failed = false;
 	int rc = 0;
 	u32 slew_delay;
 
@@ -384,13 +383,17 @@ static int spm_regulator_write_voltage(struct spm_vreg *vreg, int uV)
 		/* Set voltage control register via SPM. */
 		rc = msm_spm_set_vdd(vreg->cpu_num, vlevel);
 		if (rc) {
-			pr_debug("%s: msm_spm_set_vdd failed, rc=%d; falling back on SPMI write\n",
-				vreg->rdesc.name, rc);
-			spm_failed = true;
+			/*
+			 * SPM may have partially applied this voltage vote.
+			 * Never switch to a second, unsynchronized PMIC writer.
+			 */
+			pr_err("%s: SPM voltage vote failed, rc=%d\n",
+			       vreg->rdesc.name, rc);
+			return rc;
 		}
 	}
 
-	if (unlikely(vreg->bypass_spm || spm_failed)) {
+	if (vreg->bypass_spm) {
 		rc = qpnp_smps_write_voltage(vreg, vlevel);
 		if (rc) {
 			pr_err("%s: voltage write failed, rc=%d\n",

@@ -54,3 +54,18 @@ Scope: Sony Xperia X Performance (`F8131` single-SIM / `F8132` dual-SIM, branch 
    - Inspect `/sys/kernel/debug/cpr3-regulator/` to verify decoded QFPROM fuse corners, speed bin, open-loop voltages, and quotients against Sony 4.4 `dmesg` from the same physical `F8131`/`F8132` unit.
 3. **Stage 3 (`CPUFREQ-READY`):**
    - Only after Stage 2 passes on hardware, lift the `if (1)` guard in `drivers/cpufreq/qcom-cpufreq-nvmem.c` and test stepwise OPP transitions across both Silver and Gold clusters.
+
+## 6. Post-Integration Deep Audit Fixes (SAW3 / SPM / APM / Kryo LDO / MEM-ACC)
+
+1. **`drivers/soc/qcom/spm.c` (`msm_spm_set_low_power_mode`):**
+   - Replaced the unconditional `return 0` stub with `msm_spm_probe_done()` verification followed by explicit `-EOPNOTSUPP` rejection (`pr_warn_once`), as MSM8996 CPU/cluster idle states are owned by ARM64 PSCI (`qcom,use-psci`) and `saw3@9a10000` (`qcom,system-cbf`) has no HLOS SPM command sequences.
+2. **`drivers/soc/qcom/spm.c` (`msm_spm_avs_set_limit`):**
+   - Added strict order validation (`min_lvl > max_lvl` -> `-EINVAL`), 8-bit `SAW3_AVS_LIMIT` range check (`> 0xFF` -> `-ERANGE`), and 6-bit `SAW3_AVS_CTL` range check (`> 0x3F` -> `-ERANGE` when `SAW3_AVS_CTL_EN_MASK` is active), plus `mb()` after writing `SAW3_AVS_LIMIT`.
+3. **`drivers/soc/qcom/spm.c` (`msm_spm_avs_clear_irq` & multi-step operations):**
+   - Latched `drv->state_uncertain = true` on any partial or failed register read/write across `msm_spm_avs_clear_irq()`, `msm_spm_avs_enable_irq()`, `msm_spm_avs_disable_irq()`, `msm_spm_avs_enable()`, `msm_spm_avs_disable()`, `msm_spm_is_avs_enabled()`, and `msm_spm_get_vdd()` (including `SAW3_PMIC_STS` non-idle timeout).
+4. **Atomic context safety (`spinlock_t` in `drivers/soc/qcom/spm.c`):**
+   - Converted `drv->lock` from `struct mutex` to `spinlock_t` (`spin_lock_irqsave`) and set `.fast_io = true` on `qcom_saw3_regmap_config` so `msm_spm_get_vdd()` can be safely called from `kryo_regulator_lpm_prepare()` inside atomic `CPU_CLUSTER_PM_ENTER` notifications without sleeping while atomic.
+5. **`drivers/soc/qcom/apm.c`:**
+   - Synchronized `ctrl->supply` at probe time from hardware `APCC_APM_CTL_STS` (`0xa8`), and ensured `msm_apm_secure_clock_source_override(ctrl_dev, false)` is always invoked on the error unwind path if `msm8996_apm_wait_for_switch()` times out.
+6. **`drivers/regulator/kryo-regulator.c` & `drivers/regulator/mem-acc-regulator.c`:**
+   - Fixed missing `rc` capture and `of_node_put(child)` in `kryo_regulator_probe()`, added `kvreg->retention_rdev` unregister on probe failure and driver removal, enforced abort on `kryo_set_ldo_volt()` failure in `kryo_regulator_set_bypass()` and `kryo_regulator_lpm_prepare()`/`resume()`, and moved `mem_acc_vreg->corner = corner` inside `mem_acc_memory_mutex`.

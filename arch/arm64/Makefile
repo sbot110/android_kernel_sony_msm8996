@@ -157,11 +157,15 @@ libs-$(CONFIG_EFI_STUB) += $(objtree)/drivers/firmware/efi/libstub/lib.a
 
 # Default target when executing plain make
 boot		:= arch/arm64/boot
+ifeq ($(CONFIG_BUILD_ARM64_APPENDED_DTB_IMAGE),y)
+KBUILD_IMAGE	:= $(boot)/$(subst $\",,$(CONFIG_BUILD_ARM64_APPENDED_KERNEL_IMAGE_NAME))
+else
 KBUILD_IMAGE	:= $(boot)/Image.gz
+endif
 
 # Don't compile Image in mixed build with "all" target
 ifndef KBUILD_MIXED_TREE
-all:	Image.gz
+all:	$(notdir $(KBUILD_IMAGE))
 endif
 
 
@@ -169,6 +173,9 @@ Image: vmlinux
 	$(Q)$(MAKE) $(build)=$(boot) $(boot)/$@
 
 Image.%: Image
+	$(Q)$(MAKE) $(build)=$(boot) $(boot)/$@
+
+Image-dtb Image.gz-dtb: vmlinux scripts dtbs
 	$(Q)$(MAKE) $(build)=$(boot) $(boot)/$@
 
 install: install-image := Image

@@ -75,3 +75,24 @@ adb shell "ls -la /sys/fs/pstore/"
 adb shell "cat /sys/fs/pstore/console-ramoops-0" > dora-5.15-console-ramoops.log
 adb shell "cat /sys/fs/pstore/dmesg-ramoops-0" > dora-5.15-dmesg-ramoops.log
 ```
+
+## 6. Sony S1 Appended DTB (`Image.gz-dtb`) & LineageOS 21 `boot.img` Geometry
+
+Per `sbot110/android_device_sony_tone-common/BoardConfigCommon.mk` and binary inspection of Sony's reference `kernel-dtb-dora`:
+
+- **Appended DTB Format (`Image.gz-dtb`):** Sony S1 Bootloader expects `Image.gz` immediately followed by the 4 concatenated Flattened Device Tree (`.dtb`, magic `0xd00dfeed`) blobs:
+  1. `msm8996-v3.0-pmi8996-sony-xperia-tone-dora.dtb` (`qcom,msm-id = <246 0x30000>, <305 0x30000>`, `pmi8996`)
+  2. `msm8996-pmi8996-sony-xperia-tone-dora.dtb` (`qcom,msm-id = <246 0x20000>`, `pmi8996`)
+  3. `msm8996-v3.0-sony-xperia-tone-dora.dtb` (`qcom,msm-id = <246 0x30000>, <305 0x30000>`, `pmi8994`)
+  4. `msm8996-sony-xperia-tone-dora.dtb` (`qcom,msm-id = <246 0x20000>`, `pmi8994`)
+- **Exact `mkbootimg` Offsets (`BoardConfigCommon.mk`):**
+  - `BOARD_KERNEL_BASE := 0x80000000`
+  - `BOARD_KERNEL_PAGESIZE := 4096`
+  - `BOARD_KERNEL_OFFSET := 0x00008000` (physical `0x80008000`)
+  - `BOARD_KERNEL_TAGS_OFFSET := 0x01E00000` (physical `0x81E00000`, +30 MiB — prevents decompressed ARM64 `Image` from overwriting DTB tags)
+  - `BOARD_RAMDISK_OFFSET := 0x02000000` (physical `0x82000000`, +32 MiB)
+  - `BOARD_BOOTIMAGE_PARTITION_SIZE := 67108864` (64 MiB)
+- **Diagnostic `BOARD_KERNEL_CMDLINE`:**
+  ```
+  androidboot.hardware=qcom user_debug=31 msm_rtb.filter=0x237 ehci-hcd.park=3 lpm_levels.sleep_disabled=1 cma=64M@0-0xffffffff coherent_pool=2M zram.backend=z3fold loop.max_part=16 androidboot.selinux=permissive earlycon=msm_serial_dm,0x075b0000 console=ttyMSM0,115200n8 console=pstore0 loglevel=8 ignore_loglevel printk.time=1 panic=5 oops=panic softlockup_panic=1 hung_task_panic=1
+  ```

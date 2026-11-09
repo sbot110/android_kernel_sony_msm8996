@@ -16,16 +16,33 @@
 
 OBJCOPYFLAGS_Image :=-O binary -R .note -R .note.gnu.build-id -R .comment -S
 
-targets := Image Image.bz2 Image.gz Image.lz4 Image.lzma Image.lzo
+targets := Image Image-dtb Image.bz2 Image.gz Image.gz-dtb Image.lz4 Image.lzma Image.lzo
+
+DTB_NAMES := $(subst $\",,$(CONFIG_BUILD_ARM64_APPENDED_DTB_IMAGE_NAMES))
+ifneq ($(DTB_NAMES),)
+DTB_LIST := $(addsuffix .dtb,$(DTB_NAMES))
+DTB_OBJS := $(addprefix $(obj)/dts/qcom/,$(DTB_LIST))
+else
+DTB_OBJS := $(shell find $(obj)/dts/ -name \*.dtb)
+endif
+
+quiet_cmd_cat = CAT     $@
+      cmd_cat = cat $(real-prereqs) > $@
 
 $(obj)/Image: vmlinux FORCE
 	$(call if_changed,objcopy)
+
+$(obj)/Image-dtb: $(obj)/Image $(DTB_OBJS) FORCE
+	$(call if_changed,cat)
 
 $(obj)/Image.bz2: $(obj)/Image FORCE
 	$(call if_changed,bzip2)
 
 $(obj)/Image.gz: $(obj)/Image FORCE
 	$(call if_changed,gzip)
+
+$(obj)/Image.gz-dtb: $(obj)/Image.gz $(DTB_OBJS) FORCE
+	$(call if_changed,cat)
 
 $(obj)/Image.lz4: $(obj)/Image FORCE
 	$(call if_changed,lz4)

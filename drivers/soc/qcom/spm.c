@@ -17,12 +17,12 @@
 #include <linux/io.h>
 #include <linux/kernel.h>
 #include <linux/module.h>
-#include <linux/mutex.h>
 #include <linux/of.h>
 #include <linux/of_address.h>
 #include <linux/of_device.h>
 #include <linux/platform_device.h>
 #include <linux/regmap.h>
+#include <linux/spinlock.h>
 #include <soc/qcom/spm.h>
 
 /*
@@ -60,6 +60,8 @@ enum saw3_reg {
 #define SAW3_AVS_CTL_IRQ_MAX_MASK	0x4
 #define SAW3_AVS_CTL_CLEAR_MASK		0x7efc00
 #define SAW3_AVS_CTL_TGGL_MASK		0x8000000
+#define SAW3_AVS_CTL_VLVL_MIN		0x4
+#define SAW3_AVS_CTL_VLVL_MAX		0x3f
 #define SAW3_PMIC_STS_STATE_MASK	0x30000
 #define SAW3_PMIC_STATE_IDLE		0x0
 #define SAW3_VCTL_DEFAULT_TIMEOUT_US	500
@@ -68,7 +70,7 @@ struct qcom_spm_drvdata {
 	struct device *dev;
 	struct device_node *of_node;
 	struct regmap *regmap;
-	struct mutex lock;
+	spinlock_t lock;
 	bool state_uncertain;
 	bool pmic_arb_present;
 	u32 major;
@@ -148,6 +150,7 @@ int msm_spm_set_vdd(unsigned int cpu, unsigned int vlevel)
 {
 	struct qcom_spm_drvdata *drv = msm_spm_get_drvdata(cpu);
 	u32 vctl, data3, avs_ctl, pmic_sts = 0;
+	unsigned long flags;
 	bool avs_enabled;
 	u32 timeout_us;
 	int ret;
@@ -163,27 +166,27 @@ int msm_spm_set_vdd(unsigned int cpu, unsigned int vlevel)
 	/*
 	 * VCTL_PORT must be 0 for SAW3_PMIC_STS to be updated by hardware.
 	 */
-	if (drv->vctl_port != 0 || vlevel > 0xFF)
+	if (drv->vctl_port != 0 || vlevel > SAW3_VCTL_DATA_MASK)
 		return -EINVAL;
 
-	mutex_lock(&drv->lock);
+	spin_lock_irqsave(&drv->lock, flags);
 
 	if (drv->state_uncertain) {
-		mutex_unlock(&drv->lock);
+		spin_unlock_irqrestore(&drv->lock, flags);
 		return -EIO;
 	}
 
 	ret = regmap_read(drv->regmap, SAW3_AVS_CTL, &avs_ctl);
 	if (ret)
-		goto out_unlock;
+		goto fail_uncertain;
 
 	ret = regmap_read(drv->regmap, SAW3_VCTL, &vctl);
 	if (ret)
-		goto out_unlock;
+		goto fail_uncertain;
 
 	ret = regmap_read(drv->regmap, SAW3_SPM_PMIC_DATA_3, &data3);
 	if (ret)
-		goto out_unlock;
+		goto fail_uncertain;
 
 	vctl = (vctl & ~SAW3_VCTL_CLEAR_MASK) | (vlevel & SAW3_VCTL_DATA_MASK) |
 	       ((drv->vctl_port & 0x7) << 16);
@@ -193,7 +196,8 @@ int msm_spm_set_vdd(unsigned int cpu, unsigned int vlevel)
 	avs_enabled = !!(avs_ctl & SAW3_AVS_CTL_EN_MASK);
 
 	/* AVS limit fields accept 6-bit selectors; reject before touching hardware. */
-	if (avs_enabled && (vlevel < 4 || vlevel > 0x3f)) {
+	if (avs_enabled &&
+	    (vlevel < SAW3_AVS_CTL_VLVL_MIN || vlevel > SAW3_AVS_CTL_VLVL_MAX)) {
 		ret = -ERANGE;
 		goto out_unlock;
 	}
@@ -254,9 +258,10 @@ int msm_spm_set_vdd(unsigned int cpu, unsigned int vlevel)
 				   new_avs | SAW3_AVS_CTL_TGGL_MASK);
 		if (ret)
 			goto fail_uncertain;
+		mb();
 	}
 
-	mutex_unlock(&drv->lock);
+	spin_unlock_irqrestore(&drv->lock, flags);
 	return 0;
 
 fail_uncertain:
@@ -271,7 +276,7 @@ fail_uncertain:
 		"SAW3 voltage transition to 0x%02x failed (%d); AVS kept disabled and further votes blocked\n",
 		vlevel, ret);
 out_unlock:
-	mutex_unlock(&drv->lock);
+	spin_unlock_irqrestore(&drv->lock, flags);
 	return ret;
 }
 EXPORT_SYMBOL_GPL(msm_spm_set_vdd);
@@ -279,10 +284,13 @@ EXPORT_SYMBOL_GPL(msm_spm_set_vdd);
 /**
  * msm_spm_get_vdd() - Read acknowledged PMIC voltage selector from SAW3
  * @cpu: CPU core number
+ *
+ * Safe to invoke from atomic context (e.g. CPU_CLUSTER_PM_ENTER in kryo-regulator).
  */
 int msm_spm_get_vdd(unsigned int cpu)
 {
 	struct qcom_spm_drvdata *drv = msm_spm_get_drvdata(cpu);
+	unsigned long flags;
 	u32 status = 0;
 	u32 timeout_us;
 	int ret;
@@ -292,9 +300,9 @@ int msm_spm_get_vdd(unsigned int cpu)
 	if (IS_ERR(drv))
 		return PTR_ERR(drv);
 
-	mutex_lock(&drv->lock);
+	spin_lock_irqsave(&drv->lock, flags);
 	if (drv->state_uncertain) {
-		mutex_unlock(&drv->lock);
+		spin_unlock_irqrestore(&drv->lock, flags);
 		return -EIO;
 	}
 
@@ -302,7 +310,8 @@ int msm_spm_get_vdd(unsigned int cpu)
 	do {
 		ret = regmap_read(drv->regmap, SAW3_PMIC_STS, &status);
 		if (ret) {
-			mutex_unlock(&drv->lock);
+			drv->state_uncertain = true;
+			spin_unlock_irqrestore(&drv->lock, flags);
 			return ret;
 		}
 		if ((status & SAW3_PMIC_STS_STATE_MASK) == SAW3_PMIC_STATE_IDLE)
@@ -311,11 +320,15 @@ int msm_spm_get_vdd(unsigned int cpu)
 	} while (--timeout_us);
 
 	if (!timeout_us) {
-		mutex_unlock(&drv->lock);
+		drv->state_uncertain = true;
+		dev_err(drv->dev,
+			"SAW3 PMIC_STS busy timeout during get_vdd (sts=0x%08x)\n",
+			status);
+		spin_unlock_irqrestore(&drv->lock, flags);
 		return -ETIMEDOUT;
 	}
 
-	mutex_unlock(&drv->lock);
+	spin_unlock_irqrestore(&drv->lock, flags);
 	return status & SAW3_VCTL_DATA_MASK;
 }
 EXPORT_SYMBOL_GPL(msm_spm_get_vdd);
@@ -327,6 +340,7 @@ EXPORT_SYMBOL_GPL(msm_spm_get_vdd);
 int msm_spm_is_avs_enabled(unsigned int cpu)
 {
 	struct qcom_spm_drvdata *drv = msm_spm_get_drvdata(cpu);
+	unsigned long flags;
 	u32 val;
 	int ret;
 
@@ -335,13 +349,15 @@ int msm_spm_is_avs_enabled(unsigned int cpu)
 	if (IS_ERR(drv))
 		return PTR_ERR(drv);
 
-	mutex_lock(&drv->lock);
+	spin_lock_irqsave(&drv->lock, flags);
 	if (drv->state_uncertain) {
-		mutex_unlock(&drv->lock);
+		spin_unlock_irqrestore(&drv->lock, flags);
 		return -EIO;
 	}
 	ret = regmap_read(drv->regmap, SAW3_AVS_CTL, &val);
-	mutex_unlock(&drv->lock);
+	if (ret)
+		drv->state_uncertain = true;
+	spin_unlock_irqrestore(&drv->lock, flags);
 	if (ret)
 		return ret;
 
@@ -356,6 +372,7 @@ EXPORT_SYMBOL_GPL(msm_spm_is_avs_enabled);
 int msm_spm_avs_enable(unsigned int cpu)
 {
 	struct qcom_spm_drvdata *drv = msm_spm_get_drvdata(cpu);
+	unsigned long flags;
 	u32 val;
 	int ret;
 
@@ -364,19 +381,21 @@ int msm_spm_avs_enable(unsigned int cpu)
 	if (IS_ERR(drv))
 		return PTR_ERR(drv);
 
-	mutex_lock(&drv->lock);
+	spin_lock_irqsave(&drv->lock, flags);
 	if (drv->state_uncertain) {
-		mutex_unlock(&drv->lock);
+		spin_unlock_irqrestore(&drv->lock, flags);
 		return -EIO;
 	}
 	ret = regmap_read(drv->regmap, SAW3_AVS_CTL, &val);
 	if (!ret) {
 		val |= SAW3_AVS_CTL_EN_MASK | SAW3_AVS_CTL_TGGL_MASK;
 		ret = regmap_write(drv->regmap, SAW3_AVS_CTL, val);
-		if (ret)
-			drv->state_uncertain = true;
+		if (!ret)
+			mb();
 	}
-	mutex_unlock(&drv->lock);
+	if (ret)
+		drv->state_uncertain = true;
+	spin_unlock_irqrestore(&drv->lock, flags);
 	return ret;
 }
 EXPORT_SYMBOL_GPL(msm_spm_avs_enable);
@@ -388,6 +407,7 @@ EXPORT_SYMBOL_GPL(msm_spm_avs_enable);
 int msm_spm_avs_disable(unsigned int cpu)
 {
 	struct qcom_spm_drvdata *drv = msm_spm_get_drvdata(cpu);
+	unsigned long flags;
 	u32 val;
 	int ret;
 
@@ -396,19 +416,21 @@ int msm_spm_avs_disable(unsigned int cpu)
 	if (IS_ERR(drv))
 		return PTR_ERR(drv);
 
-	mutex_lock(&drv->lock);
+	spin_lock_irqsave(&drv->lock, flags);
 	if (drv->state_uncertain) {
-		mutex_unlock(&drv->lock);
+		spin_unlock_irqrestore(&drv->lock, flags);
 		return -EIO;
 	}
 	ret = regmap_read(drv->regmap, SAW3_AVS_CTL, &val);
 	if (!ret) {
 		val &= ~(SAW3_AVS_CTL_EN_MASK | SAW3_AVS_CTL_TGGL_MASK);
 		ret = regmap_write(drv->regmap, SAW3_AVS_CTL, val);
-		if (ret)
-			drv->state_uncertain = true;
+		if (!ret)
+			mb();
 	}
-	mutex_unlock(&drv->lock);
+	if (ret)
+		drv->state_uncertain = true;
+	spin_unlock_irqrestore(&drv->lock, flags);
 	return ret;
 }
 EXPORT_SYMBOL_GPL(msm_spm_avs_disable);
@@ -418,27 +440,59 @@ EXPORT_SYMBOL_GPL(msm_spm_avs_disable);
  * @cpu: CPU core number
  * @min_lvl: minimum PMIC selector
  * @max_lvl: maximum PMIC selector
+ *
+ * SAW3_AVS_LIMIT (offset 0x24) encodes min_lvl in bits [7:0] and max_lvl in
+ * bits [23:16]. When SAW3_AVS_CTL_EN_MASK is active, SAW3_AVS_CTL also limits
+ * selectors to 6-bit values [0x0..0x3f]. Reject inverted ranges (min > max)
+ * and out-of-range selectors before touching hardware.
  */
 int msm_spm_avs_set_limit(unsigned int cpu, uint32_t min_lvl, uint32_t max_lvl)
 {
 	struct qcom_spm_drvdata *drv = msm_spm_get_drvdata(cpu);
-	u32 value = ((max_lvl & 0xFF) << 16) | (min_lvl & 0xFF);
+	unsigned long flags;
+	u32 avs_ctl = 0;
+	u32 value;
 	int ret;
+
+	if (min_lvl > max_lvl)
+		return -EINVAL;
+	if (min_lvl > SAW3_VCTL_DATA_MASK || max_lvl > SAW3_VCTL_DATA_MASK)
+		return -ERANGE;
 
 	if (!drv)
 		return -EPROBE_DEFER;
 	if (IS_ERR(drv))
 		return PTR_ERR(drv);
 
-	mutex_lock(&drv->lock);
+	value = ((max_lvl & SAW3_VCTL_DATA_MASK) << 16) |
+		(min_lvl & SAW3_VCTL_DATA_MASK);
+
+	spin_lock_irqsave(&drv->lock, flags);
 	if (drv->state_uncertain) {
-		mutex_unlock(&drv->lock);
+		spin_unlock_irqrestore(&drv->lock, flags);
 		return -EIO;
 	}
+
+	ret = regmap_read(drv->regmap, SAW3_AVS_CTL, &avs_ctl);
+	if (ret) {
+		drv->state_uncertain = true;
+		spin_unlock_irqrestore(&drv->lock, flags);
+		return ret;
+	}
+
+	if ((avs_ctl & SAW3_AVS_CTL_EN_MASK) &&
+	    (min_lvl > SAW3_AVS_CTL_VLVL_MAX || max_lvl > SAW3_AVS_CTL_VLVL_MAX)) {
+		spin_unlock_irqrestore(&drv->lock, flags);
+		return -ERANGE;
+	}
+
 	ret = regmap_write(drv->regmap, SAW3_AVS_LIMIT, value);
 	if (ret)
 		drv->state_uncertain = true;
-	mutex_unlock(&drv->lock);
+	else
+		mb();
+
+	spin_unlock_irqrestore(&drv->lock, flags);
 	return ret;
 }
 EXPORT_SYMBOL_GPL(msm_spm_avs_set_limit);
@@ -451,6 +505,7 @@ EXPORT_SYMBOL_GPL(msm_spm_avs_set_limit);
 int msm_spm_avs_enable_irq(unsigned int cpu, enum msm_spm_avs_irq irq)
 {
 	struct qcom_spm_drvdata *drv = msm_spm_get_drvdata(cpu);
+	unsigned long flags;
 	u32 mask, val;
 	int ret;
 
@@ -466,17 +521,21 @@ int msm_spm_avs_enable_irq(unsigned int cpu, enum msm_spm_avs_irq irq)
 	if (IS_ERR(drv))
 		return PTR_ERR(drv);
 
-	mutex_lock(&drv->lock);
+	spin_lock_irqsave(&drv->lock, flags);
 	if (drv->state_uncertain) {
-		mutex_unlock(&drv->lock);
+		spin_unlock_irqrestore(&drv->lock, flags);
 		return -EIO;
 	}
 	ret = regmap_read(drv->regmap, SAW3_AVS_CTL, &val);
 	if (!ret && !(val & mask)) {
 		val |= mask;
 		ret = regmap_write(drv->regmap, SAW3_AVS_CTL, val);
+		if (!ret)
+			mb();
 	}
-	mutex_unlock(&drv->lock);
+	if (ret)
+		drv->state_uncertain = true;
+	spin_unlock_irqrestore(&drv->lock, flags);
 	return ret;
 }
 EXPORT_SYMBOL_GPL(msm_spm_avs_enable_irq);
@@ -489,6 +548,7 @@ EXPORT_SYMBOL_GPL(msm_spm_avs_enable_irq);
 int msm_spm_avs_disable_irq(unsigned int cpu, enum msm_spm_avs_irq irq)
 {
 	struct qcom_spm_drvdata *drv = msm_spm_get_drvdata(cpu);
+	unsigned long flags;
 	u32 mask, val;
 	int ret;
 
@@ -504,17 +564,21 @@ int msm_spm_avs_disable_irq(unsigned int cpu, enum msm_spm_avs_irq irq)
 	if (IS_ERR(drv))
 		return PTR_ERR(drv);
 
-	mutex_lock(&drv->lock);
+	spin_lock_irqsave(&drv->lock, flags);
 	if (drv->state_uncertain) {
-		mutex_unlock(&drv->lock);
+		spin_unlock_irqrestore(&drv->lock, flags);
 		return -EIO;
 	}
 	ret = regmap_read(drv->regmap, SAW3_AVS_CTL, &val);
 	if (!ret && (val & mask)) {
 		val &= ~mask;
 		ret = regmap_write(drv->regmap, SAW3_AVS_CTL, val);
+		if (!ret)
+			mb();
 	}
-	mutex_unlock(&drv->lock);
+	if (ret)
+		drv->state_uncertain = true;
+	spin_unlock_irqrestore(&drv->lock, flags);
 	return ret;
 }
 EXPORT_SYMBOL_GPL(msm_spm_avs_disable_irq);
@@ -523,10 +587,15 @@ EXPORT_SYMBOL_GPL(msm_spm_avs_disable_irq);
  * msm_spm_avs_clear_irq() - Clear latched AVS interrupt
  * @cpu: CPU core number
  * @irq: interrupt type (MIN or MAX)
+ *
+ * Clearing a latched AVS IRQ requires a two-step write toggling the IRQ enable
+ * bit off and back on. Any failure during the read or either write step leaves
+ * SAW3_AVS_CTL in an uncertain state and latches state_uncertain = true.
  */
 int msm_spm_avs_clear_irq(unsigned int cpu, enum msm_spm_avs_irq irq)
 {
 	struct qcom_spm_drvdata *drv = msm_spm_get_drvdata(cpu);
+	unsigned long flags;
 	u32 mask, val;
 	int ret;
 
@@ -542,26 +611,54 @@ int msm_spm_avs_clear_irq(unsigned int cpu, enum msm_spm_avs_irq irq)
 	if (IS_ERR(drv))
 		return PTR_ERR(drv);
 
-	mutex_lock(&drv->lock);
+	spin_lock_irqsave(&drv->lock, flags);
 	if (drv->state_uncertain) {
-		mutex_unlock(&drv->lock);
+		spin_unlock_irqrestore(&drv->lock, flags);
 		return -EIO;
 	}
 	ret = regmap_read(drv->regmap, SAW3_AVS_CTL, &val);
 	if (!ret && (val & mask)) {
 		/* Clear by toggling interrupt enable bit off and back on */
 		ret = regmap_write(drv->regmap, SAW3_AVS_CTL, val & ~mask);
-		if (!ret)
+		if (!ret) {
+			mb();
 			ret = regmap_write(drv->regmap, SAW3_AVS_CTL, val);
+			if (!ret)
+				mb();
+		}
 	}
-	mutex_unlock(&drv->lock);
+	if (ret) {
+		drv->state_uncertain = true;
+		dev_err(drv->dev,
+			"SAW3 AVS clear_irq(%d) failed (%d); controller state uncertain\n",
+			irq, ret);
+	}
+	spin_unlock_irqrestore(&drv->lock, flags);
 	return ret;
 }
 EXPORT_SYMBOL_GPL(msm_spm_avs_clear_irq);
 
+/**
+ * msm_spm_set_low_power_mode() - Reject HLOS SPM low-power mode programming
+ * @mode: requested low-power mode
+ * @notify_rpm: RPM notification flag
+ *
+ * On MSM8996, per-core and L2/cluster low-power state sequences are owned by
+ * ARM64 PSCI firmware in TrustZone (qcom,use-psci), and the HLOS-visible
+ * CBF SAW3 block (saw3@9a10000) is a dedicated PMIC/AVS voltage controller
+ * with no HLOS SPM command sequences. Never fake success; fail closed with
+ * -EOPNOTSUPP if invoked.
+ */
 int msm_spm_set_low_power_mode(unsigned int mode, bool notify_rpm)
 {
-	return 0;
+	int ret = msm_spm_probe_done();
+
+	if (ret)
+		return ret;
+
+	pr_warn_once("HLOS msm_spm_set_low_power_mode(mode=%u, rpm=%d) is unsupported on MSM8996 PSCI; rejecting\n",
+		     mode, notify_rpm);
+	return -EOPNOTSUPP;
 }
 EXPORT_SYMBOL_GPL(msm_spm_set_low_power_mode);
 
@@ -570,6 +667,7 @@ static const struct regmap_config qcom_saw3_regmap_config = {
 	.val_bits = 32,
 	.reg_stride = 4,
 	.max_register = SAW3_VERSION,
+	.fast_io = true,
 };
 
 static int qcom_spm_parse_cpu_vctl_list(struct device *dev,
@@ -636,7 +734,7 @@ static int qcom_spm_probe(struct platform_device *pdev)
 
 	drv->dev = dev;
 	drv->of_node = node;
-	mutex_init(&drv->lock);
+	spin_lock_init(&drv->lock);
 
 	ret = qcom_spm_parse_cpu_vctl_list(dev, node, &drv->cpus);
 	if (ret)

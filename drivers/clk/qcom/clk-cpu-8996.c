@@ -44,6 +44,9 @@ enum _smux_input {
 #define SSSCTL_OFFSET		0x160
 #define PSCTL_OFFSET		0x164
 
+#define MUX_PMUX_MASK				GENMASK(1, 0)
+#define MUX_SMUX_SHIFT				2
+#define MUX_SMUX_MASK				GENMASK(3, 2)
 #define MUX_AUTO_CLK_SEL_ALWAYS_ON_MASK		GENMASK(5, 4)
 #define MUX_AUTO_CLK_SEL_ALWAYS_ON_GPLL0_SEL	(0x3 << 4)
 #define CLK_CTL_AUTO_CLK_SEL			BIT(8)
@@ -94,6 +97,8 @@ static struct clk_alpha_pll perfcl_pll = {
 		.parent_names = (const char *[]){ "xo" },
 		.num_parents = 1,
 		.ops = &clk_alpha_pll_hwfsm_ops,
+		/* HWFSM PLL votes are hardware-managed; never disable at late_initcall */
+		.flags = CLK_IGNORE_UNUSED,
 	},
 };
 
@@ -106,6 +111,8 @@ static struct clk_alpha_pll pwrcl_pll = {
 		.parent_names = (const char *[]){ "xo" },
 		.num_parents = 1,
 		.ops = &clk_alpha_pll_hwfsm_ops,
+		/* HWFSM PLL votes are hardware-managed; never disable at late_initcall */
+		.flags = CLK_IGNORE_UNUSED,
 	},
 };
 
@@ -138,6 +145,8 @@ static struct clk_alpha_pll perfcl_alt_pll = {
 		.parent_names = (const char *[]){ "xo" },
 		.num_parents = 1,
 		.ops = &clk_alpha_pll_hwfsm_ops,
+		/* Keep alternate PLL armed in HWFSM mode for glitch-free rate transitions */
+		.flags = CLK_IGNORE_UNUSED,
 	},
 };
 
@@ -152,6 +161,8 @@ static struct clk_alpha_pll pwrcl_alt_pll = {
 		.parent_names = (const char *[]){ "xo" },
 		.num_parents = 1,
 		.ops = &clk_alpha_pll_hwfsm_ops,
+		/* Keep alternate PLL armed in HWFSM mode for glitch-free rate transitions */
+		.flags = CLK_IGNORE_UNUSED,
 	},
 };
 
@@ -404,6 +415,7 @@ static void qcom_cpu_clk_msm8996_unregister_fixed(void)
 		cpuhp_remove_state(qcom_cpu_clk_cpuhp_state);
 		qcom_cpu_clk_cpuhp_state = 0;
 	}
+	base = NULL;
 	if (!IS_ERR_OR_NULL(perfcl_pmux.pll_acd)) {
 		clk_hw_unregister(perfcl_pmux.pll_acd);
 		perfcl_pmux.pll_acd = NULL;
@@ -427,6 +439,113 @@ static int qcom_cpu_clk_msm8996_register_clks(struct device *dev,
 {
 	int i, ret;
 
+	/*
+	 * Configure hardware PLLs, ACD on all online clusters, and mux topology
+	 * BEFORE registering clocks with the Common Clock Framework. This guarantees:
+	 * 1. Both clusters are parked on locked alternate PLLs (307.2 MHz) while
+	 *    primary HFPLLs are reprogrammed to safe 1036.8 MHz (L=54).
+	 * 2. L2ACDCR and SSSCTL are initialized on each online cluster via cpuhp
+	 *    before switching primary muxes to the ACD leg (ACD_INDEX).
+	 * 3. CCF reads the exact steady-state mux parents (SMUX = PLL/2, PMUX = ACD)
+	 *    during devm_clk_register_regmap(), keeping enable_count and rate
+	 *    accounting synchronized even when CPUFreq is disabled.
+	 */
+	ret = regmap_update_bits(regmap, PWRCL_REG_OFFSET + MUX_OFFSET,
+				 MUX_AUTO_CLK_SEL_ALWAYS_ON_MASK,
+				 MUX_AUTO_CLK_SEL_ALWAYS_ON_GPLL0_SEL);
+	if (ret)
+		goto err_unreg;
+
+	ret = regmap_update_bits(regmap, PERFCL_REG_OFFSET + MUX_OFFSET,
+				 MUX_AUTO_CLK_SEL_ALWAYS_ON_MASK,
+				 MUX_AUTO_CLK_SEL_ALWAYS_ON_GPLL0_SEL);
+	if (ret)
+		goto err_unreg;
+
+	/* Arm alternate PLLs (307.2 MHz) in HWFSM mode first and wait for lock */
+	clk_alpha_pll_configure(&perfcl_alt_pll, regmap, &altpll_config);
+	clk_alpha_pll_configure(&pwrcl_alt_pll, regmap, &altpll_config);
+	mb();
+	udelay(50);
+
+	/* Park both clusters on ALT_INDEX while reconfiguring primary HFPLLs */
+	ret = regmap_update_bits(regmap, PWRCL_REG_OFFSET + MUX_OFFSET,
+				 MUX_PMUX_MASK, ALT_INDEX);
+	if (ret)
+		goto err_unreg;
+
+	ret = regmap_update_bits(regmap, PERFCL_REG_OFFSET + MUX_OFFSET,
+				 MUX_PMUX_MASK, ALT_INDEX);
+	if (ret)
+		goto err_unreg;
+
+	mb();
+	udelay(5);
+
+	/* Configure primary HFPLLs (1036.8 MHz, L=54) in HWFSM mode and wait for lock */
+	clk_alpha_pll_configure(&perfcl_pll, regmap, &hfpll_config);
+	clk_alpha_pll_configure(&pwrcl_pll, regmap, &hfpll_config);
+	mb();
+	udelay(50);
+
+	ret = regmap_write(regmap, PWRCL_REG_OFFSET + PSCTL_OFFSET, PSCTL_DEFAULT_VAL);
+	if (ret)
+		goto err_unreg;
+
+	ret = regmap_write(regmap, PERFCL_REG_OFFSET + PSCTL_OFFSET, PSCTL_DEFAULT_VAL);
+	if (ret)
+		goto err_unreg;
+
+	ret = regmap_update_bits(regmap, PWRCL_REG_OFFSET + CLK_CTL_OFFSET,
+				 CLK_CTL_AUTO_CLK_SEL, CLK_CTL_AUTO_CLK_SEL);
+	if (ret)
+		goto err_unreg;
+
+	ret = regmap_update_bits(regmap, PERFCL_REG_OFFSET + CLK_CTL_OFFSET,
+				 CLK_CTL_AUTO_CLK_SEL, CLK_CTL_AUTO_CLK_SEL);
+	if (ret)
+		goto err_unreg;
+
+	mb();
+	udelay(5);
+
+	/* Program L2 ACD + SSSCTL on all online CPUs across both clusters */
+	qcom_cpu_clk_msm8996_acd_init(base);
+
+	ret = cpuhp_setup_state(CPUHP_AP_ONLINE_DYN, "clk/qcom/cpu8996:online",
+				qcom_cpu_clk_msm8996_cpu_online, NULL);
+	if (ret < 0) {
+		dev_err(dev, "Failed to register cpuhp state: %d\n", ret);
+		goto err_unreg;
+	}
+	qcom_cpu_clk_cpuhp_state = ret;
+
+	/* Park secondary muxes on PLL/2 (518.4 MHz) and switch primary muxes to ACD leg */
+	ret = regmap_update_bits(regmap, PWRCL_REG_OFFSET + MUX_OFFSET,
+				 MUX_SMUX_MASK,
+				 SMUX_PLL_DIV2_INDEX << MUX_SMUX_SHIFT);
+	if (ret)
+		goto err_unreg;
+
+	ret = regmap_update_bits(regmap, PERFCL_REG_OFFSET + MUX_OFFSET,
+				 MUX_SMUX_MASK,
+				 SMUX_PLL_DIV2_INDEX << MUX_SMUX_SHIFT);
+	if (ret)
+		goto err_unreg;
+
+	ret = regmap_update_bits(regmap, PWRCL_REG_OFFSET + MUX_OFFSET,
+				 MUX_PMUX_MASK, ACD_INDEX);
+	if (ret)
+		goto err_unreg;
+
+	ret = regmap_update_bits(regmap, PERFCL_REG_OFFSET + MUX_OFFSET,
+				 MUX_PMUX_MASK, ACD_INDEX);
+	if (ret)
+		goto err_unreg;
+
+	mb();
+	udelay(5);
+
 	perfcl_smux.pll = clk_hw_register_fixed_factor(dev, "perfcl_pll_main",
 						       "perfcl_pll",
 						       CLK_SET_RATE_PARENT,
@@ -435,7 +554,7 @@ static int qcom_cpu_clk_msm8996_register_clks(struct device *dev,
 		ret = PTR_ERR(perfcl_smux.pll);
 		perfcl_smux.pll = NULL;
 		dev_err(dev, "Failed to initialize perfcl_pll_main: %d\n", ret);
-		return ret;
+		goto err_unreg;
 	}
 
 	pwrcl_smux.pll = clk_hw_register_fixed_factor(dev, "pwrcl_pll_main",
@@ -478,63 +597,6 @@ static int qcom_cpu_clk_msm8996_register_clks(struct device *dev,
 		if (ret)
 			goto err_unreg;
 	}
-
-	/* Ensure always-on GPLL0/2 fallback source is selected for AUTO_CLK_SEL */
-	ret = regmap_update_bits(regmap, PWRCL_REG_OFFSET + MUX_OFFSET,
-				 MUX_AUTO_CLK_SEL_ALWAYS_ON_MASK,
-				 MUX_AUTO_CLK_SEL_ALWAYS_ON_GPLL0_SEL);
-	if (ret)
-		goto err_unreg;
-
-	ret = regmap_update_bits(regmap, PERFCL_REG_OFFSET + MUX_OFFSET,
-				 MUX_AUTO_CLK_SEL_ALWAYS_ON_MASK,
-				 MUX_AUTO_CLK_SEL_ALWAYS_ON_GPLL0_SEL);
-	if (ret)
-		goto err_unreg;
-
-	clk_alpha_pll_configure(&perfcl_pll, regmap, &hfpll_config);
-	clk_alpha_pll_configure(&pwrcl_pll, regmap, &hfpll_config);
-	clk_alpha_pll_configure(&perfcl_alt_pll, regmap, &altpll_config);
-	clk_alpha_pll_configure(&pwrcl_alt_pll, regmap, &altpll_config);
-
-	/* Wait for HWFSM PLLs to settle, then enable AUTO_CLK_SEL and PSCTL */
-	udelay(50);
-	ret = regmap_write(regmap, PWRCL_REG_OFFSET + PSCTL_OFFSET, PSCTL_DEFAULT_VAL);
-	if (ret)
-		goto err_unreg;
-
-	ret = regmap_write(regmap, PERFCL_REG_OFFSET + PSCTL_OFFSET, PSCTL_DEFAULT_VAL);
-	if (ret)
-		goto err_unreg;
-
-	ret = regmap_update_bits(regmap, PWRCL_REG_OFFSET + CLK_CTL_OFFSET,
-				 CLK_CTL_AUTO_CLK_SEL, CLK_CTL_AUTO_CLK_SEL);
-	if (ret)
-		goto err_unreg;
-
-	ret = regmap_update_bits(regmap, PERFCL_REG_OFFSET + CLK_CTL_OFFSET,
-				 CLK_CTL_AUTO_CLK_SEL, CLK_CTL_AUTO_CLK_SEL);
-	if (ret)
-		goto err_unreg;
-
-	qcom_cpu_clk_msm8996_acd_init(base);
-
-	ret = cpuhp_setup_state(CPUHP_AP_ONLINE_DYN, "clk/qcom/cpu8996:online",
-				qcom_cpu_clk_msm8996_cpu_online, NULL);
-	if (ret < 0) {
-		dev_err(dev, "Failed to register cpuhp state: %d\n", ret);
-		goto err_unreg;
-	}
-	qcom_cpu_clk_cpuhp_state = ret;
-
-	/* Park secondary muxes on PLL/2 so sub-600 MHz OPPs are ready */
-	ret = clk_cpu_8996_mux_set_parent(&pwrcl_smux.clkr.hw, SMUX_PLL_DIV2_INDEX);
-	if (ret)
-		goto err_unreg;
-
-	ret = clk_cpu_8996_mux_set_parent(&perfcl_smux.clkr.hw, SMUX_PLL_DIV2_INDEX);
-	if (ret)
-		goto err_unreg;
 
 	ret = clk_notifier_register(pwrcl_pmux.clkr.hw.clk, &pwrcl_pmux.nb);
 	if (ret)

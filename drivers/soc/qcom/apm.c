@@ -164,6 +164,11 @@ static int msm_apm_ctrl_devm_ioremap(struct platform_device *pdev,
 		dev_info(dev, "overriding clock sources across APM switch\n");
 
 	ctrl->version = readl_relaxed(ctrl->apcs_csr_base + APCS_VERSION);
+	if ((readl_relaxed(ctrl->reg_base + APCC_APM_CTL_STS) &
+	     MSM_APM_CTL_STS_MASK) == MSM_APM_MX_DONE_VAL)
+		ctrl->supply = MSM_APM_SUPPLY_MX;
+	else
+		ctrl->supply = MSM_APM_SUPPLY_APCC;
 
 	if (ctrl->version >= HMSS_VERSION_1P2)
 		return ret;
@@ -468,14 +473,17 @@ static int msm8996_apm_switch_to_mx(struct msm_apm_ctrl_dev *ctrl_dev)
 		for (i = 0; i < SPM_EVENT_NUM; i++)
 			writel_relaxed(SPM_EVENT_SET_VAL,
 				       ctrl_dev->apcs_spm_events_addr[i]);
+		mb();
 	}
 
 	/*
-	 * Ensure that HMSS v1.0/v1.1 register writes are completed before
-	 * bailing out in the case of a switching time out.
+	 * Always release the TrustZone GPLL0 clock override even if the
+	 * hardware APM switch timed out, preserving the first error code.
 	 */
-	if (ret)
+	if (ret) {
+		msm_apm_secure_clock_source_override(ctrl_dev, false);
 		goto done;
+	}
 
 	ret = msm_apm_secure_clock_source_override(ctrl_dev, false);
 	if (ret)
@@ -554,14 +562,17 @@ static int msm8996_apm_switch_to_apcc(struct msm_apm_ctrl_dev *ctrl_dev)
 		ndelay(200);
 		writel_relaxed(MSM_APM_SEC_CLK_SEL_VAL,
 			       ctrl_dev->apc1_pll_ctl_addr);
+		mb();
 	}
 
 	/*
-	 * Ensure that HMSS v1.0/v1.1 register writes are completed before
-	 * bailing out in the case of a switching time out.
+	 * Always release the TrustZone GPLL0 clock override even if the
+	 * hardware APM switch timed out, preserving the first error code.
 	 */
-	if (ret)
+	if (ret) {
+		msm_apm_secure_clock_source_override(ctrl_dev, false);
 		goto done;
+	}
 
 	ret = msm_apm_secure_clock_source_override(ctrl_dev, false);
 	if (ret)

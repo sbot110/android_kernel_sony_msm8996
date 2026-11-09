@@ -376,8 +376,11 @@ static int kryo_regulator_set_bypass(struct regulator_dev *rdev,
 	 * modes to ensure stable operation.
 	 */
 	rc = kryo_set_ldo_volt(kvreg, kvreg->volt);
-	if (rc)
+	if (rc) {
 		kvreg_err(kvreg, "set voltage failed, rc=%d\n", rc);
+		spin_unlock_irqrestore(&kvreg->slock, flags);
+		return rc;
+	}
 
 	rc = kryo_configure_mode(kvreg, enable);
 	if (rc)
@@ -887,10 +890,11 @@ static int kryo_regulator_lpm_prepare(struct kryo_regulator *kvreg)
 			bhs_volt = kvreg->vref_func_max_volt;
 		}
 
-		kryo_set_ldo_volt(kvreg, bhs_volt);
-
-		/* Switch Power Gate Mode */
-		kryo_configure_mode(kvreg, BHS_MODE);
+		if (kryo_set_ldo_volt(kvreg, bhs_volt) ||
+		    kryo_configure_mode(kvreg, BHS_MODE)) {
+			spin_unlock_irqrestore(&kvreg->slock, flags);
+			return NOTIFY_BAD;
+		}
 	}
 
 	kvreg->lpm_enter_count++;
@@ -902,6 +906,7 @@ static int kryo_regulator_lpm_prepare(struct kryo_regulator *kvreg)
 static int kryo_regulator_lpm_resume(struct kryo_regulator *kvreg)
 {
 	unsigned long flags;
+	int rc = 0;
 
 	spin_lock_irqsave(&kvreg->slock, flags);
 
@@ -914,13 +919,11 @@ static int kryo_regulator_lpm_resume(struct kryo_regulator *kvreg)
 		 * Cached voltage value corresponds to vdd supply minus
 		 * LDO headroom, reprogram it.
 		 */
-		kryo_set_ldo_volt(kvreg, kvreg->volt);
-
-		/* Switch Power Gate Mode */
-		kryo_configure_mode(kvreg, LDO_MODE);
-
-		/* Request final LDO output voltage */
-		kryo_set_ldo_volt(kvreg, kvreg->pre_lpm_state_volt);
+		rc = kryo_set_ldo_volt(kvreg, kvreg->volt);
+		if (!rc)
+			rc = kryo_configure_mode(kvreg, LDO_MODE);
+		if (!rc)
+			rc = kryo_set_ldo_volt(kvreg, kvreg->pre_lpm_state_volt);
 	}
 
 	kvreg->lpm_exit_count++;
@@ -933,7 +936,7 @@ static int kryo_regulator_lpm_resume(struct kryo_regulator *kvreg)
 	}
 	spin_unlock_irqrestore(&kvreg->slock, flags);
 
-	return NOTIFY_OK;
+	return rc ? NOTIFY_BAD : NOTIFY_OK;
 }
 
 static int kryo_regulator_cpu_pm_callback(struct notifier_block *self,
@@ -1008,7 +1011,8 @@ static int kryo_regulator_probe(struct platform_device *pdev)
 	kvreg->mode		= BHS_MODE;
 
 	for_each_available_child_of_node(dev->of_node, child) {
-		kryo_regulator_retention_init(kvreg, pdev, child);
+		rc = kryo_regulator_retention_init(kvreg, pdev, child);
+		of_node_put(child);
 		if (rc) {
 			dev_err(dev, "could not initialize retention regulator, rc=%d\n",
 				rc);
@@ -1021,7 +1025,7 @@ static int kryo_regulator_probe(struct platform_device *pdev)
 	rc = kryo_hw_init(kvreg);
 	if (rc) {
 		dev_err(dev, "unable to perform CPUSS PM initialization sequence\n");
-		return rc;
+		goto err_unreg_retention;
 	}
 
 	reg_config.dev = dev;
@@ -1032,7 +1036,7 @@ static int kryo_regulator_probe(struct platform_device *pdev)
 	if (IS_ERR(kvreg->rdev)) {
 		rc = PTR_ERR(kvreg->rdev);
 		kvreg_err(kvreg, "regulator_register failed, rc=%d\n", rc);
-		return rc;
+		goto err_unreg_retention;
 	}
 
 	platform_set_drvdata(pdev, kvreg);
@@ -1052,6 +1056,11 @@ static int kryo_regulator_probe(struct platform_device *pdev)
 		   kvreg->vref_func_step_volt,
 		   kvreg->cluster_num);
 
+	return 0;
+
+err_unreg_retention:
+	if (!IS_ERR_OR_NULL(kvreg->retention_rdev))
+		regulator_unregister(kvreg->retention_rdev);
 	return rc;
 }
 
@@ -1065,6 +1074,8 @@ static int kryo_regulator_remove(struct platform_device *pdev)
 
 	cpu_pm_unregister_notifier(&kvreg->cpu_pm_notifier);
 	regulator_unregister(kvreg->rdev);
+	if (!IS_ERR_OR_NULL(kvreg->retention_rdev))
+		regulator_unregister(kvreg->retention_rdev);
 	platform_set_drvdata(pdev, NULL);
 	kryo_debugfs_deinit(kvreg);
 

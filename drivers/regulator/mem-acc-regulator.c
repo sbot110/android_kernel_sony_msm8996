@@ -283,6 +283,7 @@ static int mem_acc_regulator_set_voltage(struct regulator_dev *rdev,
 
 	if (mem_acc_vreg->flags & MEM_ACC_USE_ADDR_VAL_MAP) {
 		update_acc_reg(mem_acc_vreg, corner);
+		mem_acc_vreg->corner = corner;
 	} else if (mem_acc_vreg->flags & MEM_ACC_USE_CORNER_ACC_MAP) {
 		if (corner > mem_acc_vreg->corner) {
 			for (i = mem_acc_vreg->corner + 1; i <= corner; i++) {
@@ -306,17 +307,12 @@ static int mem_acc_regulator_set_voltage(struct regulator_dev *rdev,
 			}
 		}
 	}
+	pr_debug("new voltage corner set %d\n", corner);
 
 out_unlock:
 	mutex_unlock(&mem_acc_memory_mutex);
 
-	if (rc)
-		return rc;
-
-	pr_debug("new voltage corner set %d\n", corner);
-	mem_acc_vreg->corner = corner;
-
-	return 0;
+	return rc;
 }
 
 static int mem_acc_regulator_get_voltage(struct regulator_dev *rdev)

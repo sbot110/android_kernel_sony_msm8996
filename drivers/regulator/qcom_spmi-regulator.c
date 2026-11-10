@@ -1208,11 +1208,11 @@ spmi_regulator_saw_set_voltage(struct regulator_dev *rdev, unsigned selector)
 	int ret;
 
 	/*
-	 * The SAW3 transaction has no voltage range field. Require a
-	 * single zero-range mapping, as the SAW3 readback path does.
+	 * The SAW3 transaction has no voltage range field. Require at least
+	 * one range whose first entry uses hardware range_sel == 0.
 	 */
-	if (!vreg->set_points || vreg->set_points->count != 1 ||
-	    vreg->set_points->range->range_sel != 0)
+	if (!vreg->set_points || vreg->set_points->count < 1 ||
+	    vreg->set_points->range[0].range_sel != 0)
 		return -EINVAL;
 
 	ret = spmi_sw_selector_to_hw(vreg, selector, &range_sel, &hw_sel);
@@ -1241,8 +1241,8 @@ static int spmi_regulator_saw_get_voltage(struct regulator_dev *rdev)
 	int ret;
 
 	/* The SAW writer supports only the zero hardware range. */
-	if (!vreg->set_points || vreg->set_points->count != 1 ||
-	    vreg->set_points->range->range_sel != 0)
+	if (!vreg->set_points || vreg->set_points->count < 1 ||
+	    vreg->set_points->range[0].range_sel != 0)
 		return -EINVAL;
 
 	ret = msm_spm_probe_done();
@@ -1253,7 +1253,7 @@ static int spmi_regulator_saw_get_voltage(struct regulator_dev *rdev)
 	if (ret < 0)
 		return ret;
 
-	range = vreg->set_points->range;
+	range = &vreg->set_points->range[0];
 	return spmi_hw_selector_to_sw(vreg, ret, range);
 }
 
@@ -1647,6 +1647,7 @@ static int spmi_regulator_init_registers(struct spmi_regulator *vreg,
 	int ret;
 	enum spmi_regulator_logical_type type;
 	u8 ctrl_reg[8], reg, mask;
+	bool ctrl_dirty = false;
 
 	type = vreg->logical_type;
 
@@ -1664,6 +1665,7 @@ static int spmi_regulator_init_registers(struct spmi_regulator *vreg,
 				~SPMI_COMMON_ENABLE_FOLLOW_ALL_MASK;
 			ctrl_reg[SPMI_COMMON_IDX_ENABLE] |=
 				data->pin_ctrl_enable & SPMI_COMMON_ENABLE_FOLLOW_ALL_MASK;
+			ctrl_dirty = true;
 			break;
 		default:
 			break;
@@ -1679,6 +1681,7 @@ static int spmi_regulator_init_registers(struct spmi_regulator *vreg,
 				~SPMI_COMMON_MODE_FOLLOW_ALL_MASK;
 			ctrl_reg[SPMI_COMMON_IDX_MODE] |=
 				data->pin_ctrl_hpm & SPMI_COMMON_MODE_FOLLOW_ALL_MASK;
+			ctrl_dirty = true;
 			break;
 		case SPMI_REGULATOR_LOGICAL_TYPE_VS:
 		case SPMI_REGULATOR_LOGICAL_TYPE_ULT_LO_SMPS:
@@ -1688,16 +1691,20 @@ static int spmi_regulator_init_registers(struct spmi_regulator *vreg,
 				~SPMI_COMMON_MODE_FOLLOW_AWAKE_MASK;
 			ctrl_reg[SPMI_COMMON_IDX_MODE] |=
 				data->pin_ctrl_hpm & SPMI_COMMON_MODE_FOLLOW_AWAKE_MASK;
+			ctrl_dirty = true;
 			break;
 		default:
 			break;
 		}
 	}
 
-	/* Write back any control register values that were modified. */
-	ret = spmi_vreg_write(vreg, SPMI_COMMON_REG_VOLTAGE_RANGE, ctrl_reg, 8);
-	if (ret)
-		return ret;
+	/* Write back control register values only if modified by DT pin-ctrl. */
+	if (ctrl_dirty) {
+		ret = spmi_vreg_write(vreg, SPMI_COMMON_REG_VOLTAGE_RANGE,
+				      ctrl_reg, 8);
+		if (ret)
+			return ret;
+	}
 
 	/* Set soft start strength and over current protection for VS. */
 	if (type == SPMI_REGULATOR_LOGICAL_TYPE_VS) {

@@ -2564,7 +2564,8 @@ static inline void sdhci_msm_get_of_property(struct platform_device *pdev,
 
 	of_property_read_u32(node, "qcom,dll-config", &msm_host->dll_config);
 
-	if (of_device_is_compatible(node, "qcom,msm8916-sdhci"))
+	if (of_device_is_compatible(node, "qcom,msm8916-sdhci") ||
+	    of_device_is_compatible(node, "qcom,msm8996-sdhci"))
 		host->quirks2 |= SDHCI_QUIRK2_BROKEN_64_BIT_DMA;
 }
 

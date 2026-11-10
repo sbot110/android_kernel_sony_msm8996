@@ -2097,7 +2097,6 @@ static int mmc_rescan_try_freq(struct mmc_host *host, unsigned freq)
 	if (!(host->caps2 & MMC_CAP2_NO_SD)) {
 		if (!mmc_attach_sd(host))
 			return 0;
-		mmc_gpio_tray_close_set_uim2(host, 1);
 	}
 
 	if (!(host->caps2 & MMC_CAP2_NO_MMC))
@@ -2256,6 +2255,9 @@ void mmc_rescan(struct work_struct *work)
 		goto out;
 	}
 
+	if (!(host->caps2 & MMC_CAP2_NO_SD))
+		mmc_gpio_tray_close_set_uim2(host, 0);
+
 	for (i = 0; i < ARRAY_SIZE(freqs); i++) {
 		unsigned int freq = freqs[i];
 		if (freq > host->f_max) {
@@ -2268,6 +2270,9 @@ void mmc_rescan(struct work_struct *work)
 		if (freqs[i] <= host->f_min)
 			break;
 	}
+
+	if (!host->card && !(host->caps2 & MMC_CAP2_NO_SD))
+		mmc_gpio_tray_close_set_uim2(host, 1);
 
 	/*
 	 * Ignore the command timeout errors observed during

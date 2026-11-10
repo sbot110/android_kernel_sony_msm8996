@@ -295,6 +295,44 @@ u64 cpu_logical_map(unsigned int cpu)
 	return __cpu_logical_map[cpu];
 }
 
+static void __init dora_record_boot_stage(unsigned int stage, u64 arg0, u64 arg1)
+{
+	/*
+	 * Experimental early-boot breadcrumb table at 0xa7fff000..0xa7fff0ff
+	 * (8 slots x 32 bytes; Slot 0 = Stage 1, Slot 1 = Stage 2 in head.S,
+	 * Slots 2..5 = Stages 3..6 in setup_arch).
+	 * Each 32-byte slot has:
+	 *   [+0x00] magic    = "515STGS<stage>"
+	 *   [+0x08] arg0     = stage-specific diagnostic value 0
+	 *   [+0x10] arg1     = stage-specific diagnostic value 1
+	 *   [+0x18] checksum = magic ^ arg0 ^ arg1 ^ 0x3c3c3c3c3c3c3c3cULL
+	 */
+	u64 *base;
+	u64 *slot;
+	u64 magic, checksum;
+
+	if (stage < 3 || stage > 6)
+		return;
+
+	base = early_memremap(0xa7fff000ULL, 0x100);
+	if (!base)
+		return;
+
+	slot = base + ((stage - 1) * 4);
+	magic = 0x3053475453353135ULL | ((u64)(stage & 0xf) << 56);
+	checksum = magic ^ arg0 ^ arg1 ^ 0x3c3c3c3c3c3c3c3cULL;
+
+	WRITE_ONCE(slot[0], magic);
+	WRITE_ONCE(slot[1], arg0);
+	WRITE_ONCE(slot[2], arg1);
+	WRITE_ONCE(slot[3], checksum);
+	dsb(sy);
+	dcache_clean_inval_poc((unsigned long)slot,
+			       (unsigned long)(slot + 4));
+	dsb(sy);
+	early_memunmap(base, 0x100);
+}
+
 void __init __no_sanitize_address setup_arch(char **cmdline_p)
 {
 	setup_initial_init_mm(_stext, _etext, _edata, _end);
@@ -310,6 +348,9 @@ void __init __no_sanitize_address setup_arch(char **cmdline_p)
 
 	early_fixmap_init();
 	early_ioremap_init();
+
+	dora_record_boot_stage(3, (u64)__fdt_pointer,
+			       (u64)read_cpuid_mpidr());
 
 	setup_machine_fdt(__fdt_pointer);
 
@@ -343,7 +384,12 @@ void __init __no_sanitize_address setup_arch(char **cmdline_p)
 
 	arm64_memblock_init();
 
+	dora_record_boot_stage(4, (u64)memblock_start_of_DRAM(),
+			       (u64)memblock_end_of_DRAM());
+
 	paging_init();
+
+	dora_record_boot_stage(5, (u64)_text, (u64)_end);
 
 	acpi_table_upgrade();
 
@@ -358,6 +404,8 @@ void __init __no_sanitize_address setup_arch(char **cmdline_p)
 	kasan_init();
 
 	request_standard_resources();
+
+	dora_record_boot_stage(6, (u64)initrd_start, (u64)initrd_end);
 
 	early_ioremap_reset();
 

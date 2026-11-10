@@ -33,12 +33,21 @@
 	reserved-memory {
 		ramoops@a7f00000 {
 			compatible = "ramoops";
-			reg = <0 0xa7f00000 0 0x100000>;
+			reg = <0 0xa7f00000 0 0xff000>;
 			record-size = <0x20000>;
 			console-size = <0x40000>;
 			ftrace-size = <0x20000>;
 			pmsg-size = <0x20000>;
 			ecc-size = <16>;
+			no-map;
+		};
+
+		/*
+		 * Experimental early-boot stage breadcrumb page (6 slots x 32 bytes
+		 * with XOR checksums written by head.S and setup.c).
+		 */
+		dora_boot_stage: memory@a7fff000 {
+			reg = <0 0xa7fff000 0 0x1000>;
 			no-map;
 		};
 

@@ -64,7 +64,7 @@
 	 */
 	efi_signature_nop			// special NOP to identity as PE/COFF executable
 	b	primary_entry			// branch to kernel start, magic
-	.quad	0				// Image load offset from start of RAM, little-endian
+	.quad	0x80000				// Image load offset from start of RAM, little-endian
 	le64sym	_kernel_size_le			// Effective size of kernel image, little-endian
 	le64sym	_kernel_flags_le		// Informative flags, little-endian
 	.quad	0				// reserved
@@ -114,6 +114,49 @@ SYM_CODE_START_LOCAL(preserve_boot_args)
 	adr_l	x0, boot_args			// record the contents of
 	stp	x21, x1, [x0]			// x0 .. x3 at kernel entry
 	stp	x2, x3, [x0, #16]
+
+	/*
+	 * Dora (MSM8996) experimental early-boot breadcrumb Slot 0 (Stage 1):
+	 * Physical address 0xa7fff000 (reserved no-map page above ramoops).
+	 * Clear Slots 1..5 (0xa7fff020..0xa7fff0bf) first so no stale stage
+	 * markers remain from a previous warm boot, then write Slot 0:
+	 *   [+0x00] magic    = "515STGS1" (0x3153475453353135)
+	 *   [+0x08] arg0     = x21 (FDT physical address)
+	 *   [+0x10] arg1     = _text physical load address
+	 *   [+0x18] checksum = magic ^ arg0 ^ arg1 ^ 0x3c3c3c3c3c3c3c3c
+	 * Use dsb sy + dc civac + dsb sy to clean and invalidate to PoC.
+	 */
+	mov	x2, #0xf000
+	movk	x2, #0xa7ff, lsl #16		// x2 = 0xa7fff000
+	stp	xzr, xzr, [x2, #0x20]
+	stp	xzr, xzr, [x2, #0x30]
+	stp	xzr, xzr, [x2, #0x40]
+	stp	xzr, xzr, [x2, #0x50]
+	stp	xzr, xzr, [x2, #0x60]
+	stp	xzr, xzr, [x2, #0x70]
+	stp	xzr, xzr, [x2, #0x80]
+	stp	xzr, xzr, [x2, #0x90]
+	stp	xzr, xzr, [x2, #0xa0]
+	stp	xzr, xzr, [x2, #0xb0]
+
+	mov	x3, #0x3135			// "51"
+	movk	x3, #0x5335, lsl #16		// "5S"
+	movk	x3, #0x4754, lsl #32		// "TG"
+	movk	x3, #0x3153, lsl #48		// "S1" -> "515STGS1"
+	adrp	x4, _text			// arg1 = _text PA
+	eor	x5, x3, x21
+	eor	x5, x5, x4
+	eor	x5, x5, #0x3c3c3c3c3c3c3c3c	// checksum
+	stp	x3, x21, [x2, #0x00]
+	stp	x4, x5, [x2, #0x10]
+
+	dsb	sy
+	dc	civac, x2
+	add	x3, x2, #0x40
+	dc	civac, x3
+	add	x3, x2, #0x80
+	dc	civac, x3
+	dsb	sy
 
 	dmb	sy				// needed before dc ivac with
 						// MMU off
@@ -863,6 +906,31 @@ SYM_FUNC_START_LOCAL(__primary_switch)
 	mov	x19, x0				// preserve new SCTLR_EL1 value
 	mrs	x20, sctlr_el1			// preserve old SCTLR_EL1 value
 #endif
+
+	/*
+	 * Dora (MSM8996) experimental early-boot breadcrumb Slot 1 (Stage 2):
+	 * Physical address 0xa7fff020 (immediately before __enable_mmu):
+	 *   [+0x20] magic    = "515STGS2" (0x3253475453353135)
+	 *   [+0x28] arg0     = x23 (physical misalignment / KASLR offset)
+	 *   [+0x30] arg1     = init_pg_dir physical address
+	 *   [+0x38] checksum = magic ^ arg0 ^ arg1 ^ 0x3c3c3c3c3c3c3c3c
+	 * Preserves x0 (SCTLR_EL1), x19, x20, x21, x23, x24, x28.
+	 */
+	mov	x2, #0xf000
+	movk	x2, #0xa7ff, lsl #16		// x2 = 0xa7fff000
+	mov	x3, #0x3135			// "51"
+	movk	x3, #0x5335, lsl #16		// "5S"
+	movk	x3, #0x4754, lsl #32		// "TG"
+	movk	x3, #0x3253, lsl #48		// "S2" -> "515STGS2"
+	adrp	x4, init_pg_dir			// arg1 = init_pg_dir PA
+	eor	x5, x3, x23
+	eor	x5, x5, x4
+	eor	x5, x5, #0x3c3c3c3c3c3c3c3c	// checksum
+	stp	x3, x23, [x2, #0x20]
+	stp	x4, x5, [x2, #0x30]
+	dsb	sy
+	dc	civac, x2
+	dsb	sy
 
 	adrp	x1, init_pg_dir
 	bl	__enable_mmu

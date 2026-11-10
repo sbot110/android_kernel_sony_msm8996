@@ -916,8 +916,8 @@ SYM_FUNC_START_LOCAL(__primary_switch)
 	 *   [+0x38] checksum = magic ^ arg0 ^ arg1 ^ 0x3c3c3c3c3c3c3c3c
 	 * Preserves x0 (SCTLR_EL1), x19, x20, x21, x23, x24, x28.
 	 */
-	mov	x2, #0xf000
-	movk	x2, #0xa7ff, lsl #16		// x2 = 0xa7fff000
+	mov	x2, #0xf020
+	movk	x2, #0xa7ff, lsl #16		// x2 = 0xa7fff020 (Slot 1)
 	mov	x3, #0x3135			// "51"
 	movk	x3, #0x5335, lsl #16		// "5S"
 	movk	x3, #0x4754, lsl #32		// "TG"
@@ -926,8 +926,8 @@ SYM_FUNC_START_LOCAL(__primary_switch)
 	eor	x5, x3, x23
 	eor	x5, x5, x4
 	eor	x5, x5, #0x3c3c3c3c3c3c3c3c	// checksum
-	stp	x3, x23, [x2, #0x20]
-	stp	x4, x5, [x2, #0x30]
+	stp	x3, x23, [x2]
+	stp	x4, x5, [x2, #0x10]
 	dsb	sy
 	dc	civac, x2
 	dsb	sy

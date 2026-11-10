@@ -91,13 +91,13 @@ static const struct alpha_pll_config hfpll_config = {
 static struct clk_alpha_pll perfcl_pll = {
 	.offset = PERFCL_REG_OFFSET,
 	.regs = prim_pll_regs,
-	.flags = SUPPORTS_DYNAMIC_UPDATE | SUPPORTS_FSM_MODE,
+	.flags = SUPPORTS_DYNAMIC_UPDATE,
 	.clkr.hw.init = &(struct clk_init_data){
 		.name = "perfcl_pll",
 		.parent_names = (const char *[]){ "xo" },
 		.num_parents = 1,
-		.ops = &clk_alpha_pll_hwfsm_ops,
-		/* HWFSM PLL votes are hardware-managed; never disable at late_initcall */
+		.ops = &clk_alpha_pll_huayra_ops,
+		/* Primary CPU PLL must never be disabled at late_initcall */
 		.flags = CLK_IGNORE_UNUSED,
 	},
 };
@@ -105,13 +105,13 @@ static struct clk_alpha_pll perfcl_pll = {
 static struct clk_alpha_pll pwrcl_pll = {
 	.offset = PWRCL_REG_OFFSET,
 	.regs = prim_pll_regs,
-	.flags = SUPPORTS_DYNAMIC_UPDATE | SUPPORTS_FSM_MODE,
+	.flags = SUPPORTS_DYNAMIC_UPDATE,
 	.clkr.hw.init = &(struct clk_init_data){
 		.name = "pwrcl_pll",
 		.parent_names = (const char *[]){ "xo" },
 		.num_parents = 1,
-		.ops = &clk_alpha_pll_hwfsm_ops,
-		/* HWFSM PLL votes are hardware-managed; never disable at late_initcall */
+		.ops = &clk_alpha_pll_huayra_ops,
+		/* Primary CPU PLL must never be disabled at late_initcall */
 		.flags = CLK_IGNORE_UNUSED,
 	},
 };
@@ -437,18 +437,15 @@ static void qcom_cpu_clk_msm8996_unregister_fixed(void)
 static int qcom_cpu_clk_msm8996_register_clks(struct device *dev,
 					      struct regmap *regmap)
 {
+	u32 pwr_mode = 0, perf_mode = 0;
 	int i, ret;
 
 	/*
-	 * Configure hardware PLLs, ACD on all online clusters, and mux topology
-	 * BEFORE registering clocks with the Common Clock Framework. This guarantees:
-	 * 1. Both clusters are parked on locked alternate PLLs (307.2 MHz) while
-	 *    primary HFPLLs are reprogrammed to safe 1036.8 MHz (L=54).
-	 * 2. L2ACDCR and SSSCTL are initialized on each online cluster via cpuhp
-	 *    before switching primary muxes to the ACD leg (ACD_INDEX).
-	 * 3. CCF reads the exact steady-state mux parents (SMUX = PLL/2, PMUX = ACD)
-	 *    during devm_clk_register_regmap(), keeping enable_count and rate
-	 *    accounting synchronized even when CPUFreq is disabled.
+	 * Configure APCC hardware auto-clock-select (GPLL0 fallback, PSCTL,
+	 * and CLK_CTL_AUTO_CLK_SEL) BEFORE arming the alternate PLLs in HWFSM
+	 * mode. Do NOT switch live CPU primary muxes (PMUX) to ALT_INDEX during
+	 * probe(), and do NOT overwrite primary Huayra HFPLL registers when the
+	 * bootloader has already locked and enabled PLL_OUTCTRL (BIT(0)).
 	 */
 	ret = regmap_update_bits(regmap, PWRCL_REG_OFFSET + MUX_OFFSET,
 				 MUX_AUTO_CLK_SEL_ALWAYS_ON_MASK,
@@ -461,32 +458,6 @@ static int qcom_cpu_clk_msm8996_register_clks(struct device *dev,
 				 MUX_AUTO_CLK_SEL_ALWAYS_ON_GPLL0_SEL);
 	if (ret)
 		goto err_unreg;
-
-	/* Arm alternate PLLs (307.2 MHz) in HWFSM mode first and wait for lock */
-	clk_alpha_pll_configure(&perfcl_alt_pll, regmap, &altpll_config);
-	clk_alpha_pll_configure(&pwrcl_alt_pll, regmap, &altpll_config);
-	mb();
-	udelay(50);
-
-	/* Park both clusters on ALT_INDEX while reconfiguring primary HFPLLs */
-	ret = regmap_update_bits(regmap, PWRCL_REG_OFFSET + MUX_OFFSET,
-				 MUX_PMUX_MASK, ALT_INDEX);
-	if (ret)
-		goto err_unreg;
-
-	ret = regmap_update_bits(regmap, PERFCL_REG_OFFSET + MUX_OFFSET,
-				 MUX_PMUX_MASK, ALT_INDEX);
-	if (ret)
-		goto err_unreg;
-
-	mb();
-	udelay(5);
-
-	/* Configure primary HFPLLs (1036.8 MHz, L=54) in HWFSM mode and wait for lock */
-	clk_alpha_pll_configure(&perfcl_pll, regmap, &hfpll_config);
-	clk_alpha_pll_configure(&pwrcl_pll, regmap, &hfpll_config);
-	mb();
-	udelay(50);
 
 	ret = regmap_write(regmap, PWRCL_REG_OFFSET + PSCTL_OFFSET, PSCTL_DEFAULT_VAL);
 	if (ret)
@@ -509,7 +480,27 @@ static int qcom_cpu_clk_msm8996_register_clks(struct device *dev,
 	mb();
 	udelay(5);
 
-	/* Program L2 ACD + SSSCTL on all online CPUs across both clusters */
+	/* Arm alternate PLLs (307.2 MHz) in HWFSM mode for future rate transitions */
+	clk_alpha_pll_configure(&perfcl_alt_pll, regmap, &altpll_config);
+	clk_alpha_pll_configure(&pwrcl_alt_pll, regmap, &altpll_config);
+	mb();
+	udelay(50);
+
+	/*
+	 * Only configure a primary Huayra HFPLL if the bootloader left its
+	 * output disabled (PLL_OUTCTRL == BIT(0) is clear). Reprogramming an
+	 * active primary HFPLL while the cluster is running from it or before
+	 * CPRh voltage scaling is active is unsafe.
+	 */
+	regmap_read(regmap, PERFCL_REG_OFFSET, &perf_mode);
+	if (!(perf_mode & BIT(0)))
+		clk_alpha_pll_configure(&perfcl_pll, regmap, &hfpll_config);
+
+	regmap_read(regmap, PWRCL_REG_OFFSET, &pwr_mode);
+	if (!(pwr_mode & BIT(0)))
+		clk_alpha_pll_configure(&pwrcl_pll, regmap, &hfpll_config);
+
+	/* Program L2 ACD + SSSCTL on the executing cluster and register cpuhp */
 	qcom_cpu_clk_msm8996_acd_init(base);
 
 	ret = cpuhp_setup_state(CPUHP_AP_ONLINE_DYN, "clk/qcom/cpu8996:online",
@@ -520,7 +511,7 @@ static int qcom_cpu_clk_msm8996_register_clks(struct device *dev,
 	}
 	qcom_cpu_clk_cpuhp_state = ret;
 
-	/* Park secondary muxes on PLL/2 (518.4 MHz) and switch primary muxes to ACD leg */
+	/* Park secondary muxes on PLL/2 and select ACD leg after L2ACDCR+SSSCTL init */
 	ret = regmap_update_bits(regmap, PWRCL_REG_OFFSET + MUX_OFFSET,
 				 MUX_SMUX_MASK,
 				 SMUX_PLL_DIV2_INDEX << MUX_SMUX_SHIFT);

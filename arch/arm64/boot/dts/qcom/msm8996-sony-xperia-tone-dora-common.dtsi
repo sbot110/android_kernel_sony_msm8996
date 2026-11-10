@@ -27,12 +27,13 @@
 
 	chosen {
 		/*
-		 * Override tone.dtsi bootargs to omit earlycon=msm_serial_dm,0x75b0000:
-		 * on retail F8131/F8132 units without Sony TA UART enabled, S1 leaves
-		 * BLSP2 UART2 unclocked, causing an immediate early-boot SError.
+		 * Override tone.dtsi bootargs to omit earlycon=msm_serial_dm,0x75b0000
+		 * and omit stdout-path = "serial0:115200n8": on retail F8131/F8132
+		 * units without Sony TA UART enabled, S1 leaves BLSP2 UART2
+		 * (0x075b0000) unclocked/unpinned, causing an early-boot SError or
+		 * console TX_READY hang before ramoops/initramfs can run.
 		 */
 		bootargs = "androidboot.hardware=qcom user_debug=31 msm_rtb.filter=0x237 ehci-hcd.park=3 cma=64M@0-0xffffffff coherent_pool=2M loop.max_part=16";
-		stdout-path = "serial0:115200n8";
 	};
 
 	reserved-memory {

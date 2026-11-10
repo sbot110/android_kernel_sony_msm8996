@@ -91,12 +91,12 @@ static const struct alpha_pll_config hfpll_config = {
 static struct clk_alpha_pll perfcl_pll = {
 	.offset = PERFCL_REG_OFFSET,
 	.regs = prim_pll_regs,
-	.flags = SUPPORTS_DYNAMIC_UPDATE,
+	.flags = SUPPORTS_DYNAMIC_UPDATE | SUPPORTS_FSM_MODE,
 	.clkr.hw.init = &(struct clk_init_data){
 		.name = "perfcl_pll",
 		.parent_names = (const char *[]){ "xo" },
 		.num_parents = 1,
-		.ops = &clk_alpha_pll_huayra_ops,
+		.ops = &clk_alpha_pll_hwfsm_ops,
 		/* Primary CPU PLL must never be disabled at late_initcall */
 		.flags = CLK_IGNORE_UNUSED,
 	},
@@ -105,12 +105,12 @@ static struct clk_alpha_pll perfcl_pll = {
 static struct clk_alpha_pll pwrcl_pll = {
 	.offset = PWRCL_REG_OFFSET,
 	.regs = prim_pll_regs,
-	.flags = SUPPORTS_DYNAMIC_UPDATE,
+	.flags = SUPPORTS_DYNAMIC_UPDATE | SUPPORTS_FSM_MODE,
 	.clkr.hw.init = &(struct clk_init_data){
 		.name = "pwrcl_pll",
 		.parent_names = (const char *[]){ "xo" },
 		.num_parents = 1,
-		.ops = &clk_alpha_pll_huayra_ops,
+		.ops = &clk_alpha_pll_hwfsm_ops,
 		/* Primary CPU PLL must never be disabled at late_initcall */
 		.flags = CLK_IGNORE_UNUSED,
 	},
@@ -434,18 +434,20 @@ static void qcom_cpu_clk_msm8996_unregister_fixed(void)
 	}
 }
 
+#define PLL_ACTIVE_MASK	(BIT(0) | BIT(20) | BIT(30) | BIT(31))
+
 static int qcom_cpu_clk_msm8996_register_clks(struct device *dev,
 					      struct regmap *regmap)
 {
 	u32 pwr_mode = 0, perf_mode = 0;
+	u32 pwr_alt_mode = 0, perf_alt_mode = 0;
 	int i, ret;
 
 	/*
 	 * Configure APCC hardware auto-clock-select (GPLL0 fallback, PSCTL,
-	 * and CLK_CTL_AUTO_CLK_SEL) BEFORE arming the alternate PLLs in HWFSM
-	 * mode. Do NOT switch live CPU primary muxes (PMUX) to ALT_INDEX during
-	 * probe(), and do NOT overwrite primary Huayra HFPLL registers when the
-	 * bootloader has already locked and enabled PLL_OUTCTRL (BIT(0)).
+	 * and CLK_CTL_AUTO_CLK_SEL). Preserve the bootloader's working PMUX
+	 * and SMUX selection during probe() and only configure PLLs that are
+	 * not already locked/active in manual or HWFSM mode.
 	 */
 	ret = regmap_update_bits(regmap, PWRCL_REG_OFFSET + MUX_OFFSET,
 				 MUX_AUTO_CLK_SEL_ALWAYS_ON_MASK,
@@ -480,24 +482,29 @@ static int qcom_cpu_clk_msm8996_register_clks(struct device *dev,
 	mb();
 	udelay(5);
 
-	/* Arm alternate PLLs (307.2 MHz) in HWFSM mode for future rate transitions */
-	clk_alpha_pll_configure(&perfcl_alt_pll, regmap, &altpll_config);
-	clk_alpha_pll_configure(&pwrcl_alt_pll, regmap, &altpll_config);
+	/* Arm alternate PLLs (307.2 MHz) in HWFSM mode if not already active */
+	regmap_read(regmap, PERFCL_REG_OFFSET + ALT_PLL_OFFSET, &perf_alt_mode);
+	if (!(perf_alt_mode & PLL_ACTIVE_MASK))
+		clk_alpha_pll_configure(&perfcl_alt_pll, regmap, &altpll_config);
+
+	regmap_read(regmap, PWRCL_REG_OFFSET + ALT_PLL_OFFSET, &pwr_alt_mode);
+	if (!(pwr_alt_mode & PLL_ACTIVE_MASK))
+		clk_alpha_pll_configure(&pwrcl_alt_pll, regmap, &altpll_config);
 	mb();
 	udelay(50);
 
 	/*
-	 * Only configure a primary Huayra HFPLL if the bootloader left its
-	 * output disabled (PLL_OUTCTRL == BIT(0) is clear). Reprogramming an
-	 * active primary HFPLL while the cluster is running from it or before
-	 * CPRh voltage scaling is active is unsafe.
+	 * Only configure a primary Huayra HFPLL if the bootloader left it
+	 * completely inactive (neither PLL_OUTCTRL, PLL_VOTE_FSM_ENA,
+	 * PLL_ACTIVE_FLAG, nor PLL_LOCK_DET is set). Reprogramming an active
+	 * HFPLL while a CPU cluster runs from it is unsafe.
 	 */
 	regmap_read(regmap, PERFCL_REG_OFFSET, &perf_mode);
-	if (!(perf_mode & BIT(0)))
+	if (!(perf_mode & PLL_ACTIVE_MASK))
 		clk_alpha_pll_configure(&perfcl_pll, regmap, &hfpll_config);
 
 	regmap_read(regmap, PWRCL_REG_OFFSET, &pwr_mode);
-	if (!(pwr_mode & BIT(0)))
+	if (!(pwr_mode & PLL_ACTIVE_MASK))
 		clk_alpha_pll_configure(&pwrcl_pll, regmap, &hfpll_config);
 
 	/* Program L2 ACD + SSSCTL on the executing cluster and register cpuhp */
@@ -510,32 +517,6 @@ static int qcom_cpu_clk_msm8996_register_clks(struct device *dev,
 		goto err_unreg;
 	}
 	qcom_cpu_clk_cpuhp_state = ret;
-
-	/* Park secondary muxes on PLL/2 and select ACD leg after L2ACDCR+SSSCTL init */
-	ret = regmap_update_bits(regmap, PWRCL_REG_OFFSET + MUX_OFFSET,
-				 MUX_SMUX_MASK,
-				 SMUX_PLL_DIV2_INDEX << MUX_SMUX_SHIFT);
-	if (ret)
-		goto err_unreg;
-
-	ret = regmap_update_bits(regmap, PERFCL_REG_OFFSET + MUX_OFFSET,
-				 MUX_SMUX_MASK,
-				 SMUX_PLL_DIV2_INDEX << MUX_SMUX_SHIFT);
-	if (ret)
-		goto err_unreg;
-
-	ret = regmap_update_bits(regmap, PWRCL_REG_OFFSET + MUX_OFFSET,
-				 MUX_PMUX_MASK, ACD_INDEX);
-	if (ret)
-		goto err_unreg;
-
-	ret = regmap_update_bits(regmap, PERFCL_REG_OFFSET + MUX_OFFSET,
-				 MUX_PMUX_MASK, ACD_INDEX);
-	if (ret)
-		goto err_unreg;
-
-	mb();
-	udelay(5);
 
 	perfcl_smux.pll = clk_hw_register_fixed_factor(dev, "perfcl_pll_main",
 						       "perfcl_pll",

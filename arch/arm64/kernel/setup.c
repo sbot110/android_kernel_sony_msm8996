@@ -298,8 +298,11 @@ u64 cpu_logical_map(unsigned int cpu)
 static void __init dora_record_boot_stage(unsigned int stage, u64 arg0, u64 arg1)
 {
 	/*
-	 * Experimental early-boot breadcrumb table at 0xa7fff000..0xa7fff0ff
-	 * (8 slots x 32 bytes; Slot 0 = Stage 1, Slot 1 = Stage 2 in head.S,
+	 * Experimental early-boot breadcrumb table at 0xa7fff000..0xa7fff0bf,
+	 * mirrored at 0xa7ffff00..0xa7ffffbf so TWRP 3.18 pmsg initialization
+	 * at 0xa7fff000..0xa7fff00b and /dev/pmsg0 writes at 0xa7fff00c+ do not
+	 * overwrite the markers.
+	 * (6 slots x 32 bytes; Slot 0 = Stage 1, Slot 1 = Stage 2 in head.S,
 	 * Slots 2..5 = Stages 3..6 in setup_arch).
 	 * Each 32-byte slot has:
 	 *   [+0x00] magic    = "515STGS<stage>"
@@ -309,16 +312,18 @@ static void __init dora_record_boot_stage(unsigned int stage, u64 arg0, u64 arg1
 	 */
 	u64 *base;
 	u64 *slot;
+	u64 *mslot;
 	u64 magic, checksum;
 
 	if (stage < 3 || stage > 6)
 		return;
 
-	base = early_memremap(0xa7fff000ULL, 0x100);
+	base = early_memremap(0xa7fff000ULL, 0x1000);
 	if (!base)
 		return;
 
 	slot = base + ((stage - 1) * 4);
+	mslot = (u64 *)((char *)base + 0xf00) + ((stage - 1) * 4);
 	magic = 0x3053475453353135ULL | ((u64)(stage & 0xf) << 56);
 	checksum = magic ^ arg0 ^ arg1 ^ 0x3c3c3c3c3c3c3c3cULL;
 
@@ -326,11 +331,17 @@ static void __init dora_record_boot_stage(unsigned int stage, u64 arg0, u64 arg1
 	WRITE_ONCE(slot[1], arg0);
 	WRITE_ONCE(slot[2], arg1);
 	WRITE_ONCE(slot[3], checksum);
+	WRITE_ONCE(mslot[0], magic);
+	WRITE_ONCE(mslot[1], arg0);
+	WRITE_ONCE(mslot[2], arg1);
+	WRITE_ONCE(mslot[3], checksum);
 	dsb(sy);
 	dcache_clean_inval_poc((unsigned long)slot,
 			       (unsigned long)(slot + 4));
+	dcache_clean_inval_poc((unsigned long)mslot,
+			       (unsigned long)(mslot + 4));
 	dsb(sy);
-	early_memunmap(base, 0x100);
+	early_memunmap(base, 0x1000);
 }
 
 void __init __no_sanitize_address setup_arch(char **cmdline_p)

@@ -19,10 +19,14 @@ The physical address `0xa7f00000` (size `0x100000`, 1 MiB) matches Sony referenc
 | `venus_region` | `0x90f00000` | `0x91400000` | `5 MiB` | Venus video PIL |
 | `mba_region` | `0x91500000` | `0x91700000` | `2 MiB` | Modem boot authenticator |
 | `rmtfs_mem` | `0xa0000000` | `0xa2000000` | `2 MiB` (range) | Remote filesystem buffer |
-| `ramoops@a7f00000` | `0xa7f00000` | `0xa7fff000` | `1020 KiB` | `pstore` / `ramoops` (`no-map`) |
-| `memory@a7fff000` | `0xa7fff000` | `0xa8000000` | `4 KiB` | Experimental early-boot stage breadcrumbs (`no-map`) |
+| `ramoops@a7f00000` | `0xa7f00000` | `0xa7fff000` | `1020 KiB` (`0xff000`) | `pstore` / `ramoops` (`no-map`, aligned with TWRP 3.18) |
+| `memory@a7fff000` | `0xa7fff000` | `0xa8000000` | `4 KiB` (`0x1000`) | Early-boot stage breadcrumbs (`no-map`, mirrored at `+0xf00`) |
 
-No address overlaps exist. Sub-allocations (`record-size = 128 KiB`, `console-size = 256 KiB`, `ftrace-size = 128 KiB`, `pmsg-size = 128 KiB`) total `640 KiB <= 1020 KiB`.
+No address overlaps exist. With `reg = <0 0xa7f00000 0 0xff000>`, `record-size = <0x1000>`, `console-size = <0x40000>`, `ftrace-size = <0x1000>`, `pmsg-size = <0>`, and `ecc-size = <0>`, `fs/pstore/ram.c:ramoops_probe()` computes identical physical addresses for `dmesg`, `console`, and `ftrace` relative to TWRP 3.18 (`mem_size = 0x100000`, `pmsg_size = 0x1000`):
+- `dmesg` (`dprzs[0..189]`, 190 records × `0x1000`): `0xa7f00000 .. 0xa7fbdfff` (`0xbe000` bytes)
+- `console` (`cprz`): `0xa7fbe000 .. 0xa7ffdfff` (`0x40000` bytes)
+- `ftrace` (`fprzs`): `0xa7ffe000 .. 0xa7ffefff` (`0x1000` bytes)
+- `pmsg` (`mprz` in TWRP 3.18 / `dora_boot_stage` in Linux 5.15): `0xa7fff000 .. 0xa7ffffff` (`0x1000` bytes; markers at `0xa7fff000..0xa7fff0bf` are mirrored at `0xa7ffff00..0xa7ffffbf` so TWRP's 12-byte `DBGC` header zap at `0xa7fff000..0xa7fff00b` does not destroy them).
 
 ## 2. Sony S1 Bootloader (`Tone`) Constraints: `fastboot flash boot` vs `fastboot boot`
 

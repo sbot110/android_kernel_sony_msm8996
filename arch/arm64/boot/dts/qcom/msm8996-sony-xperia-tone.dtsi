@@ -36,17 +36,18 @@
 		ramoops@a7f00000 {
 			compatible = "ramoops";
 			reg = <0 0xa7f00000 0 0xff000>;
-			record-size = <0x20000>;
+			record-size = <0x1000>;
 			console-size = <0x40000>;
-			ftrace-size = <0x20000>;
-			pmsg-size = <0x20000>;
-			ecc-size = <16>;
+			ftrace-size = <0x1000>;
+			pmsg-size = <0>;
+			ecc-size = <0>;
 			no-map;
 		};
 
 		/*
 		 * Experimental early-boot stage breadcrumb page (6 slots x 32 bytes
-		 * with XOR checksums written by head.S and setup.c).
+		 * at 0xa7fff000..0xa7fff0bf mirrored at 0xa7ffff00..0xa7ffffbf with
+		 * XOR checksums written by head.S and setup.c).
 		 */
 		dora_boot_stage: memory@a7fff000 {
 			reg = <0 0xa7fff000 0 0x1000>;

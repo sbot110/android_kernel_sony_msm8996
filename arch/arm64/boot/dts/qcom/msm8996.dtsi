@@ -389,9 +389,9 @@
 	};
 
 	/*
-	 * The retail Sony S1 bootloader updates /memory, not /memory@80000000.
-	 * Keep the working Sony 4.4 node name and empty reg placeholder so the
-	 * bootloader can supply the board-specific RAM ranges at boot time.
+	 * Working Sony 4.4 exposes /memory with an empty reg placeholder.
+	 * Use the same node name and default cells in 5.15 so the Sony S1
+	 * bootloader has the same target for its board-specific RAM fixups.
 	 * Do not hard-code a 3 GiB range: the hardware has reserved holes.
 	 */
 	memory {

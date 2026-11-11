@@ -303,7 +303,7 @@ static void __init dora_record_boot_stage(unsigned int stage, u64 arg0, u64 arg1
 	 * at 0xa7fff000..0xa7fff00b and /dev/pmsg0 writes at 0xa7fff00c+ do not
 	 * overwrite the markers.
 	 * (6 slots x 32 bytes; Slot 0 = Stage 1, Slot 1 = Stage 2 in head.S,
-	 * Slots 2..5 = Stages 3..6 in setup_arch).
+	 * Slots 2..6 = Stages 3..7 in setup_arch).
 	 * Each 32-byte slot has:
 	 *   [+0x00] magic    = "515STGS<stage>"
 	 *   [+0x08] arg0     = stage-specific diagnostic value 0
@@ -315,7 +315,7 @@ static void __init dora_record_boot_stage(unsigned int stage, u64 arg0, u64 arg1
 	u64 *mslot;
 	u64 magic, checksum;
 
-	if (stage < 3 || stage > 6)
+	if (stage < 3 || stage > 7)
 		return;
 
 	base = early_memremap(0xa7fff000ULL, 0x1000);
@@ -400,7 +400,9 @@ void __init __no_sanitize_address setup_arch(char **cmdline_p)
 
 	paging_init();
 
-	dora_record_boot_stage(5, (u64)_text, (u64)_end);
+	/* Record physical rather than kernel virtual addresses for S1 overlap checks. */
+	dora_record_boot_stage(5, (u64)__pa_symbol(_text),
+			       (u64)__pa_symbol(_end));
 
 	acpi_table_upgrade();
 
@@ -417,6 +419,16 @@ void __init __no_sanitize_address setup_arch(char **cmdline_p)
 	request_standard_resources();
 
 	dora_record_boot_stage(6, (u64)initrd_start, (u64)initrd_end);
+
+	/*
+	 * Stage 7: bootloader-provided FDT physical interval [start, end).
+	 * This makes an FDT/Image overlap visible even without a serial console.
+	 * initial_boot_params is available after setup_machine_fdt().
+	 */
+	if (initial_boot_params)
+		dora_record_boot_stage(7, (u64)__fdt_pointer,
+				       (u64)__fdt_pointer +
+				       (u64)fdt_totalsize(initial_boot_params));
 
 	early_ioremap_reset();
 

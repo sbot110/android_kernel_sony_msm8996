@@ -120,7 +120,7 @@ SYM_CODE_START_LOCAL(preserve_boot_args)
 	 * Physical address 0xa7fff000 (reserved no-map page above ramoops),
 	 * mirrored at 0xa7ffff00 so TWRP 3.18 pmsg header zap at 0xa7fff000..0x00b
 	 * and /dev/pmsg0 writes at 0xa7fff00c+ do not destroy the markers.
-	 * Clear Slots 1..5 (+0x20..+0xbf) in both primary and mirror tables first
+	 * Clear Slots 1..6 (+0x20..+0xdf) in both primary and mirror tables first
 	 * so no stale stage markers remain from a previous warm boot, then write
 	 * Slot 0:
 	 *   [+0x00] magic    = "515STGS1" (0x3153475453353135)
@@ -142,6 +142,8 @@ SYM_CODE_START_LOCAL(preserve_boot_args)
 	stp	xzr, xzr, [x2, #0x90]
 	stp	xzr, xzr, [x2, #0xa0]
 	stp	xzr, xzr, [x2, #0xb0]
+	stp	xzr, xzr, [x2, #0xc0]
+	stp	xzr, xzr, [x2, #0xd0]
 	stp	xzr, xzr, [x6, #0x20]
 	stp	xzr, xzr, [x6, #0x30]
 	stp	xzr, xzr, [x6, #0x40]
@@ -152,6 +154,8 @@ SYM_CODE_START_LOCAL(preserve_boot_args)
 	stp	xzr, xzr, [x6, #0x90]
 	stp	xzr, xzr, [x6, #0xa0]
 	stp	xzr, xzr, [x6, #0xb0]
+	stp	xzr, xzr, [x6, #0xc0]
+	stp	xzr, xzr, [x6, #0xd0]
 
 	mov	x3, #0x3135			// "51"
 	movk	x3, #0x5335, lsl #16		// "5S"
@@ -172,10 +176,14 @@ SYM_CODE_START_LOCAL(preserve_boot_args)
 	dc	civac, x3
 	add	x3, x2, #0x80
 	dc	civac, x3
+	add	x3, x2, #0xc0
+	dc	civac, x3
 	dc	civac, x6
 	add	x3, x6, #0x40
 	dc	civac, x3
 	add	x3, x6, #0x80
+	dc	civac, x3
+	add	x3, x6, #0xc0
 	dc	civac, x3
 	dsb	sy
 

@@ -45,8 +45,8 @@
 		};
 
 		/*
-		 * Experimental early-boot stage breadcrumb page (6 slots x 32 bytes
-		 * at 0xa7fff000..0xa7fff0bf mirrored at 0xa7ffff00..0xa7ffffbf with
+		 * Experimental early-boot stage breadcrumb page (7 slots x 32 bytes
+		 * at 0xa7fff000..0xa7fff0df mirrored at 0xa7ffff00..0xa7ffffdf with
 		 * XOR checksums written by head.S and setup.c).
 		 */
 		dora_boot_stage: memory@a7fff000 {

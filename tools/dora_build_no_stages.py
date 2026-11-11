@@ -3,16 +3,20 @@
 
 Run from the existing experimental worktree:
     python3 tools/dora_build_no_stages.py
+For a new experimental output directory:
+    python3 tools/dora_build_no_stages.py --outdir /mnt/c/platform-tools/dora515-preflight-memory-node
 
 This script never flashes a phone, never creates branches, and restores the
 two temporarily changed source files after building. Output is intentionally
 placed in a NEW directory; existing diagnostic images are not overwritten.
 """
+import argparse
 import hashlib
 import json
 import shutil
 import subprocess
 import sys
+import zlib
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -21,7 +25,7 @@ EXPECTED_ROOT = WORK / "sony-msm8996-5.15-ad3dcab-test"
 OUT = WORK / "out-sony-5.15-ad3dcab-test"
 ROM_ZIP = Path.home() / "android/lineage/out/target/product/dora/lineage-21.0-20261030-UNOFFICIAL-dora.zip"
 REFERENCE = Path("/mnt/c/platform-tools/dora-boot-reference.img")
-DEST = Path("/mnt/c/platform-tools/dora515-preflight-no-stages")
+DEFAULT_DEST = Path("/mnt/c/platform-tools/dora515-preflight-no-stages")
 HEAD = ROOT / "arch/arm64/kernel/head.S"
 SETUP = ROOT / "arch/arm64/kernel/setup.c"
 OLD_NO_PREMMU_SHA256 = "10930343a49a2c4fd9c0db760659c198b11e371108c634e067ecc8e30a76b132"
@@ -87,6 +91,13 @@ def disable_c(s):
 
 
 def main():
+    ap = argparse.ArgumentParser(description=__doc__)
+    ap.add_argument("--outdir", type=Path, default=DEFAULT_DEST,
+                    help="new output directory; existing output will never be overwritten")
+    args = ap.parse_args()
+    DEST = args.outdir.expanduser().resolve()
+    if DEST == Path("/") or DEST == ROOT or DEST == OUT or DEST == WORK:
+        die("Refusing dangerous output location")
     print("=== DORA 5.15: BUILD WITHOUT STAGES 1-7 ===", flush=True)
 
     if ROOT != EXPECTED_ROOT.resolve():
@@ -116,7 +127,7 @@ def main():
 
     head_obj = OUT / "arch/arm64/kernel/head.o"
     setup_obj = OUT / "arch/arm64/kernel/setup.o"
-    before = {p: sha(p) if p.is_file() else None
+    before = {p: p.stat().st_mtime_ns if p.is_file() else None
               for p in (head_obj, setup_obj)}
 
     print("Temporary edits: head.S Stage 1,2 off; setup.c Stage 3..7 off", flush=True)
@@ -135,13 +146,36 @@ def main():
         for path in (head_obj, setup_obj):
             if not path.is_file():
                 die(f"Expected compiled object missing: {path}")
-            if before[path] == sha(path):
-                die(f"Object unchanged after disabling its boot stages: {path}")
+            if before[path] is not None and path.stat().st_mtime_ns <= before[path]:
+                die(f"Object was not rebuilt from temporarily modified source: {path}")
 
         packed = OUT / "arch/arm64/boot/Image.gz-dtb"
         image = OUT / "arch/arm64/boot/Image"
         if not packed.is_file() or not image.is_file():
             die("Missing built kernel image")
+
+        # Require the Sony 4.4-style RAM node in each of the four candidate
+        # DTBs before packaging any image from this modified branch.
+        from dora_audit_dtb_early import parse_fdt
+        dec = zlib.decompressobj(31)
+        image_data = dec.decompress(packed.read_bytes()) + dec.flush()
+        if not dec.eof or image_data != image.read_bytes():
+            die("Built gzip Image does not match the raw Image")
+        dtbs = dec.unused_data
+        pos = 0
+        for i in range(4):
+            length, nodes, _, _ = parse_fdt(dtbs[pos:])
+            root_memory = nodes.get("/memory")
+            if root_memory is None:
+                die(f"DTB {i+1} lacks Sony 4.4-style /memory")
+            if root_memory.get("reg") != b"\x00" * 16:
+                die(f"DTB {i+1} /memory reg differs from Sony 4.4 placeholder")
+            if "/memory@80000000" in nodes:
+                die(f"DTB {i+1} still contains /memory@80000000")
+            pos += length
+        if pos != len(dtbs):
+            die("Unexpected data trailing four appended DTBs")
+        print("PASS: all four DTBs contain /memory and zero reg as Sony 4.4", flush=True)
 
         run(sys.executable, ROOT / "tools/dora_prepare_boot515.py",
             "--reference", REFERENCE,

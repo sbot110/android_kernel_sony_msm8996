@@ -302,7 +302,7 @@ static void __init dora_record_boot_stage(unsigned int stage, u64 arg0, u64 arg1
 	 * mirrored at 0xa7ffff00..0xa7ffffbf so TWRP 3.18 pmsg initialization
 	 * at 0xa7fff000..0xa7fff00b and /dev/pmsg0 writes at 0xa7fff00c+ do not
 	 * overwrite the markers.
-	 * (6 slots x 32 bytes; Slot 0 = Stage 1, Slot 1 = Stage 2 in head.S,
+	 * (7 slots x 32 bytes; Slot 0 = Stage 1, Slot 1 = Stage 2 in head.S,
 	 * Slots 2..6 = Stages 3..7 in setup_arch).
 	 * Each 32-byte slot has:
 	 *   [+0x00] magic    = "515STGS<stage>"

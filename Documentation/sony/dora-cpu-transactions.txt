@@ -1,0 +1,132 @@
+MSM8996 CPU transaction and APCC regulator ownership — Stage 4
+============================================================
+
+Status and scope
+----------------
+The current APCC/CBF platform provider is still read-only. CPU_FREQ and
+CPU_IDLE remain disabled; maxcpus=2 is unchanged. No four-CPU, voltage, DVFS,
+thermal, suspend or physical ACD claim is made by this change.
+
+The new clk-msm8996-cpu-transaction.c is compiled production coordination
+code with explicit hardware/power callbacks, not an installed MMIO adapter.
+It is executable in the fault model and available to a future qualified
+APCC/CBF adapter. No successful callback is supplied by a fake regulator,
+a fixed voltage, a fake RPM ACK or the boot clock observation driver.
+
+Original source evidence
+------------------------
+Sony4.4 reference: 0c295b15b6d0fb59a64e13b9e0ef2070818ef2a1.
+- drivers/clk/msm/clock.c: clk_set_rate calls CPU pre_set_rate before adding
+  the target VDD vote; it retains the old vote through the hardware change,
+  releases it afterwards, then calls CPU post_set_rate.
+- drivers/clk/msm/clock-cpu-8996.c: cpu_clk_8996_pre_set_rate moves off ACD
+  before an increase. MAX_PLL_MAIN_FREQ is 595200000 Hz. For an old rate up
+  to twice that maximum, the safe output is old/2; above it, 595200000 Hz.
+  The fallback AUX rate is measured, not assigned as a boot voltage/frequency.
+- Decreasing to an ACD rate first programs the target while both votes are
+  retained, then moves to a non-ACD output before removing the old vote;
+  post_set_rate restores the target ACD output after the voltage decrease.
+- The main/div2 transition old>600 MHz to new<600 MHz selects old/2 before
+  retuning the PLL. The performance alternate PLL uses 307200000/556800000 Hz
+  with the original 1190400000 Hz threshold. These are source limits, not
+  new OPPs. Alternate-PLL-only boot mode is not activated here.
+
+The lookup helper validates all frequency/level pairs of the selected Sony
+plan, rejects bins outside 0..3 and unsupported target frequencies, and never
+falls back to bin0. Bootstrap may use the next source fmax level for an
+already measured firmware rate without changing that rate into a new OPP.
+The committed final-DT fixture contains all twelve PWR/PERF/CBF bin plans;
+its properties match all four original SoC/PMIC variants.
+
+Transaction contract
+--------------------
+A backend must provide actual source-plan lookup, exclusion of power collapse
+and competing owners, stable PLL/mux readback, safe-output selection, the
+original hardware PLL/divider programming and two independently tracked
+voltage leases. Releasing a lease must remove its voltage constraints as
+well as its enable count: regulator_disable alone is not an unvote of a
+stored corner request. Fixed lease updates are idempotent.
+Each lease covers every required primary and digital supply, including shared
+rails; the guard must exclude their competing hardware owners, not just this
+transaction object's software callers. The object's mutex alone cannot provide
+that shared-domain exclusion.
+
+Bootstrap first measures the rate under the domain guard, moves to a verified
+non-increasing safe output, obtains a real acknowledged source-derived lease,
+checks all power states and only then restores the measured output. It does
+not assume firmware left a sufficient corner. A measured rate below the
+available AUX rate is rejected instead of being raised to a guessed safe rate.
+
+A rate change retains the old lease while acquiring the new lease, performs
+Sony's ACD/alternate-PLL/div2 ordering and removes the old lease only after
+verified hardware sequencing. It never calls program before power_ready has
+confirmed the required requests. Same-rate requests still verify power/state.
+
+Any partial operation may have applied despite its errno. The engine records
+UNKNOWN leases before attempting changes and keeps the primary errno. Recovery
+moves to a readback-confirmed non-ACD output bounded by both the old and current
+rate, re-ACKs the old lease, restores an altered alternate PLL, removes the
+pending target lease and restores the old output only after power confirmation.
+If any step cannot be confirmed it keeps the domain guard/leases and enters
+quarantine; future changes fail until explicit reconciliation succeeds.
+
+A failed bootstrap may have recovered and established the old plan while still
+returning the original error. The hardware owner must inspect/retain the
+transaction state and must not free its rail/clock handles on such an error.
+A quarantined object cannot be abandoned or have its guard/leases silently
+released. There is no generic destroy/unvote API while a CPU remains powered.
+
+S8/S9/S10/S11 ownership and provider distinction
+-----------------------------------------------
+Original arch/arm/boot/dts/qcom/msm8996-regulator.dtsi:515-518 documents:
+  PM8994 S8 + S9 + S10 + S11 = 4 phase VDD_APCC supply
+  S11 is the gang leader.
+The final original DT uses qcom,spm-regulator@3200 and its AVS limit child
+(475000..1140000 uV, max step 150000 uV). This data is identical across all
+four Dora SoC/PMIC variants.
+
+The compiled Dora DT has a native RPM provider at
+/rpm-glink/rpm_requests/pm8994-regulators, with compatible
+qcom,rpm-pm8994-regulators. It is driven by qcom_smd-regulator.c, which
+iterates available child nodes. The board must exclude its s8/s9/s10/s11
+children from native RPM registration for the source-described APCC gang
+handoff. This is the relevant board ownership correction; the SPM/HMSS/APM/
+Kryo path must remain gated until its complete hardware owner is qualified.
+
+Dora currently has no native SPMI qcom,pm8994-regulators container. Do not add
+one merely to set an ownership flag: it would register 42 unrelated rails even
+after excluding the four APCC rails.
+
+As future protection for boards that legitimately use that native SPMI
+container, qcom_spmi-regulator.c now accepts opt-in qcom,spm-owned-apcc. It
+excludes exactly s8/s9/s10/s11 before any per-rail type probing/MMIO or
+regulator-core registration, without depending on saw_regmap already existing.
+The flag is valid only for PM8994; other PMICs reject it, and boards without
+it retain existing behavior. This SPMI exclusion has no live effect on Dora's
+current RPM provider and is not an SPM or voltage provider.
+
+Remaining adapter requirements
+------------------------------
+- Complete APCC/CBF native PLL/mux adapter with verified stable readback and
+  original safe transitions; do not blindly attach CPU VDD classes to CCF,
+  whose voltage calculation can run before PRE_RATE_CHANGE.
+- Real CPU CPR/SPM/APM/Kryo ownership, shared-rail serialization and ACK/state
+  behavior, including suspend/thermal/hotplug; no duplicate native S11 owner.
+- Source-selected fuse/binning and OPP integration; unknown bins must fail.
+- Confirm how quarantined/partially failed hardware can be recovered on a
+  phone before making any runtime or BOOT TEST READY claim.
+
+Checks
+------
+  python3 scripts/dora/check-spmi-ownership.py
+  python3 scripts/dora/check-cpu-transactions.py
+  python3 scripts/dora/check-cpu-clocks.py --config OUT/.config
+
+The first test executes the actual full native SPMI probe and real PMIC tables
+with an instrumented register model: default registration, exact four-rail
+exclusion before MMIO, wrong-PMIC rejection, all allocation failures and
+registration failure. The second compiles the real production transaction
+code, tests all twelve Sony plans, bootstrap/up/down faults with and without
+partial apply, rollback/quarantine, ACK ordering, divider/alternate rules and
+concurrent serialization. The observer check still rejects any hardware-write
+path in the active read-only provider. All are host models, not a phone test.

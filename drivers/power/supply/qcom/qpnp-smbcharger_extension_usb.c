@@ -34,6 +34,7 @@
 #define ID_POLLING_WAKE_LOCK_TIMEOUT_EXT	(1000)
 
 static struct usb_somc_params *musb_params;
+static DEFINE_MUTEX(somc_usb_control_lock);
 
 static bool force_id_polling_on;
 module_param(force_id_polling_on, bool, S_IRUSR | S_IWUSR);
@@ -67,12 +68,16 @@ static int set_start_id_polling(const char *val, const struct kernel_param *kp)
 	struct smbchg_chip *chip;
 	int ret;
 
+	mutex_lock(&somc_usb_control_lock);
 	if (musb_params == NULL) {
 		pr_err("not yet initialized\n");
-		return -ENODEV;
+		ret = -ENODEV;
+		goto unlock;
 	}
 
 	ret = param_set_bool(val, kp);
+	if (ret)
+		goto unlock;
 
 	usb_params = musb_params;
 	chip = container_of(usb_params, struct smbchg_chip, usb_params);
@@ -88,7 +93,7 @@ static int set_start_id_polling(const char *val, const struct kernel_param *kp)
 				&typecctrl->stop_polling_delay,
 				msecs_to_jiffies(id_polling_timeout));
 
-		__pm_wakeup_event(&typecctrl->wakeup_source_id_polling,
+		__pm_wakeup_event(typecctrl->wakeup_source_id_polling,
 					(id_polling_timeout +
 					ID_POLLING_WAKE_LOCK_TIMEOUT_EXT));
 		typecctrl->user_request_polling = true;
@@ -99,6 +104,8 @@ static int set_start_id_polling(const char *val, const struct kernel_param *kp)
 		somc_chg_usbid_stop_polling(usb_params);
 	}
 
+unlock:
+	mutex_unlock(&somc_usb_control_lock);
 	return ret;
 }
 
@@ -121,6 +128,9 @@ static void somc_chg_usbid_start_polling_delay_work(struct work_struct *work)
 	struct smbchg_chip *chip = container_of(usb_params,
 						struct smbchg_chip,
 						usb_params);
+
+	if (READ_ONCE(chip->stopping))
+		return;
 
 	dev_dbg(chip->dev, "start id polling\n");
 
@@ -165,6 +175,9 @@ static void somc_chg_usbid_stop_polling_delay_work(struct work_struct *work)
 						struct smbchg_chip,
 						usb_params);
 
+	if (READ_ONCE(chip->stopping))
+		return;
+
 	if (force_id_polling_on) {
 		dev_dbg(chip->dev,
 			"force ID Polling. do not stop polling\n");
@@ -184,8 +197,8 @@ static void somc_chg_usbid_stop_polling_delay_work(struct work_struct *work)
 
 out:
 	typecctrl->user_request_polling = false;
-	if (typecctrl->wakeup_source_id_polling.active)
-		__pm_relax(&typecctrl->wakeup_source_id_polling);
+	if (typecctrl->wakeup_source_id_polling->active)
+		__pm_relax(typecctrl->wakeup_source_id_polling);
 }
 
 static void somc_chg_usbid_stop_polling(struct usb_somc_params *usb_params)
@@ -209,6 +222,13 @@ int somc_chg_usbid_stop_id_polling_host_function(
 						struct smbchg_chip,
 						usb_params);
 
+	int rc;
+
+	mutex_lock(&somc_usb_control_lock);
+	if (!chip->somc_usb_ready || READ_ONCE(chip->stopping)) {
+		rc = -ESHUTDOWN;
+		goto unlock;
+	}
 	if (force_stop != 0) {
 		dev_err(chip->dev, "force stop!!\n");
 		typecctrl->user_request_polling = false;
@@ -219,10 +239,13 @@ int somc_chg_usbid_stop_id_polling_host_function(
 		somc_chg_usbid_stop_polling(usb_params);
 		/* stop host function */
 		update_typec_otg_status(chip, POWER_SUPPLY_TYPE_UFP, true);
-		return 0;
+		rc = 0;
 	} else {
-		return -EBUSY;
+		rc = -EBUSY;
 	}
+unlock:
+	mutex_unlock(&somc_usb_control_lock);
+	return rc;
 }
 
 /*
@@ -256,7 +279,7 @@ static int get_prop_usb_dp_voltage_now(struct smbchg_chip *chip)
 	rc = qpnp_vadc_read(chip->usb_params.vadc_usb_dp, USB_DP, &results);
 	if (rc) {
 		pr_err("Unable to read usb_dp rc=%d\n", rc);
-		return 0;
+		return rc;
 	} else {
 		return results.physical;
 	}
@@ -277,7 +300,7 @@ static int get_prop_usb_dm_voltage_now(struct smbchg_chip *chip)
 	rc = qpnp_vadc_read(chip->usb_params.vadc_usb_dm, USB_DM, &results);
 	if (rc) {
 		pr_err("Unable to read usb_dm rc=%d\n", rc);
-		return 0;
+		return rc;
 	} else {
 		return results.physical;
 	}
@@ -315,13 +338,13 @@ static int get_prop_proprietary_charger(struct smbchg_chip *chip)
 	int i;
 
 	dp = get_prop_usb_dp_voltage_now(chip);
-	if (IS_ERR_VALUE(dp)) {
+	if ((dp < 0)) {
 		dev_err(chip->dev, "%s: read D+ voltage fail\n", __func__);
 		return dp;
 	}
 
 	dm = get_prop_usb_dm_voltage_now(chip);
-	if (IS_ERR_VALUE(dm)) {
+	if ((dm < 0)) {
 		dev_err(chip->dev, "%s: read D- voltage fail\n", __func__);
 		return dm;
 	}
@@ -354,18 +377,18 @@ static int is_floated_charger(struct smbchg_chip *chip)
 	int dm = 0;
 	int ret;
 	union power_supply_propval dpdm_3v3 = {
-		POWER_SUPPLY_DP_DM_DP3P3_DM3P3, };
+		SONY_DP_DM_DP3P3_DM3P3, };
 
 	ret = power_supply_get_property(chip->usb_psy,
 					POWER_SUPPLY_PROP_DP_DM, &dp_dm);
-	if (IS_ERR_VALUE(ret)) {
+	if ((ret < 0)) {
 		dev_err(chip->dev, "%s: read D+/D- state fail\n", __func__);
 		return ret;
 	}
 
 	ret = power_supply_set_property(chip->usb_psy,
 			POWER_SUPPLY_PROP_DP_DM, &dpdm_3v3);
-	if (IS_ERR_VALUE(ret)) {
+	if ((ret < 0)) {
 		dev_err(chip->dev, "%s: set D+/D- 3.3V fail\n", __func__);
 		return ret;
 	}
@@ -373,14 +396,14 @@ static int is_floated_charger(struct smbchg_chip *chip)
 	msleep(100);
 
 	ret = get_prop_usb_dp_voltage_now(chip);
-	if (IS_ERR_VALUE(ret)) {
+	if ((ret < 0)) {
 		dev_err(chip->dev, "%s: read D+ voltage fail\n", __func__);
 		goto out;
 	}
 	dp = ret;
 
 	ret = get_prop_usb_dm_voltage_now(chip);
-	if (IS_ERR_VALUE(ret)) {
+	if ((ret < 0)) {
 		dev_err(chip->dev, "%s: read D- voltage fail\n", __func__);
 		goto out;
 	}
@@ -415,6 +438,9 @@ static int somc_usb_otg_regulator_register_ocp_notification(
 	struct smbchg_chip *chip = rdev_get_drvdata(rdev);
 	struct somc_usb_ocp *ocp = &chip->usb_params.ocp;
 	unsigned long flags;
+
+	if (READ_ONCE(chip->stopping))
+		return -ESHUTDOWN;
 
 	spin_lock_irqsave(&ocp->lock, flags);
 	if (notification)
@@ -453,18 +479,23 @@ static int somc_usb_register(struct smbchg_chip *chip)
 	struct somc_typec_mode_ctrl *typecctrl = &params->typecctrl;
 
 	memset(&ocp->notification, 0, sizeof(ocp->notification));
-	spin_lock_init(&ocp->lock);
 
-	musb_params = params;
 
 	typecctrl->polling_wq = create_singlethread_workqueue("id-polling_wq");
+	if (!typecctrl->polling_wq)
+		return -ENOMEM;
 	INIT_DELAYED_WORK(&typecctrl->start_polling_delay,
 				somc_chg_usbid_start_polling_delay_work);
 	INIT_DELAYED_WORK(&typecctrl->stop_polling_delay,
 				somc_chg_usbid_stop_polling_delay_work);
 
-	wakeup_source_init(&typecctrl->wakeup_source_id_polling,
+	typecctrl->wakeup_source_id_polling = wakeup_source_register(chip->dev,
 					"wakeup_source_id_polling");
+	if (!typecctrl->wakeup_source_id_polling) {
+		destroy_workqueue(typecctrl->polling_wq);
+		typecctrl->polling_wq = NULL;
+		return -ENOMEM;
+	}
 
 	typecctrl->user_request_polling = false;
 	typecctrl->avoid_first_usbid_change = false;
@@ -474,6 +505,10 @@ static int somc_usb_register(struct smbchg_chip *chip)
 	id_polling_timeout = ID_POLLING_TIMEOUT_DEFAULT;
 	force_id_polling_on = false;
 
+	mutex_lock(&somc_usb_control_lock);
+	musb_params = params;
+	chip->somc_usb_ready = true;
+	mutex_unlock(&somc_usb_control_lock);
 	pr_smb(PR_MISC, "somc usb register success\n");
 	return 0;
 }
@@ -482,9 +517,18 @@ static void somc_usb_unregister(struct smbchg_chip *chip)
 {
 	struct somc_typec_mode_ctrl *typecctrl = &chip->usb_params.typecctrl;
 
+	mutex_lock(&somc_usb_control_lock);
+	if (!chip->somc_usb_ready) {
+		mutex_unlock(&somc_usb_control_lock);
+		return;
+	}
+	musb_params = NULL;
+	chip->somc_usb_ready = false;
+	mutex_unlock(&somc_usb_control_lock);
 	cancel_delayed_work_sync(&typecctrl->stop_polling_delay);
 	cancel_delayed_work_sync(&typecctrl->start_polling_delay);
 	destroy_workqueue(typecctrl->polling_wq);
-
-	wakeup_source_trash(&typecctrl->wakeup_source_id_polling);
+	typecctrl->polling_wq = NULL;
+	wakeup_source_unregister(typecctrl->wakeup_source_id_polling);
+	typecctrl->wakeup_source_id_polling = NULL;
 }

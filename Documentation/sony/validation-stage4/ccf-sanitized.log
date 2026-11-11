@@ -1,0 +1,2 @@
+PASS: actual CCF leases, ACK quarantine, bootstrap sentinel, PM balance, unprepared writes, mux readback, notifier abort and teardown
+Host state model only; physical RPM/PLL behavior and IRQ races remain unverified.

@@ -1,3 +1,4 @@
+/* SPDX-License-Identifier: GPL-2.0 */
 #ifndef __ASM_PCI_H
 #define __ASM_PCI_H
 #ifdef __KERNEL__
@@ -7,8 +8,6 @@
 #include <linux/dma-mapping.h>
 
 #include <asm/io.h>
-#include <asm-generic/pci-bridge.h>
-#include <asm-generic/pci-dma-compat.h>
 
 #define PCIBIOS_MIN_IO		0x1000
 #define PCIBIOS_MIN_MEM		0
@@ -19,10 +18,7 @@
 #define pcibios_assign_all_busses() \
 	(pci_has_flag(PCI_REASSIGN_ALL_BUS))
 
-/*
- * PCI address space differs from physical memory address space
- */
-#define PCI_DMA_BUS_IS_PHYS	(0)
+#define ARCH_GENERIC_PCI_MMAP_RESOURCE	1
 
 extern int isa_dma_bridge_buggy;
 
@@ -41,8 +37,3 @@ static inline int pci_proc_domain(struct pci_bus *bus)
 
 #endif  /* __KERNEL__ */
 #endif  /* __ASM_PCI_H */
-
-#ifdef CONFIG_PCI_MSM
-#define arch_setup_msi_irqs arch_setup_msi_irqs
-#define arch_teardown_msi_irqs arch_teardown_msi_irqs
-#endif

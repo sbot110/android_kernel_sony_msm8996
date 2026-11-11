@@ -1,0 +1,17 @@
+{
+  "drivers/clk/clk.c": "1e7395fb816dd755708958609a4f564197e068a592a46db010a62dc9ecfcf278",
+  "drivers/clk/qcom/clk-msm8996-cpu-native.c": "1d3a2564e1954fa3d84256f4c895584bd03afa99326780946e80369145a3578b",
+  "drivers/clk/qcom/clk-msm8996-cpu-native.h": "78b7252ba20b1081239c35694e1fa0c6c249a3535f23ece484aed05abc637bac",
+  "drivers/regulator/cpr3-regulator.c": "896f7fd5b056d2f8fb32e23a6c802bbfdd9811ba850120421a4e3f6d5c008b7a",
+  "drivers/regulator/cpr3-regulator.h": "27997afaa3c098f7225a58138cedf08d3b5b9ad39b89391562ce0ca52e9b621b",
+  "drivers/soc/qcom/msm-apm.c": "a4d5e28b34dfc94f7c6ce60940a0680ff233edbab324f544f46331223d9f31fb",
+  "drivers/soc/qcom/msm-spm.c": "a8d0de4d74b1ad92add9244694eb0e7a9a2c00d687f7d347030cfeb1d5397319",
+  "drivers/soc/qcom/spm_devices.c": "eb0043ed44feb00527d1f385d15261e3cc18fd3b252233e8f222217f3fd556b4",
+  "drivers/soc/qcom/spm_driver.h": "513fec5740ad92353c490aeb664cddb48a09e47d0742273d7ba7431059b2598c",
+  "drivers/usb/dwc3/dwc3-qcom.c": "048e12b9ea6ae8e734ebfeb18fcfd2537a28c02b2635016460660cd570869ed8",
+  "scripts/dora/build.sh": "f5d0cda8adea8724b8f174a3d6afa08085c5e6675e969f339afd8f80f570737e",
+  "scripts/dora/check-clk-vdd.py": "e87393342df526e504efdc0e37321eae700ced169e72c04b64aca5a68d7c1afb",
+  "scripts/dora/check-cpu-native.py": "66da13cfd2dcdab4cac854eba0d1e76a5ec931c588170c9012a9dcb0f2d47f10",
+  "scripts/dora/check-cpu-shared-power.py": "25dbfa5f1eb2cde1f49a7ad5822ed04fab8a815e1465b5b72e9f47f78a3adff2",
+  "scripts/dora/check-usb-parent-handoff.py": "c4fac39d21cb7715148fa58445145af2501c52e9b845e13e24ea3bcd1549d33d"
+}

@@ -1,0 +1,72 @@
+{
+  "reference_commit": "0c295b15b6d0fb59a64e13b9e0ef2070818ef2a1",
+  "panels": [
+    {
+      "file": "dsi-panel-somc-synaptics-auo-1080p-cmd.dtsi",
+      "label": "dsi_auo_synaptics_cmd_4",
+      "node": "somc,auo_synaptics_cmd_4_panel",
+      "panel_name": "4",
+      "adc_min": 1087000,
+      "adc_max": 1231000,
+      "sha256": "8300001a3af918d8eb813d09a2d22814a23b4403b6000aef75c91b6006d2a72c"
+    },
+    {
+      "file": "dsi-panel-somc-synaptics-jdi-1080p-cmd.dtsi",
+      "label": "dsi_jdi_synaptics_cmd_6",
+      "node": "somc,jdi_synaptics_cmd_6_panel",
+      "panel_name": "6",
+      "adc_min": 353000,
+      "adc_max": 653000,
+      "sha256": "6b174708dddb4739313df4e3c4cceb3d480de6c25f2960e5ede800ac3cc96bbd"
+    },
+    {
+      "file": "dsi-panel-somc-synaptics-lgd-1080p-cmd.dtsi",
+      "label": "dsi_lgd_synaptics_cmd_8",
+      "node": "somc,lgd_synaptics_cmd_8_panel",
+      "panel_name": "8",
+      "adc_min": 215000,
+      "adc_max": 256000,
+      "sha256": "546bc9aac998a6f52fc7bcd33f7ed1870410d10d808b03952641c02ab83994e5"
+    },
+    {
+      "file": "dsi-panel-somc-synaptics-sharp-1080p-cmd-ID3.dtsi",
+      "label": "dsi_sharp_synaptics_cmd_3",
+      "node": "somc,sharp_synaptics_cmd_3_panel",
+      "panel_name": "3",
+      "adc_min": 1236000,
+      "adc_max": 1395000,
+      "sha256": "24d3cb4e71167c79ee6beae59ab9072583bc1bc33e25d17e572f936b1f55d156"
+    },
+    {
+      "file": "dsi-panel-somc-synaptics-sharp-1080p-cmd-ID9.dtsi",
+      "label": "dsi_sharp_synaptics_cmd_9",
+      "node": "somc,sharp_synaptics_cmd_9_panel",
+      "panel_name": "9",
+      "adc_min": 0,
+      "adc_max": 57000,
+      "sha256": "3c9a1512613905e0be8c4367f9d61ec8a5c07b0981625782421f94c56eecee01"
+    }
+  ],
+  "f8132_reported_los20": {
+    "lcdid_adc": "0x11FFEA",
+    "physical": 1179626,
+    "panel_name": "4",
+    "node": "somc,auo_synaptics_cmd_4_panel",
+    "width": 1080,
+    "height": 1920,
+    "fps": 60,
+    "bitclk": 897039360,
+    "pclk": 149506560,
+    "byteclk": 112129920,
+    "escclk": 19200000
+  },
+  "activation": "All five panels are included by the Stage 3 display graph; final display safety gate keeps hardware disabled until native MMCC frequency/RPM-corner coupling is implemented. No panel is forced.",
+  "reference_files_sha256": {
+    "dsi-panel-dora.dtsi": "c9955437c8b56351a5f75f3d2043eeadeee05597b98a909d496379b5c9c81a9a",
+    "dsi-panel-somc-synaptics-auo-1080p-cmd.dtsi": "8300001a3af918d8eb813d09a2d22814a23b4403b6000aef75c91b6006d2a72c",
+    "dsi-panel-somc-synaptics-jdi-1080p-cmd.dtsi": "6b174708dddb4739313df4e3c4cceb3d480de6c25f2960e5ede800ac3cc96bbd",
+    "dsi-panel-somc-synaptics-lgd-1080p-cmd.dtsi": "546bc9aac998a6f52fc7bcd33f7ed1870410d10d808b03952641c02ab83994e5",
+    "dsi-panel-somc-synaptics-sharp-1080p-cmd-ID3.dtsi": "24d3cb4e71167c79ee6beae59ab9072583bc1bc33e25d17e572f936b1f55d156",
+    "dsi-panel-somc-synaptics-sharp-1080p-cmd-ID9.dtsi": "3c9a1512613905e0be8c4367f9d61ec8a5c07b0981625782421f94c56eecee01"
+  }
+}

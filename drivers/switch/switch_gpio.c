@@ -42,7 +42,7 @@ static void gpio_switch_work(struct work_struct *work)
 	struct gpio_switch_data	*data =
 		container_of(work, struct gpio_switch_data, work);
 
-	state = gpio_get_value(data->gpio);
+	state = gpio_get_value_cansleep(data->gpio);
 	switch_set_state(&data->sdev, state);
 }
 
@@ -116,6 +116,8 @@ static int gpio_switch_probe(struct platform_device *pdev)
 	if (ret < 0)
 		goto err_request_irq;
 
+	platform_set_drvdata(pdev, switch_data);
+
 	/* Perform initial detection */
 	gpio_switch_work(&switch_data->work);
 
@@ -137,10 +139,12 @@ static int gpio_switch_remove(struct platform_device *pdev)
 {
 	struct gpio_switch_data *switch_data = platform_get_drvdata(pdev);
 
+	free_irq(switch_data->irq, switch_data);
 	cancel_work_sync(&switch_data->work);
 	gpio_free(switch_data->gpio);
 	switch_dev_unregister(&switch_data->sdev);
 	kfree(switch_data);
+	platform_set_drvdata(pdev, NULL);
 
 	return 0;
 }

@@ -1,0 +1,185 @@
+{
+  "boot_test_ready": false,
+  "runtime_verified": false,
+  "status": "software inspection only",
+  "selftest_checks": 0,
+  "supplied_reserved_ranges": [],
+  "kernel_artifact": {
+    "path": "/workspace/stage7-official-kernel-dtb-dora",
+    "compression": "gzip",
+    "compressed_stream_bytes": 10394346,
+    "decompressed_file_bytes": 25412176,
+    "text_offset": 524288,
+    "image_size": 28000256,
+    "runtime_extent": 28000256,
+    "flags": 10,
+    "little_endian": true,
+    "layout": "single gzip stream followed by zero or more complete FDTs",
+    "appended_dtbs": [
+      {
+        "trailer_offset": 0,
+        "bytes": 448417,
+        "boot_cpuid_phys": 0,
+        "selection_tuples": {
+          "qcom,msm-id": [
+            246,
+            196608
+          ],
+          "qcom,board-id": [
+            8,
+            0
+          ],
+          "qcom,pmic-id": [
+            131081,
+            65555,
+            0,
+            0
+          ]
+        },
+        "selected_by_bootloader": "UNVERIFIED",
+        "reserved_ranges": [
+          {
+            "source": "/reserved-memory/removed_regions@85800000",
+            "start": 2239758336,
+            "size": 50331648
+          },
+          {
+            "source": "/reserved-memory/peripheral_region@8ea00000",
+            "start": 2392850432,
+            "size": 47185920
+          },
+          {
+            "source": "/reserved-memory/modem_region@88800000",
+            "start": 2290089984,
+            "size": 102760448
+          },
+          {
+            "source": "/reserved-memory/dfps_data_mem@83400000",
+            "start": 2202009600,
+            "size": 4096
+          },
+          {
+            "source": "/reserved-memory/cont_splash_mem@83401000",
+            "start": 2202013696,
+            "size": 37744640
+          },
+          {
+            "source": "/reserved-memory/cont_splash_mem_hdmi@b1c00000",
+            "start": 2982150144,
+            "size": 37744640
+          },
+          {
+            "source": "/reserved-memory/pstore_reserve_mem_region@a7f00000",
+            "start": 2817523712,
+            "size": 1048576
+          }
+        ],
+        "dynamic_reserved_nodes": [
+          "/reserved-memory/adsp_region",
+          "/reserved-memory/qseecom_region",
+          "/reserved-memory/secure_region",
+          "/reserved-memory/linux,cma"
+        ],
+        "dt_bootargs": "sched_enable_hmp=1 rcupdate.rcu_expedited=1",
+        "stdout_path": "serial0",
+        "mmc_aliases": {
+          "mmc0": null,
+          "sdhc1": "/soc/sdhci@7464900",
+          "mmc1": null,
+          "sdhc2": "/soc/sdhci@74A4900"
+        },
+        "declared_initrd": {},
+        "sha256": "d5760d7dc2ca31f51e4c15de8eca14285cab20f9bf3a11d9177e661819f39012"
+      },
+      {
+        "trailer_offset": 448417,
+        "bytes": 448929,
+        "boot_cpuid_phys": 0,
+        "selection_tuples": {
+          "qcom,msm-id": [
+            246,
+            196609
+          ],
+          "qcom,board-id": [
+            8,
+            0
+          ],
+          "qcom,pmic-id": [
+            131081,
+            65555,
+            0,
+            0
+          ]
+        },
+        "selected_by_bootloader": "UNVERIFIED",
+        "reserved_ranges": [
+          {
+            "source": "/reserved-memory/removed_regions@85800000",
+            "start": 2239758336,
+            "size": 50331648
+          },
+          {
+            "source": "/reserved-memory/peripheral_region@8ea00000",
+            "start": 2392850432,
+            "size": 47185920
+          },
+          {
+            "source": "/reserved-memory/modem_region@88800000",
+            "start": 2290089984,
+            "size": 102760448
+          },
+          {
+            "source": "/reserved-memory/dfps_data_mem@83400000",
+            "start": 2202009600,
+            "size": 4096
+          },
+          {
+            "source": "/reserved-memory/cont_splash_mem@83401000",
+            "start": 2202013696,
+            "size": 37744640
+          },
+          {
+            "source": "/reserved-memory/cont_splash_mem_hdmi@b1c00000",
+            "start": 2982150144,
+            "size": 37744640
+          },
+          {
+            "source": "/reserved-memory/pstore_reserve_mem_region@a7f00000",
+            "start": 2817523712,
+            "size": 1048576
+          }
+        ],
+        "dynamic_reserved_nodes": [
+          "/reserved-memory/adsp_region",
+          "/reserved-memory/qseecom_region",
+          "/reserved-memory/secure_region",
+          "/reserved-memory/linux,cma"
+        ],
+        "dt_bootargs": "sched_enable_hmp=1 rcupdate.rcu_expedited=1",
+        "stdout_path": "serial0",
+        "mmc_aliases": {
+          "mmc0": null,
+          "sdhc1": "/soc/sdhci@7464900",
+          "mmc1": null,
+          "sdhc2": "/soc/sdhci@74A4900"
+        },
+        "declared_initrd": {},
+        "sha256": "159ae1a235a63602853264e91a24d436fac458ac5761e46d340651ff3f5c7ea6"
+      }
+    ],
+    "trailing_zero_padding": 0,
+    "entry_and_relocation": "UNVERIFIED",
+    "sha256": "75a8dc67020fb672251a9c737ba14e1082348cd06fde8e159174ad4595ab614c"
+  },
+  "dtb_artifacts": [],
+  "missing_evidence": [
+    "phone kernel-entry/RPM/eMMC/GPT logs",
+    "actual DTB selection and relocation logs",
+    "watchdog/CPU/charging handoff qualification",
+    "userspace init/SELinux/APEX runtime validation",
+    "working original boot.img",
+    "identified LOS21 ramdisk/image",
+    "observed boot partition size",
+    "observed effective cmdline"
+  ]
+}

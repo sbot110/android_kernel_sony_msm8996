@@ -1,0 +1,71 @@
+Stage 6 CPU hardware boundary (2026-11-05)
+========================================
+Start: 961ff7bf2eb9ab1dc6d83be69972b06e7cede65b, actual published Stage5 HEAD.
+Sony reference: 0c295b15b6d0fb59a64e13b9e0ef2070818ef2a1.
+
+Implemented and connected
+-------------------------
+clk-msm8996-cpu-hw.c reads the real QFPROM NVMEM speedbin cell before APCC
+clock publication. It releases the NVMEM handle/buffer, propagates deferred
+probe and read failures, rejects bins4..7 and missing/malformed selected
+plans, and validates all selected PWR/PERF/CBF pairs with the production
+transaction engine's plan validator. No bin0 fallback is permitted. The
+three plans are device-managed; partial failure frees every allocated plan.
+The observer reports the selected bin without claiming a measured voltage.
+
+Sony clock-cpu-8996.c:140-141,1330-1331 reads EFUSE[31:29] at0x74130.
+The dormant native cell had reg=<0x130 4>,bits=<29 3>. Linux4.19's
+Documentation/devicetree/bindings/nvmem/nvmem.txt requires a byte-relative
+bit offset0..7, and nvmem_shift_read_buffer_in_place() operates on bytes.
+The corrected reg=<0x133 1>,bits=<5 3> describes exactly the same fuse bits.
+The adapter consumes the already-extracted one-byte value, without a second
+shift. This does not change any Sony frequency/voltage table or fuse value.
+The gated GPU child shares the same cell. Its existing byte-wise read_plan
+accepts a one-byte extracted bin; check-variants.py now strictly validates
+the corrected binding and also rejects the old offset/bits fixture. The
+first clean pipeline exposed that stale checker; its failure is retained
+separately from the subsequent corrected clean run.
+
+Hardware chain and remaining boundary
+-------------------------------------
+Sony4.4                         Linux4.19 / Stage6
+clock-cpu-8996.c APCC/CBF       clk-cpu-8996.c: real read-only PLL/mux paths;
+                              clk-msm8996-cpu-hw.c: real QFPROM/plan acquisition
+primary Huayra/alternate PLL   boot decoding/lock validation only; no qualified
+                              programmable CPU adapter or domain guard
+ACD indirect L2 registers      source sequences retained in Sony reference;
+                              target-cluster access/wake/exclusion unbound
+CPR3 HMSS                      cpr3-hmss-regulator.c + cpr3-regulator.c compile;
+                              DT gated, shared domain arbitration incomplete
+SPM/SAW S11 gang leader        spm-regulator.c + msm-spm.c; DT gated
+S8/S9/S10/S11 four-phase APCC   native RPM children remain disabled; never
+                              instantiate four independent voltage owners
+Kryo functional/retention LDO  kryo-regulator.c; DT gated, requires live SPM
+APM                           msm-apm.c; DT gated; no fake secure-call success
+fuse/binning                   source-selected common bin/PVS0 now read;
+                              twelve exact source plans remain unchanged
+thermal/hotplug/collapse       source components exist, but cross-controller
+                              transaction ownership/lifetime not qualified
+
+Sony pre_set_rate moves off ACD before a voltage increase; post_set_rate
+restores the ACD output after a decrease. Native CCF's voltage calculation
+precedes PRE_RATE_CHANGE. Attaching voltage classes or a notifier to the
+observer would violate that ordering. The existing transaction engine is
+still the coordination layer, with no bound modifying callbacks. Its domain
+guard must exclude both clusters' shared supply owners and power collapse;
+an object mutex or stable double sample does not provide that exclusion.
+CBF/ACD/PLL writes, voltage votes, suspend/resume and recovery remain OFF.
+CPU_FREQ=n, CPU_IDLE=n, maxcpus=2. No SDM845 limits or fictitious providers.
+
+Verification
+-------------
+check-cpu-hardware.py executes production NVMEM bit extraction, the hardware
+plan reader and engine lookup, with all256 fuse bytes, all12 Sony plans,
+every plan-read/allocation failure, unsupported bins and malformed plans.
+check-cpu-clocks.py executes the real observer probe with a fuse defer/error
+before allocation/publication. Its existing MMIO/PLL/lock/readback fault
+cases remain. check-cpu-dt.py validates the real QFPROM link and rejects the
+old bits29 binding, wrong offset, missing cell/name and all existing unsafe
+voltage/CPU activation fixtures in each compiled tree.
+These tests prove software behavior, not rail settling, fuse readings on a
+phone, PLL programming, CPU thermal control or a completed hardware adapter.

@@ -1,0 +1,20 @@
+{
+  "build_exit": 0,
+  "source_sha": "e7d77288f8f1fb7865c21d5178a82bce9e90d67e",
+  "initial_sha": "8d7ab8a3baeb73cfaea264f3f7758e32cffce097",
+  "out_dir": "/workspace/work/dora-stage4-clean2-20261103.6FUiPC",
+  "jobs": 4,
+  "started": "2026-11-03T12:12:32Z",
+  "finished": "2026-11-03T12:33:05Z",
+  "compiler_warning_count": 97,
+  "warnings_new_vs_stage3": 0,
+  "independent_dtc_warning_count": 116,
+  "check_script_count": 32,
+  "BUILDABLE": true,
+  "BOOT TEST READY": false,
+  "RUNTIME VERIFIED": false,
+  "storage": "SDHC1 eMMC, 7464900.sdhci; typed CX active; both SDHC and unused UFS host/PHY gated",
+  "external_device_vendor": "UNMODIFIED; one unapplied tested cmdline patch prepared",
+  "boot_img_created": false,
+  "device_flashed": false
+}

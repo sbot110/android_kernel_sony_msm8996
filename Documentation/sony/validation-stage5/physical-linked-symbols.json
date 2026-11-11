@@ -1,0 +1,12 @@
+{
+  "qcom_rpm_physical_check_ready": true,
+  "qcom_rpm_physical_sync": true,
+  "qcom_rpm_physical_recover": true,
+  "qcom_rpm_physical_register": true,
+  "qcom_rpm_physical_suspend": true,
+  "qcom_rpm_physical_resume": true,
+  "qcom_rpm_smd_claim": true,
+  "qcom_rpm_smd_release": true,
+  "regulator_sync_load": true,
+  "clk_vdd_class_handoff_done": true
+}

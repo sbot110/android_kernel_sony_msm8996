@@ -1538,7 +1538,8 @@ static int cpr3_hmss_init_aging(struct cpr3_controller *ctrl)
 	ctrl->aging_complete_vdd_mode = REGULATOR_MODE_IDLE;
 
 	ctrl->aging_sensor_count = 1;
-	ctrl->aging_sensor = kzalloc(sizeof(*ctrl->aging_sensor), GFP_KERNEL);
+	ctrl->aging_sensor = devm_kzalloc(ctrl->dev,
+				 sizeof(*ctrl->aging_sensor), GFP_KERNEL);
 	if (!ctrl->aging_sensor)
 		return -ENOMEM;
 
@@ -1818,6 +1819,7 @@ static int cpr3_hmss_regulator_remove(struct platform_device *pdev)
 static struct platform_driver cpr3_hmss_regulator_driver = {
 	.driver		= {
 		.name		= "qcom,cpr3-hmss-regulator",
+		.suppress_bind_attrs = true,
 		.of_match_table	= cpr_regulator_match_table,
 		.owner		= THIS_MODULE,
 		.pm             = &cpr3_hmss_regulator_pm_ops,

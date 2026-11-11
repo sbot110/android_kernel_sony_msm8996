@@ -1,0 +1,64 @@
+/workspace/stage7-final-clean-out/arch/arm64/boot/dts/qcom/msm8996-v3.0-sony-xperia-tone-dora.dtb
+/dev/null: Warning (unit_address_vs_reg): /memory: node has a reg or ranges property, but no unit name
+/dev/null: Warning (unit_address_vs_reg): /reserved-memory/rmtfs@86700000: node has a unit name, but no reg property
+/dev/null: Warning (unit_address_vs_reg): /soc: node has a reg or ranges property, but no unit name
+/dev/null: Warning (unit_address_vs_reg): /soc/usb@7600000: node has a unit name, but no reg property
+/dev/null: Warning (unit_address_vs_reg): /soc/usb@6a00000: node has a unit name, but no reg property
+/dev/null: Warning (unit_address_vs_reg): /soc/agnoc@0: node has a unit name, but no reg property
+/dev/null: Warning (unit_address_vs_reg): /soc/cpr3-ctrl@99e8000/thread@0: node has a unit name, but no reg property
+/dev/null: Warning (unit_address_vs_reg): /soc/cpr3-ctrl@99e8000/thread@1: node has a unit name, but no reg property
+/dev/null: Warning (unit_address_vs_reg): /soc/apc0-pwrcl-mem-acc-regulator: node has a reg or ranges property, but no unit name
+/dev/null: Warning (unit_address_vs_reg): /soc/apc1-perfcl-mem-acc-regulator: node has a reg or ranges property, but no unit name
+/dev/null: Warning (unit_address_vs_reg): /soc/apcc-l3-mem-acc-regulator: node has a reg or ranges property, but no unit name
+/dev/null: Warning (unit_address_vs_reg): /soc/qcom,mdss_dsi: node has a reg or ranges property, but no unit name
+/dev/null: Warning (unit_address_vs_reg): /soc/cpr3-ctrl@838000/thread@0: node has a unit name, but no reg property
+/dev/null: Warning (unit_address_format): /soc/apm@099e0000: unit name should not have leading 0s
+/dev/null: Warning (unique_unit_address): /soc/syscon@9820000: duplicate unit-address (also used in node /soc/mailbox@9820000)
+/workspace/stage7-final-clean-out/arch/arm64/boot/dts/qcom/msm8996-v3.0-pmi8996-sony-xperia-tone-dora.dtb
+/dev/null: Warning (unit_address_vs_reg): /memory: node has a reg or ranges property, but no unit name
+/dev/null: Warning (unit_address_vs_reg): /reserved-memory/rmtfs@86700000: node has a unit name, but no reg property
+/dev/null: Warning (unit_address_vs_reg): /soc: node has a reg or ranges property, but no unit name
+/dev/null: Warning (unit_address_vs_reg): /soc/usb@7600000: node has a unit name, but no reg property
+/dev/null: Warning (unit_address_vs_reg): /soc/usb@6a00000: node has a unit name, but no reg property
+/dev/null: Warning (unit_address_vs_reg): /soc/agnoc@0: node has a unit name, but no reg property
+/dev/null: Warning (unit_address_vs_reg): /soc/cpr3-ctrl@99e8000/thread@0: node has a unit name, but no reg property
+/dev/null: Warning (unit_address_vs_reg): /soc/cpr3-ctrl@99e8000/thread@1: node has a unit name, but no reg property
+/dev/null: Warning (unit_address_vs_reg): /soc/apc0-pwrcl-mem-acc-regulator: node has a reg or ranges property, but no unit name
+/dev/null: Warning (unit_address_vs_reg): /soc/apc1-perfcl-mem-acc-regulator: node has a reg or ranges property, but no unit name
+/dev/null: Warning (unit_address_vs_reg): /soc/apcc-l3-mem-acc-regulator: node has a reg or ranges property, but no unit name
+/dev/null: Warning (unit_address_vs_reg): /soc/qcom,mdss_dsi: node has a reg or ranges property, but no unit name
+/dev/null: Warning (unit_address_vs_reg): /soc/cpr3-ctrl@838000/thread@0: node has a unit name, but no reg property
+/dev/null: Warning (unit_address_format): /soc/apm@099e0000: unit name should not have leading 0s
+/dev/null: Warning (unique_unit_address): /soc/syscon@9820000: duplicate unit-address (also used in node /soc/mailbox@9820000)
+/workspace/stage7-final-clean-out/arch/arm64/boot/dts/qcom/msm8996-sony-xperia-tone-dora.dtb
+/dev/null: Warning (unit_address_vs_reg): /memory: node has a reg or ranges property, but no unit name
+/dev/null: Warning (unit_address_vs_reg): /reserved-memory/rmtfs@86700000: node has a unit name, but no reg property
+/dev/null: Warning (unit_address_vs_reg): /soc: node has a reg or ranges property, but no unit name
+/dev/null: Warning (unit_address_vs_reg): /soc/usb@7600000: node has a unit name, but no reg property
+/dev/null: Warning (unit_address_vs_reg): /soc/usb@6a00000: node has a unit name, but no reg property
+/dev/null: Warning (unit_address_vs_reg): /soc/agnoc@0: node has a unit name, but no reg property
+/dev/null: Warning (unit_address_vs_reg): /soc/cpr3-ctrl@99e8000/thread@0: node has a unit name, but no reg property
+/dev/null: Warning (unit_address_vs_reg): /soc/cpr3-ctrl@99e8000/thread@1: node has a unit name, but no reg property
+/dev/null: Warning (unit_address_vs_reg): /soc/apc0-pwrcl-mem-acc-regulator: node has a reg or ranges property, but no unit name
+/dev/null: Warning (unit_address_vs_reg): /soc/apc1-perfcl-mem-acc-regulator: node has a reg or ranges property, but no unit name
+/dev/null: Warning (unit_address_vs_reg): /soc/apcc-l3-mem-acc-regulator: node has a reg or ranges property, but no unit name
+/dev/null: Warning (unit_address_vs_reg): /soc/qcom,mdss_dsi: node has a reg or ranges property, but no unit name
+/dev/null: Warning (unit_address_vs_reg): /soc/cpr3-ctrl@838000/thread@0: node has a unit name, but no reg property
+/dev/null: Warning (unit_address_format): /soc/apm@099e0000: unit name should not have leading 0s
+/dev/null: Warning (unique_unit_address): /soc/syscon@9820000: duplicate unit-address (also used in node /soc/mailbox@9820000)
+/workspace/stage7-final-clean-out/arch/arm64/boot/dts/qcom/msm8996-v3.1-pmi8996-sony-xperia-tone-dora.dtb
+/dev/null: Warning (unit_address_vs_reg): /memory: node has a reg or ranges property, but no unit name
+/dev/null: Warning (unit_address_vs_reg): /reserved-memory/rmtfs@86700000: node has a unit name, but no reg property
+/dev/null: Warning (unit_address_vs_reg): /soc: node has a reg or ranges property, but no unit name
+/dev/null: Warning (unit_address_vs_reg): /soc/usb@7600000: node has a unit name, but no reg property
+/dev/null: Warning (unit_address_vs_reg): /soc/usb@6a00000: node has a unit name, but no reg property
+/dev/null: Warning (unit_address_vs_reg): /soc/agnoc@0: node has a unit name, but no reg property
+/dev/null: Warning (unit_address_vs_reg): /soc/cpr3-ctrl@99e8000/thread@0: node has a unit name, but no reg property
+/dev/null: Warning (unit_address_vs_reg): /soc/cpr3-ctrl@99e8000/thread@1: node has a unit name, but no reg property
+/dev/null: Warning (unit_address_vs_reg): /soc/apc0-pwrcl-mem-acc-regulator: node has a reg or ranges property, but no unit name
+/dev/null: Warning (unit_address_vs_reg): /soc/apc1-perfcl-mem-acc-regulator: node has a reg or ranges property, but no unit name
+/dev/null: Warning (unit_address_vs_reg): /soc/apcc-l3-mem-acc-regulator: node has a reg or ranges property, but no unit name
+/dev/null: Warning (unit_address_vs_reg): /soc/qcom,mdss_dsi: node has a reg or ranges property, but no unit name
+/dev/null: Warning (unit_address_vs_reg): /soc/cpr3-ctrl@838000/thread@0: node has a unit name, but no reg property
+/dev/null: Warning (unit_address_format): /soc/apm@099e0000: unit name should not have leading 0s
+/dev/null: Warning (unique_unit_address): /soc/syscon@9820000: duplicate unit-address (also used in node /soc/mailbox@9820000)

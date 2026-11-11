@@ -50,7 +50,7 @@
 #include <asm/uaccess.h>
 #include <asm/unaligned.h>
 #if (LINUX_VERSION_CODE >= KERNEL_VERSION(2, 6, 27)) && defined(CONFIG_HAS_WAKELOCK)
-#include <linux/wakelock.h>
+#include "dhd_wakelock.h"
 #endif /* (LINUX_VERSION_CODE >= KERNEL_VERSION(2, 6, 27)) && defined (CONFIG_HAS_WAKELOCK) */
 #include <dhd_buzzz.h>
 /* The kernel threading is sdio-specific */
@@ -791,7 +791,7 @@ extern int dhd_os_wake_lock(dhd_pub_t *pub);
 extern int dhd_os_wake_unlock(dhd_pub_t *pub);
 extern int dhd_os_wake_lock_waive(dhd_pub_t *pub);
 extern int dhd_os_wake_lock_restore(dhd_pub_t *pub);
-extern void dhd_os_wake_lock_init(struct dhd_info *dhd);
+extern int dhd_os_wake_lock_init(struct dhd_info *dhd);
 extern void dhd_os_wake_lock_destroy(struct dhd_info *dhd);
 extern int dhd_event_wake_lock(dhd_pub_t *pub);
 extern int dhd_event_wake_unlock(dhd_pub_t *pub);

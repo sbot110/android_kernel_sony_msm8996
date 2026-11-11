@@ -1,0 +1,75 @@
+// SPDX-License-Identifier: GPL-2.0-only
+/*
+ * Sony Tone PCIe/WLAN wiring adapted from the Sony 4.4.302 reference
+ * 0c295b15b6d0fb59a64e13b9e0ef2070818ef2a1.
+ * Copyright (C) 2015 Sony Mobile Communications Inc.
+ *
+ * Include AFTER msm8996-sony-xperia-tone.dtsi. The host extension uses
+ * the existing MSM8996 QMP PHY and GCC genpd rather than substituting
+ * fake regulator/PHY implementations for the old downstream framework.
+ */
+
+/* GPIO84 belongs solely to Sony WLAN power control, as in the reference. */
+/delete-node/ &wlan_en;
+
+/ {
+	bcmdhd_wlan {
+		compatible = "android,bcmdhd_wlan";
+		gpios = <&msmgpio 84 GPIO_ACTIVE_HIGH>,
+			<&msmgpio 79 GPIO_ACTIVE_HIGH>;
+		pinctrl-names = "default", "sleep";
+		pinctrl-0 = <&wl_reg_on &wl_host_wake>;
+		pinctrl-1 = <&wl_reg_on &wl_host_wake>;
+		wlan-pci-number = <0>;
+	};
+};
+
+&pcie0 {
+	compatible = "qcom,msm8996-pci-msm";
+	cell-index = <0>;
+	/delete-property/ vddpe-3v3-supply;
+	/delete-property/ vdda-supply;
+
+	/* Original controller and PHY windows; viewport iATU is inside DBI. */
+	reg = <0x00600000 0x2000>,
+		<0x00034000 0x4000>,
+		<0x0c000000 0xf1d>,
+		<0x0c000f20 0xa8>,
+		<0x0c100000 0x100000>;
+	reg-names = "parf", "phy", "dm_core", "elbi", "conf";
+	phys = <&pciephy_0>;
+	phy-names = "pciephy";
+	power-domains = <&gcc PCIE0_GDSC>;
+
+	vreg-1p8-supply = <&pm8994_l12>;
+	vreg-0p9-supply = <&pm8994_l28>;
+	qcom,vreg-0p9-voltage-level = <925000 925000 24000>;
+	qcom,target-link-speed = <2>;
+	qcom,ep-latency = <10>;
+	qcom,aux-clk-sync;
+	qcom,clk-power-manage-en;
+	/* GPIO power-on and enumeration are performed by the real WLAN client. */
+	qcom,boot-option = <1>;
+
+	clocks = <&gcc GCC_PCIE_0_PIPE_CLK>,
+		<&gcc GCC_PCIE_0_AUX_CLK>,
+		<&gcc GCC_PCIE_0_CFG_AHB_CLK>,
+		<&gcc GCC_PCIE_0_MSTR_AXI_CLK>,
+		<&gcc GCC_PCIE_0_SLV_AXI_CLK>,
+		<&gcc GCC_PCIE_CLKREF_CLK>;
+	clock-names = "pcie_0_pipe_clk", "pcie_0_aux_clk",
+		"pcie_0_cfg_ahb_clk", "pcie_0_mstr_axi_clk",
+		"pcie_0_slv_axi_clk", "pcie_0_ldo";
+	/* Indexed by the vendor host's fixed clock-info array, not DT order. */
+	max-clock-frequency-hz = <0 0 1010526 0 0 0 0 0 0 0 0 0 0 0 0>;
+
+	/* BCMDHD uses legacy INTx. Link-down has a proven dedicated GIC line. */
+	interrupt-parent = <&intc>;
+	interrupts = <GIC_SPI 244 IRQ_TYPE_LEVEL_HIGH>,
+		<GIC_SPI 245 IRQ_TYPE_LEVEL_HIGH>,
+		<GIC_SPI 247 IRQ_TYPE_LEVEL_HIGH>,
+		<GIC_SPI 248 IRQ_TYPE_LEVEL_HIGH>,
+		<GIC_SPI 254 IRQ_TYPE_EDGE_RISING>;
+	interrupt-names = "int_a", "int_b", "int_c", "int_d",
+		"int_pls_link_down";
+};

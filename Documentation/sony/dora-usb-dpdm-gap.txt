@@ -1,0 +1,161 @@
+Sony dora USB / charger DPDM integration gap
+==========================================
+
+Scope: source inspection only. This document does not establish working USB,
+charger detection, fast charging, OTG, or suspend on F8131 or F8132. No DPDM
+provider was added by this inspection.
+
+Observed providers and consumers
+-------------------------------
+
+The active board description uses the generic PHY driver
+  drivers/phy/qualcomm/phy-qcom-qusb2.c
+with compatible "sony,dora-qusb2-phy", "qcom,msm8996-qusb2-phy",
+hsusb_phy1 at 0x07411000.
+The board uses dwc3-qcom plus a high-speed, peripheral-only DWC3 child. That
+child refers to hsusb_phy1 through "phys" / "phy-names = usb2-phy".
+The PHY driver exports a generic PHY, not a DPDM regulator or "dpdm" supply.
+It enables the vdda-pll and vdda-phy-dpdm rails, programs/reset the PHY, checks
+PLL lock, and controls clocks in its init/exit/runtime-PM operations.
+
+A real vendor DPDM regulator implementation IS already present in
+  drivers/usb/phy/phy-msm-qusb.c
+under CONFIG_MSM_QUSB_PHY. Its compatible is "qcom,qusb2phy" and it registers
+a legacy struct usb_phy using usb_add_phy_dev(). Its regulator enable/disable
+functions are qusb_phy_dpdm_regulator_enable()/disable(). Thus the blocker is
+an incompatible active provider/binding and missing integration, not absence
+of all DPDM source code. The vendor qusb-v2 driver also implements DPDM for
+its own hardware layout; it is not a substitute for MSM8996 register offsets.
+
+The Sony 4.4 reference at commit
+  0c295b15b6d0fb59a64e13b9e0ef2070818ef2a1
+has an earlier, richer phy-msm-qusb.c. Its regulator requests pass through
+qusb_phy_update_dpdm(), and an optional "dpdm" power_supply handles the
+POWER_SUPPLY_PROP_DP_DM QC voltage/pulse commands when the board enables
+qcom,enable-dpdm-pulsing. Enabling that option must follow the complete
+original board include chain; its presence on a development-board DTS alone
+is not proof that Sony dora enables it.
+
+The original msm-pmi8994.dtsi charger has
+  dpdm-supply = <&qusb_phy0>;
+The ported qpnp-smbcharger consumer needs this regulator for high-impedance
+charger detection. Its QC path also calls set_dpdm_psy(), which looks up a
+separate power_supply named "dpdm". The Sony USB extension additionally asks
+the USB power supply for DP_DM commands and reads real D+/D- voltage through
+VADC. A regulator-only implementation does not satisfy these other APIs.
+The extension's DP3P3_DM3P3 command needs its actual provider/routing verified:
+no matching command handler was found in the inspected reference USB drivers.
+
+Original MSM8996 DPDM hardware behavior
+-------------------------------------
+
+Reference files:
+  drivers/usb/phy/phy-msm-qusb.c
+  arch/arm/boot/dts/qcom/msm8996.dtsi
+  arch/arm/boot/dts/qcom/msm8996-tone-common.dtsi
+  arch/arm/boot/dts/qcom/msm-pmi8994.dtsi
+
+The original qusb_phy0 describes the same 0x07411000/0x180 MMIO region,
+QUSB2PHY_PRIM_BCR reset, PM8994 L12 (1.8 V) and L24 (3.075-3.2 V) rails.
+It also votes VDD_MX via pm8994_s2_corner with the RPM corner values <1 5 7>.
+These corner integers are not microvolt values and cannot be copied into a
+native voltage-regulator supply. Original clocks are cfg_ahb_clk and
+ref_clk_src; the CMOS reference selection is described through ref_clk_addr
+0x00388018. The reference efuse resource starts at 0x0007024c with bit 21,
+width 4; the generic driver uses a QFPROM nvmem cell instead. The native
+cell reads 0x7424e bits 5..8, whereas the legacy word starts at 0x7024c
+bit 21. Upstream QFPROM distinguishes corrected and raw register views;
+the native cell is retained rather than changing the address by assumption.
+Physical trim/USB electrical validation is still required.
+
+DPF_DMF enable:
+- Under the PHY lock, vote digital/analog rails, including analog voltage/load.
+- If a prior USB collapse requires high-Z restoration, enable required clocks,
+  reset assert, wait 100-150 us, and deassert.
+- Write UTMI_CTRL1 (0xc0): TERM_SELECT bit4 | XCVR_SELECT_FS bit2 |
+  OP_MODE_NON_DRIVE bit0. Write UTMI_CTRL2 (0xc4): UTMI_ULPI_SEL bit7 |
+  UTMI_TEST_MUX_SEL bit6. Write POWERDOWN (0xb4): CLAMP_N_EN bit5 |
+  FREEZIO_N bit1 | POWER_DOWN bit0, then complete the writes.
+- Balance temporary clocks when suspended. With QC pulsing enabled, clear
+  QC1 (0x70) and QC2 (0x74) under the AHB clock.
+
+DPR_DMR disable clears QC1/QC2 when enabled and releases the DPDM power vote
+only when USB does not still require power. The current 4.19 vendor driver
+also resets before releasing the DPDM vote to avoid leakage with shared PHY
+supplies. These operations are tied to cable state, suspend and PHY ownership;
+a fixed regulator cannot reproduce them.
+
+The original QC path uses QC1 VDP_SRC_EN bit2 / VDM_SRC_EN bit4, QC2 pull-up
+controls, a 250-us pulse, then a 2-3-ms settling interval. This is distinct
+from simply enabling the L24 analog rail or a DPDM regulator.
+
+The Sony board also overrides the generic MSM8996 PHY tuning sequence:
+  TUNE1 0x80 = 0xd0, TUNE2 0x84 = 0xa3,
+  TUNE3 0x88 = 0x83, TUNE4 0x8c = 0xc7.
+The generic driver's defaults are 0xf8, 0xb3, 0x83, 0xc0. Its existing tuning
+properties do not express every changed bit. The old Sony DT contains
+qcom,tune2-offset = <0xfffffffe>; no consumer of that exact property was found
+in either inspected driver tree. Do not claim that the property already
+adjusts efuse tuning or silently reinterpret it as another binding.
+
+The native driver now has an explicit "sony,dora-qusb2-phy" compatible for
+this board. It selects the complete ten-entry Sony initialization sequence,
+including TUNE1/2/3/4 = d0/a3/83/c7, with the same MSM8996 register layout,
+PLL sequence, reset, clocks and regulators. Nonzero per-device nvmem trim
+still overrides the high TUNE2 nibble after board defaults; an unfused or
+unreadable trim leaves the Sony a3 fallback. The original Sony copyright,
+GPL-2.0 provenance and source commit are retained beside the table. Generic
+MSM8996 and SDM845 compatibles retain their existing tables. This restores
+board tuning; it neither creates a DPDM provider nor enables charging. PHY
+lock, USB electrical behavior and suspend still require physical tests.
+
+Required proper integration
+---------------------------
+
+Only one driver may own this MMIO region, reset and clock state. Creating a
+second vendor PHY node next to the active generic PHY would duplicate that
+ownership. Adding only dpdm-supply pointing to the generic PHY does not
+create a regulator provider; deleting the property to suppress probe failure
+would leave the hardware operation unimplemented.
+
+Two real approaches require further implementation and testing:
+
+1. Extend the existing generic MSM8996 PHY with an explicit optional DPDM
+   regulator and, where required, QC command provider. Refactor shared rail,
+   clock, reset and runtime-PM ownership so USB and charger votes are balanced.
+   Serialize generic init/exit/set_mode/runtime callbacks with DPDM access.
+   Keep rails on while either user needs them, perform checked register writes,
+   and restore controller/UTMI ownership when leaving high-Z mode. Resetting
+   an active USB link to satisfy a charger vote is unsafe. Connection and
+   collapse state must come from real USB/VBUS events: phy_initialized alone
+   does not mean that a cable is present or absent. Add checked teardown and
+   preserve other SoCs' behavior when the optional provider is not requested.
+   Calling generic phy_init() from regulator enable is insufficient: normal
+   PHY initialization enables driving mode rather than the required high-Z.
+
+2. Bind the existing vendor usb_phy driver with its real resources, voltage-
+   corner provider and board tuning; remove the competing generic binding.
+   DWC3 core supports legacy "usb-phy" as well as generic "phys", but current
+   dwc3-qcom does not issue the vendor connect/disconnect notifications found
+   in dwc3-msm. Merely replacing one phandle leaves cable_connected and power
+   policy incomplete. Port the needed glue/notification behavior or a checked
+   adaptation, and restore Sony QC supply/API support where the selected
+   vendor driver differs from the reference. Audit and test work/notifier
+   cleanup and clock/regulator error paths before enabling the binding.
+
+The Dora DT no longer describes USB_DETECT GPIO24 as a digital ID input.
+Sony uses this output with a VADC/pullup circuit; the removed GPIO extcon
+was not an implementation of that circuit. DWC3 remains fixed high-speed
+peripheral mode without ID/VBUS extcon. dwc3-qcom's no-extcon path enables
+the peripheral VBUS override; this is not real cable/charger detection.
+Restore a real charger/USB event path,
+avoid competing USB power-supply owners, and verify ordinary SDP/CDP/DCP
+charging before enabling high-voltage negotiation. Native and vendor PHY
+interrupt-bit definitions also differ; resolve against the MSM8996 source
+layout instead of copying newer SoC definitions without verification.
+
+For F8131 and F8132 separately test: boot with/without USB cable, charger types,
+USB enumeration/ADB, cable removal/reinsertion, bus and system suspend/resume,
+charge-current limits, real DP/DM voltages, temperature controls, no PHY reset
+during transfer, and OTG only after its complete role/power path is enabled.
+A successful build confirms none of these electrical behaviors.

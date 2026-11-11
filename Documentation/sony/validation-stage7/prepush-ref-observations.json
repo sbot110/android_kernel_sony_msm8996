@@ -1,0 +1,11 @@
+{
+  "no_stage7_push_has_occurred": true,
+  "target_branch_unchanged": true,
+  "changes_observed_before_our_push": {
+    "refs/heads/kernel-5.5": {
+      "initial": "470fdeebc4a60c93095267c2861ff2e6e642985b",
+      "prepush": "030f0b026abcc01b990cc7f8b04b9e65fb9bbe74"
+    }
+  },
+  "interpretation": "External remote ref change observed before our publication; not undone or written by this task. Post-push comparisons use both initial and immediately-before-push snapshots."
+}

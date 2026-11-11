@@ -1,0 +1,65 @@
+Sony dora Clearpad framebuffer backend
+======================================
+
+Scope
+-----
+The existing Sony Clearpad core and I2C driver now support the real Tone
+MDSS framebuffer/incell API. The FB backend follows the original Sony 4.4
+notification contract; it does not force a panel, LCD ID, controller family
+or F8131/F8132 hardware variant. Existing controller/firmware code remains
+available. The matching board I2C/pinctrl/IRQ/controller configuration must
+still be integrated and tested on both models.
+
+Configuration and interface
+---------------------------
+Enable INPUT_TOUCHSCREEN, TOUCHSCREEN_CLEARPAD_CORE and
+TOUCHSCREEN_CLEARPAD_I2C with FB_MSM_MDSS_SPECIFIC_PANEL. The hidden
+TOUCHSCREEN_CLEARPAD_FB option follows the Tone incell provider, preventing
+an incompatible DRM backend/Tone incell-header combination. Boards using
+the existing DRM incell provider retain the DRM panel backend.
+The FB path accepts both normal and Sony extended early/late blank events,
+uses INCELL_DISPLAY_HW_RESET as original Tone does, and preserves the zero
+notifier return used by fb_blank() for failed-blank rollback. It omits the
+newer DRM-only unconditional suspend call: original Tone coordinates sleep
+through its power-user/wakeup-gesture state machine. No panel ADC selection
+or panel initialization sequence is changed here.
+
+Confirmed lifecycle fixes
+-------------------------
+* IRQs are initially requested with IRQ_NOAUTOEN, preventing IRQ processing
+  before input/controller initialization. Registration is tracked separately
+  from IRQ enable state, including optional noise-detection IRQs.
+* Display notification registration follows IRQ/input setup. Shutdown sets a
+  stop flag under the controller/noise locks, prevents IRQ re-enabling and
+  delayed-work rearming, and immediately masks active IRQ lines.
+* Teardown removes notifier/sysfs producers, synchronizes and frees IRQs
+  without holding the controller lock needed by IRQ threads, then drains
+  post-probe/resume/reset/watchdog work before releasing input and state.
+  Interrupt waiters are woken with ENODEV during shutdown.
+* A common unwind handles partial probe failure and remove, unregistering
+  any registered input device and balancing created attributes, links,
+  node references, optional RMI child and wakeup setup.
+* /sys/devices/common_touch/touch is retained using a real allocated root
+  device with root_device_register/root_device_unregister, replacing an
+  embedded device that outlived its enclosing state and lacked release.
+* The enabled debug attribute tracks real IRQ ownership and waits for IRQ
+  handlers without holding their controller mutex. It validates input and
+  propagates request errors instead of reporting success after failure.
+* GPIO/IRQ provider errors preserve EPROBE_DEFER. The retained DRM path also
+  preserves deferred panel discovery, and its shared panel pointer is
+  exported for separately built core/I2C modules.
+
+Validation and limits
+---------------------
+ARM64 compilation of clearpad_core.o and clearpad_i2c.o passed with the
+Tone FB backend and, separately, with the retained DRM backend. This is a
+source/API check, not a runtime fault-injection or hardware test. The final
+combined kernel link is reported separately in build validation records.
+
+Neither F8131 nor F8132 has been tested with this kernel. Required tests
+include every stock panel/controller combination, startup and firmware
+identification, multitouch coordinates, noise detection under cellular and
+charging load, display blank/unblank, suspend/resume, wake gestures and
+error recovery. Factory direct RMI access is optional and is not covered
+by these object builds. No complete hardware compatibility claim follows
+from successful compilation.

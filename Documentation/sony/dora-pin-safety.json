@@ -1,0 +1,397 @@
+{
+  "reference_commit": "0c295b15b6d0fb59a64e13b9e0ef2070818ef2a1",
+  "reference_entry": "msm8996-v3-tone-dora_generic.dts",
+  "all_four_original_variants_same_pin_defaults": true,
+  "groups": {
+    "pm8994-gpio": {
+      "1": {
+        "status": "okay",
+        "properties": {
+          "qcom,master-en": 0
+        }
+      },
+      "2": {
+        "status": "ok",
+        "properties": {
+          "qcom,mode": 0,
+          "qcom,pull": 0,
+          "qcom,vin-sel": 2,
+          "qcom,src-sel": 0,
+          "qcom,master-en": 1
+        }
+      },
+      "3": {
+        "status": "ok",
+        "properties": {
+          "qcom,mode": 0,
+          "qcom,pull": 0,
+          "qcom,vin-sel": 2,
+          "qcom,src-sel": 0,
+          "qcom,master-en": 1
+        }
+      },
+      "4": {
+        "status": "ok",
+        "properties": {
+          "qcom,mode": 0,
+          "qcom,pull": 0,
+          "qcom,vin-sel": 2,
+          "qcom,src-sel": 0,
+          "qcom,master-en": 1
+        }
+      },
+      "5": {
+        "status": "ok",
+        "properties": {
+          "qcom,mode": 0,
+          "qcom,pull": 0,
+          "qcom,vin-sel": 2,
+          "qcom,src-sel": 0,
+          "qcom,master-en": 1
+        }
+      },
+      "6": {
+        "status": "okay",
+        "properties": {
+          "qcom,master-en": 0
+        }
+      },
+      "7": {
+        "status": "ok",
+        "properties": {
+          "qcom,mode": 1,
+          "qcom,output-type": 0,
+          "qcom,invert": 0,
+          "qcom,pull": 5,
+          "qcom,vin-sel": 2,
+          "qcom,out-strength": 1,
+          "qcom,src-sel": 0,
+          "qcom,master-en": 1
+        }
+      },
+      "8": {
+        "status": "okay",
+        "properties": {
+          "qcom,mode": 1,
+          "qcom,invert": 0,
+          "qcom,pull": 4,
+          "qcom,vin-sel": 2,
+          "qcom,src-sel": 0,
+          "qcom,master-en": 0
+        }
+      },
+      "9": {
+        "status": "okay",
+        "properties": {
+          "qcom,mode": 1,
+          "qcom,output-type": 0,
+          "qcom,invert": 1,
+          "qcom,vin-sel": 0,
+          "qcom,out-strength": 1,
+          "qcom,src-sel": 0,
+          "qcom,master-en": 0
+        }
+      },
+      "10": {
+        "status": "ok",
+        "properties": {
+          "qcom,mode": 0,
+          "qcom,pull": 4,
+          "qcom,vin-sel": 2,
+          "qcom,src-sel": 0,
+          "qcom,master-en": 1
+        }
+      },
+      "11": {
+        "status": "okay",
+        "properties": {
+          "qcom,master-en": 0
+        }
+      },
+      "12": {
+        "status": "okay",
+        "properties": {
+          "qcom,master-en": 0
+        }
+      },
+      "13": {
+        "status": "ok",
+        "properties": {
+          "qcom,mode": 1,
+          "qcom,output-type": 0,
+          "qcom,invert": 0,
+          "qcom,pull": 5,
+          "qcom,vin-sel": 2,
+          "qcom,out-strength": 1,
+          "qcom,src-sel": 0,
+          "qcom,master-en": 1
+        }
+      },
+      "14": {
+        "status": "okay",
+        "properties": {
+          "qcom,mode": 1,
+          "qcom,output-type": 0,
+          "qcom,invert": 1,
+          "qcom,vin-sel": 2,
+          "qcom,out-strength": 1,
+          "qcom,src-sel": 0,
+          "qcom,master-en": 0
+        }
+      },
+      "15": {
+        "status": "okay",
+        "properties": {
+          "qcom,mode": 1,
+          "qcom,output-type": 0,
+          "qcom,pull": 5,
+          "qcom,vin-sel": 2,
+          "qcom,out-strength": 1,
+          "qcom,src-sel": 2,
+          "qcom,master-en": 1
+        }
+      },
+      "16": {
+        "status": "disabled",
+        "properties": {}
+      },
+      "17": {
+        "status": "okay",
+        "properties": {
+          "qcom,master-en": 0
+        }
+      },
+      "18": {
+        "status": "ok",
+        "properties": {
+          "qcom,mode": 1,
+          "qcom,output-type": 0,
+          "qcom,invert": 0,
+          "qcom,pull": 5,
+          "qcom,vin-sel": 2,
+          "qcom,out-strength": 1,
+          "qcom,src-sel": 3,
+          "qcom,master-en": 1
+        }
+      },
+      "19": {
+        "status": "okay",
+        "properties": {
+          "qcom,mode": 1,
+          "qcom,invert": 0,
+          "qcom,pull": 4,
+          "qcom,vin-sel": 2,
+          "qcom,src-sel": 0,
+          "qcom,master-en": 0
+        }
+      },
+      "20": {
+        "status": "disabled",
+        "properties": {}
+      },
+      "22": {
+        "status": "okay",
+        "properties": {
+          "qcom,master-en": 0
+        }
+      }
+    },
+    "pmi8994-gpio": {
+      "1": {
+        "status": "okay",
+        "properties": {
+          "qcom,mode": 1,
+          "qcom,output-type": 0,
+          "qcom,invert": 0,
+          "qcom,vin-sel": 2,
+          "qcom,out-strength": 1,
+          "qcom,src-sel": 0,
+          "qcom,master-en": 1
+        }
+      },
+      "2": {
+        "status": "okay",
+        "properties": {
+          "qcom,mode": 1,
+          "qcom,pull": 5,
+          "qcom,vin-sel": 2,
+          "qcom,src-sel": 0,
+          "qcom,master-en": 0
+        }
+      },
+      "3": {
+        "status": "okay",
+        "properties": {
+          "qcom,mode": 1,
+          "qcom,pull": 5,
+          "qcom,vin-sel": 2,
+          "qcom,src-sel": 0,
+          "qcom,master-en": 0
+        }
+      },
+      "4": {
+        "status": "okay",
+        "properties": {
+          "qcom,mode": 1,
+          "qcom,output-type": 0,
+          "qcom,invert": 1,
+          "qcom,vin-sel": 2,
+          "qcom,out-strength": 1,
+          "qcom,src-sel": 0,
+          "qcom,master-en": 1
+        }
+      },
+      "5": {
+        "status": "okay",
+        "properties": {
+          "qcom,mode": 1,
+          "qcom,output-type": 0,
+          "qcom,invert": 0,
+          "qcom,vin-sel": 2,
+          "qcom,out-strength": 1,
+          "qcom,src-sel": 0,
+          "qcom,master-en": 1
+        }
+      },
+      "6": {
+        "status": "okay",
+        "properties": {
+          "qcom,mode": 1,
+          "qcom,output-type": 0,
+          "qcom,invert": 0,
+          "qcom,vin-sel": 2,
+          "qcom,out-strength": 1,
+          "qcom,src-sel": 0,
+          "qcom,master-en": 1
+        }
+      },
+      "7": {
+        "status": "okay",
+        "properties": {
+          "qcom,mode": 1,
+          "qcom,output-type": 0,
+          "qcom,invert": 0,
+          "qcom,vin-sel": 0,
+          "qcom,out-strength": 1,
+          "qcom,src-sel": 0,
+          "qcom,master-en": 1
+        }
+      },
+      "8": {
+        "status": "okay",
+        "properties": {
+          "qcom,mode": 1,
+          "qcom,output-type": 0,
+          "qcom,invert": 0,
+          "qcom,vin-sel": 2,
+          "qcom,out-strength": 1,
+          "qcom,src-sel": 0,
+          "qcom,master-en": 1
+        }
+      },
+      "9": {
+        "status": "okay",
+        "properties": {}
+      },
+      "10": {
+        "status": "okay",
+        "properties": {
+          "qcom,mode": 1,
+          "qcom,output-type": 0,
+          "qcom,invert": 0,
+          "qcom,pull": 5,
+          "qcom,vin-sel": 2,
+          "qcom,out-strength": 1,
+          "qcom,src-sel": 0,
+          "qcom,master-en": 1
+        }
+      }
+    },
+    "pm8994-mpp": {
+      "1": {
+        "status": "disabled",
+        "properties": {}
+      },
+      "2": {
+        "status": "okay",
+        "properties": {
+          "qcom,mode": 4,
+          "qcom,output-type": 0,
+          "qcom,vin-sel": 2,
+          "qcom,src-sel": 0,
+          "qcom,master-en": 1,
+          "qcom,ain-route": 1
+        }
+      },
+      "3": {
+        "status": "disabled",
+        "properties": {}
+      },
+      "4": {
+        "status": "okay",
+        "properties": {
+          "qcom,mode": 1,
+          "qcom,output-type": 0,
+          "qcom,invert": 1,
+          "qcom,vin-sel": 2,
+          "qcom,src-sel": 0,
+          "qcom,master-en": 0
+        }
+      },
+      "5": {
+        "status": "okay",
+        "properties": {
+          "qcom,mode": 4,
+          "qcom,master-en": 1,
+          "qcom,ain-route": 0
+        }
+      },
+      "6": {
+        "status": "okay",
+        "properties": {
+          "qcom,master-en": 0
+        }
+      },
+      "7": {
+        "status": "disabled",
+        "properties": {}
+      },
+      "8": {
+        "status": "okay",
+        "properties": {
+          "qcom,mode": 4,
+          "qcom,master-en": 1,
+          "qcom,ain-route": 3
+        }
+      }
+    }
+  },
+  "fuel_gauge_safety": {
+    "qcom,hot-bat-decidegc": [
+      550
+    ],
+    "qcom,warm-bat-decidegc": [
+      450
+    ],
+    "qcom,cool-bat-decidegc": [
+      100
+    ],
+    "qcom,cold-bat-decidegc": [
+      50
+    ],
+    "qcom,cold-hot-jeita-hysteresis": [
+      20,
+      20
+    ],
+    "somc,cool-warm-jeita-hysteresis": [
+      20,
+      20
+    ],
+    "qcom,fg-iterm-ma": [
+      150
+    ],
+    "qcom,fg-chg-iterm-ma": [
+      150
+    ]
+  }
+}

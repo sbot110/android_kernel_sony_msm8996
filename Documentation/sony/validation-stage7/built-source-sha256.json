@@ -1,0 +1,16 @@
+{
+  "drivers/clk/qcom/Makefile": "5c08ff2a7255adb4f87ef5e41094c3325cc6d93e8464821e01870d83d5fad282",
+  "drivers/clk/qcom/clk-msm8996-cpu-native.c": "24061c3ab09ecab4ffea1faf6745636fcfdb0dbb97491d2ab07fd55adab90c56",
+  "drivers/clk/qcom/clk-msm8996-cpu-native.h": "922b9655f931a219c52b3b15efee3ba28affe1404815cd5d8ef269d77a2d91a9",
+  "drivers/phy/qualcomm/phy-qcom-qusb2.c": "09341111aca4c0dbfec55442ba519fbd25cbdd9ad91ec3cd570ad7d691acdf2e",
+  "drivers/regulator/spm-regulator.c": "265a21fdbb85a5994313804c50086594d19e7279182a80a43caf8cd2c205a84f",
+  "drivers/soc/qcom/spm_devices.c": "889912bfc9984e02357ddec07b2b28cbea6fe171ed9581cecaffe126309386ad",
+  "drivers/soc/qcom/watchdog_v2.c": "6b23d0da499da7b1f4c63435659f67407419769c80f9305853f84900d6ca1fff",
+  "scripts/dora/build.sh": "75ca6cf9f2b3fa06ceb6e5941e68111ddd97a7860c20f601be95020c9730478e",
+  "scripts/dora/check-artifacts.py": "51bd084e000724f0323dbc31952f1e1b2ece9217394f299a7773b3e055276e86",
+  "scripts/dora/check-boot-image.py": "605a9448f96d0efd05afbca3727c4177a2822ec9fd06ec5969564c15022bbc0c",
+  "scripts/dora/check-cpu-native.py": "43c72e76cfe42c432849d564c3aa8520cbbe272e6a7b78ecad16e49db7fcb4c0",
+  "scripts/dora/check-spm-transactions.py": "b9b0f9c7e33b6c19a9dfed4e460629e7b271fdd736b2c4c1d5224cd120220adf",
+  "scripts/dora/check-usb-handoff.py": "8e6010642f5f3d2c92bca5a8c5e5ff4b61bfc217acfb893876fe7bb92986d61e",
+  "scripts/dora/check-watchdog.py": "7002f963b0241002c24dfd79179d6345de370e332cc5e4365221a0ecadf4205a"
+}

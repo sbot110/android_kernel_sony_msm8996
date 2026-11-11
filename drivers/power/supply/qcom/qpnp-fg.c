@@ -32,6 +32,7 @@
 #include <linux/module.h>
 #include <linux/ktime.h>
 #include <linux/power_supply.h>
+#include <linux/pm_wakeup.h>
 #include <linux/of_batterydata.h>
 #include <linux/spinlock.h>
 #include <linux/string_helpers.h>
@@ -329,6 +330,9 @@ static int fg_reset_on_lockup;
 static int fg_sense_type = -EINVAL;
 static int fg_restart;
 
+/* Serialize module-parameter users against the start of driver teardown. */
+static DEFINE_MUTEX(fg_param_lock);
+
 static int fg_est_dump;
 module_param_named(
 	first_est_dump, fg_est_dump, int, 00600
@@ -356,6 +360,7 @@ struct fg_irq {
 	int			irq;
 	bool			disabled;
 	bool			wakeup;
+	bool			requested;
 };
 
 enum fg_soc_irq {
@@ -440,23 +445,38 @@ static struct register_offset offset[] = {
 		((chip)->mem_base + (chip)->offset[MEM_INTF_WR_DATA0])
 
 struct fg_wakeup_source {
-	struct wakeup_source	source;
+	struct wakeup_source	*source;
 	unsigned long		enabled;
 };
 
+static void fg_release_wakeup_source(void *data)
+{
+	wakeup_source_unregister(data);
+}
+
+static int fg_init_wakeup_source(struct device *dev,
+		struct fg_wakeup_source *source, const char *name)
+{
+	source->source = wakeup_source_register(dev, name);
+	if (!source->source)
+		return -ENOMEM;
+	return devm_add_action_or_reset(dev, fg_release_wakeup_source,
+			source->source);
+}
+
 static void fg_stay_awake(struct fg_wakeup_source *source)
 {
-	if (!__test_and_set_bit(0, &source->enabled)) {
-		__pm_stay_awake(&source->source);
-		pr_debug("enabled source %s\n", source->source.name);
+	if (!test_and_set_bit(0, &source->enabled)) {
+		__pm_stay_awake(source->source);
+		pr_debug("enabled source %s\n", source->source->name);
 	}
 }
 
 static void fg_relax(struct fg_wakeup_source *source)
 {
-	if (__test_and_clear_bit(0, &source->enabled)) {
-		__pm_relax(&source->source);
-		pr_debug("disabled source %s\n", source->source.name);
+	if (test_and_clear_bit(0, &source->enabled)) {
+		__pm_relax(source->source);
+		pr_debug("disabled source %s\n", source->source->name);
 	}
 }
 
@@ -517,9 +537,13 @@ struct fg_chip {
 	struct work_struct	charge_full_work;
 	struct work_struct	gain_comp_work;
 	struct work_struct	bcl_hi_power_work;
+	struct work_struct	hard_jeita_work;
+	unsigned long		hard_jeita_pending;
 	struct power_supply	*batt_psy;
 	struct power_supply	*usb_psy;
 	struct power_supply	*dc_psy;
+	struct mutex		psy_lock;
+	struct fg_wakeup_source	hard_jeita_wakeup_source;
 	struct fg_wakeup_source	memif_wakeup_source;
 	struct fg_wakeup_source	profile_wakeup_source;
 	struct fg_wakeup_source	empty_check_wakeup_source;
@@ -535,6 +559,7 @@ struct fg_chip {
 	bool			use_otp_profile;
 	bool			battery_missing;
 	bool			power_supply_registered;
+	bool			somc_sysfs_registered;
 	bool			sw_rbias_ctrl;
 	bool			use_thermal_coefficients;
 	bool			esr_strict_filter;
@@ -553,6 +578,8 @@ struct fg_chip {
 	bool			charging_disabled;
 	bool			use_vbat_low_empty_soc;
 	bool			fg_shutdown;
+	bool			cleanup_done;
+	bool			stopping;
 	bool			use_soft_jeita_irq;
 	bool			allow_false_negative_isense;
 	struct delayed_work	update_jeita_setting;
@@ -1364,6 +1391,18 @@ static int fg_check_ima_exception(struct fg_chip *chip, bool check_hw_sts)
 	return rc;
 }
 
+static int fg_set_irq_wake(struct fg_irq *irq, bool enable)
+{
+	int rc;
+
+	if (irq->wakeup == enable)
+		return 0;
+	rc = enable ? enable_irq_wake(irq->irq) : disable_irq_wake(irq->irq);
+	if (!rc)
+		irq->wakeup = enable;
+	return rc;
+}
+
 static void fg_enable_irqs(struct fg_chip *chip, bool enable)
 {
 	if (!(enable ^ chip->irqs_enabled))
@@ -1371,39 +1410,39 @@ static void fg_enable_irqs(struct fg_chip *chip, bool enable)
 
 	if (enable) {
 		enable_irq(chip->soc_irq[DELTA_SOC].irq);
-		enable_irq_wake(chip->soc_irq[DELTA_SOC].irq);
+		fg_set_irq_wake(&chip->soc_irq[DELTA_SOC], true);
 		if (!chip->full_soc_irq_enabled) {
 			enable_irq(chip->soc_irq[FULL_SOC].irq);
-			enable_irq_wake(chip->soc_irq[FULL_SOC].irq);
+			fg_set_irq_wake(&chip->soc_irq[FULL_SOC], true);
 			chip->full_soc_irq_enabled = true;
 		}
 		enable_irq(chip->batt_irq[BATT_MISSING].irq);
 		if (!chip->vbat_low_irq_enabled) {
 			enable_irq(chip->batt_irq[VBATT_LOW].irq);
-			enable_irq_wake(chip->batt_irq[VBATT_LOW].irq);
+			fg_set_irq_wake(&chip->batt_irq[VBATT_LOW], true);
 			chip->vbat_low_irq_enabled = true;
 		}
 		if (!chip->use_vbat_low_empty_soc) {
 			enable_irq(chip->soc_irq[EMPTY_SOC].irq);
-			enable_irq_wake(chip->soc_irq[EMPTY_SOC].irq);
+			fg_set_irq_wake(&chip->soc_irq[EMPTY_SOC], true);
 		}
 		chip->irqs_enabled = true;
 	} else {
-		disable_irq_wake(chip->soc_irq[DELTA_SOC].irq);
+		fg_set_irq_wake(&chip->soc_irq[DELTA_SOC], false);
 		disable_irq_nosync(chip->soc_irq[DELTA_SOC].irq);
 		if (chip->full_soc_irq_enabled) {
-			disable_irq_wake(chip->soc_irq[FULL_SOC].irq);
+			fg_set_irq_wake(&chip->soc_irq[FULL_SOC], false);
 			disable_irq_nosync(chip->soc_irq[FULL_SOC].irq);
 			chip->full_soc_irq_enabled = false;
 		}
 		disable_irq(chip->batt_irq[BATT_MISSING].irq);
 		if (chip->vbat_low_irq_enabled) {
-			disable_irq_wake(chip->batt_irq[VBATT_LOW].irq);
+			fg_set_irq_wake(&chip->batt_irq[VBATT_LOW], false);
 			disable_irq_nosync(chip->batt_irq[VBATT_LOW].irq);
 			chip->vbat_low_irq_enabled = false;
 		}
 		if (!chip->use_vbat_low_empty_soc) {
-			disable_irq_wake(chip->soc_irq[EMPTY_SOC].irq);
+			fg_set_irq_wake(&chip->soc_irq[EMPTY_SOC], false);
 			disable_irq_nosync(chip->soc_irq[EMPTY_SOC].irq);
 		}
 		chip->irqs_enabled = false;
@@ -2079,24 +2118,24 @@ static int get_current_time(unsigned long *now_tm_sec)
 	struct rtc_device *rtc;
 	int rc;
 
-	rtc = rtc_class_open(CONFIG_RTC_HCTOSYS_DEVICE);
+	rtc = rtc_class_open(CONFIG_QPNP_FG_RTC_DEVICE);
 	if (rtc == NULL) {
 		pr_err("%s: unable to open rtc device (%s)\n",
-			__FILE__, CONFIG_RTC_HCTOSYS_DEVICE);
+			__FILE__, CONFIG_QPNP_FG_RTC_DEVICE);
 		return -EINVAL;
 	}
 
 	rc = rtc_read_time(rtc, &tm);
 	if (rc) {
 		pr_err("Error reading rtc device (%s) : %d\n",
-			CONFIG_RTC_HCTOSYS_DEVICE, rc);
+			CONFIG_QPNP_FG_RTC_DEVICE, rc);
 		goto close_time;
 	}
 
 	rc = rtc_valid_tm(&tm);
 	if (rc) {
 		pr_err("Invalid RTC time (%s): %d\n",
-			CONFIG_RTC_HCTOSYS_DEVICE, rc);
+			CONFIG_QPNP_FG_RTC_DEVICE, rc);
 		goto close_time;
 	}
 	rtc_tm_to_time(&tm, now_tm_sec);
@@ -3792,6 +3831,9 @@ static enum alarmtimer_restart fg_cap_learning_alarm_cb(struct alarm *alarm,
 	struct fg_chip *chip = container_of(alarm, struct fg_chip,
 					fg_cap_learning_alarm);
 
+	if (READ_ONCE(chip->stopping))
+		return ALARMTIMER_NORESTART;
+
 	if (chip->learning_data.active) {
 		if (fg_debug_mask & FG_AGING)
 			pr_info("alarm fired\n");
@@ -4160,15 +4202,46 @@ out:
 	return rc;
 }
 
+/* Each cache owns one 4.19 power_supply reference, released by devres. */
+static struct power_supply *fg_get_supply(struct fg_chip *chip,
+		struct power_supply **cache, const char *name)
+{
+	struct power_supply *psy;
+
+	mutex_lock(&chip->psy_lock);
+	if (!*cache && !READ_ONCE(chip->stopping))
+		*cache = power_supply_get_by_name(name);
+	psy = *cache;
+	mutex_unlock(&chip->psy_lock);
+	return psy;
+}
+
+static void fg_put_supply_refs(void *data)
+{
+	struct fg_chip *chip = data;
+
+	mutex_lock(&chip->psy_lock);
+	if (chip->batt_psy)
+		power_supply_put(chip->batt_psy);
+	if (chip->usb_psy)
+		power_supply_put(chip->usb_psy);
+	if (chip->dc_psy)
+		power_supply_put(chip->dc_psy);
+	chip->batt_psy = NULL;
+	chip->usb_psy = NULL;
+	chip->dc_psy = NULL;
+	mutex_unlock(&chip->psy_lock);
+	mutex_destroy(&chip->psy_lock);
+}
+
 static bool is_usb_present(struct fg_chip *chip)
 {
 	union power_supply_propval prop = {0,};
+	struct power_supply *psy;
 
-	if (!chip->usb_psy)
-		chip->usb_psy = power_supply_get_by_name("usb");
-
-	if (chip->usb_psy)
-		power_supply_get_property(chip->usb_psy,
+	psy = fg_get_supply(chip, &chip->usb_psy, "usb");
+	if (psy)
+		power_supply_get_property(psy,
 				POWER_SUPPLY_PROP_PRESENT, &prop);
 	return prop.intval != 0;
 }
@@ -4176,12 +4249,11 @@ static bool is_usb_present(struct fg_chip *chip)
 static bool is_dc_present(struct fg_chip *chip)
 {
 	union power_supply_propval prop = {0,};
+	struct power_supply *psy;
 
-	if (!chip->dc_psy)
-		chip->dc_psy = power_supply_get_by_name("dc");
-
-	if (chip->dc_psy)
-		power_supply_get_property(chip->dc_psy,
+	psy = fg_get_supply(chip, &chip->dc_psy, "dc");
+	if (psy)
+		power_supply_get_property(psy,
 				POWER_SUPPLY_PROP_PRESENT, &prop);
 	return prop.intval != 0;
 }
@@ -4194,12 +4266,11 @@ static bool is_input_present(struct fg_chip *chip)
 static bool is_otg_present(struct fg_chip *chip)
 {
 	union power_supply_propval prop = {0,};
+	struct power_supply *psy;
 
-	if (!chip->usb_psy)
-		chip->usb_psy = power_supply_get_by_name("usb");
-
-	if (chip->usb_psy)
-		power_supply_get_property(chip->usb_psy,
+	psy = fg_get_supply(chip, &chip->usb_psy, "usb");
+	if (psy)
+		power_supply_get_property(psy,
 				POWER_SUPPLY_PROP_USB_OTG, &prop);
 	return prop.intval != 0;
 }
@@ -4209,13 +4280,7 @@ static bool is_charger_available(struct fg_chip *chip)
 	if (!chip->batt_psy_name)
 		return false;
 
-	if (!chip->batt_psy)
-		chip->batt_psy = power_supply_get_by_name(chip->batt_psy_name);
-
-	if (!chip->batt_psy)
-		return false;
-
-	return true;
+	return !!fg_get_supply(chip, &chip->batt_psy, chip->batt_psy_name);
 }
 
 static int set_prop_enable_charging(struct fg_chip *chip, bool enable)
@@ -4280,13 +4345,13 @@ static void status_change_work(struct work_struct *work)
 		if (!chip->vbat_low_irq_enabled &&
 				!chip->use_vbat_low_empty_soc) {
 			enable_irq(chip->batt_irq[VBATT_LOW].irq);
-			enable_irq_wake(chip->batt_irq[VBATT_LOW].irq);
+			fg_set_irq_wake(&chip->batt_irq[VBATT_LOW], true);
 			chip->vbat_low_irq_enabled = true;
 		}
 
 		if (!chip->full_soc_irq_enabled) {
 			enable_irq(chip->soc_irq[FULL_SOC].irq);
-			enable_irq_wake(chip->soc_irq[FULL_SOC].irq);
+			fg_set_irq_wake(&chip->soc_irq[FULL_SOC], true);
 			chip->full_soc_irq_enabled = true;
 		}
 
@@ -4295,13 +4360,13 @@ static void status_change_work(struct work_struct *work)
 	} else if (chip->status == POWER_SUPPLY_STATUS_DISCHARGING) {
 		if (chip->vbat_low_irq_enabled &&
 				!chip->use_vbat_low_empty_soc) {
-			disable_irq_wake(chip->batt_irq[VBATT_LOW].irq);
+			fg_set_irq_wake(&chip->batt_irq[VBATT_LOW], false);
 			disable_irq_nosync(chip->batt_irq[VBATT_LOW].irq);
 			chip->vbat_low_irq_enabled = false;
 		}
 
 		if (chip->full_soc_irq_enabled) {
-			disable_irq_wake(chip->soc_irq[FULL_SOC].irq);
+			fg_set_irq_wake(&chip->soc_irq[FULL_SOC], false);
 			disable_irq_nosync(chip->soc_irq[FULL_SOC].irq);
 			chip->full_soc_irq_enabled = false;
 		}
@@ -4884,6 +4949,9 @@ static int fg_power_get_property(struct power_supply *psy,
 	struct fg_chip *chip =  power_supply_get_drvdata(psy);
 	bool vbatt_low_sts;
 
+	if (READ_ONCE(chip->stopping))
+		return -ENODEV;
+
 	switch (psp) {
 	case POWER_SUPPLY_PROP_BATTERY_TYPE:
 		if (chip->battery_missing)
@@ -5002,6 +5070,9 @@ static int fg_power_set_property(struct power_supply *psy,
 	struct fg_chip *chip = power_supply_get_drvdata(psy);
 	int rc = 0, unused;
 
+	if (READ_ONCE(chip->stopping))
+		return -ENODEV;
+
 #ifdef CONFIG_QPNP_FG_EXTENSION
 	if (fg_debug_mask & FG_SOMC)
 		pr_info("psp %d, val = %d\n", psp, val->intval);
@@ -5042,9 +5113,7 @@ static int fg_power_set_property(struct power_supply *psy,
 								false;
 			}
 			if (!chip->batt_irq[JEITA_SOFT_COLD].wakeup) {
-				enable_irq_wake(
-					chip->batt_irq[JEITA_SOFT_COLD].irq);
-				chip->batt_irq[JEITA_SOFT_COLD].wakeup = true;
+				fg_set_irq_wake(&chip->batt_irq[JEITA_SOFT_COLD], true);
 			}
 			if (chip->batt_irq[JEITA_SOFT_HOT].disabled) {
 				enable_irq(
@@ -5052,15 +5121,11 @@ static int fg_power_set_property(struct power_supply *psy,
 				chip->batt_irq[JEITA_SOFT_HOT].disabled = false;
 			}
 			if (!chip->batt_irq[JEITA_SOFT_HOT].wakeup) {
-				enable_irq_wake(
-					chip->batt_irq[JEITA_SOFT_HOT].irq);
-				chip->batt_irq[JEITA_SOFT_HOT].wakeup = true;
+				fg_set_irq_wake(&chip->batt_irq[JEITA_SOFT_HOT], true);
 			}
 		} else {
 			if (chip->batt_irq[JEITA_SOFT_COLD].wakeup) {
-				disable_irq_wake(
-					chip->batt_irq[JEITA_SOFT_COLD].irq);
-				chip->batt_irq[JEITA_SOFT_COLD].wakeup = false;
+				fg_set_irq_wake(&chip->batt_irq[JEITA_SOFT_COLD], false);
 			}
 			if (!chip->batt_irq[JEITA_SOFT_COLD].disabled) {
 				disable_irq_nosync(
@@ -5068,9 +5133,7 @@ static int fg_power_set_property(struct power_supply *psy,
 				chip->batt_irq[JEITA_SOFT_COLD].disabled = true;
 			}
 			if (chip->batt_irq[JEITA_SOFT_HOT].wakeup) {
-				disable_irq_wake(
-					chip->batt_irq[JEITA_SOFT_HOT].irq);
-				chip->batt_irq[JEITA_SOFT_HOT].wakeup = false;
+				fg_set_irq_wake(&chip->batt_irq[JEITA_SOFT_HOT], false);
 			}
 			if (!chip->batt_irq[JEITA_SOFT_HOT].disabled) {
 				disable_irq_nosync(
@@ -5404,32 +5467,53 @@ static enum alarmtimer_restart fg_hard_jeita_alarm_cb(struct alarm *alarm,
 {
 	struct fg_chip *chip = container_of(alarm,
 			struct fg_chip, hard_jeita_alarm);
+
+	if (READ_ONCE(chip->stopping))
+		return ALARMTIMER_NORESTART;
+
+	/* Power-supply callbacks and regmap accesses may sleep. */
+	if (!test_and_set_bit(0, &chip->hard_jeita_pending)) {
+		fg_stay_awake(&chip->hard_jeita_wakeup_source);
+		schedule_work(&chip->hard_jeita_work);
+	}
+	alarm_forward_now(alarm, ns_to_ktime(HARD_JEITA_ALARM_CHECK_NS));
+	return ALARMTIMER_RESTART;
+}
+
+static void fg_hard_jeita_work(struct work_struct *work)
+{
+	struct fg_chip *chip = container_of(work,
+			struct fg_chip, hard_jeita_work);
 	int rc, health = POWER_SUPPLY_HEALTH_UNKNOWN;
 	u8 regval;
 	bool batt_hot, batt_cold;
 	union power_supply_propval val = {0, };
 
+	if (READ_ONCE(chip->stopping))
+		goto done;
+
 	if (!is_usb_present(chip)) {
 		pr_debug("USB plugged out, stop the timer!\n");
-		return ALARMTIMER_NORESTART;
+		alarm_cancel(&chip->hard_jeita_alarm);
+		goto done;
 	}
 
 	rc = fg_read(chip, &regval, BATT_INFO_STS(chip->batt_base), 1);
 	if (rc) {
 		pr_err("read batt_sts failed, rc=%d\n", rc);
-		goto recheck;
+		goto done;
 	}
 
 	batt_hot = !!(regval & JEITA_HARD_HOT_RT_STS);
 	batt_cold = !!(regval & JEITA_HARD_COLD_RT_STS);
 	if (batt_hot && batt_cold) {
 		pr_debug("Hot && cold can't co-exist\n");
-		goto recheck;
+		goto done;
 	}
 
 	if ((batt_hot == chip->batt_hot) && (batt_cold == chip->batt_cold)) {
 		pr_debug("battery JEITA state not changed, ignore\n");
-		goto recheck;
+		goto done;
 	}
 
 	if (batt_cold != chip->batt_cold) {
@@ -5458,7 +5542,7 @@ static enum alarmtimer_restart fg_hard_jeita_alarm_cb(struct alarm *alarm,
 		}
 	}
 
-	if (health != POWER_SUPPLY_HEALTH_UNKNOWN) {
+	if (health != POWER_SUPPLY_HEALTH_UNKNOWN && is_charger_available(chip)) {
 		pr_debug("FG report battery health: %d\n", health);
 		val.intval = health;
 		rc = power_supply_set_property(chip->batt_psy,
@@ -5467,9 +5551,10 @@ static enum alarmtimer_restart fg_hard_jeita_alarm_cb(struct alarm *alarm,
 			pr_err("Set batt_psy health: %d failed\n", health);
 	}
 
-recheck:
-	alarm_forward_now(alarm, ns_to_ktime(HARD_JEITA_ALARM_CHECK_NS));
-	return ALARMTIMER_RESTART;
+done:
+	fg_relax(&chip->hard_jeita_wakeup_source);
+	/* Publish availability only after the old wake vote has been removed. */
+	clear_bit(0, &chip->hard_jeita_pending);
 }
 
 #define BATT_SOFT_COLD_STS	BIT(0)
@@ -5594,7 +5679,7 @@ static irqreturn_t fg_vbatt_low_handler(int irq, void *_chip)
 		if (vbatt_low_sts) {
 			if (fg_debug_mask & FG_IRQS)
 				pr_info("Vbatt is low\n");
-			disable_irq_wake(chip->batt_irq[VBATT_LOW].irq);
+			fg_set_irq_wake(&chip->batt_irq[VBATT_LOW], false);
 			disable_irq_nosync(chip->batt_irq[VBATT_LOW].irq);
 			chip->vbat_low_irq_enabled = false;
 			fg_stay_awake(&chip->empty_check_wakeup_source);
@@ -5614,7 +5699,7 @@ static irqreturn_t fg_vbatt_low_handler(int irq, void *_chip)
 		if (!vbatt_low_sts && chip->vbat_low_irq_enabled) {
 			if (fg_debug_mask & FG_IRQS)
 				pr_info("disabling vbatt_low irq\n");
-			disable_irq_wake(chip->batt_irq[VBATT_LOW].irq);
+			fg_set_irq_wake(&chip->batt_irq[VBATT_LOW], false);
 			disable_irq_nosync(chip->batt_irq[VBATT_LOW].irq);
 			chip->vbat_low_irq_enabled = false;
 		}
@@ -5699,6 +5784,7 @@ static irqreturn_t fg_soc_irq_handler(int irq, void *_chip)
 	if (rc) {
 		pr_err("spmi read failed: addr=%03X, rc=%d\n",
 				INT_RT_STS(chip->soc_base), rc);
+		return IRQ_HANDLED;
 	}
 
 	if (fg_debug_mask & FG_IRQS)
@@ -5820,6 +5906,9 @@ static irqreturn_t fg_first_soc_irq_handler(int irq, void *_chip)
 static void fg_external_power_changed(struct power_supply *psy)
 {
 	struct fg_chip *chip = power_supply_get_drvdata(psy);
+
+	if (READ_ONCE(chip->stopping))
+		return;
 
 	if (is_input_present(chip) && chip->rslow_comp.active &&
 			chip->rslow_comp.chg_rs_to_rslow > 0 &&
@@ -5954,7 +6043,7 @@ static int populate_system_data(struct fg_chip *chip)
 		else
 			chip->somc_params.data.set_cc_soc_coeff = false;
 	}
-#endif	
+#endif
 	rc = fg_mem_read(chip, buffer, CUTOFF_VOLTAGE_REG, 2, 0, 0);
 	if (rc) {
 		pr_err("Failed to read cutoff voltage: %d\n", rc);
@@ -7032,7 +7121,7 @@ static void check_empty_work(struct work_struct *work)
 
 		if (!chip->vbat_low_irq_enabled) {
 			enable_irq(chip->batt_irq[VBATT_LOW].irq);
-			enable_irq_wake(chip->batt_irq[VBATT_LOW].irq);
+			fg_set_irq_wake(&chip->batt_irq[VBATT_LOW], true);
 			chip->vbat_low_irq_enabled = true;
 		}
 	} else if (fg_is_batt_empty(chip)) {
@@ -7647,6 +7736,44 @@ static int fg_of_init(struct fg_chip *chip)
 	return rc;
 }
 
+static int fg_request_irq(struct fg_chip *chip, struct fg_irq *irq,
+		irq_handler_t handler, irq_handler_t thread, unsigned long flags,
+		const char *name)
+{
+	int rc = devm_request_threaded_irq(chip->dev, irq->irq, handler,
+			thread, flags, name, chip);
+
+	if (!rc)
+		irq->requested = true;
+	return rc;
+}
+
+static void fg_free_irq_array(struct fg_chip *chip, struct fg_irq *irqs,
+		unsigned int count)
+{
+	unsigned int i;
+
+	for (i = 0; i < count; i++) {
+		if (!irqs[i].requested)
+			continue;
+		if (irqs[i].wakeup) {
+			disable_irq_wake(irqs[i].irq);
+			irqs[i].wakeup = false;
+		}
+		/* free_irq synchronizes with both primary and threaded handlers. */
+		devm_free_irq(chip->dev, irqs[i].irq, chip);
+		irqs[i].requested = false;
+	}
+}
+
+static void fg_release_irqs(struct fg_chip *chip)
+{
+	fg_free_irq_array(chip, chip->soc_irq, ARRAY_SIZE(chip->soc_irq));
+	fg_free_irq_array(chip, chip->batt_irq, ARRAY_SIZE(chip->batt_irq));
+	fg_free_irq_array(chip, chip->mem_irq, ARRAY_SIZE(chip->mem_irq));
+	chip->irqs_enabled = false;
+}
+
 static int fg_init_irqs(struct fg_chip *chip)
 {
 	int rc = 0;
@@ -7666,7 +7793,7 @@ static int fg_init_irqs(struct fg_chip *chip)
 			dev_err(&pdev->dev,
 				"Couldn't find reg in node = %s rc = %d\n",
 				child->full_name, rc);
-			return rc;
+			goto put_node;
 		}
 
 		if ((base == chip->vbat_adc_addr) ||
@@ -7678,7 +7805,7 @@ static int fg_init_irqs(struct fg_chip *chip)
 				base + REG_OFFSET_PERP_SUBTYPE, 1);
 		if (rc) {
 			pr_err("Peripheral subtype read failed rc=%d\n", rc);
-			return rc;
+			goto put_node;
 		}
 
 		switch (subtype) {
@@ -7687,93 +7814,86 @@ static int fg_init_irqs(struct fg_chip *chip)
 							      "full-soc");
 			if (chip->soc_irq[FULL_SOC].irq < 0) {
 				pr_err("Unable to get full-soc irq\n");
-				return rc;
+				rc = chip->soc_irq[FULL_SOC].irq;
+				goto put_node;
 			}
 			chip->soc_irq[EMPTY_SOC].irq = of_irq_get_byname(child,
 							       "empty-soc");
 			if (chip->soc_irq[EMPTY_SOC].irq < 0) {
 				pr_err("Unable to get low-soc irq\n");
-				return rc;
+				rc = chip->soc_irq[EMPTY_SOC].irq;
+				goto put_node;
 			}
 			chip->soc_irq[DELTA_SOC].irq = of_irq_get_byname(child,
 							       "delta-soc");
 			if (chip->soc_irq[DELTA_SOC].irq < 0) {
 				pr_err("Unable to get delta-soc irq\n");
-				return rc;
+				rc = chip->soc_irq[DELTA_SOC].irq;
+				goto put_node;
 			}
 			chip->soc_irq[FIRST_EST_DONE].irq
 				= of_irq_get_byname(child, "first-est-done");
 			if (chip->soc_irq[FIRST_EST_DONE].irq < 0) {
 				pr_err("Unable to get first-est-done irq\n");
-				return rc;
+				rc = chip->soc_irq[FIRST_EST_DONE].irq;
+				goto put_node;
 			}
 
-			rc = devm_request_irq(chip->dev,
-				chip->soc_irq[FULL_SOC].irq,
-				fg_soc_irq_handler, IRQF_TRIGGER_RISING,
-				"full-soc", chip);
+			rc = fg_request_irq(chip, &chip->soc_irq[FULL_SOC], fg_soc_irq_handler, NULL,
+				IRQF_TRIGGER_RISING, "full-soc");
 			if (rc < 0) {
 				pr_err("Can't request %d full-soc: %d\n",
 					chip->soc_irq[FULL_SOC].irq, rc);
-				return rc;
+				goto put_node;
 			}
-			enable_irq_wake(chip->soc_irq[FULL_SOC].irq);
+			fg_set_irq_wake(&chip->soc_irq[FULL_SOC], true);
 			chip->full_soc_irq_enabled = true;
 
 			if (!chip->use_vbat_low_empty_soc) {
-				rc = devm_request_irq(chip->dev,
-					chip->soc_irq[EMPTY_SOC].irq,
-					fg_empty_soc_irq_handler,
-					IRQF_TRIGGER_RISING |
-					IRQF_TRIGGER_FALLING,
-					"empty-soc", chip);
+				rc = fg_request_irq(chip, &chip->soc_irq[EMPTY_SOC], fg_empty_soc_irq_handler, NULL,
+				IRQF_TRIGGER_RISING |
+					IRQF_TRIGGER_FALLING, "empty-soc");
 				if (rc < 0) {
 					pr_err("Can't request %d empty-soc: %d\n",
 						chip->soc_irq[EMPTY_SOC].irq,
 						rc);
-					return rc;
+					goto put_node;
 				}
 			}
-			rc = devm_request_irq(chip->dev,
-				chip->soc_irq[DELTA_SOC].irq,
-				fg_soc_irq_handler, IRQF_TRIGGER_RISING,
-				"delta-soc", chip);
+			rc = fg_request_irq(chip, &chip->soc_irq[DELTA_SOC], fg_soc_irq_handler, NULL,
+				IRQF_TRIGGER_RISING, "delta-soc");
 			if (rc < 0) {
 				pr_err("Can't request %d delta-soc: %d\n",
 					chip->soc_irq[DELTA_SOC].irq, rc);
-				return rc;
+				goto put_node;
 			}
-			rc = devm_request_irq(chip->dev,
-				chip->soc_irq[FIRST_EST_DONE].irq,
-				fg_first_soc_irq_handler, IRQF_TRIGGER_RISING,
-				"first-est-done", chip);
+			rc = fg_request_irq(chip, &chip->soc_irq[FIRST_EST_DONE], fg_first_soc_irq_handler, NULL,
+				IRQF_TRIGGER_RISING, "first-est-done");
 			if (rc < 0) {
 				pr_err("Can't request %d delta-soc: %d\n",
 					chip->soc_irq[FIRST_EST_DONE].irq, rc);
-				return rc;
+				goto put_node;
 			}
 
-			enable_irq_wake(chip->soc_irq[DELTA_SOC].irq);
+			fg_set_irq_wake(&chip->soc_irq[DELTA_SOC], true);
 			if (!chip->use_vbat_low_empty_soc)
-				enable_irq_wake(chip->soc_irq[EMPTY_SOC].irq);
+				fg_set_irq_wake(&chip->soc_irq[EMPTY_SOC], true);
 			break;
 		case FG_MEMIF:
 			chip->mem_irq[FG_MEM_AVAIL].irq
 				= of_irq_get_byname(child, "mem-avail");
 			if (chip->mem_irq[FG_MEM_AVAIL].irq < 0) {
 				pr_err("Unable to get mem-avail irq\n");
-				return rc;
+				rc = chip->mem_irq[FG_MEM_AVAIL].irq;
+				goto put_node;
 			}
-			rc = devm_request_irq(chip->dev,
-					chip->mem_irq[FG_MEM_AVAIL].irq,
-					fg_mem_avail_irq_handler,
-					IRQF_TRIGGER_RISING |
-					IRQF_TRIGGER_FALLING,
-					"mem-avail", chip);
+			rc = fg_request_irq(chip, &chip->mem_irq[FG_MEM_AVAIL], fg_mem_avail_irq_handler, NULL,
+				IRQF_TRIGGER_RISING |
+					IRQF_TRIGGER_FALLING, "mem-avail");
 			if (rc < 0) {
 				pr_err("Can't request %d mem-avail: %d\n",
 					chip->mem_irq[FG_MEM_AVAIL].irq, rc);
-				return rc;
+				goto put_node;
 			}
 			break;
 		case FG_BATT:
@@ -7781,22 +7901,18 @@ static int fg_init_irqs(struct fg_chip *chip)
 				of_irq_get_byname(child, "soft-cold");
 			if (chip->batt_irq[JEITA_SOFT_COLD].irq < 0) {
 				pr_err("Unable to get soft-cold irq\n");
-				rc = -EINVAL;
-				return rc;
+				rc = chip->batt_irq[JEITA_SOFT_COLD].irq;
+				goto put_node;
 			}
-			rc = devm_request_threaded_irq(chip->dev,
-					chip->batt_irq[JEITA_SOFT_COLD].irq,
-					NULL,
-					fg_jeita_soft_cold_irq_handler,
-					IRQF_TRIGGER_RISING |
+			rc = fg_request_irq(chip, &chip->batt_irq[JEITA_SOFT_COLD], NULL, fg_jeita_soft_cold_irq_handler,
+				IRQF_TRIGGER_RISING |
 					IRQF_TRIGGER_FALLING |
-					IRQF_ONESHOT,
-					"soft-cold", chip);
+					IRQF_ONESHOT, "soft-cold");
 			if (rc < 0) {
 				pr_err("Can't request %d soft-cold: %d\n",
 					chip->batt_irq[JEITA_SOFT_COLD].irq,
 								rc);
-				return rc;
+				goto put_node;
 			}
 			disable_irq(chip->batt_irq[JEITA_SOFT_COLD].irq);
 			chip->batt_irq[JEITA_SOFT_COLD].disabled = true;
@@ -7804,21 +7920,17 @@ static int fg_init_irqs(struct fg_chip *chip)
 				of_irq_get_byname(child, "soft-hot");
 			if (chip->batt_irq[JEITA_SOFT_HOT].irq < 0) {
 				pr_err("Unable to get soft-hot irq\n");
-				rc = -EINVAL;
-				return rc;
+				rc = chip->batt_irq[JEITA_SOFT_HOT].irq;
+				goto put_node;
 			}
-			rc = devm_request_threaded_irq(chip->dev,
-					chip->batt_irq[JEITA_SOFT_HOT].irq,
-					NULL,
-					fg_jeita_soft_hot_irq_handler,
-					IRQF_TRIGGER_RISING |
+			rc = fg_request_irq(chip, &chip->batt_irq[JEITA_SOFT_HOT], NULL, fg_jeita_soft_hot_irq_handler,
+				IRQF_TRIGGER_RISING |
 					IRQF_TRIGGER_FALLING |
-					IRQF_ONESHOT,
-					"soft-hot", chip);
+					IRQF_ONESHOT, "soft-hot");
 			if (rc < 0) {
 				pr_err("Can't request %d soft-hot: %d\n",
 					chip->batt_irq[JEITA_SOFT_HOT].irq, rc);
-				return rc;
+				goto put_node;
 			}
 			disable_irq(chip->batt_irq[JEITA_SOFT_HOT].irq);
 			chip->batt_irq[JEITA_SOFT_HOT].disabled = true;
@@ -7826,42 +7938,35 @@ static int fg_init_irqs(struct fg_chip *chip)
 				of_irq_get_byname(child, "batt-missing");
 			if (chip->batt_irq[BATT_MISSING].irq < 0) {
 				pr_err("Unable to get batt-missing irq\n");
-				rc = -EINVAL;
-				return rc;
+				rc = chip->batt_irq[BATT_MISSING].irq;
+				goto put_node;
 			}
-			rc = devm_request_threaded_irq(chip->dev,
-					chip->batt_irq[BATT_MISSING].irq,
-					NULL,
-					fg_batt_missing_irq_handler,
-					IRQF_TRIGGER_RISING |
+			rc = fg_request_irq(chip, &chip->batt_irq[BATT_MISSING], NULL, fg_batt_missing_irq_handler,
+				IRQF_TRIGGER_RISING |
 					IRQF_TRIGGER_FALLING |
-					IRQF_ONESHOT,
-					"batt-missing", chip);
+					IRQF_ONESHOT, "batt-missing");
 			if (rc < 0) {
 				pr_err("Can't request %d batt-missing: %d\n",
 					chip->batt_irq[BATT_MISSING].irq, rc);
-				return rc;
+				goto put_node;
 			}
 			chip->batt_irq[VBATT_LOW].irq
 				= of_irq_get_byname(child, "vbatt-low");
 			if (chip->batt_irq[VBATT_LOW].irq < 0) {
 				pr_err("Unable to get vbatt-low irq\n");
-				rc = -EINVAL;
-				return rc;
+				rc = chip->batt_irq[VBATT_LOW].irq;
+				goto put_node;
 			}
-			rc = devm_request_irq(chip->dev,
-					chip->batt_irq[VBATT_LOW].irq,
-					fg_vbatt_low_handler,
-					IRQF_TRIGGER_RISING |
-					IRQF_TRIGGER_FALLING,
-					"vbatt-low", chip);
+			rc = fg_request_irq(chip, &chip->batt_irq[VBATT_LOW], fg_vbatt_low_handler, NULL,
+				IRQF_TRIGGER_RISING |
+					IRQF_TRIGGER_FALLING, "vbatt-low");
 			if (rc < 0) {
 				pr_err("Can't request %d vbatt-low: %d\n",
 					chip->batt_irq[VBATT_LOW].irq, rc);
-				return rc;
+				goto put_node;
 			}
 			if (chip->use_vbat_low_empty_soc) {
-				enable_irq_wake(chip->batt_irq[VBATT_LOW].irq);
+				fg_set_irq_wake(&chip->batt_irq[VBATT_LOW], true);
 				chip->vbat_low_irq_enabled = true;
 			} else {
 				disable_irq_nosync(
@@ -7873,24 +7978,30 @@ static int fg_init_irqs(struct fg_chip *chip)
 			break;
 		default:
 			pr_err("subtype %d\n", subtype);
-			return -EINVAL;
+			rc = -EINVAL;
+			goto put_node;
 		}
 	}
 
 	chip->irqs_enabled = true;
 	return rc;
+
+put_node:
+	of_node_put(child);
+	return rc;
 }
 
 static void fg_cancel_all_works(struct fg_chip *chip)
 {
+	alarm_cancel(&chip->fg_cap_learning_alarm);
+	alarm_cancel(&chip->hard_jeita_alarm);
 	cancel_delayed_work_sync(&chip->check_sanity_work);
 	cancel_delayed_work_sync(&chip->update_sram_data);
 	cancel_delayed_work_sync(&chip->update_temp_work);
 	cancel_delayed_work_sync(&chip->update_jeita_setting);
 	cancel_delayed_work_sync(&chip->check_empty_work);
 	cancel_delayed_work_sync(&chip->batt_profile_init);
-	alarm_try_to_cancel(&chip->fg_cap_learning_alarm);
-	alarm_try_to_cancel(&chip->hard_jeita_alarm);
+
 	if (!chip->ima_error_handling)
 		cancel_work_sync(&chip->ima_error_recovery_work);
 	cancel_work_sync(&chip->rslow_comp_work);
@@ -7899,49 +8010,91 @@ static void fg_cancel_all_works(struct fg_chip *chip)
 	cancel_work_sync(&chip->dump_sram);
 	cancel_work_sync(&chip->status_change_work);
 	cancel_work_sync(&chip->cycle_count_work);
+	cancel_work_sync(&chip->battery_age_work);
 	cancel_work_sync(&chip->update_esr_work);
 	cancel_work_sync(&chip->sysfs_restart_work);
 	cancel_work_sync(&chip->gain_comp_work);
-	cancel_work_sync(&chip->init_work);
+	if (current_work() != &chip->init_work)
+		cancel_work_sync(&chip->init_work);
 	cancel_work_sync(&chip->charge_full_work);
 	cancel_work_sync(&chip->bcl_hi_power_work);
 	cancel_work_sync(&chip->esr_extract_config_work);
 	cancel_work_sync(&chip->slope_limiter_work);
 	cancel_work_sync(&chip->dischg_gain_work);
 	cancel_work_sync(&chip->cc_soc_store_work);
+	cancel_work_sync(&chip->hard_jeita_work);
+	fg_relax(&chip->hard_jeita_wakeup_source);
+	clear_bit(0, &chip->hard_jeita_pending);
+	/* A worker already running at entry may have rearmed an alarm. */
+	alarm_cancel(&chip->fg_cap_learning_alarm);
+	alarm_cancel(&chip->hard_jeita_alarm);
+}
+
+static void fg_remove_interfaces(struct fg_chip *chip)
+{
+#ifdef CONFIG_QPNP_FG_EXTENSION
+	somc_fg_unregister(chip);
+#endif
+	mutex_lock(&dbgfs_data.lock);
+	if (dbgfs_data.chip == chip) {
+		debugfs_remove_recursive(dbgfs_data.root);
+		dbgfs_data.root = NULL;
+		dbgfs_data.chip = NULL;
+	}
+	mutex_unlock(&dbgfs_data.lock);
 }
 
 static void fg_cleanup(struct fg_chip *chip)
 {
+	if (chip->cleanup_done)
+		return;
+	mutex_lock(&fg_param_lock);
+	WRITE_ONCE(chip->stopping, true);
+	mutex_unlock(&fg_param_lock);
+	fg_remove_interfaces(chip);
+	chip->fg_shutdown = true;
+	fg_release_irqs(chip);
 	fg_cancel_all_works(chip);
-	power_supply_unregister(chip->bms_psy);
-	mutex_destroy(&chip->rslow_comp.lock);
-	mutex_destroy(&chip->rw_lock);
-	mutex_destroy(&chip->cyc_ctr.lock);
-	mutex_destroy(&chip->learning_data.learning_lock);
-	mutex_destroy(&chip->sysfs_restart_lock);
-	mutex_destroy(&chip->ima_recovery_lock);
-	wakeup_source_trash(&chip->resume_soc_wakeup_source.source);
-	wakeup_source_trash(&chip->empty_check_wakeup_source.source);
-	wakeup_source_trash(&chip->memif_wakeup_source.source);
-	wakeup_source_trash(&chip->profile_wakeup_source.source);
-	wakeup_source_trash(&chip->update_temp_wakeup_source.source);
-	wakeup_source_trash(&chip->update_sram_wakeup_source.source);
-	wakeup_source_trash(&chip->gain_comp_wakeup_source.source);
-	wakeup_source_trash(&chip->capacity_learning_wakeup_source.source);
-	wakeup_source_trash(&chip->esr_extract_wakeup_source.source);
-	wakeup_source_trash(&chip->slope_limit_wakeup_source.source);
-	wakeup_source_trash(&chip->dischg_gain_wakeup_source.source);
-	wakeup_source_trash(&chip->fg_reset_wakeup_source.source);
-	wakeup_source_trash(&chip->cc_soc_wakeup_source.source);
-	wakeup_source_trash(&chip->sanity_wakeup_source.source);
+	mutex_lock(&fg_param_lock);
+	if (chip->power_supply_registered) {
+		chip->power_supply_registered = false;
+		power_supply_unregister(chip->bms_psy);
+		chip->bms_psy = NULL;
+	}
+	mutex_unlock(&fg_param_lock);
+	fg_cancel_all_works(chip);
+	fg_relax(&chip->resume_soc_wakeup_source);
+	fg_relax(&chip->empty_check_wakeup_source);
+	fg_relax(&chip->memif_wakeup_source);
+	fg_relax(&chip->profile_wakeup_source);
+	fg_relax(&chip->update_temp_wakeup_source);
+	fg_relax(&chip->update_sram_wakeup_source);
+	fg_relax(&chip->gain_comp_wakeup_source);
+	fg_relax(&chip->capacity_learning_wakeup_source);
+	fg_relax(&chip->esr_extract_wakeup_source);
+	fg_relax(&chip->slope_limit_wakeup_source);
+	fg_relax(&chip->dischg_gain_wakeup_source);
+	fg_relax(&chip->fg_reset_wakeup_source);
+	fg_relax(&chip->cc_soc_wakeup_source);
+	fg_relax(&chip->sanity_wakeup_source);
+	chip->cleanup_done = true;
 }
 
 static int fg_remove(struct platform_device *pdev)
 {
 	struct fg_chip *chip = dev_get_drvdata(&pdev->dev);
 
+	mutex_lock(&fg_param_lock);
+	WRITE_ONCE(chip->stopping, true);
+	mutex_unlock(&fg_param_lock);
+	cancel_work_sync(&chip->init_work);
 	fg_cleanup(chip);
+	mutex_destroy(&chip->rslow_comp.lock);
+	mutex_destroy(&chip->rw_lock);
+	mutex_destroy(&chip->cyc_ctr.lock);
+	mutex_destroy(&chip->learning_data.learning_lock);
+	mutex_destroy(&chip->sysfs_restart_lock);
+	mutex_destroy(&chip->ima_recovery_lock);
 	dev_set_drvdata(&pdev->dev, NULL);
 	return 0;
 }
@@ -8280,6 +8433,7 @@ unlock_mutex:
 }
 
 static const struct file_operations fg_memif_dfs_reg_fops = {
+	.owner		= THIS_MODULE,
 	.open		= fg_memif_data_open,
 	.release	= fg_memif_dfs_close,
 	.read		= fg_memif_dfs_reg_read,
@@ -8307,7 +8461,7 @@ static struct dentry *fg_dfs_create_fs(void)
 	dbgfs_data.help_msg.size = strlen(dbgfs_data.help_msg.data);
 
 	file = debugfs_create_blob("help", 0444, root, &dbgfs_data.help_msg);
-	if (!file) {
+	if (IS_ERR_OR_NULL(file)) {
 		pr_err("error creating help entry\n");
 		goto err_remove_fs;
 	}
@@ -8356,21 +8510,21 @@ int fg_dfs_create(struct fg_chip *chip)
 	dbgfs_data.chip = chip;
 
 	file = debugfs_create_u32("count", DFS_MODE, root, &(dbgfs_data.cnt));
-	if (!file) {
+	if (IS_ERR_OR_NULL(file)) {
 		pr_err("error creating 'count' entry\n");
 		goto err_remove_fs;
 	}
 
 	file = debugfs_create_x32("address", DFS_MODE,
 			root, &(dbgfs_data.addr));
-	if (!file) {
+	if (IS_ERR_OR_NULL(file)) {
 		pr_err("error creating 'address' entry\n");
 		goto err_remove_fs;
 	}
 
 	file = debugfs_create_file("data", DFS_MODE, root, &dbgfs_data,
 							&fg_memif_dfs_reg_fops);
-	if (!file) {
+	if (IS_ERR_OR_NULL(file)) {
 		pr_err("error creating 'data' entry\n");
 		goto err_remove_fs;
 	}
@@ -8379,6 +8533,8 @@ int fg_dfs_create(struct fg_chip *chip)
 
 err_remove_fs:
 	debugfs_remove_recursive(root);
+	dbgfs_data.root = NULL;
+	dbgfs_data.chip = NULL;
 	return -ENOMEM;
 }
 
@@ -9033,15 +9189,12 @@ static int fg_detect_pmic_type(struct fg_chip *chip)
 	}
 
 	pmic_rev_id = get_revid_data(revid_dev_node);
+	of_node_put(revid_dev_node);
 	if (IS_ERR_OR_NULL(pmic_rev_id)) {
 		pr_err("Unable to get pmic_revid rc=%ld\n",
 				PTR_ERR(pmic_rev_id));
-		/*
-		 * the revid peripheral must be registered, any failure
-		 * here only indicates that the rev-id module has not
-		 * probed yet.
-		 */
-		return -EPROBE_DEFER;
+		/* Preserve the provider's deferred-probe or permanent error. */
+		return pmic_rev_id ? PTR_ERR(pmic_rev_id) : -EPROBE_DEFER;
 	}
 
 	switch (pmic_rev_id->pmic_subtype) {
@@ -9131,11 +9284,11 @@ static int fg_probe(struct platform_device *pdev)
 {
 	struct device *dev = &(pdev->dev);
 	struct fg_chip *chip;
-	struct device_node *child;
+	struct device_node *child = NULL;
 	unsigned int base;
 	u8 subtype, reg;
 	int rc = 0;
-	struct power_supply_config bms_psy_cfg;
+	struct power_supply_config bms_psy_cfg = {};
 
 	if (!pdev) {
 		pr_err("no valid spmi pointer\n");
@@ -9160,34 +9313,66 @@ static int fg_probe(struct platform_device *pdev)
 	chip->pdev = pdev;
 	chip->dev = &(pdev->dev);
 
-	wakeup_source_init(&chip->empty_check_wakeup_source.source,
+	rc = fg_init_wakeup_source(dev, &chip->empty_check_wakeup_source,
 			"qpnp_fg_empty_check");
-	wakeup_source_init(&chip->memif_wakeup_source.source,
+	if (rc)
+		return rc;
+	rc = fg_init_wakeup_source(dev, &chip->memif_wakeup_source,
 			"qpnp_fg_memaccess");
-	wakeup_source_init(&chip->profile_wakeup_source.source,
+	if (rc)
+		return rc;
+	rc = fg_init_wakeup_source(dev, &chip->profile_wakeup_source,
 			"qpnp_fg_profile");
-	wakeup_source_init(&chip->update_temp_wakeup_source.source,
+	if (rc)
+		return rc;
+	rc = fg_init_wakeup_source(dev, &chip->update_temp_wakeup_source,
 			"qpnp_fg_update_temp");
-	wakeup_source_init(&chip->update_sram_wakeup_source.source,
+	if (rc)
+		return rc;
+	rc = fg_init_wakeup_source(dev, &chip->update_sram_wakeup_source,
 			"qpnp_fg_update_sram");
-	wakeup_source_init(&chip->resume_soc_wakeup_source.source,
+	if (rc)
+		return rc;
+	rc = fg_init_wakeup_source(dev, &chip->resume_soc_wakeup_source,
 			"qpnp_fg_set_resume_soc");
-	wakeup_source_init(&chip->gain_comp_wakeup_source.source,
+	if (rc)
+		return rc;
+	rc = fg_init_wakeup_source(dev, &chip->gain_comp_wakeup_source,
 			"qpnp_fg_gain_comp");
-	wakeup_source_init(&chip->capacity_learning_wakeup_source.source,
+	if (rc)
+		return rc;
+	rc = fg_init_wakeup_source(dev, &chip->capacity_learning_wakeup_source,
 			"qpnp_fg_cap_learning");
-	wakeup_source_init(&chip->esr_extract_wakeup_source.source,
+	if (rc)
+		return rc;
+	rc = fg_init_wakeup_source(dev, &chip->esr_extract_wakeup_source,
 			"qpnp_fg_esr_extract");
-	wakeup_source_init(&chip->slope_limit_wakeup_source.source,
+	if (rc)
+		return rc;
+	rc = fg_init_wakeup_source(dev, &chip->slope_limit_wakeup_source,
 			"qpnp_fg_slope_limit");
-	wakeup_source_init(&chip->dischg_gain_wakeup_source.source,
+	if (rc)
+		return rc;
+	rc = fg_init_wakeup_source(dev, &chip->dischg_gain_wakeup_source,
 			"qpnp_fg_dischg_gain");
-	wakeup_source_init(&chip->fg_reset_wakeup_source.source,
+	if (rc)
+		return rc;
+	rc = fg_init_wakeup_source(dev, &chip->fg_reset_wakeup_source,
 			"qpnp_fg_reset");
-	wakeup_source_init(&chip->cc_soc_wakeup_source.source,
+	if (rc)
+		return rc;
+	rc = fg_init_wakeup_source(dev, &chip->cc_soc_wakeup_source,
 			"qpnp_fg_cc_soc");
-	wakeup_source_init(&chip->sanity_wakeup_source.source,
+	if (rc)
+		return rc;
+	rc = fg_init_wakeup_source(dev, &chip->sanity_wakeup_source,
 			"qpnp_fg_sanity_check");
+	if (rc)
+		return rc;
+	rc = fg_init_wakeup_source(dev, &chip->hard_jeita_wakeup_source,
+			"qpnp_fg_hard_jeita");
+	if (rc)
+		return rc;
 	spin_lock_init(&chip->sec_access_lock);
 	mutex_init(&chip->rw_lock);
 	mutex_init(&chip->cyc_ctr.lock);
@@ -9195,6 +9380,10 @@ static int fg_probe(struct platform_device *pdev)
 	mutex_init(&chip->rslow_comp.lock);
 	mutex_init(&chip->sysfs_restart_lock);
 	mutex_init(&chip->ima_recovery_lock);
+	mutex_init(&chip->psy_lock);
+	rc = devm_add_action_or_reset(dev, fg_put_supply_refs, chip);
+	if (rc)
+		goto of_init_fail;
 	INIT_DELAYED_WORK(&chip->update_jeita_setting, update_jeita_setting);
 	INIT_DELAYED_WORK(&chip->update_sram_data, update_sram_data_work);
 	INIT_DELAYED_WORK(&chip->update_temp_work, update_temp_data);
@@ -9219,6 +9408,7 @@ static int fg_probe(struct platform_device *pdev)
 	INIT_WORK(&chip->slope_limiter_work, slope_limiter_work);
 	INIT_WORK(&chip->dischg_gain_work, discharge_gain_work);
 	INIT_WORK(&chip->cc_soc_store_work, cc_soc_store_work);
+	INIT_WORK(&chip->hard_jeita_work, fg_hard_jeita_work);
 	alarm_init(&chip->fg_cap_learning_alarm, ALARM_BOOTTIME,
 			fg_cap_learning_alarm_cb);
 	alarm_init(&chip->hard_jeita_alarm, ALARM_BOOTTIME,
@@ -9277,13 +9467,14 @@ static int fg_probe(struct platform_device *pdev)
 		default:
 			pr_err("Invalid peripheral subtype=0x%x\n", subtype);
 			rc = -EINVAL;
+			goto of_init_fail;
 		}
 	}
 
 	rc = fg_detect_pmic_type(chip);
 	if (rc) {
 		pr_err("Unable to detect PMIC type rc=%d\n", rc);
-		return rc;
+		goto of_init_fail;
 	}
 
 	rc = fg_memif_init(chip);
@@ -9342,13 +9533,14 @@ static int fg_probe(struct platform_device *pdev)
 	bms_psy_cfg.supplied_to = fg_supplicants;
 	bms_psy_cfg.num_supplicants =  ARRAY_SIZE(fg_supplicants);
 	bms_psy_cfg.of_node = NULL;
-	chip->bms_psy = devm_power_supply_register(chip->dev,
+	chip->bms_psy = power_supply_register(chip->dev,
 			&chip->bms_psy_d,
 			&bms_psy_cfg);
 	if (IS_ERR(chip->bms_psy)) {
-		pr_err("batt failed to register rc = %ld\n",
-				PTR_ERR(chip->bms_psy));
-		goto of_init_fail;
+		rc = PTR_ERR(chip->bms_psy);
+		chip->bms_psy = NULL;
+		pr_err("batt failed to register rc = %d\n", rc);
+		goto cancel_work;
 	}
 	chip->power_supply_registered = true;
 	/*
@@ -9357,7 +9549,7 @@ static int fg_probe(struct platform_device *pdev)
 	 */
 	chip->batt_psy_name = "battery";
 
-	if (chip->mem_base) {
+	if (IS_ENABLED(CONFIG_DEBUG_FS) && chip->mem_base) {
 		rc = fg_dfs_create(chip);
 		if (rc < 0) {
 			pr_err("failed to create debugfs rc = %d\n", rc);
@@ -9373,8 +9565,6 @@ static int fg_probe(struct platform_device *pdev)
 	chip->batt_range_pct = &fg_batt_range_pct;
 	memset(chip->batt_info, INT_MAX, sizeof(chip->batt_info));
 
-	schedule_work(&chip->init_work);
-
 #ifdef CONFIG_QPNP_FG_EXTENSION
 	rc = somc_fg_register(chip);
 	if (rc < 0) {
@@ -9382,6 +9572,7 @@ static int fg_probe(struct platform_device *pdev)
 		goto cancel_work;
 	}
 #endif
+	schedule_work(&chip->init_work);
 
 	pr_info("FG Probe success - FG Revision DIG:%d.%d ANA:%d.%d PMIC subtype=%d\n",
 		chip->revision[DIG_MAJOR], chip->revision[DIG_MINOR],
@@ -9391,33 +9582,43 @@ static int fg_probe(struct platform_device *pdev)
 	return rc;
 
 power_supply_unregister:
-	power_supply_unregister(chip->bms_psy);
 cancel_work:
+	mutex_lock(&fg_param_lock);
+	WRITE_ONCE(chip->stopping, true);
+	mutex_unlock(&fg_param_lock);
+	fg_remove_interfaces(chip);
+	fg_release_irqs(chip);
 	fg_cancel_all_works(chip);
-#ifdef CONFIG_QPNP_FG_EXTENSION
-	somc_fg_unregister(chip);
-#endif
+	mutex_lock(&fg_param_lock);
+	if (chip->power_supply_registered) {
+		chip->power_supply_registered = false;
+		power_supply_unregister(chip->bms_psy);
+		chip->bms_psy = NULL;
+	}
+	mutex_unlock(&fg_param_lock);
+	fg_cancel_all_works(chip);
 of_init_fail:
+	of_node_put(child);
 	mutex_destroy(&chip->rslow_comp.lock);
 	mutex_destroy(&chip->rw_lock);
 	mutex_destroy(&chip->cyc_ctr.lock);
 	mutex_destroy(&chip->learning_data.learning_lock);
 	mutex_destroy(&chip->sysfs_restart_lock);
 	mutex_destroy(&chip->ima_recovery_lock);
-	wakeup_source_trash(&chip->resume_soc_wakeup_source.source);
-	wakeup_source_trash(&chip->empty_check_wakeup_source.source);
-	wakeup_source_trash(&chip->memif_wakeup_source.source);
-	wakeup_source_trash(&chip->profile_wakeup_source.source);
-	wakeup_source_trash(&chip->update_temp_wakeup_source.source);
-	wakeup_source_trash(&chip->update_sram_wakeup_source.source);
-	wakeup_source_trash(&chip->gain_comp_wakeup_source.source);
-	wakeup_source_trash(&chip->capacity_learning_wakeup_source.source);
-	wakeup_source_trash(&chip->esr_extract_wakeup_source.source);
-	wakeup_source_trash(&chip->slope_limit_wakeup_source.source);
-	wakeup_source_trash(&chip->dischg_gain_wakeup_source.source);
-	wakeup_source_trash(&chip->fg_reset_wakeup_source.source);
-	wakeup_source_trash(&chip->cc_soc_wakeup_source.source);
-	wakeup_source_trash(&chip->sanity_wakeup_source.source);
+	fg_relax(&chip->resume_soc_wakeup_source);
+	fg_relax(&chip->empty_check_wakeup_source);
+	fg_relax(&chip->memif_wakeup_source);
+	fg_relax(&chip->profile_wakeup_source);
+	fg_relax(&chip->update_temp_wakeup_source);
+	fg_relax(&chip->update_sram_wakeup_source);
+	fg_relax(&chip->gain_comp_wakeup_source);
+	fg_relax(&chip->capacity_learning_wakeup_source);
+	fg_relax(&chip->esr_extract_wakeup_source);
+	fg_relax(&chip->slope_limit_wakeup_source);
+	fg_relax(&chip->dischg_gain_wakeup_source);
+	fg_relax(&chip->fg_reset_wakeup_source);
+	fg_relax(&chip->cc_soc_wakeup_source);
+	fg_relax(&chip->sanity_wakeup_source);
 	return rc;
 }
 
@@ -9515,6 +9716,10 @@ static void fg_shutdown(struct platform_device *pdev)
 
 	if (fg_debug_mask & FG_STATUS)
 		pr_emerg("FG shutdown started\n");
+	mutex_lock(&fg_param_lock);
+	WRITE_ONCE(chip->stopping, true);
+	mutex_unlock(&fg_param_lock);
+	fg_release_irqs(chip);
 	fg_cancel_all_works(chip);
 	fg_check_ima_idle(chip);
 	chip->fg_shutdown = true;
@@ -9546,17 +9751,21 @@ static int fg_reset_lockup_set(const char *val, const struct kernel_param *kp)
 		return -EINVAL;
 	}
 
+	mutex_lock(&fg_param_lock);
 	bms_psy = power_supply_get_by_name("bms");
-	if (!bms_psy) {
-		pr_err("bms psy not found\n");
-		return 0;
-	}
+	if (!bms_psy)
+		goto unlock;
 
 	chip = power_supply_get_drvdata(bms_psy);
+	if (READ_ONCE(chip->stopping)) {
+		rc = -ENODEV;
+		goto put;
+	}
 	if (!chip->ima_supported) {
 		pr_err("Cannot set this for non-IMA supported FG\n");
 		fg_reset_on_lockup = old_val;
-		return -EINVAL;
+		rc = -EINVAL;
+		goto put;
 	}
 
 	if (fg_debug_mask & FG_STATUS)
@@ -9567,7 +9776,10 @@ static int fg_reset_lockup_set(const char *val, const struct kernel_param *kp)
 			msecs_to_jiffies(1000));
 	else
 		cancel_delayed_work_sync(&chip->check_sanity_work);
-
+put:
+	power_supply_put(bms_psy);
+unlock:
+	mutex_unlock(&fg_param_lock);
 	return rc;
 }
 
@@ -9600,14 +9812,19 @@ static int fg_sense_type_set(const char *val, const struct kernel_param *kp)
 	if (fg_debug_mask & FG_STATUS)
 		pr_info("fg_sense_type set to %d\n", fg_sense_type);
 
+	mutex_lock(&fg_param_lock);
 	bms_psy = power_supply_get_by_name("bms");
-	if (!bms_psy) {
-		pr_err("bms psy not found\n");
-		return 0;
-	}
+	if (!bms_psy)
+		goto unlock;
 
 	chip = power_supply_get_drvdata(bms_psy);
-	rc = set_prop_sense_type(chip, fg_sense_type);
+	if (READ_ONCE(chip->stopping))
+		rc = -ENODEV;
+	else
+		rc = set_prop_sense_type(chip, fg_sense_type);
+	power_supply_put(bms_psy);
+unlock:
+	mutex_unlock(&fg_param_lock);
 	return rc;
 }
 
@@ -9622,18 +9839,22 @@ static int fg_restart_set(const char *val, const struct kernel_param *kp)
 {
 	struct power_supply *bms_psy;
 	struct fg_chip *chip;
+	int rc = 0;
 
+	mutex_lock(&fg_param_lock);
 	bms_psy = power_supply_get_by_name("bms");
-	if (!bms_psy) {
-		pr_err("bms psy not found\n");
-		return 0;
-	}
+	if (!bms_psy)
+		goto unlock;
 	chip = power_supply_get_drvdata(bms_psy);
+	if (READ_ONCE(chip->stopping)) {
+		rc = -ENODEV;
+		goto put;
+	}
 
 	mutex_lock(&chip->sysfs_restart_lock);
 	if (fg_restart != 0) {
 		mutex_unlock(&chip->sysfs_restart_lock);
-		return 0;
+		goto put;
 	}
 	fg_restart = 1;
 	mutex_unlock(&chip->sysfs_restart_lock);
@@ -9642,7 +9863,11 @@ static int fg_restart_set(const char *val, const struct kernel_param *kp)
 		pr_info("fuel gauge restart initiated from sysfs...\n");
 
 	schedule_work(&chip->sysfs_restart_work);
-	return 0;
+put:
+	power_supply_put(bms_psy);
+unlock:
+	mutex_unlock(&fg_param_lock);
+	return rc;
 }
 
 #ifdef CONFIG_QPNP_FG_EXTENSION

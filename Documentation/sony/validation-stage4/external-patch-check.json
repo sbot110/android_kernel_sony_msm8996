@@ -1,0 +1,8 @@
+{
+  "base": "2701d2aecab52b30c3672ecebbad6ae1910cc212",
+  "scope": "scratch copy only; external device repo UNMODIFIED",
+  "original_sha256": "5aab5655ba482fdd1e1dad7587aa9bfb55ea13c5f2da3a8f91a8188e9cebf213",
+  "patched_sha256": "944e254846da634babd2b56a1c10ad93e72416a8dcd5cdacf8880e3928135317",
+  "apply_check_exit": 0,
+  "scratch_apply_exit": 0
+}

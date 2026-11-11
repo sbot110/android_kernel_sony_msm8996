@@ -1,13 +1,6 @@
-/* Copyright (c) 2014-2017, Linux Foundation. All rights reserved.
- *
- * This program is free software; you can redistribute it and/or modify
- * it under the terms of the GNU General Public License version 2 and
- * only version 2 as published by the Free Software Foundation.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
+// SPDX-License-Identifier: GPL-2.0-only
+/*
+ * Copyright (c) 2014-2016, 2018-2019, Linux Foundation. All rights reserved.
  */
 
 #include <linux/clk.h>
@@ -16,15 +9,15 @@
 #include <linux/io.h>
 #include <linux/kernel.h>
 #include <linux/module.h>
+#include <linux/of.h>
 #include <linux/slab.h>
 #include <soc/qcom/rpm-smd.h>
+#include <linux/soc/qcom/smd-rpm.h>
 #include <trace/events/trace_msm_bus.h>
 #include "msm_bus_core.h"
 #include "msm_bus_adhoc.h"
 #include "msm_bus_noc.h"
 #include "msm_bus_bimc.h"
-
-static LIST_HEAD(fabdev_list);
 
 static int msm_bus_dev_init_qos(struct device *dev, void *data);
 
@@ -42,10 +35,11 @@ ssize_t bw_show(struct device *dev, struct device_attribute *attr,
 
 	node_info = bus_node->node_info;
 
-	for (i = 0; i < bus_node->num_lnodes; i++) {
+	msm_bus_arb_lock_adhoc();
+	for (i = 0; i < bus_node->num_lnodes && off < PAGE_SIZE - 1; i++) {
 		if (!bus_node->lnode_list[i].in_use)
 			continue;
-		off += scnprintf((buf + off), PAGE_SIZE,
+		off += scnprintf((buf + off), PAGE_SIZE - off,
 		"[%d]:%s:Act_IB %llu Act_AB %llu Slp_IB %llu Slp_AB %llu\n",
 			i, bus_node->lnode_list[i].cl_name,
 			bus_node->lnode_list[i].lnode_ib[ACTIVE_CTX],
@@ -53,18 +47,19 @@ ssize_t bw_show(struct device *dev, struct device_attribute *attr,
 			bus_node->lnode_list[i].lnode_ib[DUAL_CTX],
 			bus_node->lnode_list[i].lnode_ab[DUAL_CTX]);
 	}
-	off += scnprintf((buf + off), PAGE_SIZE,
+	off += scnprintf((buf + off), PAGE_SIZE - off,
 	"Max_Act_IB %llu Sum_Act_AB %llu Act_Util_fact %d Act_Vrail_comp %d\n",
 		bus_node->node_bw[ACTIVE_CTX].max_ib,
 		bus_node->node_bw[ACTIVE_CTX].sum_ab,
 		bus_node->node_bw[ACTIVE_CTX].util_used,
 		bus_node->node_bw[ACTIVE_CTX].vrail_used);
-	off += scnprintf((buf + off), PAGE_SIZE,
+	off += scnprintf((buf + off), PAGE_SIZE - off,
 	"Max_Slp_IB %llu Sum_Slp_AB %llu Slp_Util_fact %d Slp_Vrail_comp %d\n",
 		bus_node->node_bw[DUAL_CTX].max_ib,
 		bus_node->node_bw[DUAL_CTX].sum_ab,
 		bus_node->node_bw[DUAL_CTX].util_used,
 		bus_node->node_bw[DUAL_CTX].vrail_used);
+	msm_bus_arb_unlock_adhoc();
 	return off;
 }
 
@@ -74,7 +69,7 @@ ssize_t bw_store(struct device *dev, struct device_attribute *attr,
 	return count;
 }
 
-DEVICE_ATTR(bw, 0600, bw_show, bw_store);
+DEVICE_ATTR_RW(bw);
 
 struct static_rules_type {
 	int num_rules;
@@ -82,6 +77,16 @@ struct static_rules_type {
 };
 
 static struct static_rules_type static_rules;
+
+struct msm_bus_graph {
+	struct list_head nodes;
+	struct qcom_smd_rpm *rpm;
+};
+
+/* The legacy arb API exposes one topology, not interchangeable live graphs. */
+static DEFINE_MUTEX(msm_bus_graph_lock);
+static struct msm_bus_graph *msm_bus_graph_owner;
+
 
 static int bus_get_reg(struct nodeclk *nclk, struct device *dev)
 {
@@ -107,7 +112,7 @@ static int bus_get_reg(struct nodeclk *nclk, struct device *dev)
 			dev_err(dev, "Error: Failed to get regulator %s:%d\n",
 							nclk->reg_name, ret);
 		} else {
-			dev_dbg(dev, "Succesfully got regulator for %d\n",
+			dev_dbg(dev, "Successfully got regulator for %d\n",
 				node_dev->node_info->id);
 		}
 	}
@@ -118,94 +123,63 @@ exit_of_get_reg:
 
 static int bus_enable_reg(struct nodeclk *nclk)
 {
-	int ret = 0;
+	int ret;
 
-	if (!nclk) {
-		ret = -ENXIO;
-		goto exit_bus_enable_reg;
-	}
-
-	if ((IS_ERR_OR_NULL(nclk->reg))) {
-		ret = -ENXIO;
-		goto exit_bus_enable_reg;
-	}
-
+	if (!nclk || IS_ERR_OR_NULL(nclk->reg))
+		return -ENXIO;
+	if (nclk->reg_enabled)
+		return 0;
 	ret = regulator_enable(nclk->reg);
-	if (ret) {
-		MSM_BUS_ERR("Failed to enable regulator for %s\n",
-							nclk->reg_name);
-		goto exit_bus_enable_reg;
-	}
-	pr_debug("%s: Enabled Reg\n", __func__);
-exit_bus_enable_reg:
+	if (!ret)
+		nclk->reg_enabled = true;
 	return ret;
 }
 
 static int bus_disable_reg(struct nodeclk *nclk)
 {
-	int ret = 0;
+	int ret;
 
-	if (!nclk) {
-		ret = -ENXIO;
-		goto exit_bus_disable_reg;
-	}
-
-	if ((IS_ERR_OR_NULL(nclk->reg))) {
-		ret = -ENXIO;
-		goto exit_bus_disable_reg;
-	}
-
-	regulator_disable(nclk->reg);
-	pr_debug("%s: Disabled Reg\n", __func__);
-exit_bus_disable_reg:
+	if (!nclk)
+		return -EINVAL;
+	if (!nclk->reg_enabled)
+		return 0;
+	ret = regulator_disable(nclk->reg);
+	if (!ret)
+		nclk->reg_enabled = false;
 	return ret;
 }
 
 static int enable_nodeclk(struct nodeclk *nclk, struct device *dev)
 {
-	int ret = 0;
+	int ret;
 
-	if (!nclk->enable && !nclk->setrate_only_clk) {
-		if (dev && strlen(nclk->reg_name)) {
-			if (IS_ERR_OR_NULL(nclk->reg)) {
-				ret = bus_get_reg(nclk, dev);
-				if (ret) {
-					dev_dbg(dev,
-						"Failed to get reg.Err %d\n",
-									ret);
-					goto exit_enable_nodeclk;
-				}
-			}
-
-			ret = bus_enable_reg(nclk);
-			if (ret) {
-				dev_dbg(dev, "Failed to enable reg. Err %d\n",
-									ret);
-				goto exit_enable_nodeclk;
-			}
-		}
-		ret = clk_prepare_enable(nclk->clk);
-
-		if (ret) {
-			MSM_BUS_ERR("%s: failed to enable clk ", __func__);
-			nclk->enable = false;
-		} else
-			nclk->enable = true;
+	if (nclk->enable || nclk->setrate_only_clk)
+		return 0;
+	if (dev && nclk->reg_name[0]) {
+		ret = bus_get_reg(nclk, dev);
+		if (ret)
+			return ret;
+		ret = bus_enable_reg(nclk);
+		if (ret)
+			return ret;
 	}
-exit_enable_nodeclk:
-	return ret;
+	ret = clk_prepare_enable(nclk->clk);
+	if (ret) {
+		/* Keep regulator bookkeeping if its disable itself fails. */
+		bus_disable_reg(nclk);
+		return ret;
+	}
+	nclk->enable = true;
+	return 0;
 }
 
 static int disable_nodeclk(struct nodeclk *nclk)
 {
-	int ret = 0;
-
 	if (nclk->enable && !nclk->setrate_only_clk) {
 		clk_disable_unprepare(nclk->clk);
 		nclk->enable = false;
-		bus_disable_reg(nclk);
 	}
-	return ret;
+	return bus_disable_reg(nclk);
 }
 
 static int setrate_nodeclk(struct nodeclk *nclk, long rate)
@@ -220,64 +194,76 @@ static int setrate_nodeclk(struct nodeclk *nclk, long rate)
 	return ret;
 }
 
+static int msm_bus_rpm_vote(struct msm_bus_node_device_type *node, int ctx,
+			    u32 type, int id)
+{
+	if (id < 0)
+		return -EINVAL;
+	if (node->rpm) {
+#if IS_REACHABLE(CONFIG_QCOM_SMD_RPM)
+		struct {
+			__le32 key;
+			__le32 length;
+			__le64 bandwidth;
+		} request = {
+			.key = cpu_to_le32(RPM_MASTER_FIELD_BW),
+			.length = cpu_to_le32(sizeof(u64)),
+			.bandwidth = cpu_to_le64(node->node_bw[ctx].sum_ab),
+		};
+
+		BUILD_BUG_ON(sizeof(request) != 16);
+		return qcom_rpm_smd_write(node->rpm,
+			ctx == DUAL_CTX ? QCOM_SMD_RPM_SLEEP_STATE :
+					  QCOM_SMD_RPM_ACTIVE_STATE,
+			type, id, &request, sizeof(request));
+#else
+		return -EOPNOTSUPP;
+#endif
+	}
+#if IS_REACHABLE(CONFIG_MSM_RPM_SMD)
+	{
+		struct msm_rpm_kvp kvp = {
+			.key = RPM_MASTER_FIELD_BW,
+			.length = sizeof(u64),
+			.data = (u8 *)&node->node_bw[ctx].sum_ab,
+		};
+
+		return msm_rpm_send_message(ctx == DUAL_CTX ?
+			MSM_RPM_CTX_SLEEP_SET : MSM_RPM_CTX_ACTIVE_SET,
+			type, id, &kvp, 1);
+	}
+#else
+	return -ENODEV;
+#endif
+}
+
 static int send_rpm_msg(struct msm_bus_node_device_type *ndev, int ctx)
 {
-	int ret = 0;
-	int rsc_type;
-	struct msm_rpm_kvp rpm_kvp;
-	int rpm_ctx;
+	int ret, rpm_ctx;
 
-	if (!ndev) {
-		MSM_BUS_ERR("%s: Error getting node info.", __func__);
-		ret = -ENODEV;
-		goto exit_send_rpm_msg;
-	}
-
-	rpm_kvp.length = sizeof(uint64_t);
-	rpm_kvp.key = RPM_MASTER_FIELD_BW;
-
-	if (ctx == DUAL_CTX)
-		rpm_ctx = MSM_RPM_CTX_SLEEP_SET;
-	else
-		rpm_ctx = MSM_RPM_CTX_ACTIVE_SET;
-
-	rpm_kvp.data = (uint8_t *)&ndev->node_bw[ctx].sum_ab;
-
+	if (!ndev || ctx < 0 || ctx >= NUM_CTX)
+		return -EINVAL;
+	rpm_ctx = ctx == DUAL_CTX ? MSM_RPM_CTX_SLEEP_SET :
+				    MSM_RPM_CTX_ACTIVE_SET;
 	if (ndev->node_info->mas_rpm_id != -1) {
-		rsc_type = RPM_BUS_MASTER_REQ;
-		ret = msm_rpm_send_message(rpm_ctx, rsc_type,
-			ndev->node_info->mas_rpm_id, &rpm_kvp, 1);
-		if (ret) {
-			MSM_BUS_ERR("%s: Failed to send RPM message:",
-					__func__);
-			MSM_BUS_ERR("%s:Node Id %d RPM id %d",
-			__func__, ndev->node_info->id,
-				 ndev->node_info->mas_rpm_id);
-			goto exit_send_rpm_msg;
-		}
+		ret = msm_bus_rpm_vote(ndev, ctx, RPM_BUS_MASTER_REQ,
+				       ndev->node_info->mas_rpm_id);
+		if (ret)
+			return ret;
 		trace_bus_agg_bw(ndev->node_info->id,
 			ndev->node_info->mas_rpm_id, rpm_ctx,
 			ndev->node_bw[ctx].sum_ab);
 	}
-
 	if (ndev->node_info->slv_rpm_id != -1) {
-		rsc_type = RPM_BUS_SLAVE_REQ;
-		ret = msm_rpm_send_message(rpm_ctx, rsc_type,
-			ndev->node_info->slv_rpm_id, &rpm_kvp, 1);
-		if (ret) {
-			MSM_BUS_ERR("%s: Failed to send RPM message:",
-						__func__);
-			MSM_BUS_ERR("%s: Node Id %d RPM id %d",
-			__func__, ndev->node_info->id,
-				ndev->node_info->slv_rpm_id);
-			goto exit_send_rpm_msg;
-		}
+		ret = msm_bus_rpm_vote(ndev, ctx, RPM_BUS_SLAVE_REQ,
+				       ndev->node_info->slv_rpm_id);
+		if (ret)
+			return ret;
 		trace_bus_agg_bw(ndev->node_info->id,
 			ndev->node_info->slv_rpm_id, rpm_ctx,
 			ndev->node_bw[ctx].sum_ab);
 	}
-exit_send_rpm_msg:
-	return ret;
+	return 0;
 }
 
 static int flush_bw_data(struct msm_bus_node_device_type *node_info, int ctx)
@@ -319,8 +305,9 @@ static int flush_bw_data(struct msm_bus_node_device_type *node_info, int ctx)
 				MSM_BUS_ERR("%s: Failed to send RPM msg for%d",
 				__func__, node_info->node_info->id);
 		}
-		node_info->node_bw[ctx].last_sum_ab =
-					node_info->node_bw[ctx].sum_ab;
+		if (!ret)
+			node_info->node_bw[ctx].last_sum_ab =
+						node_info->node_bw[ctx].sum_ab;
 	}
 
 exit_flush_bw_data:
@@ -330,71 +317,55 @@ exit_flush_bw_data:
 
 static int flush_clk_data(struct msm_bus_node_device_type *node, int ctx)
 {
-	struct nodeclk *nodeclk = NULL;
-	int ret = 0;
+	struct nodeclk *clock;
+	u64 rate;
+	long rounded;
+	int ret;
 
-	if (!node) {
-		MSM_BUS_ERR("Unable to find bus device");
-		ret = -ENODEV;
-		goto exit_flush_clk_data;
-	}
-
-	nodeclk = &node->clk[ctx];
-
-	if (IS_ERR_OR_NULL(nodeclk) || IS_ERR_OR_NULL(nodeclk->clk))
-		goto exit_flush_clk_data;
-
-	if (nodeclk->rate != node->node_bw[ctx].cur_clk_hz) {
-		long rounded_rate;
-
-		nodeclk->rate = node->node_bw[ctx].cur_clk_hz;
-		nodeclk->dirty = true;
-
-		if (nodeclk->rate) {
-			rounded_rate = clk_round_rate(nodeclk->clk,
-							nodeclk->rate);
-			ret = setrate_nodeclk(nodeclk, rounded_rate);
-
-			if (ret) {
-				MSM_BUS_ERR("%s: Failed to set_rate %lu for %d",
-					__func__, rounded_rate,
-						node->node_info->id);
-				ret = -ENODEV;
-				goto exit_flush_clk_data;
+	if (!node || ctx < 0 || ctx >= NUM_CTX)
+		return -EINVAL;
+	clock = &node->clk[ctx];
+	if (IS_ERR_OR_NULL(clock->clk))
+		return 0;
+	rate = node->node_bw[ctx].cur_clk_hz;
+	if (rate > LONG_MAX)
+		return -ERANGE;
+	if (clock->rate != rate || clock->dirty) {
+		clock->dirty = true;
+		if (rate) {
+			rounded = clk_round_rate(clock->clk, rate);
+			if (rounded < 0)
+				return rounded;
+			ret = setrate_nodeclk(clock, rounded);
+			if (ret)
+				return ret;
+			ret = enable_nodeclk(clock, &node->dev);
+			if (ret)
+				return ret;
+			if (node->node_info->is_fab_dev &&
+			    !IS_ERR_OR_NULL(node->bus_qos_clk.clk)) {
+				ret = enable_nodeclk(&node->bus_qos_clk, &node->dev);
+				if (ret)
+					return ret;
 			}
-
-			ret = enable_nodeclk(nodeclk, &node->dev);
-
-			if ((node->node_info->is_fab_dev) &&
-				!IS_ERR_OR_NULL(node->bus_qos_clk.clk))
-					ret = enable_nodeclk(&node->bus_qos_clk,
-								&node->dev);
 		} else {
-			if ((node->node_info->is_fab_dev) &&
-				!IS_ERR_OR_NULL(node->bus_qos_clk.clk))
-					ret =
-					disable_nodeclk(&node->bus_qos_clk);
-
-			ret = disable_nodeclk(nodeclk);
+			if (node->node_info->is_fab_dev &&
+			    !IS_ERR_OR_NULL(node->bus_qos_clk.clk)) {
+				ret = disable_nodeclk(&node->bus_qos_clk);
+				if (ret)
+					return ret;
+			}
+			ret = disable_nodeclk(clock);
+			if (ret)
+				return ret;
 		}
-
-		if (ret) {
-			MSM_BUS_ERR("%s: Failed to enable for %d", __func__,
-						node->node_info->id);
-			ret = -ENODEV;
-			goto exit_flush_clk_data;
-		}
-		MSM_BUS_DBG("%s: Updated %d clk to %llu", __func__,
-				node->node_info->id, nodeclk->rate);
+		/* Desired-rate cache is valid only after every operation succeeded. */
+		clock->rate = rate;
+		clock->dirty = false;
 	}
-exit_flush_clk_data:
-	/* Reset the aggregated clock rate for fab devices*/
-	if (node && node->node_info->is_fab_dev)
+	if (node->node_info->is_fab_dev)
 		node->node_bw[ctx].cur_clk_hz = 0;
-
-	if (nodeclk)
-		nodeclk->dirty = 0;
-	return ret;
+	return 0;
 }
 
 static int msm_bus_agg_fab_clks(struct msm_bus_node_device_type *bus_dev)
@@ -414,101 +385,37 @@ static int msm_bus_agg_fab_clks(struct msm_bus_node_device_type *bus_dev)
 	return ret;
 }
 
-static void msm_bus_log_fab_max_votes(struct msm_bus_node_device_type *bus_dev)
-{
-	int ctx;
-	struct timespec ts;
-	uint32_t vrail_comp = 0;
-	struct msm_bus_node_device_type *node;
-	uint64_t max_ib, max_ib_temp[NUM_CTX];
-
-	for (ctx = 0; ctx < NUM_CTX; ctx++) {
-		max_ib_temp[ctx] = 0;
-		bus_dev->node_bw[ctx].max_ib = 0;
-		bus_dev->node_bw[ctx].max_ab = 0;
-		bus_dev->node_bw[ctx].max_ib_cl_name = NULL;
-		bus_dev->node_bw[ctx].max_ab_cl_name = NULL;
-	}
-
-	list_for_each_entry(node, &bus_dev->devlist, dev_link) {
-		for (ctx = 0; ctx < NUM_CTX; ctx++) {
-			max_ib = node->node_bw[ctx].max_ib;
-			vrail_comp = node->node_bw[ctx].vrail_used;
-
-			if (vrail_comp && (vrail_comp != 100)) {
-				max_ib *= 100;
-				max_ib = msm_bus_div64(vrail_comp, max_ib);
-			}
-
-			if (max_ib > max_ib_temp[ctx]) {
-				max_ib_temp[ctx] = max_ib;
-				bus_dev->node_bw[ctx].max_ib =
-					node->node_bw[ctx].max_ib;
-				bus_dev->node_bw[ctx].max_ib_cl_name =
-					node->node_bw[ctx].max_ib_cl_name;
-			}
-
-			if (node->node_bw[ctx].max_ab >
-					bus_dev->node_bw[ctx].max_ab) {
-				bus_dev->node_bw[ctx].max_ab =
-					node->node_bw[ctx].max_ab;
-				bus_dev->node_bw[ctx].max_ab_cl_name =
-					node->node_bw[ctx].max_ab_cl_name;
-			}
-		}
-	}
-
-	ts = ktime_to_timespec(ktime_get());
-	for (ctx = 0; ctx < NUM_CTX; ctx++) {
-		trace_bus_max_votes((int)ts.tv_sec, (int)ts.tv_nsec,
-				bus_dev->node_info->name,
-				((ctx == ACTIVE_CTX) ? "active" : "sleep"),
-				"ib", bus_dev->node_bw[ctx].max_ib,
-				bus_dev->node_bw[ctx].max_ib_cl_name);
-	}
-
-	for (ctx = 0; ctx < NUM_CTX; ctx++) {
-		trace_bus_max_votes((int)ts.tv_sec, (int)ts.tv_nsec,
-				bus_dev->node_info->name,
-				((ctx == ACTIVE_CTX) ? "active" : "sleep"),
-				"ab", bus_dev->node_bw[ctx].max_ab,
-				bus_dev->node_bw[ctx].max_ab_cl_name);
-	}
-}
-
 int msm_bus_commit_data(struct list_head *clist)
 {
-	int ret = 0;
-	int ctx;
-	struct msm_bus_node_device_type *node;
-	struct msm_bus_node_device_type *node_tmp;
+	int ret, first_error = 0, node_error, ctx;
+	struct msm_bus_node_device_type *node, *tmp;
 
-	list_for_each_entry(node, clist, link) {
-		/* Aggregate the bus clocks */
-		if (node->node_info->is_fab_dev) {
+	list_for_each_entry(node, clist, link)
+		if (node->node_info->is_fab_dev)
 			msm_bus_agg_fab_clks(node);
-			msm_bus_log_fab_max_votes(node);
-		}
-	}
-
-	list_for_each_entry_safe(node, node_tmp, clist, link) {
+	list_for_each_entry_safe(node, tmp, clist, link) {
+		node_error = 0;
 		if (unlikely(node->node_info->defer_qos))
-				msm_bus_dev_init_qos(&node->dev, NULL);
-
-		for (ctx = 0; ctx < NUM_CTX; ctx++) {
-			ret = flush_clk_data(node, ctx);
-			if (ret)
-				MSM_BUS_ERR("%s: Err flushing clk data for:%d",
-						__func__, node->node_info->id);
-			ret = flush_bw_data(node, ctx);
-			if (ret)
-				MSM_BUS_ERR("%s: Error flushing bw data for %d",
-					__func__, node->node_info->id);
+			node_error = msm_bus_dev_init_qos(&node->dev, NULL);
+		if (!node_error) {
+			for (ctx = 0; ctx < NUM_CTX; ctx++) {
+				ret = flush_clk_data(node, ctx);
+				if (!ret)
+					ret = flush_bw_data(node, ctx);
+				if (ret && !node_error)
+					node_error = ret;
+			}
 		}
-		node->dirty = false;
-		list_del_init(&node->link);
+		if (node_error) {
+			node->dirty = true;
+			if (!first_error)
+				first_error = node_error;
+		} else {
+			node->dirty = false;
+			list_del_init(&node->link);
+		}
 	}
-	return ret;
+	return first_error;
 }
 
 void *msm_bus_realloc_devmem(struct device *dev, void *p, size_t old_size,
@@ -526,10 +433,8 @@ void *msm_bus_realloc_devmem(struct device *dev, void *p, size_t old_size,
 		copy_size = new_size;
 
 	ret = devm_kzalloc(dev, new_size, flags);
-	if (!ret) {
-		MSM_BUS_ERR("%s: Error Reallocating memory", __func__);
+	if (!ret)
 		goto exit_realloc_devmem;
-	}
 
 	memcpy(ret, p, copy_size);
 	devm_kfree(dev, p);
@@ -537,100 +442,73 @@ exit_realloc_devmem:
 	return ret;
 }
 
-static void msm_bus_fab_init_noc_ops(struct msm_bus_node_device_type *bus_dev)
+static int msm_bus_fab_init_noc_ops(struct msm_bus_node_device_type *bus_dev)
 {
 	switch (bus_dev->fabdev->bus_type) {
 	case MSM_BUS_NOC:
-		msm_bus_noc_set_ops(bus_dev);
-		break;
+		return msm_bus_noc_set_ops(bus_dev);
 	case MSM_BUS_BIMC:
-		msm_bus_bimc_set_ops(bus_dev);
-		break;
+		return msm_bus_bimc_set_ops(bus_dev);
+	case MSM_BUS_QNOC:
+		return msm_bus_qnoc_set_ops(bus_dev);
 	default:
-		MSM_BUS_ERR("%s: Invalid Bus type", __func__);
+		return -EINVAL;
 	}
 }
 
 static int msm_bus_disable_node_qos_clk(struct msm_bus_node_device_type *node)
 {
-	struct msm_bus_node_device_type *bus_node = NULL;
-	int i;
-	int ret = 0;
+	struct msm_bus_node_device_type *bus;
+	int i, ret, first_error = 0;
 
-	if (!node || (!to_msm_bus_node(node->node_info->bus_device))) {
-		ret = -ENXIO;
-		goto exit_disable_node_qos_clk;
-	}
-
-	for (i = node->num_node_qos_clks - 1; i >= 0; i--)
+	if (!node || IS_ERR_OR_NULL(node->node_info->bus_device))
+		return -ENODEV;
+	bus = to_msm_bus_node(node->node_info->bus_device);
+	for (i = 0; i < node->num_node_qos_clks; i++) {
 		ret = disable_nodeclk(&node->node_qos_clks[i]);
-
-	bus_node = to_msm_bus_node(node->node_info->bus_device);
-
-	for (i = bus_node->num_node_qos_clks - 1; i >= 0; i--)
-		ret = disable_nodeclk(&bus_node->node_qos_clks[i]);
-
-exit_disable_node_qos_clk:
-	return ret;
+		if (ret && !first_error)
+			first_error = ret;
+	}
+	for (i = 0; i < bus->num_node_qos_clks; i++) {
+		ret = disable_nodeclk(&bus->node_qos_clks[i]);
+		if (ret && !first_error)
+			first_error = ret;
+	}
+	return first_error;
 }
 
 static int msm_bus_enable_node_qos_clk(struct msm_bus_node_device_type *node)
 {
-	struct msm_bus_node_device_type *bus_node = NULL;
-	int i;
-	int ret = 0;
-	long rounded_rate;
+	struct msm_bus_node_device_type *bus, *owner;
+	struct nodeclk *clock;
+	long rounded;
+	int set, i, ret;
 
-	if (!node || (!to_msm_bus_node(node->node_info->bus_device))) {
-		ret = -ENXIO;
-		goto exit_enable_node_qos_clk;
-	}
-	bus_node = to_msm_bus_node(node->node_info->bus_device);
-
-	for (i = 0; i < node->num_node_qos_clks; i++) {
-		if (!node->node_qos_clks[i].enable_only_clk) {
-			rounded_rate =
-				clk_round_rate(
-					node->node_qos_clks[i].clk, 1);
-			ret = setrate_nodeclk(&node->node_qos_clks[i],
-								rounded_rate);
+	if (!node || IS_ERR_OR_NULL(node->node_info->bus_device))
+		return -ENODEV;
+	bus = to_msm_bus_node(node->node_info->bus_device);
+	for (set = 0; set < 2; set++) {
+		owner = set ? bus : node;
+		for (i = 0; i < owner->num_node_qos_clks; i++) {
+			clock = &owner->node_qos_clks[i];
+			if (!clock->enable_only_clk) {
+				rounded = clk_round_rate(clock->clk, 1);
+				if (rounded < 0) {
+					ret = rounded;
+					goto disable;
+				}
+				ret = setrate_nodeclk(clock, rounded);
+				if (ret)
+					goto disable;
+			}
+			ret = enable_nodeclk(clock, &owner->dev);
 			if (ret)
-				MSM_BUS_DBG("%s: Failed set rate clk,node %d\n",
-					__func__, node->node_info->id);
+				goto disable;
 		}
-		ret = enable_nodeclk(&node->node_qos_clks[i],
-					node->node_info->bus_device);
-		if (ret) {
-			MSM_BUS_DBG("%s: Failed to set Qos Clks ret %d\n",
-				__func__, ret);
-			msm_bus_disable_node_qos_clk(node);
-			goto exit_enable_node_qos_clk;
-		}
-
 	}
-
-	for (i = 0; i < bus_node->num_node_qos_clks; i++) {
-		if (!bus_node->node_qos_clks[i].enable_only_clk) {
-			rounded_rate =
-				clk_round_rate(
-					bus_node->node_qos_clks[i].clk, 1);
-			ret = setrate_nodeclk(&bus_node->node_qos_clks[i],
-								rounded_rate);
-			if (ret)
-				MSM_BUS_DBG("%s: Failed set rate clk,node %d\n",
-					__func__, node->node_info->id);
-		}
-		ret = enable_nodeclk(&bus_node->node_qos_clks[i],
-					node->node_info->bus_device);
-		if (ret) {
-			MSM_BUS_DBG("%s: Failed to set Qos Clks ret %d\n",
-				__func__, ret);
-			msm_bus_disable_node_qos_clk(node);
-			goto exit_enable_node_qos_clk;
-		}
-
-	}
-exit_enable_node_qos_clk:
+	return 0;
+disable:
+	msm_bus_disable_node_qos_clk(node);
 	return ret;
 }
 
@@ -682,117 +560,57 @@ exit_enable_limiter:
 
 static int msm_bus_dev_init_qos(struct device *dev, void *data)
 {
-	int ret = 0;
-	struct msm_bus_node_device_type *node_dev = NULL;
+	struct msm_bus_node_device_type *node = to_msm_bus_node(dev), *bus;
+	struct msm_bus_fab_device_type *fabric;
+	int ret, disable_ret;
 
-	node_dev = to_msm_bus_node(dev);
-	if (!node_dev) {
-		MSM_BUS_ERR("%s: Unable to get node device info" , __func__);
-		ret = -ENXIO;
-		goto exit_init_qos;
-	}
-
-	MSM_BUS_DBG("Device = %d", node_dev->node_info->id);
-
-	if (node_dev->ap_owned) {
-		struct msm_bus_node_device_type *bus_node_info;
-
-		bus_node_info =
-			to_msm_bus_node(node_dev->node_info->bus_device);
-
-		if (!bus_node_info) {
-			MSM_BUS_ERR("%s: Unable to get bus device info for %d",
-				__func__,
-				node_dev->node_info->id);
-			ret = -ENXIO;
-			goto exit_init_qos;
-		}
-
-		if (bus_node_info->fabdev &&
-			bus_node_info->fabdev->noc_ops.qos_init) {
-			int ret = 0;
-
-			if (node_dev->ap_owned &&
-				(node_dev->node_info->qos_params.mode) != -1) {
-
-				if (bus_node_info->fabdev->bypass_qos_prg)
-					goto exit_init_qos;
-
-				ret = msm_bus_enable_node_qos_clk(node_dev);
-				if (ret < 0) {
-					MSM_BUS_DBG("Can't Enable QoS clk %d\n",
-					node_dev->node_info->id);
-					node_dev->node_info->defer_qos = true;
-					goto exit_init_qos;
-				}
-
-				bus_node_info->fabdev->noc_ops.qos_init(
-					node_dev,
-					bus_node_info->fabdev->qos_base,
-					bus_node_info->fabdev->base_offset,
-					bus_node_info->fabdev->qos_off,
-					bus_node_info->fabdev->qos_freq);
-				ret = msm_bus_disable_node_qos_clk(node_dev);
-				node_dev->node_info->defer_qos = false;
-			}
-		} else
-			MSM_BUS_ERR("%s: Skipping QOS init for %d",
-				__func__, node_dev->node_info->id);
-	}
-exit_init_qos:
+	if (!node->ap_owned || node->node_info->qos_params.mode == -1)
+		return 0;
+	if (IS_ERR_OR_NULL(node->node_info->bus_device))
+		return -ENODEV;
+	bus = to_msm_bus_node(node->node_info->bus_device);
+	fabric = bus->fabdev;
+	if (!fabric || !fabric->noc_ops.qos_init)
+		return -ENODEV;
+	if (fabric->bypass_qos_prg)
+		return 0;
+	ret = msm_bus_enable_node_qos_clk(node);
+	if (ret)
+		goto out;
+	ret = fabric->noc_ops.qos_init(node, fabric->qos_base,
+				       fabric->base_offset, fabric->qos_off,
+				       fabric->qos_freq);
+	disable_ret = msm_bus_disable_node_qos_clk(node);
+	if (!ret)
+		ret = disable_ret;
+out:
+	node->node_info->defer_qos = !!ret;
 	return ret;
 }
 
 static int msm_bus_fabric_init(struct device *dev,
-			struct msm_bus_node_device_type *pdata)
+				struct msm_bus_node_device_type *pdata)
 {
-	struct msm_bus_fab_device_type *fabdev;
-	struct msm_bus_node_device_type *node_dev = NULL;
-	int ret = 0;
+	struct msm_bus_node_device_type *node = to_msm_bus_node(dev);
+	struct msm_bus_fab_device_type *fabric;
+	int ret;
 
-	node_dev = to_msm_bus_node(dev);
-	if (!node_dev) {
-		MSM_BUS_ERR("%s: Unable to get bus device info" , __func__);
-		ret = -ENXIO;
-		goto exit_fabric_init;
-	}
-
-	if (node_dev->node_info->virt_dev) {
-		MSM_BUS_ERR("%s: Skip Fab init for virtual device %d", __func__,
-						node_dev->node_info->id);
-		goto exit_fabric_init;
-	}
-
-	fabdev = devm_kzalloc(dev, sizeof(struct msm_bus_fab_device_type),
-								GFP_KERNEL);
-	if (!fabdev) {
-		MSM_BUS_ERR("Fabric alloc failed\n");
-		ret = -ENOMEM;
-		goto exit_fabric_init;
-	}
-
-	node_dev->fabdev = fabdev;
-	fabdev->pqos_base = pdata->fabdev->pqos_base;
-	fabdev->qos_range = pdata->fabdev->qos_range;
-	fabdev->base_offset = pdata->fabdev->base_offset;
-	fabdev->qos_off = pdata->fabdev->qos_off;
-	fabdev->qos_freq = pdata->fabdev->qos_freq;
-	fabdev->bus_type = pdata->fabdev->bus_type;
-	fabdev->bypass_qos_prg = pdata->fabdev->bypass_qos_prg;
-	msm_bus_fab_init_noc_ops(node_dev);
-
-	fabdev->qos_base = devm_ioremap(dev,
-				fabdev->pqos_base, fabdev->qos_range);
-	if (!fabdev->qos_base) {
-		MSM_BUS_ERR("%s: Error remapping address 0x%zx :bus device %d",
-			__func__,
-			 (size_t)fabdev->pqos_base, node_dev->node_info->id);
-		ret = -ENOMEM;
-		goto exit_fabric_init;
-	}
-
-exit_fabric_init:
-	return ret;
+	if (node->node_info->virt_dev)
+		return 0;
+	if (IS_ERR_OR_NULL(pdata->fabdev) || !pdata->fabdev->qos_range)
+		return -EINVAL;
+	fabric = devm_kzalloc(dev, sizeof(*fabric), GFP_KERNEL);
+	if (!fabric)
+		return -ENOMEM;
+	*fabric = *pdata->fabdev;
+	node->fabdev = fabric;
+	ret = msm_bus_fab_init_noc_ops(node);
+	if (ret)
+		return ret;
+	fabric->qos_base = devm_ioremap(dev, fabric->pqos_base, fabric->qos_range);
+	if (!fabric->qos_base)
+		return -ENOMEM;
+	return 0;
 }
 
 static int msm_bus_init_clk(struct device *bus_dev,
@@ -800,7 +618,7 @@ static int msm_bus_init_clk(struct device *bus_dev,
 {
 	unsigned int ctx;
 	struct msm_bus_node_device_type *node_dev = to_msm_bus_node(bus_dev);
-	int i;
+	int i, ret;
 
 	for (ctx = 0; ctx < NUM_CTX; ctx++) {
 		if (!IS_ERR_OR_NULL(pdata->clk[ctx].clk)) {
@@ -814,7 +632,9 @@ static int msm_bus_init_clk(struct device *bus_dev,
 			strlcpy(node_dev->clk[ctx].reg_name,
 				pdata->clk[ctx].reg_name, MAX_REG_NAME);
 			node_dev->clk[ctx].reg = NULL;
-			bus_get_reg(&node_dev->clk[ctx], bus_dev);
+			ret = bus_get_reg(&node_dev->clk[ctx], bus_dev);
+			if (ret)
+				return ret;
 			MSM_BUS_DBG("%s: Valid node clk node %d ctx %d\n",
 				__func__, node_dev->node_info->id, ctx);
 		}
@@ -835,14 +655,11 @@ static int msm_bus_init_clk(struct device *bus_dev,
 	}
 
 	if (pdata->num_node_qos_clks) {
-		node_dev->num_node_qos_clks = pdata->num_node_qos_clks;
-		node_dev->node_qos_clks = devm_kzalloc(bus_dev,
-			(node_dev->num_node_qos_clks * sizeof(struct nodeclk)),
-			GFP_KERNEL);
-		if (!node_dev->node_qos_clks) {
-			dev_err(bus_dev, "Failed to alloc memory for qos clk");
+		node_dev->node_qos_clks = devm_kcalloc(bus_dev,
+			pdata->num_node_qos_clks, sizeof(struct nodeclk), GFP_KERNEL);
+		if (!node_dev->node_qos_clks)
 			return -ENOMEM;
-		}
+		node_dev->num_node_qos_clks = pdata->num_node_qos_clks;
 
 		for (i = 0; i < pdata->num_node_qos_clks; i++) {
 			node_dev->node_qos_clks[i].clk =
@@ -878,8 +695,8 @@ static int msm_bus_copy_node_info(struct msm_bus_node_device_type *pdata,
 
 	if (!bus_node || !pdata) {
 		ret = -ENXIO;
-		MSM_BUS_ERR("%s: Invalid pointers pdata %p, bus_node %p",
-			__func__, pdata, bus_node);
+		MSM_BUS_ERR("%s: NULL pointers for pdata or bus_node",
+			__func__);
 		goto exit_copy_node_info;
 	}
 
@@ -899,6 +716,9 @@ static int msm_bus_copy_node_info(struct msm_bus_node_device_type *pdata,
 	node_info->qos_params.mode = pdata_node_info->qos_params.mode;
 	node_info->qos_params.prio1 = pdata_node_info->qos_params.prio1;
 	node_info->qos_params.prio0 = pdata_node_info->qos_params.prio0;
+	node_info->qos_params.prio_dflt = pdata_node_info->qos_params.prio_dflt;
+	node_info->qos_params.urg_fwd_en =
+				pdata_node_info->qos_params.urg_fwd_en;
 	node_info->qos_params.reg_prio1 = pdata_node_info->qos_params.reg_prio1;
 	node_info->qos_params.reg_prio0 = pdata_node_info->qos_params.reg_prio0;
 	node_info->qos_params.prio_lvl = pdata_node_info->qos_params.prio_lvl;
@@ -968,10 +788,10 @@ static int msm_bus_copy_node_info(struct msm_bus_node_device_type *pdata,
 		goto exit_copy_node_info;
 	}
 
-	node_info->black_listed_connections = devm_kzalloc(bus_dev,
+	node_info->bl_cons = devm_kzalloc(bus_dev,
 			pdata_node_info->num_blist * sizeof(int),
 			GFP_KERNEL);
-	if (!node_info->black_listed_connections) {
+	if (!node_info->bl_cons) {
 		MSM_BUS_ERR("%s:Bus black list connections alloc failed\n",
 					__func__);
 		devm_kfree(bus_dev, node_info->black_connections);
@@ -981,8 +801,8 @@ static int msm_bus_copy_node_info(struct msm_bus_node_device_type *pdata,
 		goto exit_copy_node_info;
 	}
 
-	memcpy(node_info->black_listed_connections,
-		pdata_node_info->black_listed_connections,
+	memcpy(node_info->bl_cons,
+		pdata_node_info->bl_cons,
 		sizeof(int) * pdata_node_info->num_blist);
 
 	node_info->qport = devm_kzalloc(bus_dev,
@@ -992,7 +812,7 @@ static int msm_bus_copy_node_info(struct msm_bus_node_device_type *pdata,
 		MSM_BUS_ERR("%s:Bus qport allocation failed\n", __func__);
 		devm_kfree(bus_dev, node_info->dev_connections);
 		devm_kfree(bus_dev, node_info->connections);
-		devm_kfree(bus_dev, node_info->black_listed_connections);
+		devm_kfree(bus_dev, node_info->bl_cons);
 		ret = -ENOMEM;
 		goto exit_copy_node_info;
 	}
@@ -1005,59 +825,58 @@ exit_copy_node_info:
 	return ret;
 }
 
-static struct device *msm_bus_device_init(
-			struct msm_bus_node_device_type *pdata)
+static void msm_bus_node_release(struct device *dev)
 {
-	struct device *bus_dev = NULL;
-	struct msm_bus_node_device_type *bus_node = NULL;
-	struct msm_bus_node_info_type *node_info = NULL;
-	int ret = 0;
+	of_node_put(dev->of_node);
+	kfree(to_msm_bus_node(dev));
+}
 
-	/**
-	* Init here so we can use devm calls
-	*/
+static struct device *msm_bus_device_init(
+		struct msm_bus_node_device_type *pdata, struct device *parent,
+		struct qcom_smd_rpm *rpm)
+{
+	struct msm_bus_node_device_type *node;
+	struct device *dev;
+	int ret;
 
-	bus_node = kzalloc(sizeof(struct msm_bus_node_device_type), GFP_KERNEL);
-	if (!bus_node) {
+	node = kzalloc(sizeof(*node), GFP_KERNEL);
+	if (!node)
+		return ERR_PTR(-ENOMEM);
+	dev = &node->dev;
+	dev->release = msm_bus_node_release;
+	device_initialize(dev);
+	dev->parent = parent;
+	dev->bus = &msm_bus_type;
+	dev->of_node = of_node_get(pdata->of_node);
+	node->of_node = dev->of_node;
+	node->rpm = rpm;
+	node->ap_owned = pdata->ap_owned;
+	INIT_LIST_HEAD(&node->link);
+	INIT_LIST_HEAD(&node->dev_link);
+	INIT_LIST_HEAD(&node->devlist);
+	INIT_LIST_HEAD(&node->owner_link);
+	node->node_info = devm_kzalloc(dev, sizeof(*node->node_info), GFP_KERNEL);
+	if (!node->node_info) {
 		ret = -ENOMEM;
-		goto err_device_init;
+		goto put;
 	}
-	bus_dev = &bus_node->dev;
-	device_initialize(bus_dev);
-
-	node_info = devm_kzalloc(bus_dev,
-			sizeof(struct msm_bus_node_info_type), GFP_KERNEL);
-	if (!node_info) {
-		ret = -ENOMEM;
-		goto err_put_device;
-	}
-
-	bus_node->node_info = node_info;
-	bus_node->ap_owned = pdata->ap_owned;
-	bus_dev->of_node = pdata->of_node;
-
-	ret = msm_bus_copy_node_info(pdata, bus_dev);
+	ret = msm_bus_copy_node_info(pdata, dev);
 	if (ret)
-		goto err_put_device;
-
-	bus_dev->bus = &msm_bus_type;
-	dev_set_name(bus_dev, bus_node->node_info->name);
-
-	ret = device_add(bus_dev);
+		goto put;
+	ret = dev_set_name(dev, "%s", node->node_info->name);
+	if (ret)
+		goto put;
+	ret = device_add(dev);
+	if (ret)
+		goto put;
+	ret = device_create_file(dev, &dev_attr_bw);
 	if (ret) {
-		MSM_BUS_ERR("%s: Error registering device %d",
-				__func__, pdata->node_info->id);
-		goto err_put_device;
+		device_unregister(dev);
+		return ERR_PTR(ret);
 	}
-	device_create_file(bus_dev, &dev_attr_bw);
-	INIT_LIST_HEAD(&bus_node->devlist);
-	return bus_dev;
-
-err_put_device:
-	put_device(bus_dev);
-	bus_dev = NULL;
-	kfree(bus_node);
-err_device_init:
+	return dev;
+put:
+	put_device(dev);
 	return ERR_PTR(ret);
 }
 
@@ -1115,15 +934,15 @@ static int msm_bus_setup_dev_conn(struct device *bus_dev, void *data)
 	for (j = 0; j < bus_node->node_info->num_blist; j++) {
 		bus_node->node_info->black_connections[j] =
 			bus_find_device(&msm_bus_type, NULL,
-				(void *)&bus_node->node_info->
-				black_listed_connections[j],
+			(void *)
+			&bus_node->node_info->bl_cons[j],
 				msm_bus_device_match_adhoc);
 
 		if (!bus_node->node_info->black_connections[j]) {
 			MSM_BUS_ERR("%s: Error finding conn %d for device %d\n",
-				__func__, bus_node->node_info->
-				black_listed_connections[j],
-				bus_node->node_info->id);
+			__func__,
+			bus_node->node_info->bl_cons[j],
+			bus_node->node_info->id);
 			ret = -ENODEV;
 			goto exit_setup_dev_conn;
 		}
@@ -1161,151 +980,149 @@ exit_node_debug:
 	return ret;
 }
 
-static int msm_bus_free_dev(struct device *dev, void *data)
+/* Drop all graph-owned references before unregistering any node. */
+static void msm_bus_disconnect_graph(struct msm_bus_graph *graph)
 {
-	struct msm_bus_node_device_type *bus_node = NULL;
+	struct msm_bus_node_device_type *node;
+	struct msm_bus_node_info_type *info;
+	unsigned int i;
 
-	bus_node = to_msm_bus_node(dev);
+	list_for_each_entry(node, &graph->nodes, owner_link) {
+		info = node->node_info;
+		for (i = 0; i < node->num_lnodes; i++) {
+			put_device(node->lnode_list[i].next_dev);
+			node->lnode_list[i].next_dev = NULL;
+		}
+		for (i = 0; i < info->num_connections; i++) {
+			put_device(info->dev_connections[i]);
+			info->dev_connections[i] = NULL;
+		}
+		for (i = 0; i < info->num_blist; i++) {
+			put_device(info->black_connections[i]);
+			info->black_connections[i] = NULL;
+		}
+		if (!list_empty(&node->dev_link))
+			list_del_init(&node->dev_link);
+		put_device(info->bus_device);
+		info->bus_device = NULL;
+	}
+}
 
-	if (bus_node)
-		MSM_BUS_ERR("\n%s: Removing device %d", __func__,
-						bus_node->node_info->id);
-	device_unregister(dev);
-	kfree(bus_node);
-	return 0;
+static void msm_bus_destroy_graph(struct msm_bus_graph *graph)
+{
+	struct msm_bus_node_device_type *node, *tmp;
+	int i;
+
+	list_for_each_entry(node, &graph->nodes, owner_link) {
+		device_remove_file(&node->dev, &dev_attr_bw);
+		for (i = 0; i < NUM_CTX; i++)
+			disable_nodeclk(&node->clk[i]);
+		disable_nodeclk(&node->bus_qos_clk);
+		for (i = 0; i < node->num_node_qos_clks; i++)
+			disable_nodeclk(&node->node_qos_clks[i]);
+	}
+	msm_bus_disconnect_graph(graph);
+	list_for_each_entry_safe(node, tmp, &graph->nodes, owner_link) {
+		list_del_init(&node->owner_link);
+		device_unregister(&node->dev);
+	}
 }
 
 int msm_bus_device_remove(struct platform_device *pdev)
 {
-	bus_for_each_dev(&msm_bus_type, NULL, NULL, msm_bus_free_dev);
+	struct msm_bus_graph *graph = platform_get_drvdata(pdev);
+
+	if (!graph)
+		return 0;
+	mutex_lock(&msm_bus_graph_lock);
+	if (msm_bus_graph_owner == graph) {
+		msm_bus_arb_clearops_adhoc(&arb_ops);
+		msm_bus_graph_owner = NULL;
+	}
+	msm_bus_destroy_graph(graph);
+	platform_set_drvdata(pdev, NULL);
+	mutex_unlock(&msm_bus_graph_lock);
 	return 0;
 }
 
-/**
- * msm_bus_panic_callback() - panic notification callback function.
- *              This function is invoked when a kernel panic occurs.
- * @nfb:        Notifier block pointer
- * @event:      Value passed unmodified to notifier function
- * @data:       Pointer passed unmodified to notifier function
- *
- * Return: NOTIFY_OK
- */
-static int msm_bus_panic_callback(struct notifier_block *nfb,
-					unsigned long event, void *data)
-{
-	struct msm_bus_node_device_type *bus_node = NULL;
-	unsigned int ctx;
-
-	list_for_each_entry(bus_node, &fabdev_list, dev_link) {
-		for (ctx = 0; ctx < NUM_CTX; ctx++) {
-			if (bus_node->node_bw[ctx].max_ib_cl_name &&
-				bus_node->node_bw[ctx].max_ib) {
-				pr_err("%s: %s: %s max_ib: %llu: client-name: %s\n",
-				__func__, bus_node->node_info->name,
-				((ctx == ACTIVE_CTX) ? "active" : "sleep"),
-				bus_node->node_bw[ctx].max_ib,
-				bus_node->node_bw[ctx].max_ib_cl_name);
-			}
-		}
-
-		for (ctx = 0; ctx < NUM_CTX; ctx++) {
-			if (bus_node->node_bw[ctx].max_ab_cl_name &&
-				bus_node->node_bw[ctx].max_ab) {
-				pr_err("%s: %s: %s max_ab: %llu: client-name: %s\n",
-				__func__, bus_node->node_info->name,
-				((ctx == ACTIVE_CTX) ? "active" : "sleep"),
-				bus_node->node_bw[ctx].max_ab,
-				bus_node->node_bw[ctx].max_ab_cl_name);
-			}
-		}
-	}
-
-	return NOTIFY_OK;
-}
-
-static struct notifier_block msm_bus_panic_notifier = {
-	.notifier_call = msm_bus_panic_callback,
-	.priority = 1,
-};
-
 static int msm_bus_device_probe(struct platform_device *pdev)
 {
-	unsigned int i, ret;
 	struct msm_bus_device_node_registration *pdata;
+	struct msm_bus_graph *graph;
+	struct msm_bus_node_device_type *node;
+	struct device *dev;
+	unsigned int i;
+	int ret;
 
-	/* If possible, get pdata from device-tree */
-	if (pdev->dev.of_node)
-		pdata = msm_bus_of_to_pdata(pdev);
-	else {
-		pdata = (struct msm_bus_device_node_registration *)pdev->
-			dev.platform_data;
+	pdata = pdev->dev.of_node ? msm_bus_of_to_pdata(pdev) :
+		pdev->dev.platform_data;
+	if (IS_ERR_OR_NULL(pdata))
+		return pdata ? PTR_ERR(pdata) : -ENODATA;
+	graph = devm_kzalloc(&pdev->dev, sizeof(*graph), GFP_KERNEL);
+	if (!graph)
+		return -ENOMEM;
+	INIT_LIST_HEAD(&graph->nodes);
+	if (of_find_property(pdev->dev.of_node, "qcom,rpm", NULL)) {
+#if IS_REACHABLE(CONFIG_QCOM_SMD_RPM)
+		graph->rpm = qcom_smd_rpm_get(&pdev->dev);
+		if (IS_ERR(graph->rpm))
+			return PTR_ERR(graph->rpm);
+#else
+		return -EOPNOTSUPP;
+#endif
+	} else if (!IS_REACHABLE(CONFIG_MSM_RPM_SMD)) {
+		/* Never call the legacy disabled-config success stub. */
+		for (i = 0; i < pdata->num_devices; i++)
+			if (!pdata->info[i].ap_owned &&
+			    (pdata->info[i].node_info->mas_rpm_id != -1 ||
+			     pdata->info[i].node_info->slv_rpm_id != -1))
+				return -ENODEV;
 	}
-
-	if (IS_ERR_OR_NULL(pdata)) {
-		MSM_BUS_ERR("No platform data found");
-		ret = -ENODATA;
-		goto exit_device_probe;
+	mutex_lock(&msm_bus_graph_lock);
+	if (msm_bus_graph_owner) {
+		ret = -EBUSY;
+		goto unlock;
 	}
-
 	for (i = 0; i < pdata->num_devices; i++) {
-		struct device *node_dev = NULL;
-		struct msm_bus_node_device_type *bus_node = NULL;
-
-		node_dev = msm_bus_device_init(&pdata->info[i]);
-
-		if (IS_ERR(node_dev)) {
-			MSM_BUS_ERR("%s: Error during dev init for %d",
-				__func__, pdata->info[i].node_info->id);
-			ret = PTR_ERR(node_dev);
-			goto exit_device_probe;
+		dev = msm_bus_device_init(&pdata->info[i], &pdev->dev, graph->rpm);
+		if (IS_ERR(dev)) {
+			ret = PTR_ERR(dev);
+			goto destroy;
 		}
-
-		ret = msm_bus_init_clk(node_dev, &pdata->info[i]);
-		if (ret) {
-			MSM_BUS_ERR("\n Failed to init bus clk. ret %d", ret);
-			msm_bus_device_remove(pdev);
-			goto exit_device_probe;
-		}
-		/*Is this a fabric device ?*/
-		if (pdata->info[i].node_info->is_fab_dev) {
-			MSM_BUS_DBG("%s: %d is a fab", __func__,
-						pdata->info[i].node_info->id);
-			ret = msm_bus_fabric_init(node_dev, &pdata->info[i]);
-			if (ret) {
-				MSM_BUS_ERR("%s: Error intializing fab %d",
-					__func__, pdata->info[i].node_info->id);
-				goto exit_device_probe;
-			}
-
-			bus_node = to_msm_bus_node(node_dev);
-			list_add_tail(&bus_node->dev_link, &fabdev_list);
+		node = to_msm_bus_node(dev);
+		list_add_tail(&node->owner_link, &graph->nodes);
+		ret = msm_bus_init_clk(dev, &pdata->info[i]);
+		if (ret)
+			goto destroy;
+		if (node->node_info->is_fab_dev) {
+			ret = msm_bus_fabric_init(dev, &pdata->info[i]);
+			if (ret)
+				goto destroy;
 		}
 	}
-
-	ret = bus_for_each_dev(&msm_bus_type, NULL, NULL,
-						msm_bus_setup_dev_conn);
-	if (ret) {
-		MSM_BUS_ERR("%s: Error setting up dev connections", __func__);
-		goto exit_device_probe;
+	list_for_each_entry(node, &graph->nodes, owner_link) {
+		ret = msm_bus_setup_dev_conn(&node->dev, NULL);
+		if (ret)
+			goto destroy;
 	}
-
-	/*
-	 * Setup the QoS for the nodes, don't check the error codes as we
-	 * defer QoS programming to the first transaction in cases of failure
-	 * and we want to continue the probe.
-	 */
-	ret = bus_for_each_dev(&msm_bus_type, NULL, NULL, msm_bus_dev_init_qos);
-
-	/* Register the arb layer ops */
+	list_for_each_entry(node, &graph->nodes, owner_link) {
+		ret = msm_bus_dev_init_qos(&node->dev, NULL);
+		if (ret)
+			goto destroy;
+	}
+	platform_set_drvdata(pdev, graph);
+	msm_bus_graph_owner = graph;
+	/* Publish arb callbacks only after the complete graph/QoS is usable. */
 	msm_bus_arb_setops_adhoc(&arb_ops);
-	bus_for_each_dev(&msm_bus_type, NULL, NULL, msm_bus_node_debug);
-
-	atomic_notifier_chain_register(&panic_notifier_list,
-						&msm_bus_panic_notifier);
-
-	devm_kfree(&pdev->dev, pdata->info);
-	devm_kfree(&pdev->dev, pdata);
-exit_device_probe:
+	list_for_each_entry(node, &graph->nodes, owner_link)
+		msm_bus_node_debug(&node->dev, NULL);
+	ret = 0;
+	dev_info(&pdev->dev, "Bus scaling graph and RPM transport ready\n");
+	goto unlock;
+destroy:
+	msm_bus_destroy_graph(graph);
+unlock:
+	mutex_unlock(&msm_bus_graph_lock);
 	return ret;
 }
 
@@ -1340,7 +1157,7 @@ int msm_bus_device_rules_remove(struct platform_device *pdev)
 }
 
 
-static struct of_device_id rules_match[] = {
+static const struct of_device_id rules_match[] = {
 	{.compatible = "qcom,msm-bus-static-bw-rules"},
 	{}
 };
@@ -1350,12 +1167,11 @@ static struct platform_driver msm_bus_rules_driver = {
 	.remove = msm_bus_device_rules_remove,
 	.driver = {
 		.name = "msm_bus_rules_device",
-		.owner = THIS_MODULE,
 		.of_match_table = rules_match,
 	},
 };
 
-static struct of_device_id fabric_match[] = {
+static const struct of_device_id fabric_match[] = {
 	{.compatible = "qcom,msm-bus-device"},
 	{}
 };
@@ -1365,7 +1181,7 @@ static struct platform_driver msm_bus_device_driver = {
 	.remove = msm_bus_device_remove,
 	.driver = {
 		.name = "msm_bus_device",
-		.owner = THIS_MODULE,
+		.suppress_bind_attrs = true,
 		.of_match_table = fabric_match,
 	},
 };
@@ -1383,4 +1199,4 @@ int __init msm_bus_device_init_driver(void)
 	}
 	return platform_driver_register(&msm_bus_rules_driver);
 }
-subsys_initcall(msm_bus_device_init_driver);
+fs_initcall(msm_bus_device_init_driver);

@@ -1,0 +1,12 @@
+{
+  "out": "/workspace/stage6-clean-out",
+  "code_source": "ad4544209",
+  "pipeline_exit": 1,
+  "compile_and_link": "PASS",
+  "failure": "GPU child provider mismatch: nvmem-cells (stale check-variants shared fuse path)",
+  "fix": "validate byte-relative @133/1 bits5:3; existing GPU reader accepts the one-byte result; old-binding negative fixtures added",
+  "logs": [
+    "failed-first-pipeline.log.gz",
+    "failed-first-build.log.gz"
+  ]
+}

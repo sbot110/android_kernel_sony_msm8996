@@ -1,0 +1,24 @@
+{
+  "compiler_count": 90,
+  "stage6_compiler_count": 90,
+  "compiler_added": [],
+  "compiler_removed": [],
+  "dtc_by_tree": {
+    "qcom/msm8996-v3.0-sony-xperia-tone-dora.dtb": 29,
+    "qcom/msm8996-v3.0-pmi8996-sony-xperia-tone-dora.dtb": 29,
+    "qcom/msm8996-sony-xperia-tone-dora.dtb": 29,
+    "qcom/msm8996-v3.1-pmi8996-sony-xperia-tone-dora.dtb": 29
+  },
+  "dtc_by_tree_added": [],
+  "dtc_by_tree_removed": [],
+  "bundled_dtc_by_tree": {
+    "qcom/msm8996-v3.0-sony-xperia-tone-dora.dtb": 15,
+    "qcom/msm8996-v3.0-pmi8996-sony-xperia-tone-dora.dtb": 15,
+    "qcom/msm8996-sony-xperia-tone-dora.dtb": 15,
+    "qcom/msm8996-v3.1-pmi8996-sony-xperia-tone-dora.dtb": 15
+  },
+  "bundled_dtc_by_tree_added": [],
+  "bundled_dtc_by_tree_removed": [],
+  "comparison_dtc_version": "1.6.1",
+  "bundled_dtc_version": "Version: DTC 1.4.6-g84e414b0"
+}

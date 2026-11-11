@@ -1,0 +1,13 @@
+{
+  "drivers/regulator/qcom-rpm-physical.c": true,
+  "drivers/regulator/qcom-rpm-corner.c": true,
+  "drivers/regulator/qcom_smd-regulator.c": true,
+  "drivers/mmc": true,
+  "drivers/net/wireless/bcmdhd": true,
+  "arch/arm64/boot/dts/qcom/msm8996-sony-xperia-tone-storage.dtsi": true,
+  "arch/arm64/boot/dts/qcom/diagnostic": true,
+  "Documentation/sony/dora-cpu-dt.json": true,
+  "Documentation/sony/dora-clock-voltage.json": true,
+  "Documentation/sony/dora-panels.json": true,
+  "arch/arm64/configs/tone_dora_defconfig": true
+}

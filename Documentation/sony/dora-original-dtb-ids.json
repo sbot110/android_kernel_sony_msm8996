@@ -1,0 +1,26 @@
+[
+  {
+    "file": "msm8996-v3-pmi8996-tone-dora_generic.dts",
+    "qcom,msm-id": "246 0x30001",
+    "qcom,board-id": "8 0",
+    "qcom,pmic-id": "0x20009 0x10013 0x0 0x0"
+  },
+  {
+    "file": "msm8996-v3-tone-dora_generic.dts",
+    "qcom,msm-id": "246 0x30001",
+    "qcom,board-id": "8 0",
+    "qcom,pmic-id": "0x20009 0x2000A 0x0 0x0"
+  },
+  {
+    "file": "msm8996-v3.0-pmi8996-tone-dora_generic.dts",
+    "qcom,msm-id": "246 0x30000",
+    "qcom,board-id": "8 0",
+    "qcom,pmic-id": "0x20009 0x10013 0x0 0x0"
+  },
+  {
+    "file": "msm8996-v3.0-tone-dora_generic.dts",
+    "qcom,msm-id": "246 0x30000",
+    "qcom,board-id": "8 0",
+    "qcom,pmic-id": "0x20009 0x2000A 0x0 0x0"
+  }
+]

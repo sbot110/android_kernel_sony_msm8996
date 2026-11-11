@@ -1,0 +1,23 @@
+MSM8996 firmware APCC / CBF clock observation
+
+This diagnostic driver reports the clock currently programmed by firmware. It
+has no rate, parent, gate, PLL, voltage, ACD or power-domain programming path.
+It is not a cpufreq driver and does not establish safe CPU power management.
+It must not be combined with an active driver owning these MMIO regions.
+
+Required properties:
+- compatible: "qcom,apcc-msm8996" (existing MSM8996 binding) or
+  "qcom,msm8996-apcc" for APCC; "qcom,msm8996-cbf" for CBF.
+- reg: APCC block at 0x06400000 covering both clusters (size >= 0x80118);
+  CBF mux at 0x09a11000 and PLL at offset 0xf000 (size >= 0xf038).
+- #clock-cells: 1. APCC outputs 0 (power cluster) and 1 (performance cluster).
+  CBF has output 0.
+- clocks / clock-names: APCC requires "xo" (the 19.2 MHz crystal); CBF
+  requires "xo" and "aux" (the real GCC GPLL0 main output). The CBF AUX
+  source is physically divided by two as in Sony clock-cpu-8996.c.
+
+The driver reads boot muxes, primary/alternate PLL values and main-output
+post-dividers; reserved encodings or invalid M/N data are rejected. Rates
+are observed without reprogramming boot firmware state. Final Sony speed-bin
+plans may be retained on the APCC node for auditing; this driver does not
+select them or create OPPs from them.

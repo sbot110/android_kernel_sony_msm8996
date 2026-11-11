@@ -1,0 +1,68 @@
+Sony Xperia X Performance (dora) vendor-audio source port
+=======================================================
+
+Scope and provenance
+--------------------
+The optional CONFIG_SND_SOC_SONY_MSM8996 path uses Sony's MSM8996/Tasha
+machine source from the preserved 4.4 reference, adapted to the actual 4.19
+ASoC component API. It uses existing 4.19 APRv2/Q6, WCD9335, CPE and WSA881x
+implementations. No APQ8096 or SDM machine substitutes for Sony MSM8996.
+The same source path is intended for F8131 and F8132; hardware behavior is
+unverified on both models.
+
+Configuration
+-------------
+Enable CONFIG_SND_SOC_SONY_MSM8996=y, then run olddefconfig. The fragment
+arch/arm64/configs/dora_audio.config documents this optional selection.
+SND_SOC, ARCH_QCOM, QCOM_SMEM and MAILBOX are prerequisites. Kconfig selects
+native SLIMbus NGD, SPS/NDP, SMD/RPMSG, QRTR/QMI, PIL/SSR and switch support.
+The 31 features in doraauto.conf and doraautoconf.h match exactly.
+
+Confirmed checks
+----------------
+AArch64 audio/switch archive compilation passed with the existing audio
+-Werror checks enabled. The optional switch_gpio object also compiled.
+A relocatable whole-archive link of audio and switch passed; a complete
+vmlinux link is a separate check and must be reported separately.
+Original and ported machine string multisets match: 80 DAI names,
+134 stream names, CPU DAI names, codec names and codec DAI names,
+23 SOC_ENUM_SINGLE_EXT expressions, and the Tasha compatible string.
+The original vendor virtual codec routes remain virtual audio paths.
+
+Confirmed fixes made during the port
+------------------------------------
+* Kbuild uses srctree, including with O= output directories.
+* Native component APIs and real external codec function signatures replace
+  incompatible snd_soc_codec calls.
+* AMR-WB GET_CONFIG only returns EFAULT when copy_to_user actually fails.
+  Debug parsers check errors before reading parsed values; fixed array
+  emptiness checks replace comparisons of array addresses against NULL.
+* Switch sysfs has valid drvdata before publication, and unregister no longer
+  accesses a destroyed device. Class creation is serialized, preserving
+  retry after class_create failure. GPIO switch saves drvdata and removes
+  IRQs before draining work and freeing state.
+* EAR_EN and optional US/EURO GPIO configuration precede card registration.
+  Required/deferred GPIO errors propagate, managed HPH/US-EURO requests
+  unwind correctly, and request failures stop probe.
+* Dock work/switch initialization precedes IRQ registration. Failure and
+  remove release IRQ, drain work, unregister switch, then free GPIO/state.
+* SSR notifier registration handles ERR_PTR and NULL; failure/remove releases
+  it. WCD9335 serializes machine SSR callback changes with its codec mutex
+  and clears the callback on component removal.
+
+Remaining hardware integration
+-------------------------------
+The source port alone does not connect vendor LPASS PIL/SSR, APR transport,
+SLIMbus/SPS, clocks, reserved memory/IOMMU, WCD9335 reset/regulators and Sony
+sound-card phandles to a functioning device tree. Upstream ADSP remoteproc
+must not be assumed to implement vendor subsystem_get("adsp") semantics.
+The original Tone data uses a 9.6 MHz Tasha master clock, PM8994 GPIO13 for
+EAR_EN, Sony analog/digital/ANC/speaker routes and microphone bias settings;
+Tone deletes optional HPH_EN0/1 and US/EURO GPIO properties. Preserve these
+board overrides and original hardware alternatives during DT integration.
+Sony 4.4 DSP-effects extensions (Sony hweffect parameters, q6asm hooks and
+custom-stereo routing additions) have not yet been ported to this techpack.
+
+No F8131/F8132 playback, recording, headset, speaker/earpiece, call/DSDS,
+DSP restart or suspend/resume test has been performed. Successful source
+compilation is not evidence of functioning audio hardware.

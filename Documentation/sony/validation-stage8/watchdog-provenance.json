@@ -1,0 +1,65 @@
+{
+  "official_repository": "https://github.com/sonyxperiadev/kernel-sony-msm-4.4-common",
+  "official_sha": "8176b0892ba13a0401a22d7322bc109f473a24b9",
+  "repository_type": "prebuilt kernel distribution; no arch/driver source at this revision",
+  "prebuilt_name": "kernel-dtb-dora",
+  "git_blob_sha": "68b949a218d1dd10417ac7b2f64cfddc3f73bb5b",
+  "sha256": "75a8dc67020fb672251a9c737ba14e1082348cd06fde8e159174ad4595ab614c",
+  "dtbs": [
+    {
+      "path": "/workspace/stage7-official-dora-0.dtb",
+      "sha256": "d5760d7dc2ca31f51e4c15de8eca14285cab20f9bf3a11d9177e661819f39012",
+      "reg": [
+        159580160,
+        4096
+      ],
+      "interrupts": [
+        0,
+        28,
+        0,
+        0,
+        29,
+        0
+      ],
+      "bark_ms": 12000,
+      "pet_ms": 10000,
+      "msm_id": [
+        246,
+        196608
+      ]
+    },
+    {
+      "path": "/workspace/stage7-official-dora-1.dtb",
+      "sha256": "159ae1a235a63602853264e91a24d436fac458ac5761e46d340651ff3f5c7ea6",
+      "reg": [
+        159580160,
+        4096
+      ],
+      "interrupts": [
+        0,
+        28,
+        0,
+        0,
+        29,
+        0
+      ],
+      "bark_ms": 12000,
+      "pet_ms": 10000,
+      "msm_id": [
+        246,
+        196609
+      ]
+    }
+  ],
+  "local_source_sha": "0c295b15b6d0fb59a64e13b9e0ef2070818ef2a1",
+  "local_soc_source": "arch/arm/boot/dts/qcom/msm8996.dtsi:1884",
+  "local_soc_bark_ms": 11000,
+  "local_tone_override": "arch/arm/boot/dts/qcom/msm8996-tone-common.dtsi:414",
+  "local_final_bark_ms": 12000,
+  "local_pet_ms": 10000,
+  "final_source_matches_prebuilt": true,
+  "rate": "Original watchdog_v2 default32765Hz, not32768; no clock phandle in either final DT",
+  "bootloader_handoff": "UNQUALIFIED",
+  "activation": "GATED: no config/DT enable was made",
+  "restart": "original nonsecure bite sequence retained; secure firmware restart/bootloader watchdog state need device evidence"
+}

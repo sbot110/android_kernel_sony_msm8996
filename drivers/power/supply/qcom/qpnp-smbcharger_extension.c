@@ -110,6 +110,9 @@ static void batt_log_work(struct work_struct *work)
 	struct smbchg_chip *chip = container_of(params,
 			struct smbchg_chip, somc_params);
 
+	if (READ_ONCE(chip->stopping))
+		return;
+
 	power_supply_changed(chip->batt_psy);
 
 	if (params->batt_log.output_period > 0)
@@ -386,7 +389,7 @@ exit:
 #define UNPLUG_WAKE_PERIOD		(3 * HZ)
 void somc_unplug_wakelock(struct chg_somc_params *params)
 {
-	wake_lock_timeout(&params->unplug_wakelock, UNPLUG_WAKE_PERIOD);
+	__pm_wakeup_event(params->unplug_wakelock, jiffies_to_msecs(UNPLUG_WAKE_PERIOD));
 }
 
 static void somc_chg_set_low_batt_suspend_en(struct smbchg_chip *chip)
@@ -526,6 +529,9 @@ static void somc_chg_temp_work(struct work_struct *work)
 	struct smbchg_chip *chip = container_of(params,
 					struct smbchg_chip, somc_params);
 	int status, current_ma;
+
+	if (READ_ONCE(chip->stopping))
+		return;
 
 	status = somc_chg_temp_get_status(params->temp.temp_val);
 	params->temp.status = status;
@@ -841,6 +847,9 @@ static void somc_chg_therm_level_set_work(struct work_struct *work)
 			somc_params.thermal.therm_level_set_work.work);
 	struct somc_thermal_mitigation *params = &chip->somc_params.thermal;
 
+	if (READ_ONCE(chip->stopping))
+		return;
+
 	smbchg_system_temp_level_set(chip, params->lvl_sel_temp);
 }
 
@@ -875,6 +884,9 @@ static void somc_chg_apsd_rerun_check_work(struct work_struct *work)
 	struct smbchg_chip *chip = container_of(params,
 			struct smbchg_chip, somc_params);
 	int rc;
+
+	if (READ_ONCE(chip->stopping))
+		return;
 
 	if (somc_chg_is_usb_uv_hvdcp(chip)) {
 		rc = somc_chg_apsd_wait_rerun(chip);
@@ -917,6 +929,9 @@ static void somc_chg_apsd_rerun_work(struct work_struct *work)
 	struct smbchg_chip *chip = container_of(params,
 			struct smbchg_chip, somc_params);
 	int rc;
+
+	if (READ_ONCE(chip->stopping))
+		return;
 
 	rc = somc_chg_apsd_wait_rerun(chip);
 	if (rc)
@@ -1078,8 +1093,7 @@ static const char *somc_chg_get_prop_battery_type(struct smbchg_chip *chip)
 	union power_supply_propval ret = {0, };
 
 	if (!chip->bms_psy && chip->bms_psy_name)
-		chip->bms_psy =
-			power_supply_get_by_name((char *)chip->bms_psy_name);
+		smbchg_get_psy(chip, &chip->bms_psy, chip->bms_psy_name);
 	if (!chip->bms_psy) {
 		pr_smb(PR_STATUS, "no bms psy found\n");
 		return DEFAULT_BATTERY_TYPE;
@@ -1190,6 +1204,9 @@ static void somc_chg_hvdcp3_thermal_adjust_work(struct work_struct *work)
 	bool pulsed = false;
 	int limit_usb5v_lvl = chip->somc_params.thermal.limit_usb5v_lvl;
 
+	if (READ_ONCE(chip->stopping))
+		return;
+
 	if (!hvdcp3->hvdcp3_detected)
 		return;
 
@@ -1243,6 +1260,9 @@ static void smbchg_smart_charge_wdog_work(struct work_struct *work)
 				struct smbchg_chip,
 				somc_params.smart.wdog_work.work);
 
+	if (READ_ONCE(chip->stopping))
+		return;
+
 	pr_smb(PR_SOMC, "Smart Charge Watchdog timer has expired.\n");
 
 	mutex_lock(&chip->somc_params.smart.smart_charge_lock);
@@ -1281,6 +1301,10 @@ static void somc_chg_input_current_state(struct work_struct *work)
 	const char *fcc_voter
 		= get_effective_client_locked(chip->fcc_votable);
 
+	if (READ_ONCE(chip->stopping))
+		return;
+	if (!icl_voter || !fcc_voter)
+		return;
 	if (!chip->usb_present)
 		return;
 
@@ -1751,15 +1775,31 @@ static ssize_t somc_chg_param_store(struct device *dev,
 	return count;
 }
 
-static void somc_chg_init(struct chg_somc_params *params)
+static int somc_chg_init(struct chg_somc_params *params)
 {
 	INIT_WORK(&params->temp.work, somc_chg_temp_work);
 	params->apsd.wq = create_singlethread_workqueue("chg_apsd");
+	if (!params->apsd.wq)
+		return -ENOMEM;
 	INIT_DELAYED_WORK(&params->apsd.rerun_work,
 			somc_chg_apsd_rerun_check_work);
 	INIT_DELAYED_WORK(&params->apsd.rerun_w,
 			somc_chg_apsd_rerun_work);
+	INIT_DELAYED_WORK(&params->thermal.therm_level_set_work,
+					somc_chg_therm_level_set_work);
+	INIT_DELAYED_WORK(&params->usb_remove.work, somc_chg_remove_work);
+	INIT_DELAYED_WORK(&params->batt_log.work, batt_log_work);
+	INIT_DELAYED_WORK(&params->smart.wdog_work,
+					smbchg_smart_charge_wdog_work);
+	INIT_DELAYED_WORK(&params->hvdcp3.thermal_hvdcp3_adjust_work,
+					somc_chg_hvdcp3_thermal_adjust_work);
+	INIT_DELAYED_WORK(&params->input_current.input_current_work,
+					somc_chg_input_current_state);
+
+	mutex_init(&params->smart.smart_charge_lock);
+
 	pr_smb_ext(PR_INFO, "somc chg init success\n");
+	return 0;
 }
 
 static ssize_t somc_chg_therm_show_tb(struct device *dev,
@@ -2014,10 +2054,6 @@ static int somc_chg_register(struct smbchg_chip *chip)
 	struct chg_somc_params *params = &chip->somc_params;
 	int rc;
 
-	rc = somc_chg_create_sysfs_entries(chip->dev);
-	if (rc < 0)
-		goto exit;
-
 	/* register input device */
 	params->usb_remove.unplug_key = input_allocate_device();
 	if (!params->usb_remove.unplug_key) {
@@ -2035,26 +2071,26 @@ static int somc_chg_register(struct smbchg_chip *chip)
 		rc = -ENOMEM;
 		goto free_input_dev;
 	}
-	wake_lock_init(&params->unplug_wakelock, WAKE_LOCK_SUSPEND,
-							"unplug_wakelock");
-	INIT_DELAYED_WORK(&params->thermal.therm_level_set_work,
-					somc_chg_therm_level_set_work);
-	INIT_DELAYED_WORK(&params->usb_remove.work, somc_chg_remove_work);
-	INIT_DELAYED_WORK(&params->batt_log.work, batt_log_work);
-	INIT_DELAYED_WORK(&params->smart.wdog_work,
-					smbchg_smart_charge_wdog_work);
-	INIT_DELAYED_WORK(&params->hvdcp3.thermal_hvdcp3_adjust_work,
-					somc_chg_hvdcp3_thermal_adjust_work);
-	INIT_DELAYED_WORK(&params->input_current.input_current_work,
-					somc_chg_input_current_state);
+	chip->somc_input_registered = true;
+	params->unplug_wakelock = wakeup_source_register(chip->dev,
+						"unplug_wakelock");
+	if (!params->unplug_wakelock) {
+		input_unregister_device(params->usb_remove.unplug_key);
+		params->usb_remove.unplug_key = NULL;
+		chip->somc_input_registered = false;
+		return -ENOMEM;
+	}
 
-	mutex_init(&params->smart.smart_charge_lock);
-
+	rc = somc_chg_create_sysfs_entries(chip->dev);
+	if (rc)
+		return rc;
+	chip->somc_sysfs_ready = true;
 	pr_smb_ext(PR_INFO, "somc chg register success\n");
 	return 0;
 
 free_input_dev:
 	input_free_device(params->usb_remove.unplug_key);
+	params->usb_remove.unplug_key = NULL;
 exit:
 	return rc;
 }
@@ -2063,8 +2099,29 @@ static void somc_chg_unregister(struct smbchg_chip *chip)
 {
 	struct chg_somc_params *params = &chip->somc_params;
 
-	somc_chg_remove_sysfs_entries(chip->dev);
-	wake_lock_destroy(&params->unplug_wakelock);
-	if (params->apsd.wq)
+	if (chip->somc_sysfs_ready) {
+		somc_chg_remove_sysfs_entries(chip->dev);
+		chip->somc_sysfs_ready = false;
+	}
+	if (chip->somc_works_ready) {
+		cancel_work_sync(&params->temp.work);
+		cancel_delayed_work_sync(&params->thermal.therm_level_set_work);
+		cancel_delayed_work_sync(&params->usb_remove.work);
+		cancel_delayed_work_sync(&params->batt_log.work);
+		cancel_delayed_work_sync(&params->smart.wdog_work);
+		cancel_delayed_work_sync(&params->hvdcp3.thermal_hvdcp3_adjust_work);
+		cancel_delayed_work_sync(&params->input_current.input_current_work);
+		cancel_delayed_work_sync(&params->apsd.rerun_work);
+		cancel_delayed_work_sync(&params->apsd.rerun_w);
 		destroy_workqueue(params->apsd.wq);
+		params->apsd.wq = NULL;
+		chip->somc_works_ready = false;
+	}
+	if (chip->somc_input_registered) {
+		input_unregister_device(params->usb_remove.unplug_key);
+		params->usb_remove.unplug_key = NULL;
+		chip->somc_input_registered = false;
+	}
+	wakeup_source_unregister(params->unplug_wakelock);
+	params->unplug_wakelock = NULL;
 }

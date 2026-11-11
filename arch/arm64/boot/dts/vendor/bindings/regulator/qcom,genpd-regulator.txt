@@ -1,0 +1,16 @@
+Qualcomm native GDSC regulator API adapter
+
+Some legacy Qualcomm display/IOMMU/bus clients consume a GDSC through the
+regulator API, while the clock controller owns its actual sequencing as a
+generic power domain. This adapter uses runtime-PM references to that real
+domain and preserves regulator enable/disable notifiers. It never maps or
+programs GDSC registers and never supplies voltage/mode operations.
+
+Required properties:
+- compatible: "qcom,genpd-regulator"
+- regulator-name: unique supply name
+- power-domains: exactly one real native GDSC provider reference
+
+Voltage constraints and regulator mode masks must not be specified. Do not
+use this for battery/charger/DPDM supplies or for a physical voltage rail.
+The parent genpd provider must probe before this status-only supply can bind.

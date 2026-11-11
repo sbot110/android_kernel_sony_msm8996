@@ -1,0 +1,6 @@
+{
+  "source_sha": "4877fb09ba9ea8b478fce5671267818ff1f1c5ff",
+  "out_dir": "/workspace/work/dora-stage4-clean-20261103.F8u9Oz",
+  "overall_exit": 1,
+  "reason": "DT rejected live GCC -> disabled CX supply; section mismatch exported SPM init also fixed before second CLEAN build"
+}

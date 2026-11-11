@@ -248,7 +248,7 @@ ANDROID_OFILES := wl_cfgvendor.o dhd_rtt.o bcmxtlv.o bcm_app_utils.o
 # m: module type driver
 # y: built-in type driver
 ##########################
-DRIVER_TYPE ?= y
+DRIVER_TYPE ?= $(CONFIG_BCMDHD)
 
 #########################
 # Chip dependent feature
@@ -317,7 +317,7 @@ ifeq ($(CONFIG_BCM4359),y)
   DHDCFLAGS += -DENABLE_INSMOD_NO_FW_LOAD
   DHDCFLAGS += -DUSE_LATE_INITCALL_SYNC
 endif
-ifeq ($(CONFIG_ARCH_MSM8996),y)
+ifneq ($(filter y,$(CONFIG_ARCH_MSM8996) $(CONFIG_DHD_DONGLE_ISOLATION)),)
  # Enable Dongle Isolation
   DHDCFLAGS += -DDONGLE_ENABLE_ISOLATION
 endif

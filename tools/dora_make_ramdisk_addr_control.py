@@ -49,11 +49,8 @@ def main():
         stop("Android legacy boot magic missing")
     if source[576:608] != EXPECTED_CANONICAL_ID:
         stop("4.4 AOSP canonical boot id differs from boot-validated control")
-    for position in range(PARTITION_BYTES):
-        if 576 <= position < 608:
-            continue
-        if original[position] != source[position]:
-            stop(f"Unexpected source delta outside known id field at {position:#x}")
+    if original[:576] != source[:576] or original[608:] != source[608:]:
+        stop("Unexpected source delta outside the previously validated id field")
 
     ksize, kaddr, rsize, raddr, ssize, saddr, tags, page, unused, osver = struct.unpack_from("<10I", source, 8)
     if (ksize, kaddr, rsize, raddr, ssize, tags, page, unused) != (

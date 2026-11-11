@@ -419,7 +419,9 @@ void __init __no_sanitize_address setup_arch(char **cmdline_p)
 
 	request_standard_resources();
 
-	dora_record_boot_stage(6, (u64)initrd_start, (u64)initrd_end);
+	/* initrd_start/end are virtual after arm64_memblock_init(). */
+	dora_record_boot_stage(6, (u64)phys_initrd_start,
+			       (u64)phys_initrd_start + (u64)phys_initrd_size);
 
 	/*
 	 * Stage 7: bootloader-provided FDT physical interval [start, end).

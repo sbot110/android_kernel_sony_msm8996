@@ -11,6 +11,7 @@ import hashlib
 import json
 import re
 import struct
+import zlib
 from pathlib import Path
 
 PARTITION = 64 * 1024 * 1024
@@ -109,18 +110,76 @@ def main():
               f"tags_addr=0x{item['tags_addr']:x}")
         print(f"{title} cmdline: {item['cmdline']}")
 
-    for field in ("kernel_addr", "ramdisk_addr", "tags_addr", "page_size"):
-        if twrp[field] != stable[field]:
-            fail(f"TWRP and stable boot differ at {field}; "
-                 "do not mix headers/ramdisks without manual layout audit")
+    # FOTAKernel/TeamWin header intentionally uses BASE=0 whereas the
+    # working Android boot uses BASE=0x80000000. Sony recovery's own boot
+    # path has been observed to boot with the original header; retain it.
+    # Do NOT copy the stable header's addresses onto the TWRP image.
+    for field, expected in (("kernel_addr", 0x8000),
+                            ("ramdisk_addr", 0x02000000),
+                            ("tags_addr", 0x01e00000), ("page_size", 4096)):
+        if twrp[field] != expected:
+            fail(f"unexpected TWRP FOTAKernel {field} = {twrp[field]:#x}")
+    for field, expected in (("kernel_addr", 0x80008000),
+                            ("ramdisk_addr", 0x81000000),
+                            ("tags_addr", 0x80000100), ("page_size", 4096)):
+        if stable[field] != expected:
+            fail(f"unexpected working Linux 4.4 boot {field} = {stable[field]:#x}")
+    print("NOTE: FOTAKernel uses legacy base-0 addresses; retaining ALL original "
+          "TWRP header addresses. This is a bootloader-specific hypothesis.")
 
     new_kernel, twrp_ramdisk = stable["kernel"], twrp["ramdisk"]
     if not new_kernel.startswith(b"\x1f\x8b"):
         fail("stable kernel payload does not start with gzip")
-    if twrp["kernel_addr"] + len(new_kernel) > twrp["ramdisk_addr"]:
-        fail("compressed 4.4 kernel overlaps TWRP ramdisk physical load address")
-    if twrp["ramdisk_addr"] + len(twrp_ramdisk) > (1 << 32):
-        fail("TWRP ramdisk physical end exceeds 32-bit boot address space")
+    # The Sony bootloader's actual physical placement can differ from the
+    # legacy header. Assume 0x80000000 + FOTAKernel offsets ONLY for an
+    # initial overlap check, not as proof of runtime loader behaviour.
+    base = 0x80000000
+    compressed_start = base + twrp["kernel_addr"]
+    compressed_end = compressed_start + len(new_kernel)
+    header_ramdisk_start = base + twrp["ramdisk_addr"]
+    if compressed_end > header_ramdisk_start:
+        fail("compressed 4.4 kernel could overlap TWRP ramdisk under FOTA base hypothesis")
+
+    dec = zlib.decompressobj(31)
+    try:
+        image = dec.decompress(new_kernel) + dec.flush()
+    except zlib.error as e:
+        fail(f"stable kernel gzip decompression failed: {e}")
+    if not dec.eof or len(image) < 64 or image[56:60] != b"ARM\x64":
+        fail("working 4.4 kernel payload does not contain a complete ARM64 Image")
+    text_offset, image_size, image_flags = struct.unpack_from("<QQQ", image, 8)
+    if text_offset != 0x80000 or not image_size or image_size < len(image):
+        fail("unexpected ARM64 Image header size/offset; inspect before packaging")
+    image_start = base + text_offset
+    image_end = image_start + image_size
+
+    # Verified on working 4.4 and original TWRP boots in this project:
+    # /chosen/linux,initrd-start == 0x82200000, despite different header
+    # ramdisk_addr fields. New image placement is still UNPROVEN.
+    observed_initrd_start = 0x82200000
+    observed_initrd_end = observed_initrd_start + len(twrp_ramdisk)
+    splash_start = 0x83401000
+    if image_end > observed_initrd_start:
+        fail("working 4.4 ARM64 Image reserved range can overlap observed initrd start")
+    if observed_initrd_end > splash_start:
+        fail("TWRP ramdisk can collide with preserved contiguous splash region")
+    print("=== INFERRED PHYSICAL LAYOUT (NOT VERIFIED FOR HYBRID) ===")
+    print(f"4.4 Image reserved: [0x{image_start:x}, 0x{image_end:x})")
+    print(f"FOTA base-mapped compressed kernel: [0x{compressed_start:x}, 0x{compressed_end:x})")
+    print(f"FOTA header ramdisk (inferred): 0x{header_ramdisk_start:x}")
+    print(f"Observed bootloader initrd start (4.4 and TWRP): 0x{observed_initrd_start:x}")
+    print(f"TWRP initrd if retained at observed start: "
+          f"[0x{observed_initrd_start:x}, 0x{observed_initrd_end:x})")
+    print(f"Gap to splash carveout: {splash_start - observed_initrd_end:,} bytes")
+    print(f"4.4 Image header flags: 0x{image_flags:x}, appended DTBs: {len(dec.unused_data):,} bytes")
+    if twrp_ramdisk.startswith(b"\x1f\x8b"):
+        ramdisk_format = "gzip"
+    elif twrp_ramdisk.startswith(b"\xfd7zXZ\x00"):
+        ramdisk_format = "xz"
+    else:
+        fail(f"unrecognized TWRP ramdisk compressor (first 12 bytes: {twrp_ramdisk[:12].hex()})")
+    print("TWRP ramdisk compressor:", ramdisk_format)
+    print("CAUTION: matching addresses do not prove FOTAKernel will load this hybrid.")
 
     page = twrp["page_size"]
     header = bytearray(full_fota[:page])
@@ -164,7 +223,21 @@ def main():
         "twrp_old_kernel_size": twrp["kernel_size"],
         "new_kernel_size": len(new_kernel),
         "original_twrp_ramdisk_size": len(twrp_ramdisk),
-        "header_mismatch_stopped": False,
+        "fota_header_addresses_preserved": True,
+        "stable_4_4_kernel_reused": True,
+        "fota_legacy_address_base_hypothesis": "0x80000000",
+        "assumed_4_4_image_physical_start": hex(image_start),
+        "assumed_4_4_image_physical_end": hex(image_end),
+        "observed_original_4_4_and_twrp_initrd_start": hex(observed_initrd_start),
+        "hypothetical_hybrid_twrp_initrd_end": hex(observed_initrd_end),
+        "hypothetical_gap_to_splash_bytes": splash_start - observed_initrd_end,
+        "ramdisk_format": ramdisk_format,
+        "limitations": [
+            "TWRP FOTAKernel base-0 address interpretation not independently verified",
+            "Actual ramdisk placement after bootloader handoff is not guaranteed",
+            "TWRP 3.18 userspace compatibility with Linux 4.4 remains untested",
+            "No flashing is performed by this script",
+        ],
     }
     a.outdir.mkdir(parents=True, exist_ok=False)
     (a.outdir / "dora-twrp44-unflashed.img").write_bytes(compact)

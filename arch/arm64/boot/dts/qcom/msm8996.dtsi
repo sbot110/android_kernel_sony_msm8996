@@ -388,10 +388,15 @@
 		#hwlock-cells = <1>;
 	};
 
-	memory@80000000 {
+	/*
+	 * The retail Sony S1 bootloader updates /memory, not /memory@80000000.
+	 * Keep the working Sony 4.4 node name and empty reg placeholder so the
+	 * bootloader can supply the board-specific RAM ranges at boot time.
+	 * Do not hard-code a 3 GiB range: the hardware has reserved holes.
+	 */
+	memory {
 		device_type = "memory";
-		/* We expect the bootloader to fill in the reg */
-		reg = <0x0 0x80000000 0x0 0x0>;
+		reg = <0x0 0x0 0x0 0x0>;
 	};
 
 	etm {

@@ -4,7 +4,10 @@
 The reference must be a verified full 64 MiB boot-partition backup.
 Preserve original ramdisk, boot command line, addresses, and header bytes.
 Replace only kernel_size, kernel payload, and 32-byte header SHA-1 id.
-Refuse unexpected layout, nonzero trailing bytes, wrong reference SHA-256.
+Verify reference against the exact installed LineageOS 21 ZIP boot.img.
+The canonical SHA-1 ID differs from the ZIP's original ID; record that fact,
+then use AOSP mkbootimg v0 SHA-1 for the *new* image. Preserve all bytes of
+the full partition outside the new compact boot image (do not zero-fill).
 This script NEVER communicates with the phone or flashes anything.
 """
 import argparse
@@ -13,9 +16,11 @@ import json
 import struct
 import sys
 import zlib
+import zipfile
 from pathlib import Path
 
 REFERENCE_SHA256 = "29e36966932799c43a616562928b519638b8fc2dcd9dc0d8dd12b208803ad943"
+ZIP_BOOT_SHA256 = "f923f9b99c468484b713529577b84e3a137d1b9cbc09393e5593258009983820"
 PARTITION_BYTES = 64 * 1024 * 1024
 ID_START = 576
 ID_END = 608
@@ -109,6 +114,8 @@ def verify_kernel(packed, image):
 def main():
     p = argparse.ArgumentParser(description=__doc__)
     p.add_argument("--reference", required=True, type=Path)
+    p.add_argument("--reference-zip", required=True, type=Path,
+                   help="LineageOS 21 ZIP whose boot.img exactly matches the installed partition")
     p.add_argument("--kernel", required=True, type=Path)
     p.add_argument("--image", required=True, type=Path)
     p.add_argument("--outdir", required=True, type=Path)
@@ -122,12 +129,25 @@ def main():
         stop("Reference SHA256 differs from the backup verified on the device")
 
     b = parse_boot(original)
+    with zipfile.ZipFile(a.reference_zip) as archive:
+        if "boot.img" not in archive.namelist():
+            stop("Reference ZIP has no boot.img")
+        zip_boot = archive.read("boot.img")
+    if sha256(zip_boot) != ZIP_BOOT_SHA256:
+        stop("ZIP boot.img SHA-256 does not match installed LOS21 boot.img")
+    if len(zip_boot) != b["end_offset"]:
+        stop("ZIP boot.img is not precisely the original v0 compact payload")
+    if original[:len(zip_boot)] != zip_boot:
+        stop("ZIP boot.img does not match the installed boot partition prefix")
+
     kernel = a.kernel.read_bytes()
     image = a.image.read_bytes()
     metadata = verify_kernel(kernel, image)
 
     print("=== ORIGINAL BOOT PARTITION ===")
     print("size:", len(original), "sha256:", source_sha)
+    print("original ZIP boot.img verified:", a.reference_zip.name, "SHA256:", sha256(zip_boot))
+    print("source compact boot bytes:", len(zip_boot))
     for key in ("kernel_size", "kernel_addr", "ramdisk_size", "ramdisk_addr",
                 "tags_addr", "page_size", "unused", "os_version"):
         print("%s: %s" % (key, hex(b[key]) if key.endswith("addr") else b[key]))
@@ -136,9 +156,9 @@ def main():
     print("bytes after original ramdisk all zero:", b["tail_is_zero"])
 
     if not b["id_matches"]:
-        stop("Original image ID is not canonical v0 SHA-1; need to investigate before repacking")
+        print("NOTE: installed LOS21 ZIP boot ID is non-canonical; new ID will be AOSP SHA-1")
     if not b["tail_is_zero"]:
-        stop("Nonzero data after original ramdisk, possibly footer or Sony metadata; refusing to discard")
+        print("NOTE: partition contains extra data beyond ZIP boot.img; will preserve bytes")
 
     print("=== NEW KERNEL ===")
     print("compressed kernel + DTBs:", len(kernel), "bytes")
@@ -169,7 +189,11 @@ def main():
         stop("Repacked image did not preserve ramdisk / correct ID")
     if header[12:ID_START] != b["header"][12:ID_START] or header[ID_END:] != b["header"][ID_END:]:
         stop("Unexpected header mutation")
-    full = compact + b"\x00" * (PARTITION_BYTES - len(compact))
+    # Entire partition is an exact, previously verified snapshot. Only overwrite
+    # the compact new image range; leave the remainder byte-for-byte intact.
+    full = compact + original[len(compact):]
+    if full[:len(compact)] != compact or full[len(compact):] != original[len(compact):]:
+        stop("Failed to preserve partition bytes beyond new boot image")
 
     print("=== LAYOUT ===")
     print("old flash ramdisk offset:", hex(b["ramdisk_offset"]))
@@ -180,6 +204,10 @@ def main():
     print("IMPORTANT: actual post-decompression RAM placement remains UNVERIFIED")
     print("trimmed boot size:", len(compact))
     print("full partition size:", len(full))
+    print("bytes after new boot image preserved from original full partition:", len(original) - len(compact))
+    print("WARNING: original header ramdisk_addr is INSIDE the potential decompressed Image physical range")
+    print("WARNING: working 4.4 bootloader relocation behavior is not established")
+
 
     a.outdir.mkdir(parents=True, exist_ok=True)
     dest = (
@@ -192,6 +220,11 @@ def main():
     manifest = {
         "status": "PREFLIGHT ONLY - NOT BOOT VALIDATED",
         "reference_full64_sha256": source_sha,
+        "reference_zip_boot_sha256": sha256(zip_boot),
+        "reference_zip_path": str(a.reference_zip),
+        "original_header_id_is_aosp_canonical": b["id_matches"],
+        "new_header_id_policy": "AOSP legacy v0 SHA-1",
+        "full64_outside_new_boot_preserved": True,
         "original_ramdisk_sha256": sha256(b["ramdisk"]),
         "new_kernel_sha256": sha256(kernel),
         "image_sha256": sha256(image),
@@ -218,6 +251,6 @@ def main():
 if __name__ == "__main__":
     try:
         main()
-    except (OSError, ValueError, struct.error, zlib.error) as exc:
+    except (OSError, ValueError, struct.error, zlib.error, zipfile.BadZipFile) as exc:
         print("STOP:", exc, file=sys.stderr)
         sys.exit(2)

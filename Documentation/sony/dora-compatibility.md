@@ -1,11 +1,12 @@
-Stage 7 update (2026-11-05): native APCC/CBF/ACD/PLL callbacks and real
-SPM/watchdog/USB fixes are implemented. CPU writes remain unbound without
-the shared CPR/SPM/APM owner; maxcpus=2 and CPU_FREQ/CPU_IDLE=n remain.
-Sony USB PHY init is explicitly blocked before rails/reset/MMIO, so USB/ADB
-logging is unavailable. Watchdog activation and firmware charging handoff,
-actual LOS21 boot artifacts and phone runtime remain unqualified. See
-dora-stage7-report.md and dora-stage7-early-boot.md. Compilation/host ABI
-checks do not establish bpfloader/BoringSSL/vold runtime fixes.
+Stage 8 update (2026-11-05): APM readback/ownership/retirement, CPR crossover
+quarantine/PM, bounded SAW sequences, unique native binding and monotonic
+CCF recovery floors are implemented. CPU writes remain unbound without the
+full CPR/SPM/APM/LMH shared owner; maxcpus=2 and CPU_FREQ/CPU_IDLE=n remain.
+Dora DWC3 parent now also rejects before reset/clocks/UTMI/VBUS override;
+USB/ADB logging remains unavailable. Watchdog activation, firmware charging
+handoff, actual boot artifacts and phone runtime remain unqualified. See
+dora-stage8-report.md and dora-stage8-boot-qualification.md. Host ABI checks
+do not establish bpfloader/BoringSSL/vold runtime fixes.
 
 # Dora F8131/F8132 — матрица совместимости Linux 4.19
 
@@ -69,7 +70,7 @@ PMIC, stepping или панель.** Подробнее: [GPU/варианты]
 | Clearpad / incell | Код; нет полной touch DT связи | То же | Sony MDSS/incell API есть; I2C12/controller/питание и согласование с panel sequencing ещё не завершены. |
 | VADC / FG / BCL | Код/PMIC данные; runtime нет | То же | Оригинальные каналы/профиль/JEITA и PMIC/BCL overrides сохранены. Требуются измерения, calibration, IRQ и температурные тесты. |
 | SMBcharger / BC1.2 / OTG | Код; зарядная цепь отключена | То же | Нет согласованного настоящего DPDM/USB PHY/VBUS/MicroUSB ID/ADC provider. Защиты не отключены, fixed DPDM отсутствует. |
-| USB / ADB / MTP | Init заблокирован; недоступны | То же | Source QUSB2 IRQ masks исправлены, но Sony-only EOPNOTSUPP gate удерживается до реального DPDM/VBUS/ID/charging handoff. Не использовать USB как подтверждённый logging transport. |
+| USB / ADB / MTP | Parent и PHY init заблокированы; недоступны | То же | DWC3 parent останавливается до reset/clocks/UTMI/VBUS override; QUSB2 gate сохранён. Нет реального DPDM/VBUS/ID/charging handoff. Не использовать USB как подтверждённый logging transport. |
 | Tasha / WCD9335 / audio | Драйверы; DT/firmware неполны | То же | Нужны LPASS/PIL/SSR/SLIMbus/clock маршруты и firmware, затем media, mic/headphone/speaker и voice calls. |
 | Modem / радио | Полной цепочки нет | Полной цепочки/DSDS нет | MPSS firmware/PIL/SSR, SMD/GLINK, RMNET/IPA и RIL ABI требуют завершения. Ни calls, ни data не подтверждены. |
 | Камеры | Не интегрированы полностью | То же | Sensor/CCI/ISP/EEPROM/actuator и vendor ABI. |

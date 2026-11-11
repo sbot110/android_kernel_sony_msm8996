@@ -1,3 +1,50 @@
+Dora Linux 4.19.318 / Stage 8 current validation (2026-11-05)
+==========================================================
+STATUS: BUILDABLE; BOOT TEST READY: NO; PHONE BOOT: UNTESTED.
+Initial actual local/remote HEAD: 6dfd2314c958294d13291885e3ce463e2d7a9257.
+Validated source/config/check commit: ecedc54e29a31665a761085b33adeeed280dab61.
+Six commits: five source/test commits and final documentation/evidence.
+Final SHA and post-push audit are in the final reply/external audit file.
+Build used the initial HEAD plus frozen working-tree changes; built source
+hashes match the validated source commit. Invocation HEAD in toolchain.txt
+and dirty version strings are preserved without rewriting artifacts.
+
+Clean OUT_DIR=/workspace/stage8-final-clean-out JOBS=3 scripts/dora/build.sh:
+exit0, 2026-11-05T21:17:40Z..21:27:19Z. All54 checks/81 default executions
+passed (Stage7:52/79). All52 prior scripts retained; native/CCF assertions
+strengthened, none removed. Five ASan/UBSan runs passed, detect_leaks=0.
+Final config and all four normal DTBs byte-identical to Stage7. Checked
+vmlinux/System.map/Image/Image.gz/four DTBs/ordered Image.gz-dtb and SHA256.
+Separate fresh four-SDHC1-DTB workflow: exit0, exact full-tree delta and
+normal hash preservation pass. Extra early-boot and USB-parent checks each
+inspect eight normal/diagnostic trees. No diagnostic kernel/boot image.
+Compiler90 warnings; normalized added/removed0/0. External dtc1.6.1:29/DTB,
+added/removed0/0; bundled dtc1.4.6:15/DTB, unchanged and recorded separately.
+No new warning suppression or weakened checks. git diff --check passes.
+Image.gz-dtb:9734047 bytes; SHA256:
+d5b5aa6bdb4cdf594424ad5a23f8033da1e7816865cd21192cff8bb1fdf087e7
+
+APM fresh MODE/STS readback, endpoint arbitration/retirement, sticky faults,
+CPR no-voltage-rollback after uncertain switch, signed LDO errno and PM error
+propagation are implemented. SAW sequence length/capacity and failed-probe
+publication/cleanup are fixed. Native bindings are unique and peers must fit
+selected fuse plans before writes. CCF floor is monotonic; faulted handoff
+cannot release bootstrap votes. All 56 GCC/49 MMCC contracts retained.
+Dora DWC3 parent now blocks before reset/clocks/UTMI/VBUS, complementing the
+PHY gate. USB/ADB unavailable. This does not qualify firmware charging.
+
+Main live CPU power goal remains incomplete: no transferable shared gang
+CPR/SPM/APM/LMH/collapse/thermal owner or real six leases/prepared parents.
+Live CPU provider remains read-only; native S8-S11 off; maxcpus=2 and CPU_FREQ/
+CPU_IDLE=n. Watchdog handoff, charging and actual boot artifacts/logs remain
+P0. No working LOS20/LOS21 boot.img/ramdisk found in accessible search roots.
+No boot.img generation, flash, fastboot boot, device/vendor edit or eMMC write.
+Full current report: dora-stage8-report.md.
+Machine results/config/logs/SHA256: validation-stage8/.
+
+Historical Stage 7 report follows, unchanged
+===========================================
+
 Dora Linux 4.19.318 / Stage 7 current validation (2026-11-05)
 ==========================================================
 STATUS: BUILDABLE; BOOT TEST READY: NO; PHONE BOOT: UNTESTED.

@@ -24,6 +24,10 @@
 #include <linux/platform_device.h>
 #include <linux/err.h>
 #include <linux/cpu.h>
+#include <linux/atomic.h>
+#include <linux/mutex.h>
+#include <linux/spinlock.h>
+#include <linux/wait.h>
 #include <soc/qcom/spm.h>
 #include "spm_driver.h"
 
@@ -43,6 +47,15 @@ struct msm_spm_power_modes {
 
 struct msm_spm_device {
 	struct list_head list;
+	struct list_head claim;
+	struct device *owner;
+	struct resource resource;
+	raw_spinlock_t lock;
+	atomic_t users;
+	wait_queue_head_t drain;
+	bool published;
+	bool retired;
+	int error;
 	bool initialized;
 	const char *name;
 	struct msm_spm_driver_data reg_data;
@@ -66,8 +79,77 @@ struct msm_spm_vdd_info {
 };
 
 static LIST_HEAD(spm_list);
+static LIST_HEAD(spm_claims);
+static DEFINE_MUTEX(spm_owner_lock);
+static DEFINE_MUTEX(spm_probe_lock);
 static DEFINE_PER_CPU_SHARED_ALIGNED(struct msm_spm_device, msm_cpu_spm_device);
 static DEFINE_PER_CPU(struct msm_spm_device *, cpu_vctl_device);
+
+/* Raw handles have no put API. Claimed descriptors are pinned for this boot;
+ * active operations additionally pin their devres mappings until retirement
+ * drains them. Acquisition is usable by IRQ-disabled idle/hotplug callers.
+ */
+static int msm_spm_get(struct msm_spm_device *dev)
+{
+	unsigned long flags;
+	int ret = 0;
+
+	if (IS_ERR_OR_NULL(dev))
+		return dev ? PTR_ERR(dev) : -EPROBE_DEFER;
+	if (!smp_load_acquire(&dev->published))
+		return READ_ONCE(dev->retired) ?
+			(READ_ONCE(dev->error) ? READ_ONCE(dev->error) : -ESHUTDOWN) :
+			-EPROBE_DEFER;
+	raw_spin_lock_irqsave(&dev->lock, flags);
+	if (dev->retired)
+		ret = dev->error ? dev->error : -ESHUTDOWN;
+	else if (dev->error)
+		ret = dev->error;
+	else
+		atomic_inc(&dev->users);
+	raw_spin_unlock_irqrestore(&dev->lock, flags);
+	return ret;
+}
+
+static void msm_spm_put(struct msm_spm_device *dev)
+{
+	if (atomic_dec_and_test(&dev->users))
+		wake_up_all(&dev->drain);
+}
+
+static int msm_spm_state_locked(struct msm_spm_device *dev)
+{
+	return dev->error ? dev->error : dev->retired ? -ESHUTDOWN : 0;
+}
+
+static int msm_spm_fault_locked(struct msm_spm_device *dev, int error)
+{
+	if (!dev->error)
+		dev->error = error < 0 ? error : -EIO;
+	dev->cpu_vdd = VDD_UNKNOWN;
+	return dev->error;
+}
+
+static void msm_spm_lifetime_init(struct msm_spm_device *dev)
+{
+	raw_spin_lock_init(&dev->lock);
+	atomic_set(&dev->users, 0);
+	init_waitqueue_head(&dev->drain);
+}
+
+static void msm_spm_retire(struct msm_spm_device *dev, int error)
+{
+	unsigned long flags;
+
+	raw_spin_lock_irqsave(&dev->lock, flags);
+	dev->retired = true;
+	dev->initialized = false;
+	if (!dev->error)
+		dev->error = error < 0 ? error : -ESHUTDOWN;
+	smp_store_release(&dev->published, false);
+	raw_spin_unlock_irqrestore(&dev->lock, flags);
+	wait_event(dev->drain, !atomic_read(&dev->users));
+}
 
 /* A failed probe is published as ERR_PTR for every CPU sharing this SAW. */
 static struct msm_spm_device *msm_spm_vctl_device(unsigned int cpu)
@@ -76,7 +158,7 @@ static struct msm_spm_device *msm_spm_vctl_device(unsigned int cpu)
 
 	if (cpu >= nr_cpu_ids || !cpu_possible(cpu))
 		return ERR_PTR(-EINVAL);
-	dev = per_cpu(cpu_vctl_device, cpu);
+	dev = READ_ONCE(per_cpu(cpu_vctl_device, cpu));
 	if (!dev)
 		return ERR_PTR(-EPROBE_DEFER);
 	return dev;
@@ -86,9 +168,18 @@ static void msm_spm_smp_set_vdd(void *data)
 {
 	struct msm_spm_vdd_info *info = (struct msm_spm_vdd_info *)data;
 	struct msm_spm_device *dev = info->vctl_dev;
+	unsigned long flags;
 
-	info->err = msm_spm_drv_set_vdd(&dev->reg_data, info->vlevel);
-	dev->cpu_vdd = info->err ? VDD_UNKNOWN : info->vlevel;
+	raw_spin_lock_irqsave(&dev->lock, flags);
+	info->err = msm_spm_state_locked(dev);
+	if (!info->err) {
+		info->err = msm_spm_drv_set_vdd(&dev->reg_data, info->vlevel);
+		if (info->err)
+			info->err = msm_spm_fault_locked(dev, info->err);
+		else
+			dev->cpu_vdd = info->vlevel;
+	}
+	raw_spin_unlock_irqrestore(&dev->lock, flags);
 }
 
 /**
@@ -103,12 +194,13 @@ int msm_spm_probe_done(void)
 	int cpu;
 
 	for_each_possible_cpu(cpu) {
-		dev = per_cpu(cpu_vctl_device, cpu);
-		if (!dev)
-			return -EPROBE_DEFER;
+		int ret;
 
-		if (IS_ERR(dev))
-			return PTR_ERR(dev);
+		dev = msm_spm_vctl_device(cpu);
+		ret = msm_spm_get(dev);
+		if (ret)
+			return ret;
+		msm_spm_put(dev);
 	}
 
 	return 0;
@@ -117,7 +209,19 @@ EXPORT_SYMBOL(msm_spm_probe_done);
 
 void msm_spm_dump_regs(unsigned int cpu)
 {
-	dump_regs(&per_cpu(msm_cpu_spm_device, cpu).reg_data, cpu);
+	struct msm_spm_device *dev;
+	unsigned long flags;
+
+	if (cpu >= nr_cpu_ids || !cpu_possible(cpu))
+		return;
+	dev = &per_cpu(msm_cpu_spm_device, cpu);
+	if (msm_spm_get(dev))
+		return;
+	raw_spin_lock_irqsave(&dev->lock, flags);
+	if (!msm_spm_state_locked(dev))
+		dump_regs(&dev->reg_data, cpu);
+	raw_spin_unlock_irqrestore(&dev->lock, flags);
+	msm_spm_put(dev);
 }
 
 /**
@@ -133,18 +237,18 @@ int msm_spm_set_vdd(unsigned int cpu, unsigned int vlevel)
 	struct msm_spm_device *dev = msm_spm_vctl_device(cpu);
 	int ret;
 
-	if (IS_ERR(dev))
-		return PTR_ERR(dev);
-
-	info.vctl_dev = dev;
-	info.vlevel = vlevel;
-
-	ret = smp_call_function_any(&dev->mask, msm_spm_smp_set_vdd, &info,
-					true);
+	ret = msm_spm_get(dev);
 	if (ret)
 		return ret;
 
-	return info.err;
+	info.vctl_dev = dev;
+	info.vlevel = vlevel;
+	info.err = -ENXIO;
+
+	ret = smp_call_function_any(&dev->mask, msm_spm_smp_set_vdd, &info,
+					true);
+	msm_spm_put(dev);
+	return ret ? ret : info.err;
 }
 EXPORT_SYMBOL(msm_spm_set_vdd);
 
@@ -156,11 +260,21 @@ EXPORT_SYMBOL(msm_spm_set_vdd);
 int msm_spm_get_vdd(unsigned int cpu)
 {
 	struct msm_spm_device *dev = msm_spm_vctl_device(cpu);
+	unsigned long flags;
+	int ret = msm_spm_get(dev);
 
-	if (IS_ERR(dev))
-		return PTR_ERR(dev);
-
-	return msm_spm_drv_get_vdd(&dev->reg_data) ? : -EINVAL;
+	if (ret)
+		return ret;
+	raw_spin_lock_irqsave(&dev->lock, flags);
+	ret = msm_spm_state_locked(dev);
+	if (!ret) {
+		ret = msm_spm_drv_get_vdd(&dev->reg_data);
+		if (ret <= 0)
+			ret = msm_spm_fault_locked(dev, ret ? ret : -EIO);
+	}
+	raw_spin_unlock_irqrestore(&dev->lock, flags);
+	msm_spm_put(dev);
+	return ret;
 }
 EXPORT_SYMBOL(msm_spm_get_vdd);
 
@@ -242,7 +356,7 @@ static void msm_spm_config_slpreq(struct msm_spm_device *dev,
 	__raw_writel(val, dev->slpreq_base_addr);
 }
 
-static int msm_spm_dev_set_low_power_mode(struct msm_spm_device *dev,
+static int _msm_spm_dev_set_low_power_mode(struct msm_spm_device *dev,
 		unsigned int mode, bool notify_rpm, bool set_spm_enable)
 {
 	uint32_t i;
@@ -258,13 +372,11 @@ static int msm_spm_dev_set_low_power_mode(struct msm_spm_device *dev,
 		return -ENXIO;
 
 	if (!dev->num_modes)
-		return 0;
+		return mode == MSM_SPM_MODE_DISABLED ? 0 : -EOPNOTSUPP;
 
 	if (mode == MSM_SPM_MODE_DISABLED && set_spm_enable) {
 		ret = msm_spm_drv_set_spm_enable(&dev->reg_data, false);
 	} else {
-		if (set_spm_enable)
-			ret = msm_spm_drv_set_spm_enable(&dev->reg_data, true);
 		for (i = 0; i < dev->num_modes; i++) {
 			if (dev->modes[i].mode != mode)
 				continue;
@@ -275,9 +387,18 @@ static int msm_spm_dev_set_low_power_mode(struct msm_spm_device *dev,
 
 			break;
 		}
+		if (i == dev->num_modes)
+			return -EINVAL;
+		if (set_spm_enable) {
+			ret = msm_spm_drv_set_spm_enable(&dev->reg_data, true);
+			if (ret)
+				return msm_spm_fault_locked(dev, ret);
+		}
 		ret = msm_spm_drv_set_low_power_mode(&dev->reg_data, ctl);
 	}
 
+	if (ret)
+		return msm_spm_fault_locked(dev, ret);
 	msm_spm_config_q2s(dev, mode);
 	msm_spm_config_hw_flush(dev, mode);
 	msm_spm_config_slpreq(dev, mode);
@@ -285,10 +406,39 @@ static int msm_spm_dev_set_low_power_mode(struct msm_spm_device *dev,
 	return ret;
 }
 
+static int msm_spm_dev_set_low_power_mode(struct msm_spm_device *dev,
+		unsigned int mode, bool notify_rpm, bool set_spm_enable)
+{
+	unsigned long flags;
+	int ret = msm_spm_get(dev);
+
+	if (ret)
+		return ret;
+	raw_spin_lock_irqsave(&dev->lock, flags);
+	ret = msm_spm_state_locked(dev);
+	if (!ret)
+		ret = _msm_spm_dev_set_low_power_mode(dev, mode, notify_rpm,
+						    set_spm_enable);
+	raw_spin_unlock_irqrestore(&dev->lock, flags);
+	msm_spm_put(dev);
+	return ret;
+}
+
+static void msm_spm_free_program(struct msm_spm_device *dev)
+{
+	kfree(dev->modes);
+	dev->modes = NULL;
+	dev->num_modes = 0;
+	kfree(dev->reg_data.reg_seq_entry_shadow);
+	dev->reg_data.reg_seq_entry_shadow = NULL;
+	dev->reg_data.seq_entries = 0;
+}
+
 static int msm_spm_dev_init(struct msm_spm_device *dev,
 		struct msm_spm_platform_data *data)
 {
-	int i, ret = -ENOMEM;
+	unsigned int i;
+	int ret = -ENOMEM;
 	uint32_t offset = 0;
 
 	if (dev->initialized)
@@ -308,12 +458,15 @@ static int msm_spm_dev_init(struct msm_spm_device *dev,
 		goto spm_failed_init;
 
 	for (i = 0; i < dev->num_modes; i++) {
+		if (offset > 0x1ff) {
+			ret = -E2BIG;
+			goto spm_failed_init;
+		}
 
 		/* Default offset is 0 and gets updated as we write more
 		 * sequences into SPM
 		 */
-		dev->modes[i].ctl = data->modes[i].ctl | ((offset & 0x1FF)
-						<< 4);
+		dev->modes[i].ctl = data->modes[i].ctl | (offset << 4);
 		ret = msm_spm_drv_write_seq_data(&dev->reg_data,
 			data->modes[i].cmd, data->modes[i].cmd_len, &offset);
 		if (ret < 0)
@@ -329,11 +482,7 @@ static int msm_spm_dev_init(struct msm_spm_device *dev,
 	return 0;
 
 spm_failed_init:
-	kfree(dev->reg_data.reg_seq_entry_shadow);
-	dev->reg_data.reg_seq_entry_shadow = NULL;
-	dev->reg_data.seq_entries = 0;
-	kfree(dev->modes);
-	dev->modes = NULL;
+	msm_spm_free_program(dev);
 spm_failed_malloc:
 	return ret;
 }
@@ -347,63 +496,53 @@ spm_failed_malloc:
 int msm_spm_turn_on_cpu_rail(struct device_node *vctl_node,
 		unsigned int val, int cpu, int vctl_offset)
 {
-	uint32_t timeout = 2000; /* delay for voltage to settle on the core */
 	struct msm_spm_device *dev;
-	void __iomem *base;
+	unsigned long flags;
+	int ret;
 
+	(void)vctl_node;
+	(void)val;
+	(void)vctl_offset;
+	/* This old out-of-band bootstrap path had no hardware completion
+	 * readback and raced the registered gang owner. Only an existing,
+	 * confirmed SAW transition can establish an already-powered rail.
+	 */
 	if (cpu < 0 || (unsigned int)cpu >= nr_cpu_ids || !cpu_possible(cpu))
 		return -EINVAL;
-	dev = per_cpu(cpu_vctl_device, cpu);
-	if (IS_ERR(dev))
-		return PTR_ERR(dev);
-	if (dev && dev->cpu_vdd == VDD_UNKNOWN)
-		return -EIO;
-	if (dev && dev->cpu_vdd != VDD_DEFAULT)
-		return 0;
-
-	base = of_iomap(vctl_node, 1);
-	if (base) {
-		/*
-		 * Program Q2S to disable SPM legacy mode and ignore Q2S
-		 * channel requests.
-		 * bit[1] = qchannel_ignore = 1
-		 * bit[2] = spm_legacy_mode = 0
-		 */
-		writel_relaxed(0x2, base);
-		mb(); /* Ensure flush */
-		iounmap(base);
-	}
-
-	base = of_iomap(vctl_node, 0);
-	if (!base)
-		return -ENOMEM;
-
-	/* Set the CPU supply regulator voltage */
-	val = (val & 0xFF);
-	writel_relaxed(val, base + vctl_offset);
-	mb(); /* Ensure flush */
-	udelay(timeout);
-
-	/* Enable the CPU supply regulator*/
-	val = 0x30080;
-	writel_relaxed(val, base + vctl_offset);
-	mb(); /* Ensure flush */
-	udelay(timeout);
-
-	iounmap(base);
-
-	return 0;
+	dev = msm_spm_vctl_device(cpu);
+	ret = msm_spm_get(dev);
+	if (ret)
+		return ret;
+	raw_spin_lock_irqsave(&dev->lock, flags);
+	ret = msm_spm_state_locked(dev);
+	if (!ret)
+		ret = dev->cpu_vdd == VDD_UNKNOWN ? -EIO :
+			dev->cpu_vdd == VDD_DEFAULT ? -EAGAIN : 0;
+	raw_spin_unlock_irqrestore(&dev->lock, flags);
+	msm_spm_put(dev);
+	return ret;
 }
+
 EXPORT_SYMBOL(msm_spm_turn_on_cpu_rail);
 
 void msm_spm_reinit(void)
 {
+	struct msm_spm_device *dev;
+	unsigned long flags;
 	unsigned int cpu;
 
-	for_each_possible_cpu(cpu)
-		msm_spm_drv_reinit(
-			&per_cpu(msm_cpu_spm_device.reg_data, cpu), true);
+	for_each_possible_cpu(cpu) {
+		dev = &per_cpu(msm_cpu_spm_device, cpu);
+		if (msm_spm_get(dev))
+			continue;
+		raw_spin_lock_irqsave(&dev->lock, flags);
+		if (!msm_spm_state_locked(dev))
+			msm_spm_drv_reinit(&dev->reg_data, true);
+		raw_spin_unlock_irqrestore(&dev->lock, flags);
+		msm_spm_put(dev);
+	}
 }
+
 EXPORT_SYMBOL(msm_spm_reinit);
 
 /*
@@ -414,15 +553,24 @@ EXPORT_SYMBOL(msm_spm_reinit);
 bool msm_spm_is_mode_avail(unsigned int mode)
 {
 	struct msm_spm_device *dev = this_cpu_ptr(&msm_cpu_spm_device);
+	unsigned long flags;
+	bool available = false;
 	int i;
 
-	for (i = 0; i < dev->num_modes; i++) {
-		if (dev->modes[i].mode == mode)
-			return true;
-	}
-
-	return false;
+	if (msm_spm_get(dev))
+		return false;
+	raw_spin_lock_irqsave(&dev->lock, flags);
+	if (!msm_spm_state_locked(dev))
+		for (i = 0; i < dev->num_modes; i++)
+			if (dev->modes[i].mode == mode) {
+				available = true;
+				break;
+			}
+	raw_spin_unlock_irqrestore(&dev->lock, flags);
+	msm_spm_put(dev);
+	return available;
 }
+
 
 /**
  * msm_spm_is_avs_enabled() - Functions returns 1 if AVS is enabled and
@@ -434,12 +582,23 @@ bool msm_spm_is_mode_avail(unsigned int mode)
 int msm_spm_is_avs_enabled(unsigned int cpu)
 {
 	struct msm_spm_device *dev = msm_spm_vctl_device(cpu);
+	unsigned long flags;
+	int ret = msm_spm_get(dev);
 
-	if (IS_ERR(dev))
-		return PTR_ERR(dev);
-
-	return msm_spm_drv_get_avs_enable(&dev->reg_data);
+	if (ret)
+		return ret;
+	raw_spin_lock_irqsave(&dev->lock, flags);
+	ret = msm_spm_state_locked(dev);
+	if (!ret) {
+		ret = msm_spm_drv_get_avs_enable(&dev->reg_data);
+		if (ret < 0)
+			ret = msm_spm_fault_locked(dev, ret);
+	}
+	raw_spin_unlock_irqrestore(&dev->lock, flags);
+	msm_spm_put(dev);
+	return ret;
 }
+
 EXPORT_SYMBOL(msm_spm_is_avs_enabled);
 
 /**
@@ -452,12 +611,23 @@ EXPORT_SYMBOL(msm_spm_is_avs_enabled);
 int msm_spm_avs_enable(unsigned int cpu)
 {
 	struct msm_spm_device *dev = msm_spm_vctl_device(cpu);
+	unsigned long flags;
+	int ret = msm_spm_get(dev);
 
-	if (IS_ERR(dev))
-		return PTR_ERR(dev);
-
-	return msm_spm_drv_set_avs_enable(&dev->reg_data, true);
+	if (ret)
+		return ret;
+	raw_spin_lock_irqsave(&dev->lock, flags);
+	ret = msm_spm_state_locked(dev);
+	if (!ret) {
+		ret = msm_spm_drv_set_avs_enable(&dev->reg_data, true);
+		if (ret < 0)
+			ret = msm_spm_fault_locked(dev, ret);
+	}
+	raw_spin_unlock_irqrestore(&dev->lock, flags);
+	msm_spm_put(dev);
+	return ret;
 }
+
 EXPORT_SYMBOL(msm_spm_avs_enable);
 
 /**
@@ -470,12 +640,23 @@ EXPORT_SYMBOL(msm_spm_avs_enable);
 int msm_spm_avs_disable(unsigned int cpu)
 {
 	struct msm_spm_device *dev = msm_spm_vctl_device(cpu);
+	unsigned long flags;
+	int ret = msm_spm_get(dev);
 
-	if (IS_ERR(dev))
-		return PTR_ERR(dev);
-
-	return msm_spm_drv_set_avs_enable(&dev->reg_data, false);
+	if (ret)
+		return ret;
+	raw_spin_lock_irqsave(&dev->lock, flags);
+	ret = msm_spm_state_locked(dev);
+	if (!ret) {
+		ret = msm_spm_drv_set_avs_enable(&dev->reg_data, false);
+		if (ret < 0)
+			ret = msm_spm_fault_locked(dev, ret);
+	}
+	raw_spin_unlock_irqrestore(&dev->lock, flags);
+	msm_spm_put(dev);
+	return ret;
 }
+
 EXPORT_SYMBOL(msm_spm_avs_disable);
 
 /**
@@ -492,12 +673,23 @@ int msm_spm_avs_set_limit(unsigned int cpu,
 		uint32_t min_lvl, uint32_t max_lvl)
 {
 	struct msm_spm_device *dev = msm_spm_vctl_device(cpu);
+	unsigned long flags;
+	int ret = msm_spm_get(dev);
 
-	if (IS_ERR(dev))
-		return PTR_ERR(dev);
-
-	return msm_spm_drv_set_avs_limit(&dev->reg_data, min_lvl, max_lvl);
+	if (ret)
+		return ret;
+	raw_spin_lock_irqsave(&dev->lock, flags);
+	ret = msm_spm_state_locked(dev);
+	if (!ret) {
+		ret = msm_spm_drv_set_avs_limit(&dev->reg_data, min_lvl, max_lvl);
+		if (ret < 0)
+			ret = msm_spm_fault_locked(dev, ret);
+	}
+	raw_spin_unlock_irqrestore(&dev->lock, flags);
+	msm_spm_put(dev);
+	return ret;
 }
+
 EXPORT_SYMBOL(msm_spm_avs_set_limit);
 
 /**
@@ -510,12 +702,23 @@ EXPORT_SYMBOL(msm_spm_avs_set_limit);
 int msm_spm_avs_enable_irq(unsigned int cpu, enum msm_spm_avs_irq irq)
 {
 	struct msm_spm_device *dev = msm_spm_vctl_device(cpu);
+	unsigned long flags;
+	int ret = msm_spm_get(dev);
 
-	if (IS_ERR(dev))
-		return PTR_ERR(dev);
-
-	return msm_spm_drv_set_avs_irq_enable(&dev->reg_data, irq, true);
+	if (ret)
+		return ret;
+	raw_spin_lock_irqsave(&dev->lock, flags);
+	ret = msm_spm_state_locked(dev);
+	if (!ret) {
+		ret = msm_spm_drv_set_avs_irq_enable(&dev->reg_data, irq, true);
+		if (ret < 0)
+			ret = msm_spm_fault_locked(dev, ret);
+	}
+	raw_spin_unlock_irqrestore(&dev->lock, flags);
+	msm_spm_put(dev);
+	return ret;
 }
+
 EXPORT_SYMBOL(msm_spm_avs_enable_irq);
 
 /**
@@ -528,12 +731,23 @@ EXPORT_SYMBOL(msm_spm_avs_enable_irq);
 int msm_spm_avs_disable_irq(unsigned int cpu, enum msm_spm_avs_irq irq)
 {
 	struct msm_spm_device *dev = msm_spm_vctl_device(cpu);
+	unsigned long flags;
+	int ret = msm_spm_get(dev);
 
-	if (IS_ERR(dev))
-		return PTR_ERR(dev);
-
-	return msm_spm_drv_set_avs_irq_enable(&dev->reg_data, irq, false);
+	if (ret)
+		return ret;
+	raw_spin_lock_irqsave(&dev->lock, flags);
+	ret = msm_spm_state_locked(dev);
+	if (!ret) {
+		ret = msm_spm_drv_set_avs_irq_enable(&dev->reg_data, irq, false);
+		if (ret < 0)
+			ret = msm_spm_fault_locked(dev, ret);
+	}
+	raw_spin_unlock_irqrestore(&dev->lock, flags);
+	msm_spm_put(dev);
+	return ret;
 }
+
 EXPORT_SYMBOL(msm_spm_avs_disable_irq);
 
 /**
@@ -546,12 +760,23 @@ EXPORT_SYMBOL(msm_spm_avs_disable_irq);
 int msm_spm_avs_clear_irq(unsigned int cpu, enum msm_spm_avs_irq irq)
 {
 	struct msm_spm_device *dev = msm_spm_vctl_device(cpu);
+	unsigned long flags;
+	int ret = msm_spm_get(dev);
 
-	if (IS_ERR(dev))
-		return PTR_ERR(dev);
-
-	return msm_spm_drv_avs_clear_irq(&dev->reg_data, irq);
+	if (ret)
+		return ret;
+	raw_spin_lock_irqsave(&dev->lock, flags);
+	ret = msm_spm_state_locked(dev);
+	if (!ret) {
+		ret = msm_spm_drv_avs_clear_irq(&dev->reg_data, irq);
+		if (ret < 0)
+			ret = msm_spm_fault_locked(dev, ret);
+	}
+	raw_spin_unlock_irqrestore(&dev->lock, flags);
+	msm_spm_put(dev);
+	return ret;
 }
+
 EXPORT_SYMBOL(msm_spm_avs_clear_irq);
 
 /**
@@ -570,9 +795,17 @@ EXPORT_SYMBOL(msm_spm_set_low_power_mode);
 void msm_spm_set_rpm_hs(bool allow_rpm_hs)
 {
 	struct msm_spm_device *dev = this_cpu_ptr(&msm_cpu_spm_device);
+	unsigned long flags;
 
-	dev->allow_rpm_hs = allow_rpm_hs;
+	if (msm_spm_get(dev))
+		return;
+	raw_spin_lock_irqsave(&dev->lock, flags);
+	if (!msm_spm_state_locked(dev))
+		dev->allow_rpm_hs = allow_rpm_hs;
+	raw_spin_unlock_irqrestore(&dev->lock, flags);
+	msm_spm_put(dev);
 }
+
 EXPORT_SYMBOL(msm_spm_set_rpm_hs);
 
 int msm_spm_config_low_power_mode_addr(struct msm_spm_device *dev,
@@ -597,12 +830,16 @@ int __init msm_spm_init(struct msm_spm_platform_data *data, int nr_devs)
 	for_each_possible_cpu(cpu) {
 		struct msm_spm_device *dev = &per_cpu(msm_cpu_spm_device, cpu);
 
+		if (dev->initialized || dev->owner)
+			return -EBUSY;
+		msm_spm_lifetime_init(dev);
 		ret = msm_spm_dev_init(dev, &data[cpu]);
 		if (ret < 0) {
 			pr_warn("%s():failed CPU:%u ret:%d\n", __func__,
 					cpu, ret);
 			break;
 		}
+		smp_store_release(&dev->published, true);
 	}
 
 	return ret;
@@ -610,16 +847,20 @@ int __init msm_spm_init(struct msm_spm_platform_data *data, int nr_devs)
 
 struct msm_spm_device *msm_spm_get_device_by_name(const char *name)
 {
-	struct list_head *list;
+	struct msm_spm_device *dev, *found = ERR_PTR(-ENODEV);
 
-	list_for_each(list, &spm_list) {
-		struct msm_spm_device *dev
-			= list_entry(list, typeof(*dev), list);
-		if (dev->name && !strcmp(dev->name, name))
-			return dev;
-	}
-	return ERR_PTR(-ENODEV);
+	if (!name)
+		return ERR_PTR(-EINVAL);
+	mutex_lock(&spm_owner_lock);
+	list_for_each_entry(dev, &spm_list, list)
+		if (dev->name && !strcmp(dev->name, name)) {
+			found = dev->retired ? ERR_PTR(-ESHUTDOWN) : dev;
+			break;
+		}
+	mutex_unlock(&spm_owner_lock);
+	return found;
 }
+
 
 int msm_spm_config_low_power_mode(struct msm_spm_device *dev,
 		unsigned int mode, bool notify_rpm)
@@ -636,13 +877,24 @@ int msm_spm_config_low_power_mode(struct msm_spm_device *dev,
 int msm_spm_apcs_set_phase(int cpu, unsigned int phase_cnt)
 {
 	struct msm_spm_device *dev = msm_spm_vctl_device(cpu);
+	unsigned long flags;
+	int ret = msm_spm_get(dev);
 
-	if (IS_ERR(dev))
-		return PTR_ERR(dev);
-
-	return msm_spm_drv_set_pmic_data(&dev->reg_data,
-			MSM_SPM_PMIC_PHASE_PORT, phase_cnt);
+	if (ret)
+		return ret;
+	raw_spin_lock_irqsave(&dev->lock, flags);
+	ret = msm_spm_state_locked(dev);
+	if (!ret) {
+		ret = msm_spm_drv_set_pmic_data(&dev->reg_data,
+				MSM_SPM_PMIC_PHASE_PORT, phase_cnt);
+		if (ret < 0)
+			ret = msm_spm_fault_locked(dev, ret);
+	}
+	raw_spin_unlock_irqrestore(&dev->lock, flags);
+	msm_spm_put(dev);
+	return ret;
 }
+
 EXPORT_SYMBOL(msm_spm_apcs_set_phase);
 
 /** msm_spm_enable_fts_lpm() : Enable FTS to switch to low power
@@ -653,34 +905,49 @@ EXPORT_SYMBOL(msm_spm_apcs_set_phase);
 int msm_spm_enable_fts_lpm(int cpu, uint32_t mode)
 {
 	struct msm_spm_device *dev = msm_spm_vctl_device(cpu);
+	unsigned long flags;
+	int ret = msm_spm_get(dev);
 
-	if (IS_ERR(dev))
-		return PTR_ERR(dev);
-
-	return msm_spm_drv_set_pmic_data(&dev->reg_data,
-			MSM_SPM_PMIC_PFM_PORT, mode);
+	if (ret)
+		return ret;
+	raw_spin_lock_irqsave(&dev->lock, flags);
+	ret = msm_spm_state_locked(dev);
+	if (!ret) {
+		ret = msm_spm_drv_set_pmic_data(&dev->reg_data,
+				MSM_SPM_PMIC_PFM_PORT, mode);
+		if (ret < 0)
+			ret = msm_spm_fault_locked(dev, ret);
+	}
+	raw_spin_unlock_irqrestore(&dev->lock, flags);
+	msm_spm_put(dev);
+	return ret;
 }
+
 EXPORT_SYMBOL(msm_spm_enable_fts_lpm);
 
 #endif
 
 static int get_cpu_id(struct device_node *node)
 {
-	struct device_node *cpu_node;
+	struct device_node *cpu_node, *possible;
 	u32 cpu;
-	char *key = "qcom,cpu";
+	int found = -EINVAL;
 
-	cpu_node = of_parse_phandle(node, key, 0);
-	if (cpu_node) {
-		for_each_possible_cpu(cpu) {
-			if (of_get_cpu_node(cpu, NULL) == cpu_node)
-				return cpu;
-		}
-	} else
+	cpu_node = of_parse_phandle(node, "qcom,cpu", 0);
+	if (!cpu_node)
 		return num_possible_cpus();
-
-	return -EINVAL;
+	for_each_possible_cpu(cpu) {
+		possible = of_get_cpu_node(cpu, NULL);
+		if (possible == cpu_node)
+			found = cpu;
+		of_node_put(possible);
+		if (found >= 0)
+			break;
+	}
+	of_node_put(cpu_node);
+	return found;
 }
+
 
 static struct msm_spm_device *msm_spm_get_device(struct platform_device *pdev)
 {
@@ -692,20 +959,23 @@ static struct msm_spm_device *msm_spm_get_device(struct platform_device *pdev)
 	if ((cpu >= 0) && cpu < num_possible_cpus())
 		dev = &per_cpu(msm_cpu_spm_device, cpu);
 	else if (cpu == num_possible_cpus()) {
-		dev = devm_kzalloc(&pdev->dev, sizeof(struct msm_spm_device),
-					GFP_KERNEL);
+		dev = kzalloc(sizeof(struct msm_spm_device), GFP_KERNEL);
 		if (!dev)
 			return ERR_PTR(-ENOMEM);
 	}
 
 	if (!dev)
 		return NULL;
+	if (dev->owner)
+		return ERR_PTR(dev->retired ? -ESHUTDOWN : -EBUSY);
 	if (dev->initialized)
 		return ERR_PTR(-EBUSY);
 
 	if (of_property_read_string(pdev->dev.of_node, key, &val)) {
 		pr_err("%s(): Cannot find a required node key:%s\n",
 				__func__, key);
+		if (cpu == num_possible_cpus())
+			kfree(dev);
 		return ERR_PTR(-EINVAL);
 	}
 	dev->name = val;
@@ -715,20 +985,49 @@ static struct msm_spm_device *msm_spm_get_device(struct platform_device *pdev)
 
 static void get_cpumask(struct device_node *node, struct cpumask *mask)
 {
-	unsigned int c;
+	unsigned int cpu;
 	int idx = 0;
-	struct device_node *cpu_node;
-	char *key = "qcom,cpu-vctl-list";
+	struct device_node *cpu_node, *possible;
 
-	cpu_node = of_parse_phandle(node, key, idx++);
-	while (cpu_node) {
-		for_each_possible_cpu(c) {
-			if (of_get_cpu_node(c, NULL) == cpu_node)
-				cpumask_set_cpu(c, mask);
+	cpumask_clear(mask);
+	while ((cpu_node = of_parse_phandle(node, "qcom,cpu-vctl-list", idx++))) {
+		for_each_possible_cpu(cpu) {
+			possible = of_get_cpu_node(cpu, NULL);
+			if (possible == cpu_node)
+				cpumask_set_cpu(cpu, mask);
+			of_node_put(possible);
 		}
-		cpu_node = of_parse_phandle(node, key, idx++);
-	};
+		of_node_put(cpu_node);
+	}
 }
+
+static int msm_spm_claim(struct platform_device *pdev,
+		struct msm_spm_device *dev, struct resource *resource)
+{
+	struct msm_spm_device *old;
+	int ret = 0;
+
+	mutex_lock(&spm_owner_lock);
+	list_for_each_entry(old, &spm_claims, claim) {
+		if (old->owner->of_node == pdev->dev.of_node ||
+		    (resource->start <= old->resource.end &&
+		     old->resource.start <= resource->end) ||
+		    cpumask_intersects(&dev->mask, &old->mask) ||
+		    !strcmp(old->name, dev->name)) {
+			ret = old->retired ? -ESHUTDOWN : -EBUSY;
+			goto out;
+		}
+	}
+	msm_spm_lifetime_init(dev);
+	dev->resource = *resource;
+	dev->owner = get_device(&pdev->dev);
+	__module_get(THIS_MODULE);
+	list_add_tail(&dev->claim, &spm_claims);
+out:
+	mutex_unlock(&spm_owner_lock);
+	return ret;
+}
+
 
 static int msm_spm_dev_probe(struct platform_device *pdev)
 {
@@ -744,6 +1043,7 @@ static int msm_spm_dev_probe(struct platform_device *pdev)
 	int len = 0;
 	struct msm_spm_device *dev = NULL;
 	struct resource *res = NULL;
+	struct resource *saw_res;
 	uint32_t mode_count = 0;
 
 	struct spm_of {
@@ -784,15 +1084,18 @@ static int msm_spm_dev_probe(struct platform_device *pdev)
 		{"qcom,saw2-spm-cmd-fpc", MSM_SPM_MODE_FASTPC},
 	};
 
+	mutex_lock(&spm_probe_lock);
 	dev = msm_spm_get_device(pdev);
-	if (IS_ERR(dev))
-		return PTR_ERR(dev);
+	if (IS_ERR(dev)) {
+		ret = PTR_ERR(dev);
+		goto unlock;
+	}
 	if (!dev) {
 		/*
 		 * For partial goods support some CPUs might not be available
 		 * in which case, shouldn't throw an error
 		 */
-		return 0;
+		goto unlock;
 	}
 	get_cpumask(node, &dev->mask);
 
@@ -812,10 +1115,14 @@ static int msm_spm_dev_probe(struct platform_device *pdev)
 
 	/* SAW start address */
 	res = platform_get_resource(pdev, IORESOURCE_MEM, 0);
-	if (!res) {
+	if (!res || (res->start & 3) || res->end < res->start ||
+	    resource_size(res) < sizeof(u32) ||
+	    resource_size(res) > U32_MAX ||
+	    spm_data.ver_reg > resource_size(res) - sizeof(u32)) {
 		ret = -EFAULT;
 		goto fail;
 	}
+	saw_res = res;
 
 	spm_data.reg_base_addr = devm_ioremap(&pdev->dev, res->start,
 					resource_size(res));
@@ -823,6 +1130,7 @@ static int msm_spm_dev_probe(struct platform_device *pdev)
 		ret = -ENOMEM;
 		goto fail;
 	}
+	spm_data.reg_size = resource_size(res);
 
 	spm_data.vctl_port = -1;
 	spm_data.vctl_port_ub = -1;
@@ -895,8 +1203,13 @@ static int msm_spm_dev_probe(struct platform_device *pdev)
 	 * cluster in reset. Initialize q2s registers and set the
 	 * SPM_LEGACY_MODE bit.
 	 */
+	ret = msm_spm_claim(pdev, dev, saw_res);
+	if (ret)
+		goto fail;
+	ret = msm_spm_drv_reg_init(&dev->reg_data, &spm_data);
+	if (ret)
+		goto fail;
 	msm_spm_config_q2s(dev, MSM_SPM_MODE_POWER_COLLAPSE);
-	msm_spm_drv_reg_init(&dev->reg_data, &spm_data);
 
 	for (i = 0; i < ARRAY_SIZE(spm_of_data); i++) {
 		ret = of_property_read_u32(node, spm_of_data[i].key, &val);
@@ -977,16 +1290,6 @@ static int msm_spm_dev_probe(struct platform_device *pdev)
 		goto fail;
 	}
 
-	/* Failed probes must never leave a global pointer into devres memory. */
-	list_add(&dev->list, &spm_list);
-	platform_set_drvdata(pdev, dev);
-
-	for_each_cpu(cpu, &dev->mask)
-		per_cpu(cpu_vctl_device, cpu) = dev;
-
-	if (!spm_data.num_modes)
-		return 0;
-
 	cpu = get_cpu_id(pdev->dev.of_node);
 
 	/* For CPUs that are online, the SPM has to be programmed for
@@ -994,21 +1297,40 @@ static int msm_spm_dev_probe(struct platform_device *pdev)
 	 * low power modes.
 	 */
 	get_online_cpus();
-	if ((cpu >= 0) && (cpu < num_possible_cpus()) && (cpu_online(cpu)))
-		msm_spm_config_low_power_mode(dev, MSM_SPM_MODE_CLOCK_GATING,
-				false);
+	if (spm_data.num_modes && cpu >= 0 && cpu < nr_cpu_ids && cpu_online(cpu))
+		ret = _msm_spm_dev_set_low_power_mode(dev,
+				MSM_SPM_MODE_CLOCK_GATING, false, true);
 	put_online_cpus();
-	return ret;
+	if (ret)
+		goto fail;
+
+	/* Publish only after every fallible initial operation. Raw descriptors
+	 * are permanent; retirement rejects access before devres is unmapped.
+	 */
+	mutex_lock(&spm_owner_lock);
+	list_add(&dev->list, &spm_list);
+	smp_store_release(&dev->published, true);
+	for_each_cpu(cpu, &dev->mask)
+		WRITE_ONCE(per_cpu(cpu_vctl_device, cpu), dev);
+	platform_set_drvdata(pdev, dev);
+	mutex_unlock(&spm_owner_lock);
+	ret = 0;
+	goto unlock;
 
 fail:
-	cpu = get_cpu_id(pdev->dev.of_node);
-	if (dev && (cpu >= num_possible_cpus() || (cpu < 0))) {
+	if (dev->owner) {
+		msm_spm_retire(dev, ret);
+		msm_spm_free_program(dev);
 		for_each_cpu(cpu, &dev->mask)
-			per_cpu(cpu_vctl_device, cpu) = ERR_PTR(ret);
+			WRITE_ONCE(per_cpu(cpu_vctl_device, cpu), dev);
+	} else if (get_cpu_id(node) == num_possible_cpus()) {
+		kfree(dev);
 	}
 
 	pr_err("%s: CPU%d SPM device probe failed: %d\n", __func__, cpu, ret);
 
+unlock:
+	mutex_unlock(&spm_probe_lock);
 	return ret;
 }
 
@@ -1018,7 +1340,13 @@ static int msm_spm_dev_remove(struct platform_device *pdev)
 
 	if (!dev)
 		return 0;
-	list_del(&dev->list);
+	/* No new API operation can start after the flag; queued operations
+	 * recheck under the hardware lock. Drain the IPI sender as well as
+	 * its target before the platform core releases managed mappings.
+	 */
+	msm_spm_retire(dev, -ESHUTDOWN);
+	msm_spm_free_program(dev);
+	platform_set_drvdata(pdev, NULL);
 	return 0;
 }
 
@@ -1032,6 +1360,7 @@ static struct platform_driver msm_spm_device_driver = {
 	.remove = msm_spm_dev_remove,
 	.driver = {
 		.name = "spm-v2",
+		.suppress_bind_attrs = true,
 		.of_match_table = msm_spm_match_table,
 	},
 };

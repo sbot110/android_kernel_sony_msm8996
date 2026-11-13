@@ -60,6 +60,7 @@ struct msm_spm_seq_entry {
 
 struct msm_spm_platform_data {
 	void __iomem *reg_base_addr;
+	uint32_t reg_size;
 	uint32_t reg_init_values[MSM_SPM_REG_NR_INITIALIZE];
 
 	uint32_t ver_reg;
@@ -96,6 +97,7 @@ struct msm_spm_driver_data {
 	uint32_t reg_shadow[MSM_SPM_REG_NR];
 	uint32_t *reg_seq_entry_shadow;
 	uint32_t seq_entries;
+	uint32_t num_pmic_data;
 	uint32_t *reg_offsets;
 };
 
@@ -135,5 +137,5 @@ void msm_spm_reinit(void);
 int msm_spm_init(struct msm_spm_platform_data *data, int nr_devs);
 void msm_spm_drv_upd_reg_shadow(struct msm_spm_driver_data *dev, int id,
 		int val);
-uint32_t msm_spm_drv_get_vdd(struct msm_spm_driver_data *dev);
+int msm_spm_drv_get_vdd(struct msm_spm_driver_data *dev);
 #endif

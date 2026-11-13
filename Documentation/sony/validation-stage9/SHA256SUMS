@@ -1,0 +1,10 @@
+881bcb0d1ca79e0c79c99166bbb07b1d4a7af4389229f366c5e5f2393a47806c  /workspace/stage9-qualified-clean-out/.config
+2df8396a10d8885b74958f6901c4f77e5a449efd15396522f28cb0dc24b1d06e  /workspace/stage9-qualified-clean-out/vmlinux
+b988a8a87e85ba74d0db8a1e196118f5e5a6a647bc9f756a23ef0925aef6c674  /workspace/stage9-qualified-clean-out/System.map
+de834d24c1d9fca8fe1146cd1dae6662affa0086a5967749c344e2d8004090f4  /workspace/stage9-qualified-clean-out/arch/arm64/boot/Image
+085a65f7be2985c1bbb7b799c7e527c6995a667c46cfe34ede79a5469f33c2a2  /workspace/stage9-qualified-clean-out/arch/arm64/boot/Image.gz
+7675a6ba79f0509de61a252089fdef37ee002dedb4a467aa2918a604cc9012f2  /workspace/stage9-qualified-clean-out/arch/arm64/boot/dts/qcom/msm8996-v3.0-sony-xperia-tone-dora.dtb
+b1642817b4f1d0ecbef0a9484f0ebb0a1b5b0c5a892747c6cd35d3db8e23da64  /workspace/stage9-qualified-clean-out/arch/arm64/boot/dts/qcom/msm8996-v3.0-pmi8996-sony-xperia-tone-dora.dtb
+c47b47b9da01a73eab74f5f9873fba9c980019474d01d115ab371feb616df6a2  /workspace/stage9-qualified-clean-out/arch/arm64/boot/dts/qcom/msm8996-sony-xperia-tone-dora.dtb
+c0305be01340962ea9f69305168f11623237892fa34aaf6e04b6f1748acdbb24  /workspace/stage9-qualified-clean-out/arch/arm64/boot/dts/qcom/msm8996-v3.1-pmi8996-sony-xperia-tone-dora.dtb
+4245af10881462cd14ba4ef831e9a113d08ca9a81ef800fae5b065c361963d61  /workspace/stage9-qualified-clean-out/arch/arm64/boot/Image.gz-dtb

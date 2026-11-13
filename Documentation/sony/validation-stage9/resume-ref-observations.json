@@ -1,0 +1,11 @@
+{
+  "target_unchanged": true,
+  "target_sha": "e9f1a7be0c13e1447a0cf398af31a9efe5868ad1",
+  "changes_observed_before_our_push": {
+    "refs/heads/kernel-5.15": {
+      "initial": "8c7ad7e9221f299530e89d944e3399703d915760",
+      "resume": "0f955fbca80d3ccc7834f5524b1a5dc25a7ad6c9"
+    }
+  },
+  "interpretation": "External updates before Stage9 publication; no other refs written by this task"
+}

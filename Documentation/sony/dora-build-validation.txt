@@ -1,3 +1,44 @@
+Dora Linux 4.19.318 / Stage 9 current validation (2026-11-13 UTC)
+==============================================================
+STATUS: BUILDABLE; BOOT TEST READY: NO; BOOTED: NO; DAILY USE READY: NO.
+Initial SHA: e9f1a7be0c13e1447a0cf398af31a9efe5868ad1
+Validated source SHA: 87a4a52a50177dfafeec780f3f3c9316621d7c20
+Final publication SHA: final reply and external stage9-publication-audit.json.
+Six commits including final documentation/evidence; changed files: 104.
+
+Fresh OUT_DIR=/workspace/stage9-qualified-clean-out JOBS=3 scripts/dora/build.sh
+exit0, 2026-11-13T21:19:46.579564+00:00 .. 2026-11-13T21:29:34.109772+00:00.
+56 check scripts / 83 default calls pass; all54 previous scripts retained.
+Separate fresh four-SDHC1-DTB workflow exit0 and normal hashes preserved.
+Eight-tree early boot/USB-parent plus four diagnostic CPU-DT checks pass.
+8 ASan/UBSan runs pass (detect_leaks=0; LSan unavailable under ptrace).
+Compiler90; external dtc1.6.1:29/DTB; bundled dtc1.4.6:15/DTB, normal+diagnostic.
+Normalized added/removed0/0 in every warning comparison. Config identical Stage8.
+4 normal +4 diagnostic trees checked. Full-tree Stage8 delta limited to four
+APCC supply metadata additions and same-node phandle relocation. Image.gz-dtb
+SHA256: 4245af10881462cd14ba4ef831e9a113d08ca9a81ef800fae5b065c361963d61
+
+First clean workflow exit1 at dependency validation after successful link;
+its full logs and a successful validation rehearsal are archived separately.
+A second new empty O= completed the whole clean workflow above. No hidden error.
+Build invocation HEAD was initial SHA with frozen changes; all22 source hashes
+match validated source commit. Version strings/artifacts were not rewritten.
+
+Shared CPU owner is live only in read-only APCC/CBF resource lifecycle:
+real counted XO/GPLL0 references, immutable fuse plans, typed node observations,
+sticky fault and retirement. No native write binding or CPU voltage leases.
+MX is S2 ACTIVE-only LOW logical4, distinct from GCC CX and CPR corner index.
+Missing source LMHv1 S11 DPM/ODCM and autonomous CPR/AVS/collapse/thermal guard
+block voltage writes. SAW lifetime/readback and CPR failure closure improved;
+legacy AVS restore-after-failed-VDD-ACK remains an unqualified gated path.
+maxcpus=2, CPU_FREQ/CPU_IDLE=n, native S8-S11 and hardware gates retained.
+LOS21 works on Sony4.4 per user; Linux4.19 runtime remains unverified.
+No real working boot.img/LOS21 ramdisk found. No boot.img/flash/partition access.
+Full report: dora-stage9-report.md. Evidence: validation-stage9/.
+
+Historical Stage 8 report follows, unchanged
+===========================================
+
 Dora Linux 4.19.318 / Stage 8 current validation (2026-11-05)
 ==========================================================
 STATUS: BUILDABLE; BOOT TEST READY: NO; PHONE BOOT: UNTESTED.

@@ -1,0 +1,73 @@
+{
+  "time_utc": "2026-11-11T12:47:07.042460+00:00",
+  "stage": 9,
+  "read_only": true,
+  "roots": [
+    "/workspace",
+    "/tmp"
+  ],
+  "walked_directories": 19158,
+  "excluded_internal_directories": [
+    "/tmp/.agents",
+    "/tmp/.aws",
+    "/tmp/.codex",
+    "/tmp/.git",
+    "/tmp/codex-daemon-1000",
+    "/workspace/.agents",
+    "/workspace/.aws",
+    "/workspace/.codex",
+    "/workspace/.git",
+    "/workspace/android_kernel_sony_msm8996/.git"
+  ],
+  "traversal_errors": [],
+  "boot_image_or_distribution_candidates": [],
+  "kernel_generated_initramfs_paths": [
+    "/workspace/android_kernel_sony_msm8996/out/usr/initramfs_data.cpio",
+    "/workspace/stage6-clean-out/usr/initramfs_data.cpio",
+    "/workspace/stage6-final-clean-out/usr/initramfs_data.cpio",
+    "/workspace/stage7-final-clean-out/usr/initramfs_data.cpio",
+    "/workspace/stage8-final-clean-out/usr/initramfs_data.cpio"
+  ],
+  "known_kernel_only_artifacts": [
+    {
+      "path": "/workspace/stage7-official-kernel-dtb-dora",
+      "classification": "official Sony kernel-only prebuilt, provenance Stage7/8; not identified working LOS21 boot image",
+      "size_bytes": 11291692,
+      "sha256": "75a8dc67020fb672251a9c737ba14e1082348cd06fde8e159174ad4595ab614c"
+    },
+    {
+      "path": "/workspace/stage8-final-clean-out/arch/arm64/boot/Image.gz-dtb",
+      "classification": "Stage8 Linux4.19 kernel+four DTBs, no boot header or LOS21 ramdisk",
+      "size_bytes": 9734047,
+      "sha256": "d5b5aa6bdb4cdf594424ad5a23f8033da1e7816865cd21192cff8bb1fdf087e7"
+    }
+  ],
+  "working_los21_boot_image_found": false,
+  "identified_los21_ramdisk_found": false,
+  "device_or_partition_access": false,
+  "source_reference_runtime_status": "User confirms LOS21 works on original Sony4.4.302+; no image/log from that working build was supplied",
+  "linux419_runtime_status": "UNVERIFIED; historical bpfloader/BoringSSL/vold observations are not current failures of working4.4",
+  "local_git_trees_checked": [
+    {
+      "ref": "refs/heads/kernel-4.19-701905467803253630",
+      "file_count": 74706,
+      "matching_paths": []
+    },
+    {
+      "ref": "refs/heads/work",
+      "file_count": 57295,
+      "matching_paths": []
+    },
+    {
+      "ref": "refs/remotes/origin/kernel-4.19-701905467803253630",
+      "file_count": 74706,
+      "matching_paths": []
+    },
+    {
+      "ref": "refs/remotes/origin/main",
+      "file_count": 57295,
+      "matching_paths": []
+    }
+  ],
+  "local_git_boot_blob_candidates": []
+}

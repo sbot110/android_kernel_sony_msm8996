@@ -1,0 +1,22 @@
+[
+  {
+    "sha": "a67210d3923d98180c92aab68541f09787da5818",
+    "subject": "regulator: cpr3: expose HMSS observations and quarantine uncertain transitions"
+  },
+  {
+    "sha": "9c29df6a097e13ffb0d281a8eae05d9e4acf5553",
+    "subject": "regulator: qcom: observe RPM corners without acquiring supplies"
+  },
+  {
+    "sha": "7acbd44eff1839d043d1b2e40782f0f01fb6bd45",
+    "subject": "soc: qcom: retain SAW ownership and verify live AVS state"
+  },
+  {
+    "sha": "6326cd1cf2116ff4ff02288649d47864f1b12520",
+    "subject": "clk: qcom: bind Dora read-only providers to shared CPU resources"
+  },
+  {
+    "sha": "87a4a52a50177dfafeec780f3f3c9316621d7c20",
+    "subject": "dora: qualify inert CPU supply references and shared power code in builds"
+  }
+]

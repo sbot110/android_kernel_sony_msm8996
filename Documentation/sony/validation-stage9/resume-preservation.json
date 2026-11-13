@@ -1,0 +1,10 @@
+{
+  "preserved_paths": 19,
+  "all_original_snapshots_hash_verified": true,
+  "all_original_paths_still_present": true,
+  "backup_directory": "/workspace/stage9-resume-preserved",
+  "binary_tracked_diff_sha256": "3bb73eca8d68359f148f75ff1f65d04a4005cd111d51b98b9e2077f6fc462a2f",
+  "original_work_preserved": true,
+  "subsequent_source_changes": "Incremental reviewed fixes on preserved work; no reset, checkout or history rewrite",
+  "generated_python_bytecode_preserved_outside_repo": true
+}

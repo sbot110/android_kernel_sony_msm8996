@@ -1,4 +1,11 @@
-Stage 8 update (2026-11-05): APM readback/ownership/retirement, CPR crossover
+Stage 9: LOS21 is working on Sony 4.4.302+ according to the user; it is the
+runtime reference. Linux 4.19 has not booted on either model. Historical
+bpfloader/BoringSSL/vold messages are not current failures of that working
+4.4 system. New read-only APCC/CBF resource ownership, MX S2 AO identity,
+typed observations and SAW lifetime checks do not establish 4.19 runtime
+compatibility. See [Stage 9 report](dora-stage9-report.md).
+
+Stage 8 historical update (2026-11-05): APM readback/ownership/retirement, CPR crossover
 quarantine/PM, bounded SAW sequences, unique native binding and monotonic
 CCF recovery floors are implemented. CPU writes remain unbound without the
 full CPR/SPM/APM/LMH shared owner; maxcpus=2 and CPU_FREQ/CPU_IDLE=n remain.
@@ -122,8 +129,9 @@ ext4/F2FS, dm-verity/FEC, loop, OverlayFS, ION/dma-buf/fences и USB gadget.
 
 BPF program-side map flags RDONLY_PROG/WRONLY_PROG не реализованы простым
 добавлением UAPI констант. Старые bpfloader code 1, BoringSSL self-check и
-vold-failed не объявлены устранёнными; для их диагноза нужны конкретные
-binary/verifier/init/fs_mgr/crypto логи нового ядра. Механизмы безопасности
+vold-failed не считаются текущими ошибками рабочего Sony 4.4/LOS21. Для
+оценки нового Linux 4.19 нужны его binary/verifier/init/fs_mgr/crypto логи.
+Механизмы безопасности
 не отключаются для обхода ошибок. [Аудит LOS21](dora-android14-audit.md).
 
 ## Условия следующего этапа

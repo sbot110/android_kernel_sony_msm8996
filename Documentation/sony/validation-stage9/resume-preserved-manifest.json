@@ -1,0 +1,21 @@
+{
+  "Documentation/sony/dora-stage9-boot-reference.md": "82852cf593458dbcbeefec2f6581a4cd434d4bcd3cb3ab060db481116a833624",
+  "arch/arm64/boot/dts/qcom/msm8996-sony-xperia-tone-cpu.dtsi": "aea65df34603af007b91fad434dc1bc4218071105bb36f361f659e1a110b4fa0",
+  "drivers/clk/qcom/Makefile": "928b0e7ca18e5ff5ef8136d5c04cde42bb80b8a05cf9320d33ccbfb225ffdfaf",
+  "drivers/clk/qcom/clk-cpu-8996.c": "96f917ac022b1d91147be2222911ef0125a81c447578a2a760c98ee8c9fe37a2",
+  "drivers/clk/qcom/clk-msm8996-cpu-power.c": "ad5f326b36b066aaed02820986d9872dcccaa9a5598711da1bbc4933270bf2c4",
+  "drivers/clk/qcom/clk-msm8996-cpu-power.h": "c847759d8922d40f1f11a361dc00d1c23b08d03ea12a2d1d31b6dcc96be5ce84",
+  "drivers/regulator/cpr3-hmss-regulator.c": "b6d0fa5c50017caa6b42db5638941de1f4fbf10b2416b6d9473fc5709b462939",
+  "drivers/regulator/cpr3-regulator.c": "51ccbb952d6a08e28562e835b5a136fdd87527f90c23de67628717c313d3c7b6",
+  "drivers/regulator/cpr3-regulator.h": "c2f4689de3d3752032e72cfba7f7e16812a2cf78721a5d531356314545134ca9",
+  "drivers/regulator/qcom-rpm-corner.c": "a6cdab63b36a51e4d45458aa180d0645a4c572c38361d4541b4278512f571685",
+  "drivers/soc/qcom/msm-spm.c": "8dd58fb4ff9fac31e86b7d4952e956124b99e7eb3b1ecd9069d38bacb57d5377",
+  "drivers/soc/qcom/spm_devices.c": "10df5181eb69631da76da291669e7d85829ac6ce4eaea441ec1a140a3836d834",
+  "drivers/soc/qcom/spm_driver.h": "af4be298601c34712b1475977620130d16b0deecca41b1d3a3818e1dc7dfbbe4",
+  "include/linux/regulator/qcom-cpr3-cpu.h": "dadb010cad7a9ddaac640db0842ae221ad3f1c7ae0101d7130651cb042b0c2a7",
+  "include/linux/regulator/qcom-rpm-corner.h": "cacea0904130462dc4b0b3ed8aadc3d73e272d13e9537dfeb7fbfda450c0b67f",
+  "scripts/dora/check-cpr-cpu-state.py": "baf1e1b9b94d71b3910e6914bf6cd8dd38dd1981500585b99b78ead074563b48",
+  "scripts/dora/check-cpu-clocks.py": "62c2d83699a8f4b289da7d40a50e8ebab9aae5f37bec153382efbc5a8cfbfd80",
+  "scripts/dora/check-rpm-corners.py": "2b839493797bc2764a1c4107659caf8d2f785a2c38680635a5e793575f501b86",
+  "scripts/dora/check-spm-transactions.py": "f07b0e84b1e48509b1a7be72b0a474319ca91d864a95fc3627d283333bb4519a"
+}

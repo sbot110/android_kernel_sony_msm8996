@@ -1,12 +1,32 @@
-# Dora Linux 4.19: блокеры после этапа 8
+# Dora Linux 4.19: блокеры после этапа 9
 
-Обновлено: 2026-11-05. Начальный HEAD этапа:
-`6dfd2314c958294d13291885e3ce463e2d7a9257`.
+Начальный HEAD этапа 9:
+`e9f1a7be0c13e1447a0cf398af31a9efe5868ad1`.
 Эталон Sony 4.4.302: `0c295b15b6d0fb59a64e13b9e0ef2070818ef2a1`.
 
 Ни F8131, ни F8132 не загружались с этим ядром. Первая диагностическая
 загрузка не подготовлена; boot.img на этом этапе не создаётся.
 Фактическая сборка/проверенные SHA: [dora-build-validation.txt](dora-build-validation.txt).
+
+Stage 9 подключает общий read-only resource owner к APCC/CBF: реальные
+counted XO/GPLL0 references, неизменяемые выбранные fuse plans, общий sticky
+fault и постоянный retirement. Наблюдение CPR/RPM не получает consumer и
+не включает upstream supply. MX CPU digital — S2 ACTIVE-only, LOW=logical4,
+не GCC CX и не CPR plan index. Реальные voltage leases пока отсутствуют;
+native modifying callbacks не подключены. PM flags не являются доказанным
+аппаратным freeze/resume. [Подробная dependency graph](dora-stage9-cpu-power.md).
+
+Конкретный P0: исходный LMHv1 S11 notifier меняет DPM/ODCM до повышения и
+после снижения напряжения. Нынешний DCVSH driver не заменяет этот протокол.
+Также нет подтверждённого transferable CPR/AVS stop и исключения автономных
+firmware/hotplug/collapse/retention операций. Исправления SAW lifetime и
+readback закрывают программные ошибки, но не подтверждают весь handoff.
+
+Рабочий эталон LOS21/Sony 4.4.302+ подтверждён пользователем. Исторические
+bpfloader/BoringSSL/vold сообщения не являются текущими ошибками этого
+эталона; runtime нового 4.19 не проверен. Реальный boot.img/ramdisk и
+измерения watchdog/USB/charging handoff отсутствуют; точный список данных:
+[boot reference](dora-stage9-boot-reference.md).
 
 ## Реальные изменения
 
@@ -125,7 +145,7 @@ Generic UFS host/PHY recovery остаётся отдельной задачей
 
 ## Независимые проверки и физические пределы
 
-Все 54 check-*.py включены в build.sh; все 52 проверки Stage7 сохранены.
+Все 56 check-*.py включены в build.sh; все 54 проверки Stage8 сохранены.
 Точное число и результаты — в протоколе сборки. Новые
 тесты выполняют MMC alias/UIM2/provider/power helpers, physical/cache ACK
 расхождения, RPM corner aggregation/rollback/lifetime/concurrency, CCF
@@ -136,8 +156,9 @@ owners, неверные supplies/endpoint/corners и обход maxcpus.
 Без отдельных F8131/F8132 нельзя подтвердить выбранный DTB, раннюю загрузку,
 напряжение/температуры, eMMC/SD tuning и data integrity, encrypted userdata,
 каждую панель/touch/GPU, WPA2/reconnect, USB/charging, suspend, audio/voice,
-модем/DSDS или vendor runtime. Старые bpfloader/BoringSSL/vold ошибки не
-объявлены устранёнными. Механизмы безопасности не отключались.
+модем/DSDS или vendor runtime нового 4.19. Исторические bpfloader/BoringSSL/
+vold сообщения не описывают текущий рабочий эталон 4.4. Механизмы
+безопасности не отключались.
 
 SMBcharger не привязан в DT. Это не доказывает, что загрузчик прекратил
 физическую зарядку: исходное PMIC состояние и токи не измерены. Разделы

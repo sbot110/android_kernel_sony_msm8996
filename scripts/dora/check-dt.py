@@ -1,12 +1,14 @@
 #!/usr/bin/env python3
-"""Check compiled Dora identity and enabled provider references.
+"""Check Dora identity, active provider references and CPU observation links.
 
 The separate variant checker verifies actual Sony hardware differences and
 mandatory activation guards. Neither checker proves device/bootloader support.
 """
 import argparse
+import copy
 import importlib.util
 import json
+import re
 import struct
 from pathlib import Path
 
@@ -16,6 +18,48 @@ ROOT = SCRIPT.parents[2]
 spec = importlib.util.spec_from_file_location("dora_power_dt", SCRIPT.with_name("check-power-dt.py"))
 power = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(power)
+spec = importlib.util.spec_from_file_location("dora_cpu_dt", SCRIPT.with_name("check-cpu-dt.py"))
+cpu = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(cpu)
+
+APCC = "/soc/clock-controller@6400000"
+# These are observational links to the one disabled HMSS/SPM gang and its
+# distinct MX AO digital supply. They are not active regulator dependencies.
+CPU_OBSERVATIONS = {
+    "vdd-pwrcl-supply": ("/soc/cpr3-ctrl@99e8000/thread@0/regulator-pwrcl", b"apc0_pwrcl_corner\0"),
+    "vdd-perfcl-supply": ("/soc/cpr3-ctrl@99e8000/thread@1/regulator", b"apc1_corner\0"),
+    "vdd-cbf-supply": ("/soc/cpr3-ctrl@99e8000/thread@0/regulator-cbf", b"apc0_cbf_corner\0"),
+    "vdd-dig-supply": ("/rpm-glink/rpm_requests/rpm-regulator-smpa2/regulator-s2-corner-ao", b"pm8994_s2_corner_ao\0"),
+}
+
+
+def observation_sources(provider, owner):
+    """Fail closed if the live source can turn metadata into a power vote."""
+    def code(source):
+        return re.sub(r"/\*.*?\*/|//[^\n]*", "", source, flags=re.S)
+
+    provider, owner = code(provider), code(owner)
+    tables = re.findall(r"static\s+const\s+struct\s+clk_ops\s+(\w+)\s*=\s*\{(.*?)\};",
+                        provider, re.S)
+    if len(tables) != 1 or tables[0][0] != "msm8996_boot_ops":
+        raise ValueError("CPU observation requires the audited read-only clock operations")
+    fields = re.findall(r"\.(\w+)\s*=", tables[0][1])
+    if (fields != ["recalc_rate"] or
+            not re.fullmatch(r"\s*\.recalc_rate\s*=\s*msm8996_boot_recalc\s*,?\s*", tables[0][1])):
+        raise ValueError("CPU observation cannot bypass disabled providers for writable clock operations")
+    registrations = re.findall(r"\binit\.ops\s*=\s*&\s*(\w+)\s*;", provider)
+    if registrations != ["msm8996_boot_ops"]:
+        raise ValueError("CPU observer operations registration changed")
+    if re.search(r"\bclk_(?:prepare_enable|prepare|enable|disable_unprepare|unprepare|disable|set_rate|set_parent)\s*\(", provider):
+        raise ValueError("CPU observer unexpectedly controls clocks")
+    if re.search(r"\b(?:regulator_\w+|devm_regulator_\w+|"
+                 r"qcom_rpm_corner_sync|msm8996_cpu_native_\w+|msm8996_cpu_transaction_\w+|"
+                 r"write[blwq]\w*|__raw_write\w*|iowrite\w*|write_sysreg\w*|"
+                 r"regmap_(?:write\w*|update\w*))\s*\(", provider + owner):
+        raise ValueError("CPU observational metadata gained a regulator, transaction or register write path")
+    if ("qcom_cpr3_cpu_get_state_by_node(" not in owner or
+            "qcom_rpm_corner_get_state_by_node(" not in owner):
+        raise ValueError("CPU observer requires typed read-only provider snapshots")
 
 
 def cells(value):
@@ -30,7 +74,7 @@ def strings(value):
     return value[:-1].decode().split("\0")
 
 
-def validate(nodes):
+def validate(nodes, provider_source=None, owner_source=None):
     handles = {}
     for node in nodes.values():
         if "phandle" in node["props"]:
@@ -56,6 +100,27 @@ def validate(nodes):
         if not available(result):
             raise ValueError("disabled provider: " + result["path"])
         return result
+
+    # The complete CPU check also pins source-derived fuse/CPR/SPM/APM data,
+    # disabled controller ancestors, MX S2 ACTIVE-only metadata and all four
+    # independently disabled RPM gang phases. Never exempt arbitrary supplies.
+    cpu.validate(nodes)
+    qcom = ROOT / "drivers/clk/qcom"
+    observation_sources(
+        provider_source if provider_source is not None else (qcom / "clk-cpu-8996.c").read_text(),
+        owner_source if owner_source is not None else (qcom / "clk-msm8996-cpu-power.c").read_text())
+    if nodes[APCC]["props"].get("compatible") != b"qcom,apcc-msm8996\0":
+        raise ValueError("CPU observation exception requires the audited APCC provider")
+
+    def observational_supply(node, name, handle):
+        if node["path"] != APCC or name not in CPU_OBSERVATIONS:
+            return False
+        path, regulator_name = CPU_OBSERVATIONS[name]
+        target = handles.get(handle)
+        if (not target or target["path"] != path or
+                target["props"].get("regulator-name") != regulator_name or available(target)):
+            raise ValueError("incorrect or prematurely active CPU observational supply: " + name)
+        return True
 
     root = nodes["/"]["props"]
     manifest = json.loads((ROOT / "Documentation/sony/dora-original-dtb-ids.json").read_text())
@@ -111,7 +176,8 @@ def validate(nodes):
                     if name.endswith("-supply") and len(words) != 1:
                         raise ValueError("supply must reference one regulator")
                     for handle in words:
-                        provider(handle)
+                        if not observational_supply(node, name, handle):
+                            provider(handle)
                         checked += 1
                 elif name == "interrupts":
                     parent = node
@@ -151,15 +217,72 @@ def validate(nodes):
     return checked
 
 
+def selftest(nodes):
+    provider_source = (ROOT / "drivers/clk/qcom/clk-cpu-8996.c").read_text()
+    owner_source = (ROOT / "drivers/clk/qcom/clk-msm8996-cpu-power.c").read_text()
+    props = nodes[APCC]["props"]
+    mx_path = CPU_OBSERVATIONS["vdd-dig-supply"][0]
+    changes = [
+        (APCC, "vdd-pwrcl-supply", props["vdd-perfcl-supply"]),
+        (APCC, "vdd-dig-supply", props["vdd-cbf-supply"]),
+        (APCC, "unexpected-supply", props["vdd-pwrcl-supply"]),
+        ("/soc/cpr3-ctrl@99e8000", "status", b"okay\0"),
+        (mx_path.rsplit("/", 1)[0], "status", b"okay\0"),
+        (mx_path, "qcom,set", struct.pack(">I", 3)),
+        ("/rpm-glink/rpm_requests/pm8994-regulators/s8", "status", b"okay\0"),
+        ("/rpm-glink/rpm_requests/pm8994-regulators/s11", "status", b"okay\0"),
+    ]
+    cases = []
+    for path, key, replacement in changes:
+        bad = copy.deepcopy(nodes)
+        bad[path]["props"][key] = replacement
+        cases.append((path + ":" + key, bad, provider_source, owner_source))
+    bad = copy.deepcopy(nodes)
+    path = "/soc/active-provider-regression"
+    bad[path] = {"path": path, "props": {"vdd-supply": props["vdd-pwrcl-supply"]}}
+    cases.append(("active consumer of disabled regulator", bad, provider_source, owner_source))
+    cases.extend([
+        ("writable clock operation", nodes,
+         provider_source.replace(".recalc_rate = msm8996_boot_recalc,",
+                                 ".recalc_rate = msm8996_boot_recalc,\n.enable = unsafe_enable,"), owner_source),
+        ("pointer-valued writable clock operation", nodes,
+         provider_source.replace(".recalc_rate = msm8996_boot_recalc,",
+                                 ".recalc_rate = msm8996_boot_recalc,\n.enable = &unsafe_enable,"), owner_source),
+        ("CPU clock mutation", nodes, provider_source + "\nvoid unsafe(void) { clk_set_rate(0, 1); }\n", owner_source),
+        ("regulator consumer acquisition", nodes, provider_source,
+         owner_source + "\nvoid unsafe(void) { regulator_get_optional(0, 0); }\n"),
+        ("CPU voltage vote", nodes, provider_source,
+         owner_source + "\nvoid unsafe(void) { regulator_set_voltage(0, 1, 2); }\n"),
+        ("native callback binding", nodes, provider_source,
+         owner_source + "\nvoid unsafe(void) { msm8996_cpu_native_bind(0, 0, 0, 0); }\n"),
+        ("raw MMIO write", nodes, provider_source,
+         owner_source + "\nvoid unsafe(void) { __raw_writel(1, 0); }\n"),
+        ("I/O MMIO write", nodes, provider_source,
+         owner_source + "\nvoid unsafe(void) { iowrite32(1, 0); }\n"),
+    ])
+    for name, bad, provider, owner in cases:
+        try:
+            validate(bad, provider, owner)
+        except (KeyError, ValueError):
+            continue
+        raise ValueError("provider checker accepted unsafe fixture: " + name)
+    return len(cases)
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("dtb", type=Path)
+    parser.add_argument("--self-test", action="store_true")
     args = parser.parse_args()
     try:
-        count = validate(power.parse_fdt(args.dtb))
+        nodes = power.parse_fdt(args.dtb)
+        count = validate(nodes)
+        negatives = selftest(nodes) if args.self_test else 0
     except (KeyError, ValueError, OSError, struct.error) as exc:
         parser.exit(1, "Dora DT check failed: %s\n" % exc)
     print("Dora DT: original SoC/PMIC tuple, four CPU nodes/maxcpus=2, %d provider references checked" % count)
+    if args.self_test:
+        print("Dora DT: %d unsafe dependency/source mutations rejected" % negatives)
     print("LIMIT: provider references only; run variant/CPU/display/bus checks; hardware activation remains gated")
 
 

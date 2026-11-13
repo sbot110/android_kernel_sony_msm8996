@@ -44,6 +44,10 @@ python3 "$root/scripts/dora/check-cpu-hardware.py"
 python3 "$root/scripts/dora/check-cpu-native.py"
 python3 "$root/scripts/dora/check-cpu-shared-power.py" --self-test \
     --report "$out/cpu-shared-power-validation.json"
+python3 "$root/scripts/dora/check-cpu-power-owner.py" --self-test \
+    --report "$out/cpu-power-owner-validation.json"
+python3 "$root/scripts/dora/check-cpr-cpu-state.py" --self-test \
+    --report "$out/cpr-cpu-state-validation.json"
 python3 "$root/scripts/dora/check-spm-transactions.py"
 python3 "$root/scripts/dora/check-watchdog.py" --self-test
 python3 "$root/scripts/dora/check-usb-handoff.py" --self-test \
@@ -92,7 +96,7 @@ for dtb in "${dtbs[@]}"; do
     tree="$out/arch/arm64/boot/dts/$dtb"
     trees+=("$tree")
     artifact_args+=(--dtb "$dtb")
-    python3 "$root/scripts/dora/check-dt.py" "$tree"
+    python3 "$root/scripts/dora/check-dt.py" "$tree" --self-test
     python3 "$root/scripts/dora/check-cpu-dt.py" "$tree" --selftest
     python3 "$root/scripts/dora/check-power-dt.py" "$tree"
     python3 "$root/scripts/dora/check-pin-safety.py" "$tree" --self-test

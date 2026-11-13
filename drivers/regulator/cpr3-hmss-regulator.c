@@ -1733,6 +1733,7 @@ static int cpr3_hmss_regulator_probe(struct platform_device *pdev)
 		return -ENOMEM;
 
 	ctrl->dev = dev;
+	ctrl->cpu_power_domain = true;
 	/* Set to false later if anything precludes CPR operation. */
 	ctrl->cpr_allowed_hw = true;
 

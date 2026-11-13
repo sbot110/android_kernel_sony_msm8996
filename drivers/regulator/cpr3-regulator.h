@@ -768,6 +768,8 @@ struct cpr3_controller {
 	int			sensor_count;
 	int			soc_revision;
 	struct mutex		lock;
+	/* Set by the HMSS frontend, never a DT opt-in for another provider. */
+	bool			cpu_power_domain;
 	struct regulator	*vdd_regulator;
 	struct regulator	*system_regulator;
 	struct regulator	*mem_acc_regulator;
@@ -816,6 +818,8 @@ struct cpr3_controller {
 	bool			cpr_suspended;
 	/* First uncertain shared-power transition; never auto-cleared. */
 	int			power_error;
+	bool			irq_quarantined;
+	bool			ceiling_irq_quarantined;
 	struct dentry		*debugfs;
 
 	int			aging_ref_volt;

@@ -13,6 +13,13 @@
 	/* Sony sys_apcsaux_clk is GPLL0 main output divided by two. */
 	clocks = <&xo_board>, <&gcc GPLL0>;
 	clock-names = "xo", "aux";
+	/* Original clock_cpu supplies. Lookup/observation only: controllers
+	 * remain gated and this does not install a CCF voltage/rate path.
+	 */
+	vdd-pwrcl-supply = <&apc0_pwrcl_vreg>;
+	vdd-perfcl-supply = <&apc1_vreg>;
+	vdd-cbf-supply = <&apc0_cbf_vreg>;
+	vdd-dig-supply = <&pm8994_s2_corner_ao>;
 	nvmem-cells = <&sony_cpu_speedbin>;
 	nvmem-cell-names = "speedbin";
 	qcom,pwrcl-speedbin0-v0 =

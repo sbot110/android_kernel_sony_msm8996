@@ -135,7 +135,11 @@ OBSERVER_PREAMBLE = r'''
 #include <stddef.h>
 #include <stdlib.h>
 #include <string.h>
+#include <stdio.h>
+#include <sys/types.h>
 #define __iomem
+#define __maybe_unused
+#define PAGE_SIZE 4096
 #define BIT(n) (1U << (n))
 #define container_of(p, type, member) ((type *)((char *)(p) - offsetof(type, member)))
 struct clk_init_data;
@@ -169,7 +173,15 @@ static unsigned long clk_get_rate(struct clk *clock)
 #define PTR_ERR(p) ((int)(intptr_t)(p))
 #define dev_info(...) ((void)0)
 #define of_clk_hw_onecell_get NULL
-struct device { void *of_node; };
+struct device { void *of_node; void *driver_data; };
+struct device_attribute;
+struct attribute { unsigned tag; };
+struct device_attribute { struct attribute attr;
+    ssize_t (*show)(struct device *,struct device_attribute *,char *); };
+struct attribute_group { struct attribute **attrs; };
+#define DEVICE_ATTR_RO(name) struct device_attribute dev_attr_##name={.show=name##_show}
+static void *dev_get_drvdata(struct device *dev) { return dev->driver_data; }
+static void dev_set_drvdata(struct device *dev,void *data) { dev->driver_data=data; }
 struct msm8996_cpu_hw_plans { unsigned speed_bin; };
 static bool fuse_present;
 static int fuse_error;
@@ -191,11 +203,62 @@ static struct clk probe_xo = { .rate = 19200000 }, probe_aux = { .rate = 6000000
 static bool probe_cbf;
 static int aux_error;
 static unsigned registrations, providers;
+static void *allocations[8];
+static unsigned allocation_count;
+static struct clk_init_data registered_init[2];
+static struct clk_hw *registered_hw[2];
+struct msm8996_cpu_power_port { bool cbf,retired,suspended; };
+static struct msm8996_cpu_power_port probe_port;
+static bool owner_enabled;
+static int owner_error,action_error,group_error,provider_error,pm_error;
+static bool observation_error;
+static unsigned owner_attaches,observations,retirements,groups,suspends,resumes,formats;
+static void (*managed_action)(void *);
+static void *managed_data;
+static struct msm8996_cpu_power_port *msm8996_cpu_power_attach(struct device *dev,bool cbf,
+                    struct clk *xo,struct clk *aux,const struct msm8996_cpu_hw_plans *plans)
+{
+    (void)dev;assert(registrations==(cbf?1U:2U) && !providers);
+    assert(xo==&probe_xo && aux==&probe_aux);owner_attaches++;
+    if(!owner_enabled)return NULL;
+    if(owner_error)return (struct msm8996_cpu_power_port *)(intptr_t)owner_error;
+    assert(cbf ? !plans : plans && plans->speed_bin==2);
+    memset(&probe_port,0,sizeof(probe_port));probe_port.cbf=cbf;return &probe_port;
+}
+static unsigned long msm8996_cpu_power_observe(struct msm8996_cpu_power_port *port,
+                    unsigned domain,unsigned long rate)
+{
+    if(!port)return rate;
+    assert(port==&probe_port && !port->retired && (port->cbf ? domain==2 : domain<2));
+    observations++;return observation_error?0:rate;
+}
+static void msm8996_cpu_power_retire(void *data)
+{
+    struct msm8996_cpu_power_port *port=data;
+    assert(port==&probe_port && !port->retired && allocation_count==2);
+    port->retired=true;retirements++;
+}
+static int msm8996_cpu_power_suspend(struct msm8996_cpu_power_port *port)
+{ if(!port)return 0;assert(!port->retired);suspends++;if(pm_error)return pm_error;port->suspended=true;return 0; }
+static int msm8996_cpu_power_resume(struct msm8996_cpu_power_port *port)
+{ if(!port)return 0;assert(!port->retired);resumes++;if(pm_error)return pm_error;port->suspended=false;return 0; }
+static ssize_t msm8996_cpu_power_format(struct msm8996_cpu_power_port *port,char *buf,size_t size)
+{ assert(port==&probe_port && !port->retired);formats++;return snprintf(buf,size,"readonly=1\n"); }
+static int devm_add_action_or_reset(struct device *dev,void (*action)(void *),void *data)
+{
+    (void)dev;assert(!managed_action && registrations && !providers);
+    if(action_error){action(data);return action_error;}
+    managed_action=action;managed_data=data;return 0;
+}
+static int devm_device_add_group(struct device *dev,const struct attribute_group *group)
+{
+    assert(dev_get_drvdata(dev)==&probe_port && group->attrs[0] && !providers);
+    if(group_error)return group_error;
+    groups++;return 0;
+}
 static int msm8996_cpu_hw_read_plans(struct device *dev,struct msm8996_cpu_hw_plans *plans)
 { (void)dev;assert(!registrations && !providers);plans->speed_bin=2;fuse_reads++;return fuse_error; }
 static struct resource resource = { .size = sizeof(registers) };
-static void *allocations[8];
-static unsigned allocation_count;
 static bool of_device_is_compatible(void *node, const char *compatible)
 { (void)node; (void)compatible; return probe_cbf; }
 static struct resource *platform_get_resource(struct platform_device *pdev, int type, unsigned index)
@@ -222,11 +285,15 @@ static void *devm_kzalloc(struct device *dev, size_t size, unsigned flags)
 static void *devm_kcalloc(struct device *dev, size_t count, size_t size, unsigned flags)
 { return devm_kzalloc(dev, count * size, flags); }
 static int devm_clk_hw_register(struct device *dev, struct clk_hw *hw)
-{ (void)dev; assert(hw->init && hw->init->ops); registrations++; return 0; }
+{
+    (void)dev;assert(hw->init && hw->init->ops && registrations<2);
+    registered_init[registrations]=*hw->init;hw->init=&registered_init[registrations];
+    registered_hw[registrations]=hw;registrations++;return 0;
+}
 static unsigned long clk_hw_get_rate(struct clk_hw *hw);
 static int devm_of_clk_add_hw_provider(struct device *dev, void *get,
                                      struct clk_hw_onecell_data *data)
-{ (void)dev; (void)get; assert(data->num == registrations); providers++; return 0; }
+{ (void)dev; (void)get; assert(data->num == registrations);if(provider_error)return provider_error;providers++;return 0; }
 '''
 
 OBSERVER_HARNESS = r'''
@@ -256,6 +323,12 @@ static unsigned long measured(void)
     assert(barriers >= 1);
     return rate;
 }
+static void probe_cleanup(struct platform_device *pdev)
+{
+    if(managed_action){managed_action(managed_data);managed_action=NULL;managed_data=NULL;}
+    while(allocation_count)free(allocations[--allocation_count]);
+    pdev->dev.driver_data=NULL;registrations=providers=groups=0;
+}
 int main(void)
 {
     unsigned i, j, boundary, total;
@@ -265,6 +338,7 @@ int main(void)
         {true, 2, 0xf000, BIT(0) | 0x100},
     };
     struct platform_device pdev = { };
+    char state[PAGE_SIZE];
     assert(!decoder_test());
     /* XO and source-proven AUX bypass an unconfigured, disabled PLL. */
     reset(false, 0); assert(measured() == 19200000);
@@ -363,7 +437,7 @@ int main(void)
         aux_error = 0;
         assert(!msm8996_boot_probe(&pdev));
         assert(registrations == (i ? 1 : 2) && providers == 1);
-        while (allocation_count) free(allocations[--allocation_count]);
+        probe_cleanup(&pdev);
     }
     reset(false,0);probe_cbf=false;registrations=providers=0;fuse_present=true;
     fuse_error=-EPROBE_DEFER;
@@ -371,7 +445,43 @@ int main(void)
     assert(!registrations && !providers && !allocation_count);
     fuse_error=-EINVAL;assert(msm8996_boot_probe(&pdev)==-EINVAL && fuse_reads==2);
     fuse_error=0;assert(!msm8996_boot_probe(&pdev) && fuse_reads==3);
-    while(allocation_count)free(allocations[--allocation_count]);
+    probe_cleanup(&pdev);
+    /* Real provider lifecycle now attaches one common-owner port only after
+       initial PLL validation and before clock-provider publication. */
+    owner_enabled=true;
+    for(i=0;i<2;i++) {
+        reset(i,0);probe_cbf=i;fuse_present=!i;fuse_error=0;
+        owner_error=-EPROBE_DEFER;boundary=owner_attaches;
+        assert(msm8996_boot_probe(&pdev)==-EPROBE_DEFER && owner_attaches==boundary+1 && !providers);
+        assert(!managed_action);probe_cleanup(&pdev);
+        owner_error=-ESHUTDOWN;
+        assert(msm8996_boot_probe(&pdev)==-ESHUTDOWN && !providers && !managed_action);probe_cleanup(&pdev);
+        owner_error=0;action_error=-ENOMEM;boundary=retirements;
+        assert(msm8996_boot_probe(&pdev)==-ENOMEM && retirements==boundary+1 && !providers && !managed_action);
+        probe_cleanup(&pdev);action_error=0;
+        observation_error=true;boundary=observations;
+        assert(msm8996_boot_probe(&pdev)==-EINVAL && observations>boundary && !providers && managed_action);
+        probe_cleanup(&pdev);observation_error=false;
+        group_error=-ENOMEM;
+        assert(msm8996_boot_probe(&pdev)==-ENOMEM && !providers && managed_action);
+        probe_cleanup(&pdev);group_error=0;
+        provider_error=-EIO;
+        assert(msm8996_boot_probe(&pdev)==-EIO && !providers && managed_action);
+        probe_cleanup(&pdev);provider_error=0;
+        assert(!msm8996_boot_probe(&pdev) && providers==1 && groups==1 && managed_action);
+        assert(pdev.dev.driver_data==&probe_port && observations);
+        assert(cpu_power_state_show(&pdev.dev,NULL,state)>0 && !strcmp(state,"readonly=1\n"));
+        assert(formats);
+        assert(!msm8996_boot_suspend(&pdev.dev) && probe_port.suspended);
+        pm_error=-EAGAIN;assert(msm8996_boot_resume(&pdev.dev)==-EAGAIN && probe_port.suspended);
+        pm_error=0;assert(!msm8996_boot_resume(&pdev.dev) && !probe_port.suspended);
+        assert(suspends && resumes);
+        boundary=observations;
+        for(j=0;j<registrations;j++)assert(clk_hw_get_rate(registered_hw[j])==19200000);
+        assert(observations>boundary);
+        probe_cleanup(&pdev);
+    }
+    assert(!msm8996_boot_suspend(&pdev.dev) && !msm8996_boot_resume(&pdev.dev));
     return 0;
 }
 '''
@@ -420,8 +530,10 @@ def main():
         source.write_text(HARNESS.replace("int main(void)", "static int decoder_test(void)") +
                           OBSERVER_PREAMBLE + observer + OBSERVER_HARNESS)
         command = shlex.split(os.environ.get("HOSTCC", "cc"))
+        flags = (["-fsanitize=address,undefined", "-fno-omit-frame-pointer"]
+                 if os.environ.get("CPU_CLOCK_SANITIZE") else [])
         subprocess.run(command + ["-std=gnu99", "-Wall", "-Wextra", "-Werror",
-                                 "-I", str(HEADER.parent), str(source),
+                                 *flags, "-I", str(HEADER.parent), str(source),
                                  "-o", str(binary)], check=True)
         subprocess.run([str(binary)], check=True)
     print("CPU boot clocks: production MMIO read path, AUX/PLL sources, lock/output checks, "

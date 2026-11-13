@@ -83,6 +83,28 @@ def validate(nodes):
                 values[2] != 1):  # Native GPLL0, not raw GPLL0_EARLY.
             raise ValueError("incorrect APCC/CBF XO or GPLL0 auxiliary source")
     observer_inputs(apcc)
+    # Source clock_cpu links all three CPR demands to one HMSS gang. The
+    # PLL digital vote is MX S2 ACTIVE-only, independent of GCC's CX S1.
+    supplies = {
+        "vdd-pwrcl-supply": "/soc/cpr3-ctrl@99e8000/thread@0/regulator-pwrcl",
+        "vdd-perfcl-supply": "/soc/cpr3-ctrl@99e8000/thread@1/regulator",
+        "vdd-cbf-supply": "/soc/cpr3-ctrl@99e8000/thread@0/regulator-cbf",
+    }
+    for key, path in supplies.items():
+        value = cells(apcc.get(key, b""))
+        if len(value) != 1 or phandles.get(value[0]) != path:
+            raise ValueError("incorrect shared CPU CPR supply: " + key)
+    value = cells(apcc.get("vdd-dig-supply", b""))
+    mx_path = phandles.get(value[0]) if len(value) == 1 else None
+    mx = nodes.get(mx_path, {}).get("props", {})
+    resource = nodes.get(mx_path.rsplit("/", 1)[0] if mx_path else "", {}).get("props", {})
+    if (mx.get("regulator-name") != b"pm8994_s2_corner_ao\0" or
+            cells(mx.get("qcom,set", b"")) != (1,) or
+            "qcom,use-voltage-corner" not in mx or
+            resource.get("qcom,resource-name") != b"smpa\0" or
+            cells(resource.get("qcom,resource-id", b"")) != (2,) or
+            resource.get("status") != b"disabled\0"):
+        raise ValueError("incorrect or prematurely active CPU MX S2 AO supply")
     for key, expected in GOLDEN["frequency_plans"].items():
         if cells(apcc.get(key, b"")) != tuple(expected):
             raise ValueError("final Sony bin plan mismatch: " + key)
@@ -106,6 +128,9 @@ def validate(nodes):
 
 
 def selftest(nodes):
+    mx_path = next(path for path, node in nodes.items()
+                   if node["props"].get("regulator-name") == b"pm8994_s2_corner_ao\0")
+    mx_resource = mx_path.rsplit("/", 1)[0]
     cases = (
         ("/soc/cpr3-ctrl@99e8000", "vdd-limit-supply", None),
         ("/soc/cpr3-ctrl@99e8000", "status", b"okay\0"),
@@ -113,6 +138,14 @@ def selftest(nodes):
         ("/soc/clock-controller@6400000", "qcom,pwrcl-speedbin1-v0", b"\0" * 8),
         ("/soc/clock-controller@6400000", "clock-names", b"xo\0"),
         ("/soc/clock-controller@6400000", "clocks", struct.pack(">III", 0, 0, 0)),
+        ("/soc/clock-controller@6400000", "vdd-pwrcl-supply", None),
+        ("/soc/clock-controller@6400000", "vdd-perfcl-supply", struct.pack(">I", 0)),
+        ("/soc/clock-controller@6400000", "vdd-cbf-supply", struct.pack(">I", 0)),
+        ("/soc/clock-controller@6400000", "vdd-dig-supply", None),
+        (mx_path, "qcom,set", struct.pack(">I", 3)),
+        (mx_path, "qcom,use-voltage-corner", None),
+        (mx_resource, "qcom,resource-id", struct.pack(">I", 1)),
+        (mx_resource, "status", b"okay\0"),
         ("/soc/clock-controller@6400000", "nvmem-cells", None),
         ("/soc/clock-controller@6400000", "nvmem-cell-names", b"wrong\0"),
         ("/soc/qfprom@74000/cpu-speedbin@133", "bits", struct.pack(">II", 29, 3)),

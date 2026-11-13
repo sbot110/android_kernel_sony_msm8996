@@ -6,13 +6,15 @@
  * The Linux Foundation, from 0c295b15b6d0fb59a64e13b9e0ef2070818ef2a1.
  * Huayra fractional decoding follows clk-alpha-pll.c in this kernel.
  *
- * This driver deliberately has no clock/voltage programming operations.
+ * This driver deliberately has no CPU PLL/mux/voltage programming operations.
+ * Its common read-only resource owner retains counted parent preparations.
  * Sony's ACD must leave the primary PLL BEFORE a CPR voltage transition;
  * attaching its corner tables to a generic CCF rate notifier is unsafe.
  * A coordinated rate/voltage driver is required before enabling cpufreq.
  */
 #include <linux/clk.h>
 #include <linux/clk-provider.h>
+#include <linux/device.h>
 #include <linux/errno.h>
 #include <linux/io.h>
 #include <linux/module.h>
@@ -21,11 +23,14 @@
 
 #include "clk-msm8996-boot.h"
 #include "clk-msm8996-cpu-hw.h"
+#include "clk-msm8996-cpu-power.h"
 
 struct msm8996_boot_clk {
 	struct clk_hw hw;
 	void __iomem *base;
 	struct clk *aux;
+	struct msm8996_cpu_power_port *power;
+	unsigned int domain;
 	bool cbf;
 };
 
@@ -72,7 +77,7 @@ static int msm8996_boot_snapshot(struct msm8996_boot_clk *clk,
 	return state->mux == readl_relaxed(clk->base + mux_offset) ? 0 : -EAGAIN;
 }
 
-static unsigned long msm8996_boot_recalc(struct clk_hw *hw,
+static unsigned long msm8996_boot_read_rate(struct clk_hw *hw,
 				       unsigned long xo)
 {
 	struct msm8996_boot_clk *clk = container_of(hw,
@@ -130,8 +135,38 @@ static unsigned long msm8996_boot_recalc(struct clk_hw *hw,
 	return rate;
 }
 
+static unsigned long msm8996_boot_recalc(struct clk_hw *hw,
+				       unsigned long xo)
+{
+	struct msm8996_boot_clk *clk = container_of(hw,
+					struct msm8996_boot_clk, hw);
+
+	/* A zero/unstable readback must reach the common owner as a fault,
+	 * rather than leave a stale successful sample in another domain.
+	 */
+	return msm8996_cpu_power_observe(clk->power, clk->domain,
+					msm8996_boot_read_rate(hw, xo));
+}
+
 static const struct clk_ops msm8996_boot_ops = {
 	.recalc_rate = msm8996_boot_recalc,
+};
+
+static ssize_t cpu_power_state_show(struct device *dev,
+				   struct device_attribute *attr, char *buf)
+{
+	(void)attr;
+	return msm8996_cpu_power_format(dev_get_drvdata(dev), buf, PAGE_SIZE);
+}
+static DEVICE_ATTR_RO(cpu_power_state);
+
+static struct attribute *msm8996_cpu_power_attrs[] = {
+	&dev_attr_cpu_power_state.attr,
+	NULL,
+};
+
+static const struct attribute_group msm8996_cpu_power_group = {
+	.attrs = msm8996_cpu_power_attrs,
 };
 
 static int msm8996_boot_probe(struct platform_device *pdev)
@@ -141,6 +176,8 @@ static int msm8996_boot_probe(struct platform_device *pdev)
 	struct msm8996_boot_clk *clks;
 	struct clk_init_data init = { };
 	struct msm8996_cpu_hw_plans plans;
+	const struct msm8996_cpu_hw_plans *selected = NULL;
+	struct msm8996_cpu_power_port *power;
 	const char *parent;
 	struct clk *xo, *aux;
 	struct resource *res;
@@ -160,9 +197,9 @@ static int msm8996_boot_probe(struct platform_device *pdev)
 		return PTR_ERR(xo);
 	if (!clk_get_rate(xo))
 		return -EINVAL;
-	/* GCC owns the fixed critical GPLL0 root. This handle only measures it;
-	 * the observer neither acquires a hardware/voltage lease nor programs it.
-	 * Resolve it before registering any clocks, including for APCC SMUX3.
+	/* GCC owns the fixed critical GPLL0 root. Resolve it before registering
+	 * clocks; the common resource owner below retains counted parent
+	 * preparations without programming a CPU PLL or a CPU voltage vote.
 	 */
 	aux = devm_clk_get(dev, "aux");
 	if (IS_ERR(aux))
@@ -175,7 +212,8 @@ static int msm8996_boot_probe(struct platform_device *pdev)
 		ret = msm8996_cpu_hw_read_plans(dev, &plans);
 		if (ret)
 			return ret;
-		dev_info(dev, "QFPROM CPU speed bin %u; CPR/SPM ownership unavailable\n",
+		selected = &plans;
+		dev_info(dev, "QFPROM CPU speed bin %u; CPU writes remain gated\n",
 			 plans.speed_bin);
 	}
 	parent = __clk_get_name(xo);
@@ -197,6 +235,7 @@ static int msm8996_boot_probe(struct platform_device *pdev)
 		clks[i].base = base + i * 0x80000;
 		clks[i].cbf = cbf;
 		clks[i].aux = aux;
+		clks[i].domain = cbf ? 2 : i;
 		ret = devm_clk_hw_register(dev, &clks[i].hw);
 		if (ret)
 			return ret;
@@ -204,10 +243,40 @@ static int msm8996_boot_probe(struct platform_device *pdev)
 			return -EINVAL;
 		data->hws[i] = &clks[i].hw;
 	}
+	power = msm8996_cpu_power_attach(dev, cbf, xo, aux, selected);
+	if (IS_ERR(power))
+		return PTR_ERR(power);
+	if (power) {
+		/* Added after hw registration: retirement/drain runs before hw,
+		 * maps and plans are released by devres on every unwind path.
+		 */
+		ret = devm_add_action_or_reset(dev, msm8996_cpu_power_retire, power);
+		if (ret)
+			return ret;
+		for (i = 0; i < count; i++) {
+			clks[i].power = power;
+			if (!clk_hw_get_rate(&clks[i].hw))
+				return -EINVAL;
+		}
+		dev_set_drvdata(dev, power);
+		ret = devm_device_add_group(dev, &msm8996_cpu_power_group);
+		if (ret)
+			return ret;
+	}
 	ret = devm_of_clk_add_hw_provider(dev, of_clk_hw_onecell_get, data);
 	if (!ret)
 		dev_info(dev, "observing firmware clocks; DVFS is unavailable\n");
 	return ret;
+}
+
+static int __maybe_unused msm8996_boot_suspend(struct device *dev)
+{
+	return msm8996_cpu_power_suspend(dev_get_drvdata(dev));
+}
+
+static int __maybe_unused msm8996_boot_resume(struct device *dev)
+{
+	return msm8996_cpu_power_resume(dev_get_drvdata(dev));
 }
 
 static const struct of_device_id msm8996_boot_match[] = {
@@ -218,12 +287,17 @@ static const struct of_device_id msm8996_boot_match[] = {
 };
 MODULE_DEVICE_TABLE(of, msm8996_boot_match);
 
+static const struct dev_pm_ops msm8996_boot_pm_ops = {
+	SET_SYSTEM_SLEEP_PM_OPS(msm8996_boot_suspend, msm8996_boot_resume)
+};
+
 static struct platform_driver msm8996_boot_driver = {
 	.probe = msm8996_boot_probe,
 	.driver = {
 		.name = "msm8996-boot-clock",
 		.of_match_table = msm8996_boot_match,
 		.suppress_bind_attrs = true,
+		.pm = &msm8996_boot_pm_ops,
 	},
 };
 builtin_platform_driver(msm8996_boot_driver);

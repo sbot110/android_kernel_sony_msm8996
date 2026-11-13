@@ -13,6 +13,7 @@ import tempfile
 
 ROOT = Path(__file__).resolve().parents[2]
 source = (ROOT / 'drivers/regulator/qcom-rpm-corner.c').read_text()
+header = (ROOT / 'include/linux/regulator/qcom-rpm-corner.h').read_text()
 
 
 def function(name, code=source):
@@ -66,7 +67,8 @@ static void list_del_init(struct list_head *e)
 { e->prev->next=e->next;e->next->prev=e->prev;INIT_LIST_HEAD(e); }
 struct kref { unsigned count; };
 struct device { void *data;void *release_record; };
-struct device_node { unsigned refs; };
+struct device_node { unsigned refs;bool disabled; };
+static bool of_device_is_available(struct device_node *node) { return !node->disabled; }
 struct regulator_ops { int unused; };
 struct regulator_desc { const struct regulator_ops *ops;unsigned n_voltages,linear_min_sel;int min_uV,uV_step; };
 struct regulator_dev { struct device dev;struct regulator_desc *desc;void *data;unsigned refs;void (*put)(void *);void *put_data; };
@@ -116,13 +118,16 @@ static int qcom_rpm_smd_write(struct qcom_smd_rpm *, int, u32, u32, void *, size
 '''
 harness += '\n'.join(l for l in source.splitlines() if l.startswith('#define RPM_CORNER_'))+'\n'
 harness += source[source.index('enum rpm_corner_key'):source.index('/* All aggregation/')]
+harness += re.search(r'struct qcom_rpm_corner_state \{.*?\n\};', header, re.S).group() + '\n'
 for name in ('rpm_corner_aggregate', 'rpm_corner_send', 'rpm_corner_dominates',
-             'rpm_corner_write_pair', 'rpm_corner_apply', 'rpm_corner_ready'):
+             'rpm_corner_write_pair', 'rpm_corner_apply', 'rpm_corner_ready',
+             'rpm_corner_copy_state'):
     harness += function(name)
 harness += 'enum rpm_corner_action { SET_CORNER, SET_ENABLE, SET_DISABLE };\n'
 for name in ('rpm_corner_change', 'rpm_corner_set_voltage', 'rpm_corner_get_voltage',
              'rpm_corner_enable', 'rpm_corner_disable', 'rpm_corner_is_enabled',
-             'rpm_corner_error_flags', 'qcom_rpm_corner_sync'):
+             'rpm_corner_error_flags', 'qcom_rpm_corner_sync',
+             'qcom_rpm_corner_get_state', 'qcom_rpm_corner_get_state_by_node'):
     harness += function(name)
 harness += r'''
 static void of_node_put(struct device_node *node) { if(node) { assert(node->refs);node->refs--; } }
@@ -195,6 +200,7 @@ static struct rpm_corner_resource resource;
 static struct rpm_corner_client clients[3];
 static struct regulator_dev rdev[3];
 static struct regulator regs[3];
+static struct device_node lookup_nodes[3];
 static struct device device;
 static void reset(void)
 {
@@ -206,7 +212,7 @@ static void reset(void)
     INIT_LIST_HEAD(&resource.registry);resource.rpm=&endpoint;resource.type=0x61706d73;resource.id=1;resource.count=3;resource.clients=clients;resource.online=true;
     device.data=&resource;
     for(i=0;i<3;i++) {
-        clients[i].resource=&resource;clients[i].sets=RPM_CORNER_BOTH;clients[i].key=CORNER;
+        clients[i].resource=&resource;clients[i].node=&lookup_nodes[i];clients[i].sets=RPM_CORNER_BOTH;clients[i].key=CORNER;
         rdev[i].data=&clients[i];rdev[i].desc=&clients[i].desc;clients[i].desc.ops=&rpm_corner_ops;clients[i].desc.n_voltages=7;clients[i].desc.min_uV=1;clients[i].desc.uV_step=1;
         regs[i].rdev=&rdev[i];
     }
@@ -232,16 +238,93 @@ static void *contend(void *arg)
     }
     return NULL;
 }
+static void *observe(void *arg)
+{
+    unsigned i,index=(uintptr_t)arg;
+    struct qcom_rpm_corner_state state;
+    for(i=0;i<1000;i++) {
+        assert(!qcom_rpm_corner_get_state(&regs[index],&state));
+        assert(state.resource_type==0x61706d73 && state.resource_id==1);
+        assert(state.key==0x6e726f63 && state.sets==(index?RPM_CORNER_ACTIVE:RPM_CORNER_BOTH));
+        assert(state.online && !state.retired && !state.suspended && !state.quarantined);
+        assert(!state.voltage_valid || state.requested_corner_wire<=6);
+        assert(!state.enabled || (state.enable_valid && state.voltage_valid));
+    }
+    return NULL;
+}
+static void *node_contend(void *unused)
+{
+    (void)unused;
+    for(unsigned i=0;i<1000;i++)assert(!rpm_corner_set_voltage(&rdev[1],i%6+2,7,NULL));
+    return NULL;
+}
+static void *node_observe(void *unused)
+{
+    (void)unused;
+    struct qcom_rpm_corner_state state;
+    for(unsigned i=0;i<1000;i++) {
+        assert(!qcom_rpm_corner_get_state_by_node(&lookup_nodes[1],&state));
+        assert(state.resource_type==0x61706d73 && state.resource_id==1);
+        assert(state.sets==RPM_CORNER_ACTIVE && !state.owned_keys && !state.enabled);
+        assert(!state.voltage_valid || state.requested_corner_wire<=6);
+    }
+    return NULL;
+}
+static pthread_barrier_t removal_barrier;
+static void *node_remove_observe(void *arg)
+{
+    struct qcom_rpm_corner_state state;
+    struct device_node *node=arg;
+    int ret,barrier_ret;
+    assert(!qcom_rpm_corner_get_state_by_node(node,&state));
+    barrier_ret=pthread_barrier_wait(&removal_barrier);
+    assert(!barrier_ret || barrier_ret==PTHREAD_BARRIER_SERIAL_THREAD);
+    for(unsigned i=0;i<10000;i++) {
+        ret=qcom_rpm_corner_get_state_by_node(node,&state);
+        assert(!ret || ret==-ENODEV || ret==-EPROBE_DEFER);
+        if(ret==-EPROBE_DEFER)assert(!state.resource_type);
+        else assert(state.resource_type==0x61706d73 && state.resource_id==2);
+    }
+    return NULL;
+}
 int main(void)
 {
     unsigned before,flags,i,selector;
-    pthread_t first,second;
+    pthread_t first,second,reader;
+    struct qcom_rpm_corner_state state;
     struct rpm_corner_resource *heap;
     struct rpm_corner_client *held;
     struct device provider={0};
-    struct device_node nodes[2]={{1},{1}};
+    struct device_node nodes[2]={{.refs=1},{.refs=1}};
     struct regulator_ops foreign={1};
+    /* Observation never creates a baseline, claims a vote, or transmits. */
+    reset();
+    assert(!qcom_rpm_corner_get_state(&regs[0],&state) && !sends);
+    assert(state.resource_type==0x61706d73 && state.resource_id==1 && state.key==0x6e726f63);
+    assert(state.sets==RPM_CORNER_BOTH && !state.voltage_valid && !state.enable_valid && !state.enabled);
+    assert(!state.owned_keys && !state.recovery_keys && !state.last_error);
+    assert(state.online && !state.retired && !state.suspended && !state.quarantined && !state.initial_uncertain);
+    assert(!qcom_rpm_corner_get_state(&regs[1],&state) && state.sets==RPM_CORNER_ACTIVE && !sends);
+    assert(!qcom_rpm_corner_get_state(&regs[2],&state) && state.key==0x00636676 && !sends);
+    assert(rpm_corner_set_voltage(&rdev[0],5,7,NULL)==0 && !sends);
+    assert(!qcom_rpm_corner_get_state(&regs[0],&state) && state.voltage_valid);
+    assert(state.requested_corner_wire==4 && !state.enable_valid && !state.owned_keys && !sends);
+    assert(qcom_rpm_corner_get_state(NULL,&state)==-EINVAL && !state.resource_type && !sends);
+    assert(qcom_rpm_corner_get_state(ERR_PTR(-ENODEV),&state)==-EINVAL && !sends);
+    assert(qcom_rpm_corner_get_state(&regs[0],NULL)==-EINVAL && !sends);
+    clients[0].desc.ops=&foreign;
+    assert(qcom_rpm_corner_get_state(&regs[0],&state)==-EOPNOTSUPP && !state.resource_type && !sends);
+    clients[0].desc.ops=&rpm_corner_ops;
+    resource.online=false;
+    assert(qcom_rpm_corner_get_state(&regs[0],&state)==-EPROBE_DEFER && !state.online && !state.retired && !sends);
+    resource.retired=true;
+    assert(qcom_rpm_corner_get_state(&regs[0],&state)==-ENODEV && state.retired && !sends);
+    done();
     reset();bootstrap();
+    before=sends;
+    assert(!qcom_rpm_corner_get_state(&regs[0],&state) && sends==before);
+    assert(state.voltage_valid && state.requested_corner_wire==4 && state.enable_valid && state.enabled);
+    assert(state.owned_keys==(BIT(CORNER)|BIT(ENABLE)) && !state.recovery_keys);
     selector=99;
     assert(rpm_corner_set_voltage(&rdev[0],5,7,&selector)==0 && selector==4);
     assert(regulator_list_voltage_linear(&rdev[0],selector)==5);
@@ -254,6 +337,8 @@ int main(void)
     assert(rpm_corner_set_voltage(&rdev[1],7,7,NULL)==0);
     assert(physical[0][CORNER]==6 && physical[1][CORNER]==4);
     assert(rpm_corner_enable(&rdev[1])==0 && rpm_corner_disable(&rdev[1])==0);
+    before=sends;
+    assert(!qcom_rpm_corner_get_state(&regs[1],&state) && state.enable_valid && !state.enabled && sends==before);
     assert(physical[0][CORNER]==6); /* Stored disabled corner still aggregates. */
     assert(rpm_corner_set_voltage(&rdev[1],1,7,NULL)==0 && physical[0][CORNER]==4);
     assert(rpm_corner_set_voltage(&rdev[2],4,7,NULL)==0);
@@ -276,6 +361,10 @@ int main(void)
     reset();bootstrap();before=sends;applied_failed=1;
     fails[before+1]=ETIMEDOUT;fails[before+2]=EIO; /* Sleep failure, active rollback failure. */
     assert(rpm_corner_set_voltage(&rdev[0],7,7,NULL)==-ETIMEDOUT && resource.quarantined);
+    before=sends;
+    assert(qcom_rpm_corner_get_state(&regs[0],&state)==-ETIMEDOUT && sends==before);
+    assert(state.quarantined && !state.initial_uncertain && state.last_error==-ETIMEDOUT);
+    assert(state.recovery_keys==(BIT(CORNER)|BIT(ENABLE)) && resource.quarantined);
     assert(!rpm_corner_error_flags(&rdev[0],&flags) && flags==REGULATOR_ERROR_FAIL);
     fails[sends]=ENODEV;
     assert(qcom_rpm_corner_sync(&regs[0],true)==-ENODEV && resource.quarantined);
@@ -287,6 +376,12 @@ int main(void)
     reset();assert(rpm_corner_set_voltage(&rdev[0],5,7,NULL)==0);
     fails[1]=ETIMEDOUT;applied_failed=1;
     assert(rpm_corner_enable(&rdev[0])==-ETIMEDOUT && resource.quarantined && resource.initial_uncertain);
+    before=sends;
+    assert(qcom_rpm_corner_get_state(&regs[0],&state)==-ETIMEDOUT && sends==before);
+    assert(state.initial_uncertain && state.quarantined && state.voltage_valid && !state.enable_valid);
+    resource.last_error=0;
+    assert(qcom_rpm_corner_get_state(&regs[0],&state)==-EIO && !state.last_error && sends==before);
+    assert(resource.quarantined && resource.initial_uncertain);resource.last_error=-ETIMEDOUT;
     assert(!clients[0].request.enable_valid && physical[0][CORNER]==4 && physical[0][ENABLE]==1);
     before=sends;assert(qcom_rpm_corner_sync(&regs[0],true)==-EAGAIN && sends==before);
     assert(rpm_corner_set_voltage(&rdev[0],1,7,NULL)==-EUCLEAN);
@@ -295,6 +390,8 @@ int main(void)
     assert(qcom_rpm_corner_sync(&regs[0],true)==0);
     done();
     reset();bootstrap();assert(rpm_corner_suspend(&device)==0 && resource.suspended);
+    before=sends;
+    assert(qcom_rpm_corner_get_state(&regs[0],&state)==-EBUSY && state.suspended && sends==before);
     assert(rpm_corner_set_voltage(&rdev[0],7,7,NULL)==-EBUSY);
     fails[sends]=ENODEV;
     assert(rpm_corner_resume(&device)==-ENODEV && resource.suspended);
@@ -304,7 +401,8 @@ int main(void)
     done();
     reset();bootstrap();assert(!pthread_create(&first,NULL,contend,(void *)(uintptr_t)0));
     assert(!pthread_create(&second,NULL,contend,(void *)(uintptr_t)1));
-    assert(!pthread_join(first,NULL) && !pthread_join(second,NULL));
+    assert(!pthread_create(&reader,NULL,observe,(void *)(uintptr_t)1));
+    assert(!pthread_join(first,NULL) && !pthread_join(second,NULL) && !pthread_join(reader,NULL));
     assert(physical[0][CORNER]==6 && physical[1][CORNER]==4 && !resource.quarantined);
     done();
     reset();
@@ -325,7 +423,10 @@ int main(void)
        Failure before/after registration retains a raced published rdev. */
     heap=calloc(1,sizeof(*heap));heap->clients=calloc(2,sizeof(*heap->clients));heap->count=2;
     assert(!pthread_mutex_init(&heap->lock.value,NULL));heap->refs.count=1;
-    for(i=0;i<2;i++) { heap->clients[i].resource=heap;heap->clients[i].node=&nodes[i]; }
+    for(i=0;i<2;i++) {
+        heap->clients[i].resource=heap;heap->clients[i].node=&nodes[i];
+        heap->clients[i].desc.ops=&rpm_corner_ops;
+    }
     held=&heap->clients[0];fail_alloc=true;
     assert(rpm_corner_register_one(&provider,held)==-ENOMEM && !registrations && heap->refs.count==1);
     fail_alloc=false;fail_registration=true;
@@ -338,9 +439,68 @@ int main(void)
     rpm_corner_unregister(heap);rpm_corner_put(heap);
     assert(!freed_resources && !freed_arrays && held->resource->retired);
     assert(rpm_corner_change(held,SET_CORNER,5)==-ENODEV);
+    before=sends;
+    {
+        struct regulator retained={.rdev=&published_rdev};
+        assert(qcom_rpm_corner_get_state(&retained,&state)==-ENODEV && sends==before);
+        assert(state.retired && !state.online && !state.voltage_valid);
+    }
     assert(!pthread_mutex_destroy(&heap->lock.value));rdev_put(&published_rdev);
     assert(freed_resources==1 && freed_arrays==1 && !nodes[0].refs && !nodes[1].refs);
     assert(allocations==releases);
+    /* Exact-node observation never runs regulator core supply resolution.
+       Registry pinning covers unpublished/PM/fault state and unregister. */
+    reset();
+    assert(qcom_rpm_corner_get_state_by_node(NULL,&state)==-EINVAL && !sends);
+    assert(qcom_rpm_corner_get_state_by_node(ERR_PTR(-EINVAL),&state)==-EINVAL && !sends);
+    assert(qcom_rpm_corner_get_state_by_node(&lookup_nodes[0],NULL)==-EINVAL);
+    assert(qcom_rpm_corner_get_state_by_node(&lookup_nodes[0],&state)==-EPROBE_DEFER && !state.resource_type);
+    assert(!rpm_corner_claim(&resource));
+    assert(!qcom_rpm_corner_get_state_by_node(&lookup_nodes[1],&state) && !sends);
+    assert(state.sets==RPM_CORNER_ACTIVE && !state.voltage_valid && !state.owned_keys);
+    lookup_nodes[1].disabled=true;
+    assert(qcom_rpm_corner_get_state_by_node(&lookup_nodes[1],&state)==-EPROBE_DEFER && !state.resource_type);
+    lookup_nodes[1].disabled=false;
+    resource.online=false;
+    assert(qcom_rpm_corner_get_state_by_node(&lookup_nodes[1],&state)==-EPROBE_DEFER && !state.online);
+    resource.online=true;
+    assert(!rpm_corner_suspend(&device));
+    assert(qcom_rpm_corner_get_state_by_node(&lookup_nodes[1],&state)==-EBUSY && state.suspended && !sends);
+    assert(!rpm_corner_resume(&device));
+    resource.quarantined=true;resource.initial_uncertain=true;resource.last_error=-ETIMEDOUT;
+    assert(qcom_rpm_corner_get_state_by_node(&lookup_nodes[1],&state)==-ETIMEDOUT && !sends);
+    assert(state.quarantined && state.initial_uncertain && state.last_error==-ETIMEDOUT);
+    resource.quarantined=false;resource.initial_uncertain=false;resource.last_error=0;
+    assert(!pthread_create(&first,NULL,node_contend,NULL));
+    assert(!pthread_create(&reader,NULL,node_observe,NULL));
+    assert(!pthread_join(first,NULL) && !pthread_join(reader,NULL));
+    assert(!sends && !resource.owned);
+    rpm_corner_unregister(&resource);
+    assert(qcom_rpm_corner_get_state_by_node(&lookup_nodes[1],&state)==-EPROBE_DEFER && !state.resource_type);
+    done();
+    /* Lookup readers retain only the OF node. Actual heap resource storage can
+       be freed immediately after unclaim while these readers continue. */
+    {
+        struct device_node race_node={.refs=2}; /* Provider and observer. */
+        unsigned freed_before=freed_resources+freed_arrays;
+        int barrier_ret;
+        heap=calloc(1,sizeof(*heap));heap->clients=calloc(1,sizeof(*heap->clients));heap->count=1;
+        assert(!pthread_mutex_init(&heap->lock.value,NULL));heap->refs.count=1;
+        INIT_LIST_HEAD(&heap->registry);heap->rpm=&endpoint;heap->type=0x61706d73;heap->id=2;
+        heap->clients[0].resource=heap;heap->clients[0].node=&race_node;heap->clients[0].key=CORNER;
+        heap->clients[0].sets=RPM_CORNER_ACTIVE;
+        assert(!rpm_corner_claim(heap));heap->online=true;
+        assert(!pthread_barrier_init(&removal_barrier,NULL,2));
+        assert(!pthread_create(&reader,NULL,node_remove_observe,&race_node));
+        barrier_ret=pthread_barrier_wait(&removal_barrier);
+        assert(!barrier_ret || barrier_ret==PTHREAD_BARRIER_SERIAL_THREAD);
+        rpm_corner_unregister(heap);
+        assert(!pthread_mutex_destroy(&heap->lock.value));rpm_corner_put(heap);
+        assert(freed_resources+freed_arrays==freed_before+2 && race_node.refs==1);
+        assert(!pthread_join(reader,NULL));assert(!pthread_barrier_destroy(&removal_barrier));
+        assert(qcom_rpm_corner_get_state_by_node(&race_node,&state)==-EPROBE_DEFER && !state.resource_type);
+        of_node_put(&race_node);assert(!race_node.refs);
+    }
     /* Actual corner unclaim forwards owned state without sending NONE. */
     reset();assert(!rpm_corner_claim(&resource));bootstrap();before=sends;
     rpm_corner_unclaim(&resource);
@@ -349,14 +509,18 @@ int main(void)
     done();
     puts("PASS: actual corn/vfc/swen aggregation, BOTH/AO, ACK timeout/offline/partial rollback, initial quarantine, forced sync, PM and competing consumers");
     puts("PASS: final-rdev resource lifetime and offline callbacks retain valid state");
+    puts("PASS: typed read-only RPM snapshots, unknown initial votes, lifecycle/quarantine errors and concurrent readers");
+    puts("PASS: exact-node snapshots avoid regulator acquisition, with PM/defer/quarantine and heap-free/unregister races");
     return 0;
 }
 '''
 with tempfile.TemporaryDirectory(prefix='dora-rpm-corners-') as scratch:
     c, binary = Path(scratch) / 'corners.c', Path(scratch) / 'corners'
     c.write_text(harness)
+    sanitizer = (['-fsanitize=address,undefined', '-fno-omit-frame-pointer']
+                 if os.environ.get('DORA_RPM_CORNERS_SANITIZE') == '1' else [])
     subprocess.run([os.environ.get('HOSTCC', 'cc'), '-std=gnu11', '-O2', '-pthread',
-                    '-Wall', '-Wextra', '-Werror', '-Wno-unused-parameter', str(c),
-                    '-o', str(binary)], check=True)
+                    '-Wall', '-Wextra', '-Werror', '-Wno-unused-parameter', *sanitizer,
+                    str(c), '-o', str(binary)], check=True)
     subprocess.run([str(binary)], check=True)
 print('Host fault/locking model only; RPM firmware, physical voltage and on-device suspend remain unverified.')

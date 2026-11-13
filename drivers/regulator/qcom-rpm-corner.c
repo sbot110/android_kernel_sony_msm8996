@@ -439,6 +439,98 @@ out:
 }
 EXPORT_SYMBOL_GPL(qcom_rpm_corner_sync);
 
+/* Caller holds resource->lock. The registry or a consumer rdev pins storage. */
+static int rpm_corner_copy_state(struct rpm_corner_client *client,
+				 struct qcom_rpm_corner_state *state)
+{
+	struct rpm_corner_resource *resource = client->resource;
+	int ret;
+
+	state->resource_type = resource->type;
+	state->resource_id = resource->id;
+	state->key = rpm_corner_keys[client->key];
+	state->sets = client->sets;
+	state->owned_keys = resource->owned;
+	state->recovery_keys = resource->recovery_mask;
+	state->requested_corner_wire = client->request.corner;
+	state->voltage_valid = client->request.voltage_valid;
+	state->enable_valid = client->request.enable_valid;
+	state->enabled = client->request.enabled;
+	state->online = resource->online;
+	state->retired = resource->retired;
+	state->suspended = resource->suspended;
+	state->quarantined = resource->quarantined;
+	state->initial_uncertain = resource->initial_uncertain;
+	state->last_error = resource->last_error;
+	ret = rpm_corner_ready(resource);
+	if (!ret && resource->quarantined)
+		ret = resource->last_error < 0 ? resource->last_error : -EIO;
+	return ret;
+}
+
+int qcom_rpm_corner_get_state(struct regulator *regulator,
+			      struct qcom_rpm_corner_state *state)
+{
+	struct rpm_corner_client *client;
+	struct rpm_corner_resource *resource;
+	int ret;
+
+	if (!state)
+		return -EINVAL;
+	memset(state, 0, sizeof(*state));
+	if (!regulator || IS_ERR(regulator))
+		return -EINVAL;
+	if (regulator->rdev->desc->ops != &rpm_corner_ops)
+		return -EOPNOTSUPP;
+	client = regulator_get_drvdata(regulator);
+	resource = client->resource;
+	/* The consumer holds the rdev reference. Its final release holds the
+	 * resource alive, including after unregister marks it retired.
+	 * Copy scalars only: no resource/client pointers escape this lock.
+	 */
+	mutex_lock(&resource->lock);
+	ret = rpm_corner_copy_state(client, state);
+	mutex_unlock(&resource->lock);
+	return ret;
+}
+EXPORT_SYMBOL_GPL(qcom_rpm_corner_get_state);
+
+int qcom_rpm_corner_get_state_by_node(struct device_node *node,
+				      struct qcom_rpm_corner_state *state)
+{
+	struct rpm_corner_resource *resource;
+	unsigned int i;
+	int ret = -EPROBE_DEFER;
+
+	if (!state)
+		return -EINVAL;
+	memset(state, 0, sizeof(*state));
+	if (!node || IS_ERR(node))
+		return -EINVAL;
+	if (!of_device_is_available(node))
+		return -EPROBE_DEFER;
+	/* No regulator_get(): resolving an unresolved enabled upstream supply
+	 * in regulator core may enable it. Registry membership pins the
+	 * resource until unregister removes it before its final release.
+	 * Publication/readiness and request state are serialized separately.
+	 */
+	mutex_lock(&rpm_corner_registry_lock);
+	list_for_each_entry(resource, &rpm_corner_resources, registry) {
+		for (i = 0; i < resource->count; i++) {
+			if (resource->clients[i].node != node)
+				continue;
+			mutex_lock(&resource->lock);
+			ret = rpm_corner_copy_state(&resource->clients[i], state);
+			mutex_unlock(&resource->lock);
+			goto out;
+		}
+	}
+out:
+	mutex_unlock(&rpm_corner_registry_lock);
+	return ret;
+}
+EXPORT_SYMBOL_GPL(qcom_rpm_corner_get_state_by_node);
+
 static void rpm_corner_release(struct kref *ref)
 {
 	struct rpm_corner_resource *resource = container_of(ref,

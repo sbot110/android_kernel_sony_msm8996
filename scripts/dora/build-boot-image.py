@@ -18,6 +18,7 @@ import sys
 HERE = Path(__file__).resolve().parent
 ROOT = HERE.parents[1]
 PROFILE_PATH = ROOT / 'Documentation/sony/dora-msm8996-lk-source-layout.json'
+INITRD_EXPERIMENT_PATH = ROOT / 'Documentation/sony/dora-stage65b-initrd-experiment.json'
 spec = importlib.util.spec_from_file_location('dora_boot_inspector', HERE / 'check-boot-image.py')
 boot = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(boot)
@@ -108,10 +109,11 @@ def checked_config(config):
 
 
 def checked_layout(profile, kernel, trees, ramdisk_bytes, compressed_bytes, padded_image_bytes, page):
-    require(profile == json.loads(PROFILE_PATH.read_text()),
+    require(profile in [json.loads(path.read_text()) for path in (PROFILE_PATH, INITRD_EXPERIMENT_PATH)],
             'layout differs from the reviewed pinned CAF source profile')
     require(profile.get('profile_version') == 1 and
-            profile.get('profile_id') == 'caf-msm8996-source-layout-not-device-qualified', 'unknown layout profile')
+            profile.get('profile_id') in ('caf-msm8996-source-layout-not-device-qualified',
+                'dora-stage65b-initrd-differential-unverified'), 'unknown layout profile')
     require(profile.get('hardware_verified') is False, 'this packer cannot promote a hardware claim')
     require(profile.get('source_provenance'), 'layout source provenance is required')
     require(profile.get('firmware_match_unverified') is True, 'firmware qualification cannot be inferred')
@@ -129,7 +131,7 @@ def checked_layout(profile, kernel, trees, ramdisk_bytes, compressed_bytes, padd
             'kernel base disagrees with explicit source profile')
     require(page == profile['page_size'] and kernel['text_offset'] == profile['arm64_text_offset'],
             'reference page or kernel text_offset disagrees with source profile')
-    workspace = profile['dtb_workspace_capacity_before_ramdisk']
+    workspace = profile.get('dtb_workspace_capacity', profile.get('dtb_workspace_capacity_before_ramdisk'))
     require(type(workspace) is int and 0 < workspace <= boot.MAX_FDT, 'invalid DTB workspace')
     require(type(profile['source_dtb_pad_bytes']) is int and profile['source_dtb_pad_bytes'] >= 0,
             'invalid source DTB growth padding')
@@ -138,6 +140,12 @@ def checked_layout(profile, kernel, trees, ramdisk_bytes, compressed_bytes, padd
     ranges = [dict(source='kernel runtime (file + BSS)', start=addresses['kernel'], size=kernel['runtime_extent']),
               dict(source='compressed initrd', start=addresses['ramdisk'], size=ramdisk_bytes),
               dict(source='selected DTB workspace', start=addresses['tags'], size=workspace)]
+    if 'stage65b_observation' in profile:
+        observed = profile['stage65b_observation']
+        require(addresses['ramdisk'] == observed['linux_initrd_start'] and
+                ramdisk_bytes == observed['initrd_bytes'] and
+                addresses['ramdisk'] + ramdisk_bytes == observed['linux_initrd_end'],
+                'differential initrd range does not match the reported Stage 65B observation')
     for left in range(len(ranges)):
         require(ranges[left]['start'] + ranges[left]['size'] <= 1 << 32, 'load range overflow')
         for right in range(left + 1, len(ranges)):
@@ -183,6 +191,9 @@ def assemble(reference, image_gz, image, dtbs, profile, config, partition_size=N
     old_kernel = boot.kernel_info(section(reference, header, 'kernel'))
     require(old_kernel['compression'] == 'gzip', 'reference compression is not supported by this packer')
     ramdisk = section(reference, header, 'ramdisk')
+    if 'stage65b_observation' in profile:
+        require(hashlib.sha256(ramdisk).hexdigest() == profile['expected_stage10_ramdisk_sha256'],
+                'Stage 65B differential requires the unchanged Stage 10 working ramdisk')
     ramdisk_meta = boot.ramdisk_info(ramdisk, config)
     require(ramdisk_meta.get('android14_dora_first_stage_candidate'), 'reference is not an identified Android14 Dora first-stage ramdisk')
     payload = cpio_entries(ramdisk)

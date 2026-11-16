@@ -1,0 +1,22 @@
+{
+  "zip_sha256": "13615e75cbbc456cc6f32d960a2d07cf0c0dbc8bf4b302edb331e64e4c8a053a",
+  "boot_sha256": "f923f9b99c468484b713529577b84e3a137d1b9cbc09393e5593258009983820",
+  "boot_bytes": 13283328,
+  "stage10_reference_byte_identity": true,
+  "input_unmodified": true,
+  "entry_name": "boot.img",
+  "kernel_releases": [
+    "4.4.302+"
+  ],
+  "ramdisk_bytes": 1224724,
+  "ramdisk_sha256": "9a532793e779b33bad98df1576ec9b661bc04457f4f3f9148b31ba8d42d4f41e",
+  "header_addresses": {
+    "kernel": 2147516416,
+    "ramdisk": 2164260864
+  },
+  "header_tags_addr": 2147483904,
+  "page_size": 4096,
+  "qcom_id": "26019fa18d9ecd502b29199901c11535675606d9",
+  "raw_cmdline_published": false,
+  "raw_payload_published": false
+}

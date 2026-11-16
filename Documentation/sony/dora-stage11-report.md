@@ -1,6 +1,9 @@
 # Stage 11: Linux 4.19.318 / Sony dora
 
-Stage 11 выполнен частично: исправлен и собран kernel, полный Android boot image не создан; загрузка Android не подтверждена. Единственный аппаратный результат —
+Собран полный offline `boot-dora-lineage21-kernel419-stage11.img` с исправленным
+Linux 4.19.318 и неизменённым рабочим LOS 21 ramdisk. Дополнительно собран
+initrd822 differential image. Аппаратная загрузка нового ядра не подтверждена.
+Единственный аппаратный результат —
 сообщённое пользователем зависание Stage 10 image на Sony logo с пустым pstore.
 В этом сеансе телефон не подключался, его разделы не читались и не изменялись.
 Найденные ниже программные дефекты не объявляются установленной причиной этого
@@ -27,7 +30,7 @@ Stage 11 выполнен частично: исправлен и собран k
 | GPT/by-name/system/oem/first-stage | IMPLEMENTED / HARDWARE UNVERIFIED | Stage 10 GPT range fix и boot-only metadata `boot_devices=any`, system/ext4, oem/squashfs сохранены | Production GPT/uevent и compiled 4-tree delta tests; реальный GPT/mount не читался. CQE не включён Dora compatible `qcom,sdhci-msm` |
 | Android 14 ABI, SELinux и userspace | UNRESOLVED | Binder/ION/SELinux/BPF/config gates сохранены; kernel не подменяется Sony 4.4 | Нет `/init` runtime, policy/vendor modules/firmware/mount logs. `/init` exec result сам по себе не доказывает boot_completed |
 | USB/charging/display | BLOCKED BY HARDWARE EVIDENCE | Существующие CPU-independent safety gates сохранены | АDB, экран и вибромотор не используются как выдуманный канал ранних маркеров; full GUI/daily-use поддержка не заявлена |
-| Полный Android boot image | UNRESOLVED (missing private input) | Нужны реальные private boot/ramdisk bytes Stage 10 или исходной working LOS 21 | В окружении их нет. Хэш из отчёта не позволяет восстановить payload. Не создаётся фиктивный boot.img и не подставляется Sony 4.4 |
+| Полный Android boot image | IMPLEMENTED / HARDWARE UNVERIFIED | Из предоставленного рабочего boot 4.4 взят неизменённый ramdisk; упакованы настоящее новое ядро 4.19.318 и четыре boot DTB | Два реальных образа независимо распакованы AOSP; ramdisk и kernel payload совпадают побайтно; legacy QCOM ID, границы и tuple order проверены. Аппаратная загрузка не заявлена |
 
 ## B. Stage 65 → Stage 11
 
@@ -107,8 +110,13 @@ RWP fix сохранена отдельно в `/workspace/stage11-pre-rwp-artif
 - Проверка исходников, `git diff --check`, source-file hashes и все 19 kernel/
   config/map/DTB artifact SHA256 выполнены.
 - Packaging selftests: 2 positive/69 negative/3 unsafe mutations; parser 96
-  checks. Это synthetic host fixtures; независимый unpack полного нового
-  Android image и private ramdisk comparison не выполнялись без input.
+  checks. После получения reference дополнительно проверены два реальных
+  boot image: AOSP unpack, независимый QCOM ID, kernel/ramdisk byte equality
+  и минимальный header diff.
+- Повторная компиляция не требовалась: все 19 kernel/config/DTB artifact
+  hashes и 16 source-file hashes совпали с уже проверенной чистой сборкой.
+  Состояние до получения private input сохранено в историческом
+  `validation-stage11`; актуальная упаковка — в `validation-stage11-boot`.
 
 | Реальный артефакт относительно `/workspace/stage11-artifacts` | Bytes | SHA256 |
 | --- | --- | --- |
@@ -119,7 +127,7 @@ RWP fix сохранена отдельно в `/workspace/stage11-pre-rwp-artif
 
 Все 12 DTB, vmlinux, System.map и прочие hashes:
 [SHA256SUMS](validation-stage11/SHA256SUMS).
-[Summary](validation-stage11/summary.json),
+[Актуальный summary](validation-stage11-boot/summary.json),
 [config delta](validation-stage11/config-delta.json),
 [compiler comparison](validation-stage11/warning-comparison.json),
 [DTC comparison](validation-stage11/dtc-comparison.json),
@@ -156,13 +164,61 @@ HARDWARE BOOT FAILED/HANG AT SONY LOGO; PSTORE EMPTY; Android completion absent.
 text_offset/2MiB base, initrd,2MiB FDT growth workspace, compressed/expanded
 scratch и все fixed DT reservations. Dynamic/secure ownership неизвестен.
 
-Ожидаемый неизменённый XZ ramdisk:1,224,724 bytes, SHA256
+Предоставленный `boot.zip` теперь фактически прочитан и проверен: 11,704,070 bytes,
+SHA256 `13615e75cbbc456cc6f32d960a2d07cf0c0dbc8bf4b302edb331e64e4c8a053a`.
+Единственный regular image entry — `boot.img`, 13,283,328 bytes, SHA256
+`f923f9b99c468484b713529577b84e3a137d1b9cbc09393e5593258009983820`.
+Это побайтно тот же working reference, который анализировался в Stage 10;
+распакованное ядро содержит release `4.4.302+`. Исходный ZIP и image не менялись.
+Это полезный boot image, а не 64 MiB partition dump и не измерение GPT capacity.
+
+| Полный offline image | Bytes | SHA256 | Declared initrd |
+| --- | --- | --- | --- |
+| `/workspace/stage11-artifacts/boot-dora-lineage21-kernel419-stage11.img` | 11051008 | `c7a248e58f04fc72c4640d144f5e6f1a47dc32c85c50f020cefd3cae2ea9dfd2` | `0x82700000` |
+| `/workspace/stage11-artifacts/boot-dora-lineage21-kernel419-stage11-initrd822-experiment.img` | 11051008 | `3c33a57da1c473cf239dbd9fdc0b3cad26206461b4ba8151c371c86d60941c18` | `0x82200000` |
+
+Основной образ сохраняет Stage 10 candidate addresses, меняя ядро и boot DTB.
+Отдельный эксперимент использует то же новое ядро/DTB/ramdisk/cmdline и меняет
+только declared initrd address. Между image files отличается единственный
+byte по offset 22 — внутри ramdisk_addr header field 20..23. Это не доказательство,
+что Sony S1 применит данное поле; actual x0 и relocating component неизвестны.
+
+Оба образа содержат реальный Linux `4.19.318-dora-4.19+`, четыре Sony boot DTB
+в порядке v3.0/PMI8994, v3.1/PMI8994, v3.0/PMI8996, v3.1/PMI8996, и неизменённый
+XZ ramdisk 1,224,724 bytes, SHA256
 `9a532793e779b33bad98df1576ec9b661bc04457f4f3f9148b31ba8d42d4f41e`.
-Никакие его байты, исходный boot dump или персональные Android данные не
-добавлялись в Git. Legacy QCOM v0 ID algorithm и enforcing cmdline checks
-сохранены. Реальный final ID/cmdline/ramdisk round-trip не может быть проверен
-без input. Официальный AOSP14 unpacker подготовлен, но недостающий образ им
-не распакован. Synthetic packaging tests помечены отдельно от этой проверки.
+Независимый AOSP14 unpacker распаковал reference и оба новых boot image.
+Compressed ramdisk совпадает побайтно с оригиналом; kernel payload совпадает
+с `Image.gz-dtb-stage11-boot`; распакованный Image совпадает с clean build.
+
+Legacy Qualcomm v0 header: page 4096, second_size 0, dt_size 0;
+kernel_addr=`0x80080000`, tags_addr=`0x82500000`.
+QCOM SHA1 ID обоих images — `35afd6abb3972411a1bbe916a87557342ef46380`;
+он независимо пересчитан из extracted payload и little-endian sizes с
+дополнительным zero dt_size. ID совпадает у A/B, поскольку address words не
+входят в его область хэширования. Это не криптографическая подпись Sony.
+Enforcing/maxcpus2 policy сохранена, security/thermal/watchdog bypass не добавлен;
+полная исходная cmdline хранится privately, её hardware effective вид неизвестен.
+
+Полный Image runtime `[0x80080000,0x8159f000)` с BSS, FDT workspace
+`[0x82500000,0x82700000)`, initrd A `[0x82700000,0x8282b014)` или B
+`[0x82200000,0x8232b014)` не пересекаются друг с другом и fixed reservations
+всех четырёх DTB. Source-derived compressed scratch
+`[0x92301000,0x92c5d710)` и expanded scratch `[0x92d8b000,0x942aa000)` также
+проверены. Actual firmware RAM/relocation и dynamic/secure ownership остаются
+UNVERIFIED. File size 11051008 меньше проверенного reference 13283328;
+реальная ёмкость boot partition из этих размеров не выводится.
+
+AOSP unpacker: официальный `android-14.0.0_r1/system/tools/mkbootimg/unpack_bootimg.py`,
+SHA256 `a9d260978a63bd06a24b6347e7dee8a28ff96639793caea15dff6aa491316308`.
+[Независимый round-trip](validation-stage11-boot/aosp-independent-roundtrip-stage11.json),
+[основной image](validation-stage11-boot/boot-image-offline-result.json),
+[initrd822](validation-stage11-boot/boot-image-initrd822-result.json),
+[входной reference](validation-stage11-boot/working-reference-provenance.json),
+[все 21 SHA256](validation-stage11-boot/SHA256SUMS).
+Никакие private ramdisk bytes, исходный boot dump, исходная cmdline или
+персональные Android данные не добавлялись в Git. Образы остаются вне Git.
+**OFFLINE BUILT: YES; HARDWARE BOOT: UNVERIFIED; BOOT TEST READY: NO.**
 
 ## F. Git и публикация
 
@@ -180,10 +236,12 @@ fetch подтвердил точный Stage 10 SHA. До source edits выпо
 | `e9d2281a07f7150c343a2c651d0b38cf522f87f2` | sony: add bounded Stage 65B initrd differential without asserting S1 relocation |
 | `1b8871be2d2ce04f7361816fa90aa686e5ece1a3` | irqchip: fail stop Dora on missing GIC RWP acknowledgement |
 
-После source commits добавляется только documentation/evidence commit.
-Точный self-referencing final SHA и фактическая remote проверка находятся
-в `/workspace/stage11-artifacts/publication.json` и финальном сообщении сеанса;
-в source validation SHA не включается будущий documentation commit.
+Первый report/evidence опубликован как `42523a582c69eda88653b502a8cbf182039023da`.
+После предоставления рабочего boot.zip добавляется только новый
+documentation/evidence commit; kernel/config/DTB source не изменён. Точный
+final SHA и remote verification находятся в
+`/workspace/stage11-artifacts/publication.json` и финальном сообщении сеанса.
+Validated compiled source остаётся `1b8871be2d2ce04f7361816fa90aa686e5ece1a3`.
 Используется обычный fast-forward push с явным refspec только разрешённой
 ветки. Исходный/private boot, ramdisk и Android personal payload не публикуются.
 
@@ -191,13 +249,13 @@ fetch подтвердил точный Stage 10 SHA. До source edits выпо
 
 Это план сбора доказательств для отдельно разрешённого испытания, а не
 рекомендация прошить текущий неквалифицированный образ. Здесь команды на
-телефоне не выполнялись. **Пока нет private input и проверенного транспорта,
+телефоне не выполнялись. **Private input получен и offline images проверены,
+но без квалифицированного транспорта/reader и CPU/watchdog handoff
 аппаратное испытание нельзя считать подготовленным.**
 
 1. На хосте сохранить проверенный working backup и повторно проверить его
-   SHA256. Предоставить существующий Stage 10/working boot image или исходный
-   архив. Packer требует настоящий header/cmdline/selection tuples/ramdisk;
-   metadata из отчёта не являются заменой payload.
+   SHA256. Предоставленный working boot.zip уже прочитан, сохранён privately
+   и использован без изменения ramdisk. Это не разрешение трогать boot partition.
 2. На уже работающем Sony 4.4 получить read-only snapshot `uname -r`,
    `getprop sys.boot_completed`, `/proc/cmdline`, `/sys/firmware/fdt`, `dmesg`,
    доступные pstore records. Raw FDT/cmdline хранить privately. Из FDT нужны
@@ -207,11 +265,11 @@ fetch подтвердил точный Stage 10 SHA. До source edits выпо
    UART либо уже разрешённый debug/trace интерфейс. Source UART address сам
    по себе не подтверждает электрическое подключение/baud. USB4.19 gated,
    поэтому нельзя предполагать наличие ADB после hang.
-4. После появления private input собрать A (старые Stage 10 candidate addresses)
-   и B (те же kernel/DTB/ramdisk/cmdline, только header initrd→0x82200000).
-   Независимо распаковать AOSP и сравнить байты ramdisk/kernel; убедиться, что
-   между A/B меняется только ramdisk address field. QCOM SHA1 покрывает payload,
-   а не address words, поэтому совпадение ID при таком diff ожидаемо.
+4. A (Stage 10 candidate addresses) и B (только header initrd→0x82200000)
+   уже собраны и независимо распакованы AOSP. Подтверждён единственный
+   изменённый byte 22; kernel/DTB/ramdisk/cmdline одинаковы. Перед отдельно
+   разрешённым испытанием проверять SHA256 из этого отчёта и сохранить
+   read-only capture вне TWRP, как описано ниже.
 5. Разделение стадий требует положительных наблюдений:
 
 | Наблюдение | Что оно различает | Чего не доказывает |

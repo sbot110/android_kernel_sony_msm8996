@@ -17,3 +17,5 @@ obj-$(CONFIG_QTI_LIMITS_ISENSE_CDSP) += msm_isense_cdsp.o
 obj-$(CONFIG_QTI_CX_IPEAK_COOLING_DEVICE) += cx_ipeak_cdev.o
 obj-$(CONFIG_QTI_THERMAL_QFPROM) += qti_thermal_qfprom.o
 obj-$(CONFIG_SONY_MSM8996_BCL) += msm_bcl_legacy.o bcl_peripheral_legacy.o
+obj-$(CONFIG_SONY_MSM8996_LMH_V1) += msm8996-lmh.o
+msm8996-lmh-y := msm8996-lmh-v1.o msm8996-lmh-state.o

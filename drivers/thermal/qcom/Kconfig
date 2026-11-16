@@ -185,3 +185,12 @@ config QTI_THERMAL_QFPROM
 	  set or not. It supports to check multiple nvmem cell value for
 	  multiple condtion. In that case, if any of the nvmem-cell condition
 	  fails, driver just exits with default enabled thermal zones.
+
+config SONY_MSM8996_LMH_V1
+	bool "Sony MSM8996 LMHv1 S11 and secure sensor backend"
+	depends on ARM64 && QCOM_SCM && REGULATOR && THERMAL
+	help
+	  Original Sony MSM8996 service0x13 LMHv1 sensor/profile protocol and
+	  S11 voltage notifications for DPM/ODCM. This is not DCVSH. Compiling
+	  the driver does not qualify CPU voltage ownership or enable its DT
+	  node. Keep it gated until firmware/S11/CPR/SAW handoff is confirmed.

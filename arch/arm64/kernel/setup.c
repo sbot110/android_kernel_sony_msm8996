@@ -18,6 +18,8 @@
  */
 
 #include <linux/acpi.h>
+#include <linux/dora-boot-trace.h>
+#include <linux/libfdt.h>
 #include <linux/export.h>
 #include <linux/kernel.h>
 #include <linux/stddef.h>
@@ -199,6 +201,7 @@ static void __init setup_machine_fdt(phys_addr_t dt_phys)
 		memblock_reserve(dt_phys, size);
 
 	if (!dt_virt || !early_init_dt_scan(dt_virt)) {
+		dora_boot_mark(DORA_BOOT_FDT_REJECTED, dt_phys, !!dt_virt, 0, 0);
 		pr_crit("\n"
 			"Error: invalid device tree blob at physical address %pa (virtual address 0x%p)\n"
 			"The dtb must be 8-byte aligned and must not exceed 2 MB in size\n"
@@ -210,6 +213,9 @@ static void __init setup_machine_fdt(phys_addr_t dt_phys)
 	}
 
 	/* Early fixups are done, map the FDT as read-only now */
+	dora_boot_mark(DORA_BOOT_FDT_VALID, dt_phys, size, initrd_start, initrd_end);
+	dora_boot_mark(DORA_BOOT_FDT_HEADER, fdt_magic(dt_virt),
+		       fdt_totalsize(dt_virt), 0, 0);
 	fixmap_remap_fdt(dt_phys, &size, PAGE_KERNEL_RO);
 
 	name = of_flat_dt_get_machine_name();
@@ -331,6 +337,7 @@ early_param("warmboot", sony_param_warmboot);
 
 void __init setup_arch(char **cmdline_p)
 {
+	dora_boot_mark(DORA_BOOT_SETUP_ARCH, __fdt_pointer, 0, 0, 0);
 	init_mm.start_code = (unsigned long) _text;
 	init_mm.end_code   = (unsigned long) _etext;
 	init_mm.end_data   = (unsigned long) _edata;
@@ -366,8 +373,12 @@ void __init setup_arch(char **cmdline_p)
 	xen_early_init();
 	efi_init();
 	arm64_memblock_init();
+	dora_boot_mark(DORA_BOOT_MEMBLOCK, memblock_start_of_DRAM(),
+		       memblock_end_of_DRAM(), initrd_start, initrd_end);
 
+	dora_boot_mark(DORA_BOOT_PAGING_BEGIN, 0, 0, 0, 0);
 	paging_init();
+	dora_boot_mark(DORA_BOOT_PAGING_DONE, 0, 0, 0, 0);
 
 	acpi_table_upgrade();
 
@@ -389,6 +400,7 @@ void __init setup_arch(char **cmdline_p)
 		psci_dt_init();
 	else
 		psci_acpi_init();
+	dora_boot_mark(DORA_BOOT_PSCI_DONE, (unsigned long)psci_ops.cpu_on, 0, 0, 0);
 
 	cpu_read_bootcpu_ops();
 	smp_init_cpus();

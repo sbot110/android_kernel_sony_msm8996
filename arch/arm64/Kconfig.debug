@@ -97,3 +97,15 @@ config ARM64_STRICT_BREAK_BEFORE_MAKE
 	bool "Enforce strict break-before-make on page table updates "
 
 source "drivers/hwtracing/coresight/Kconfig"
+
+config DORA_BOOT_TRACE
+	bool "Volatile Sony Dora early boot milestones"
+	depends on ARCH_QCOM && PROC_FS
+	select CRC32
+	help
+	  Keep checksummed boot milestones in kernel-owned memory and expose
+	  them read-only to root through /proc/dora_boot_trace. This records
+	  saved entry registers, FDT, MMU-complete C code, IRQ/timer, SMP,
+	  initcalls and init execution. It makes no pre-MMU device accesses.
+	  Records are volatile: persistence across Sony S1 or TWRP is not
+	  provided, and missing records cannot prove lack of kernel entry.

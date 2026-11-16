@@ -12,6 +12,7 @@
 #define DEBUG		/* Enable initcall_debug */
 
 #include <linux/types.h>
+#include <linux/dora-boot-trace.h>
 #include <linux/extable.h>
 #include <linux/module.h>
 #include <linux/proc_fs.h>
@@ -557,6 +558,7 @@ asmlinkage __visible void __init start_kernel(void)
 	char *command_line;
 	char *after_dashes;
 
+	dora_boot_start();
 	set_task_stack_end_magic(&init_task);
 	smp_setup_processor_id();
 	debug_objects_early_init();
@@ -574,6 +576,7 @@ asmlinkage __visible void __init start_kernel(void)
 	page_address_init();
 	pr_notice("%s", linux_banner);
 	setup_arch(&command_line);
+	dora_boot_mark(DORA_BOOT_ARCH_DONE, 0, 0, 0, 0);
 	mm_init_cpumask(&init_mm);
 	setup_command_line(command_line);
 	setup_nr_cpu_ids();
@@ -651,14 +654,18 @@ asmlinkage __visible void __init start_kernel(void)
 	context_tracking_init();
 	/* init some links before init_ISA_irqs() */
 	early_irq_init();
+	dora_boot_mark(DORA_BOOT_IRQ_BEGIN, 0, 0, 0, 0);
 	init_IRQ();
+	dora_boot_mark(DORA_BOOT_IRQ_DONE, 0, 0, 0, 0);
 	tick_init();
 	rcu_init_nohz();
 	init_timers();
 	hrtimers_init();
 	softirq_init();
 	timekeeping_init();
+	dora_boot_mark(DORA_BOOT_TIMER_BEGIN, 0, 0, 0, 0);
 	time_init();
+	dora_boot_mark(DORA_BOOT_TIMER_DONE, 0, 0, 0, 0);
 
 	/*
 	 * For best initial stack canary entropy, prepare it after:
@@ -677,6 +684,7 @@ asmlinkage __visible void __init start_kernel(void)
 
 	early_boot_irqs_disabled = false;
 	local_irq_enable();
+	dora_boot_mark(DORA_BOOT_IRQS_ON, 0, 0, 0, 0);
 
 	kmem_cache_init_late();
 
@@ -904,7 +912,9 @@ int __init_or_module do_one_initcall(initcall_t fn)
 		return -EPERM;
 
 	do_trace_initcall_start(fn);
+	dora_boot_mark(DORA_BOOT_INITCALL_BEGIN, (unsigned long)fn, 0, 0, 0);
 	ret = fn();
+	dora_boot_mark(DORA_BOOT_INITCALL_DONE, (unsigned long)fn, (s64)ret, 0, 0);
 	do_trace_initcall_finish(fn, ret);
 
 	msgbuf[0] = 0;
@@ -1023,11 +1033,16 @@ void __init load_default_modules(void)
 
 static int run_init_process(const char *init_filename)
 {
+	int ret;
+
 	argv_init[0] = init_filename;
 	pr_info("Run %s as init process\n", init_filename);
-	return do_execve(getname_kernel(init_filename),
+	dora_boot_mark(DORA_BOOT_EXEC_INIT, !strcmp(init_filename, "/init"), 0, 0, 0);
+	ret = do_execve(getname_kernel(init_filename),
 		(const char __user *const __user *)argv_init,
 		(const char __user *const __user *)envp_init);
+	dora_boot_mark(DORA_BOOT_EXEC_RESULT, (s64)ret, 0, 0, 0);
+	return ret;
 }
 
 static int try_to_run_init_process(const char *init_filename)
@@ -1084,6 +1099,7 @@ static int __ref kernel_init(void *unused)
 {
 	int ret;
 
+	dora_boot_mark(DORA_BOOT_KERNEL_INIT, 0, 0, 0, 0);
 	kernel_init_freeable();
 	/* need to finish all async __init code before freeing the memory */
 	async_synchronize_full();
@@ -1160,7 +1176,9 @@ static noinline void __init kernel_init_freeable(void)
 	do_pre_smp_initcalls();
 	lockup_detector_init();
 
+	dora_boot_mark(DORA_BOOT_SMP_BEGIN, 0, 0, 0, 0);
 	smp_init();
+	dora_boot_mark(DORA_BOOT_SMP_DONE, 0, 0, 0, 0);
 	sched_init_smp();
 
 	page_alloc_init_late();

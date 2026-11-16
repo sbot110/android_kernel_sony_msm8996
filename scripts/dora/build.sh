@@ -103,6 +103,7 @@ for dtb in "${dtbs[@]}"; do
     trees+=("$tree")
     artifact_args+=(--dtb "$dtb")
     python3 "$root/scripts/dora/check-dt.py" "$tree" --self-test
+    python3 "$root/scripts/dora/check-early-irq.py" --dtb "$tree" --self-test
     python3 "$root/scripts/dora/check-cpu-dt.py" "$tree" --selftest
     python3 "$root/scripts/dora/check-power-dt.py" "$tree"
     python3 "$root/scripts/dora/check-pin-safety.py" "$tree" --self-test
@@ -126,6 +127,8 @@ python3 "$root/scripts/dora/check-artifacts.py" "$out" "${artifact_args[@]}" \
     --report "$out/artifact-validation.json"
 python3 "$root/scripts/dora/check-early-boot.py" "$out" --self-test \
     --report "$out/early-boot-validation.json"
+python3 "$root/scripts/dora/check-early-irq.py" --self-test
+python3 "$root/scripts/dora/check-boot-trace.py"
 python3 "$root/scripts/dora/check-boot-image.py" --self-test \
     --kernel "$out/arch/arm64/boot/Image.gz-dtb" --config "$out/.config" \
     --report "$out/boot-image-validation.json"

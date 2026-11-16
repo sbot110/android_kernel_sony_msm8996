@@ -1,0 +1,11 @@
+{
+  "preflight_code_git_sha": "fb4a5613c054a632da3c3c2d1adcd365a057c9b4",
+  "stage11_initial_head": "30102a011d83b4dd0d30f3d47add10fba5fe45bb",
+  "script_sha256": "8f6e66a8572aa5820ba4f1f464233f4f2085657465f8a5230175292dbeea8295",
+  "kit_sha256": "148a1f7c0acb888766140cc26a354b934ffa6a1409558ea358f57fe661939042",
+  "kernel_sources_changed": false,
+  "hardware_test_A": "NOT EXECUTED",
+  "hardware_test_B": "NOT EXECUTED",
+  "preflight_status": "STOP",
+  "boot_test_ready": false
+}

@@ -1,0 +1,11 @@
+{
+  "status": "PASS: portable kit verification, hardware preflight STOP",
+  "zip_sha256": "148a1f7c0acb888766140cc26a354b934ffa6a1409558ea358f57fe661939042",
+  "zip_bytes": 800179,
+  "zip_entries": 8,
+  "all_embedded_sha256_verified": true,
+  "standalone_script_aosp_auto_discovery": "PASS",
+  "standalone_preflight_exit": 2,
+  "standalone_preflight_status": "STOP",
+  "device_commands_executed": false
+}

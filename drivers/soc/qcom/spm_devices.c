@@ -105,6 +105,8 @@ static int msm_spm_get(struct msm_spm_device *dev)
 		ret = dev->error ? dev->error : -ESHUTDOWN;
 	else if (dev->error)
 		ret = dev->error;
+	else if (dev->reg_data.transaction_error)
+		ret = dev->reg_data.transaction_error;
 	else
 		atomic_inc(&dev->users);
 	raw_spin_unlock_irqrestore(&dev->lock, flags);
@@ -119,7 +121,8 @@ static void msm_spm_put(struct msm_spm_device *dev)
 
 static int msm_spm_state_locked(struct msm_spm_device *dev)
 {
-	return dev->error ? dev->error : dev->retired ? -ESHUTDOWN : 0;
+	return dev->error ? dev->error : dev->reg_data.transaction_error ?
+		dev->reg_data.transaction_error : dev->retired ? -ESHUTDOWN : 0;
 }
 
 static int msm_spm_fault_locked(struct msm_spm_device *dev, int error)

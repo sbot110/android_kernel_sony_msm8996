@@ -99,6 +99,10 @@ struct msm_spm_driver_data {
 	uint32_t seq_entries;
 	uint32_t num_pmic_data;
 	uint32_t *reg_offsets;
+	/* Sticky after an uncertain PMIC/AVS transaction. The endpoint lock or
+	 * exclusive probe serializes access; reinit never clears quarantine.
+	 */
+	int transaction_error;
 };
 
 int msm_spm_drv_init(struct msm_spm_driver_data *dev,

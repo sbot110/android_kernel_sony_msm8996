@@ -267,6 +267,7 @@ int main(void)
 SPM_PREAMBLE = r'''
 #include <assert.h>
 #include <errno.h>
+#include <stdbool.h>
 #include <stdint.h>
 #include <stddef.h>
 #include <stdio.h>
@@ -277,13 +278,13 @@ static unsigned warnings,writes;
 #define __WARN() (warnings++)
 static void __raw_writel(uint32_t value,void *address) { *(uint32_t *)address=value;writes++; }
 struct msm_spm_driver_data { uint32_t *reg_seq_entry_shadow;uint32_t seq_entries;
- void *reg_base_addr;uint32_t *reg_offsets; };
+ void *reg_base_addr;uint32_t *reg_offsets;int transaction_error; };
 '''
 SPM_TESTS = r'''
 int main(void)
 {
  uint32_t shadow[2]={0xaaaaaaaa,0xbbbbbbbb},hardware[2]={0},offsets[1]={0};
- struct msm_spm_driver_data dev={shadow,2,hardware,offsets};
+ struct msm_spm_driver_data dev={shadow,2,hardware,offsets,0};
  uint8_t good[]={0x11,0x22,0x0f},bad[]={0x11,0x22};uint32_t offset=0;
  assert(msm_spm_drv_write_seq_data(NULL,good,3,&offset)==-EINVAL);
  assert(msm_spm_drv_write_seq_data(&dev,NULL,3,&offset)==-EINVAL);
@@ -297,6 +298,11 @@ int main(void)
  msm_spm_drv_flush_seq_entry(NULL);assert(warnings==1 && !writes);
  msm_spm_drv_flush_seq_entry(&dev);assert(writes==2 && !memcmp(hardware,shadow,sizeof(shadow)));
  offset=8;assert(msm_spm_drv_write_seq_data(&dev,good,3,&offset)==-E2BIG && offset==8);
+ dev.transaction_error=-ETIMEDOUT;offset=0;
+ assert(msm_spm_drv_write_seq_data(&dev,good,3,&offset)==-ETIMEDOUT);
+ assert(!offset && shadow[0]==0x11aaaaaa && shadow[1]==0xbbbb0f22);
+ msm_spm_drv_flush_seq_entry(&dev);assert(writes==2 && warnings==1);
+ assert(!memcmp(hardware,shadow,sizeof(shadow)) && dev.transaction_error==-ETIMEDOUT);
  puts("PASS: production SAW bounded sequence builder/flush: bad length, terminator, capacity, offsets and byte replacement");
  return 0;
 }
@@ -375,10 +381,20 @@ def main():
                 changed = source.replace(before, after)
                 run(harness(changed if target == 'apm' else apm,
                             changed if target == 'cpr' else cpr), path, name, False)
-            print('PASS: %d unsafe shared-power mutations rejected' % len(mutations))
+            for name, target, before, after in [
+                ('faulted-sequence-cache', 'msm_spm_drv_write_seq_data',
+                 'if (dev->transaction_error)', 'if (false)'),
+                ('faulted-sequence-hardware', 'msm_spm_drv_flush_seq_entry',
+                 'if (dev && dev->transaction_error)', 'if (false)'),
+            ]:
+                body = function(spm_code, target)
+                assert before in body, name
+                run(spm_code.replace(body, body.replace(before, after, 1), 1),
+                    path, name, False)
+            print('PASS: %d unsafe shared-power mutations rejected' % (len(mutations) + 2))
     if args.report:
         args.report.write_text(json.dumps(dict(production_functions=23,
-            unsafe_mutations_rejected=len(mutations) if args.self_test else 0,
+            unsafe_mutations_rejected=len(mutations) + 2 if args.self_test else 0,
             hardware_verified=False, live_cpu_backend=False), indent=2) + '\n')
 
 

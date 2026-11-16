@@ -7,6 +7,7 @@ autonomous AVS exclusion, power collapse safety, or board qualification.
 import os
 from pathlib import Path
 import re
+import resource
 import shlex
 import subprocess
 import tempfile
@@ -268,9 +269,10 @@ struct device_node { int unused; };
 struct device { struct device_node *of_node;unsigned refs; };
 struct platform_device { struct device dev;void *data; };
 struct resource { unsigned start,end; };
+struct msm_spm_driver_data { int transaction_error; };
 struct msm_spm_device { struct list_head list,claim;struct device *owner;struct resource resource;
  raw_spinlock_t lock;atomic_t users;wait_queue_head_t drain;bool published,retired,initialized;
- int error;const char *name;unsigned reg_data,cpu_vdd,mask;void *modes; };
+ int error;const char *name;struct msm_spm_driver_data reg_data;unsigned cpu_vdd,mask;void *modes; };
 #define cpumask_intersects(a,b) (!!(*(a)&*(b)))
 static struct device *get_device(struct device *d) { d->refs++;return d; }
 static unsigned module_refs;
@@ -286,17 +288,17 @@ static bool inaccessible;
 static pthread_mutex_t boundary_lock=PTHREAD_MUTEX_INITIALIZER;
 static pthread_cond_t boundary_cond=PTHREAD_COND_INITIALIZER;
 static bool pause_driver,entered_driver,release_driver;
-static int msm_spm_drv_set_vdd(unsigned *d,unsigned l)
+static int msm_spm_drv_set_vdd(struct msm_spm_driver_data *d,unsigned l)
 { assert(d && !inaccessible);(void)l;drv_calls++;
  assert(!pthread_mutex_lock(&boundary_lock));entered_driver=true;assert(!pthread_cond_broadcast(&boundary_cond));
  while(pause_driver && !release_driver)assert(!pthread_cond_wait(&boundary_cond,&boundary_lock));
  assert(!pthread_mutex_unlock(&boundary_lock));return drv_result; }
-static int msm_spm_drv_get_vdd(unsigned *d) { assert(d && !inaccessible);drv_calls++;return drv_result?drv_result:160; }
-static int msm_spm_drv_get_avs_enable(unsigned *d) { assert(d && !inaccessible);drv_calls++;return drv_result; }
-static int msm_spm_drv_set_avs_enable(unsigned *d,bool en) { (void)en;return msm_spm_drv_get_avs_enable(d); }
-static int msm_spm_drv_set_avs_limit(unsigned *d,unsigned l,unsigned h) { (void)l;(void)h;return msm_spm_drv_get_avs_enable(d); }
-static int msm_spm_drv_set_avs_irq_enable(unsigned *d,enum msm_spm_avs_irq i,bool en) { (void)i;(void)en;return msm_spm_drv_get_avs_enable(d); }
-static int msm_spm_drv_avs_clear_irq(unsigned *d,enum msm_spm_avs_irq i) { (void)i;return msm_spm_drv_get_avs_enable(d); }
+static int msm_spm_drv_get_vdd(struct msm_spm_driver_data *d) { assert(d && !inaccessible);drv_calls++;return drv_result?drv_result:160; }
+static int msm_spm_drv_get_avs_enable(struct msm_spm_driver_data *d) { assert(d && !inaccessible);drv_calls++;return drv_result; }
+static int msm_spm_drv_set_avs_enable(struct msm_spm_driver_data *d,bool en) { (void)en;return msm_spm_drv_get_avs_enable(d); }
+static int msm_spm_drv_set_avs_limit(struct msm_spm_driver_data *d,unsigned l,unsigned h) { (void)l;(void)h;return msm_spm_drv_get_avs_enable(d); }
+static int msm_spm_drv_set_avs_irq_enable(struct msm_spm_driver_data *d,enum msm_spm_avs_irq i,bool en) { (void)i;(void)en;return msm_spm_drv_get_avs_enable(d); }
+static int msm_spm_drv_avs_clear_irq(struct msm_spm_driver_data *d,enum msm_spm_avs_irq i) { (void)i;return msm_spm_drv_get_avs_enable(d); }
 static int smp_call_function_any(unsigned *mask,void (*fn)(void *),void *info,bool wait)
 { assert(mask && wait);if(ipi_result)return ipi_result;fn(info);return 0; }
 static DEFINE_MUTEX(spm_owner_lock);
@@ -353,7 +355,12 @@ int main(void)
  drv_result=-ETIMEDOUT;assert(msm_spm_set_vdd(0,180)==-ETIMEDOUT && d.cpu_vdd==VDD_UNKNOWN);
  assert(msm_spm_turn_on_cpu_rail(NULL,160,0,0)==-ETIMEDOUT && !maps);
  drv_result=0;reject(1,-ETIMEDOUT); /* CPU aliases cannot clear the controller fault. */
- destroy(&d);initialize(&d);ipi_result=-ENXIO;
+ destroy(&d);initialize(&d);
+ /* A low-level probe/transaction fault is visible through every shared API,
+    even before the wrapper itself has latched its endpoint error. */
+ d.reg_data.transaction_error=-EIO;reject(0,-EIO);
+ assert(msm_spm_probe_done()==-EIO && !d.error);destroy(&d);
+ initialize(&d);ipi_result=-ENXIO;
  assert(msm_spm_set_vdd(0,180)==-ENXIO && d.cpu_vdd==VDD_DEFAULT);
  assert(msm_spm_turn_on_cpu_rail(NULL,160,-1,0)==-EINVAL);
  cpu_vctl_device[0]=NULL;assert(msm_spm_turn_on_cpu_rail(NULL,160,0,0)==-EPROBE_DEFER);
@@ -407,7 +414,6 @@ register_preamble = r'''
 #include <string.h>
 typedef uint32_t u32;
 #define __iomem
-#define CONFIG_MSM_AVS_HW 1
 #define GFP_KERNEL 0
 #define VDD_DEFAULT 0xDEADF00D
 #define BIT(n) (1U<<(n))
@@ -421,7 +427,8 @@ typedef uint32_t u32;
 #define wmb() ((void)0)
 enum msm_spm_avs_irq { MSM_SPM_AVS_IRQ_MIN,MSM_SPM_AVS_IRQ_MAX };
 static unsigned reads,writes,drop_at,allocations,frees,delays;
-static bool drop_all,complete_pmic;
+static bool drop_all,complete_pmic,wrong_pmic_level,busy_pmic,alter_avs;
+static unsigned vctl_writes,busy_vctl_number,avs_offset;
 static uint32_t hwregs[0x1000/4];
 static unsigned vctl_offset,pmic_offset;
 static uint32_t __raw_readl(void *p)
@@ -432,7 +439,12 @@ static void __raw_writel(uint32_t value,void *p)
  assert(offset<sizeof(hwregs) && !(offset&3));writes++;
  if(drop_all || writes==drop_at)return;
  hwregs[offset/4]=value;
- if(complete_pmic && offset==vctl_offset)hwregs[pmic_offset/4]=value&0xff; }
+ if(offset==vctl_offset) {
+  vctl_writes++;
+  if(complete_pmic)hwregs[pmic_offset/4]=((value+(wrong_pmic_level?1:0))&0xff)|
+    ((busy_pmic || vctl_writes==busy_vctl_number)?0x10000:0);
+  if(alter_avs)hwregs[avs_offset/4]&=~1U;
+ } }
 static void udelay(unsigned value) { delays+=value; }
 static void *test_calloc(size_t n,size_t size)
 { void *p=calloc(n?n:1,size);if(p)allocations++;return p; }
@@ -457,7 +469,7 @@ register_names = ['msm_spm_drv_flush_shadow', 'msm_spm_drv_load_shadow',
                   'msm_spm_drv_set_avs_limit', 'msm_spm_drv_avs_irq_mask',
                   'msm_spm_drv_set_avs_irq_enable', 'msm_spm_drv_avs_clear_irq',
                   'msm_spm_drv_flush_seq_entry', 'msm_spm_drv_write_seq_data',
-                  'msm_spm_drv_get_vdd']
+                  'msm_spm_drv_get_vdd', 'msm_spm_drv_upd_reg_shadow']
 register_production += ''.join(function(driver, name) for name in register_names)
 register_production += driver[driver.index('#ifdef CONFIG_MSM_AVS_HW'):
                               driver.index('static inline int msm_spm_drv_validate_data')]
@@ -481,18 +493,100 @@ static unsigned regoff(unsigned r) { return d.reg_offsets[r]/4; }
 static void reset(unsigned version)
 {
  memset(hwregs,0,sizeof(hwregs));memset(&d,0,sizeof(d));memset(&data,0,sizeof(data));
- reads=writes=drop_at=delays=0;drop_all=complete_pmic=false;
+ reads=writes=drop_at=delays=vctl_writes=busy_vctl_number=0;
+ drop_all=complete_pmic=wrong_pmic_level=busy_pmic=alter_avs=false;
  data.reg_base_addr=hwregs;data.reg_size=sizeof(hwregs);data.ver_reg=0xfd0;
  hwregs[data.ver_reg/4]=version;
  assert(!msm_spm_drv_reg_init(&d,&data));
  vctl_offset=d.reg_offsets[MSM_SPM_REG_SAW_VCTL];
  pmic_offset=d.reg_offsets[MSM_SPM_REG_SAW_PMIC_STS];
+ avs_offset=d.reg_offsets[MSM_SPM_REG_SAW_AVS_CTL];
  d.vctl_port=0;d.vctl_port_ub=-1;d.phase_port=1;d.pfm_port=2;d.vctl_timeout_us=3;
  hwregs[regoff(MSM_SPM_REG_SAW_ID)]=BIT(2)|(7<<4)|(255U<<24);
  reads=writes=0;
 }
 static void finish_driver(void)
 { kfree(d.reg_seq_entry_shadow);d.reg_seq_entry_shadow=NULL;d.seq_entries=0; }
+/* No error path may re-arm AVS or turn a low-level fault into a new baseline. */
+static void quarantine_no_io(void)
+{
+ unsigned r=reads,w=writes;
+ assert(d.transaction_error==-EIO);
+ assert(msm_spm_drv_set_vdd(&d,32)==-EIO);
+ assert(msm_spm_drv_get_vdd(&d)==-EIO);
+ assert(msm_spm_drv_get_avs_enable(&d)==-EIO);
+ assert(msm_spm_drv_set_avs_enable(&d,true)==-EIO);
+ assert(msm_spm_drv_set_avs_enable(&d,false)==-EIO);
+ assert(msm_spm_drv_set_avs_limit(&d,24,32)==-EIO);
+ assert(msm_spm_drv_set_avs_irq_enable(&d,MSM_SPM_AVS_IRQ_MIN,true)==-EIO);
+ assert(msm_spm_drv_avs_clear_irq(&d,MSM_SPM_AVS_IRQ_MAX)==-EIO);
+ assert(msm_spm_drv_set_pmic_data(&d,MSM_SPM_PMIC_PHASE_PORT,1)==-EIO);
+ assert(msm_spm_drv_reg_init(&d,&data)==-EIO);
+ assert(msm_spm_drv_init(&d,&data)==-EIO);
+ msm_spm_drv_reinit(&d,true);msm_spm_drv_flush_seq_entry(&d);
+ msm_spm_drv_upd_reg_shadow(&d,MSM_SPM_REG_SAW_RST,1);
+ assert(reads==r && writes==w && d.transaction_error==-EIO);
+}
+static void voltage_ack_tests(void)
+{
+ unsigned ctl,before,i;
+ reset(0x30000000);complete_pmic=true;ctl=regoff(MSM_SPM_REG_SAW_AVS_CTL);
+ hwregs[ctl]=BIT(27)|BIT(6)|1U|(20U<<10)|(24U<<17);
+#ifdef CONFIG_MSM_AVS_HW
+ assert(!msm_spm_drv_set_vdd(&d,32));
+ assert(msm_spm_drv_get_vdd(&d)==32 && !d.transaction_error);
+ assert((hwregs[ctl]&(0x7efc00|BIT(0)|BIT(27)))==
+        ((28U<<10)|(32U<<17)|BIT(0)|BIT(27)));
+ /* Every uncertain stop, PMIC ACK, limit or restore write stays quarantined.
+    Dropping the write to the separate retention PMIC_DATA3 is deliberately
+    not modelled as a current-voltage ACK failure. Retention stays unqualified. */
+ for(i=1;i<=6;i++) {
+  if(i==2 || i==4)continue;
+  reset(0x30000000);complete_pmic=true;ctl=regoff(MSM_SPM_REG_SAW_AVS_CTL);
+  hwregs[ctl]=BIT(27)|BIT(6)|1U|(20U<<10)|(24U<<17);drop_at=i;
+  assert(msm_spm_drv_set_vdd(&d,32)==-EIO);
+  if(i==1)assert(!vctl_writes && (hwregs[ctl]&BIT(27)));
+  else assert(!(hwregs[ctl]&BIT(27)));
+  quarantine_no_io();
+ }
+ /* Wrong sent-data and all non-idle FSM states are not ACKs. */
+ for(i=0;i<3;i++) {
+  reset(0x30000000);ctl=regoff(MSM_SPM_REG_SAW_AVS_CTL);
+  hwregs[ctl]=BIT(27)|1;complete_pmic=i!=0;wrong_pmic_level=i==1;busy_pmic=i==2;
+  assert(msm_spm_drv_set_vdd(&d,32)==-EIO && !(hwregs[ctl]&BIT(27)));
+  quarantine_no_io();
+ }
+ /* Lower transfer may complete while the upper-byte transfer never ACKs. */
+ reset(0x30000000);ctl=regoff(MSM_SPM_REG_SAW_AVS_CTL);hwregs[ctl]=BIT(27)|1;
+ complete_pmic=true;d.vctl_port_ub=1;busy_vctl_number=2;
+ assert(msm_spm_drv_set_vdd(&d,32)==-EIO && vctl_writes==2 && !(hwregs[ctl]&BIT(27)));
+ quarantine_no_io();
+ /* A firmware-visible control change after ACK is not permission to resume. */
+ reset(0x30000000);ctl=regoff(MSM_SPM_REG_SAW_AVS_CTL);hwregs[ctl]=BIT(27)|1;
+ complete_pmic=true;alter_avs=true;
+ assert(msm_spm_drv_set_vdd(&d,32)==-EIO && !(hwregs[ctl]&BIT(27)));
+ quarantine_no_io();
+ reset(0x30000000);ctl=regoff(MSM_SPM_REG_SAW_AVS_CTL);hwregs[ctl]=1;
+ assert(msm_spm_drv_set_vdd(&d,32)==-EBUSY && !writes && !d.transaction_error);
+ hwregs[ctl]=BIT(27)|1;
+ assert(msm_spm_drv_set_vdd(&d,3)==-ERANGE && !writes);
+ assert(msm_spm_drv_set_vdd(&d,64)==-ERANGE && !writes);
+#else
+ (void)i;
+ /* Real Dora build has no legacy AVS control support. Detect bit0 from
+    hardware and fail before writes; never substitute fake AVS-off success. */
+ before=writes;
+ assert(msm_spm_drv_set_vdd(&d,180)==-EOPNOTSUPP && writes==before);
+ assert(hwregs[ctl]&BIT(27));assert(!d.transaction_error);
+ hwregs[ctl]&=~1U;
+ assert(!msm_spm_drv_set_vdd(&d,180) && msm_spm_drv_get_vdd(&d)==180);
+ reset(0x30000000);hwregs[regoff(MSM_SPM_REG_SAW_PMIC_STS)]=0x10000;
+ assert(msm_spm_drv_set_vdd(&d,180)==-EIO);
+ quarantine_no_io();
+#endif
+ (void)before;
+ puts("PASS: PMIC ACK before AVS restore, true AVS detection in both builds, lost-stop/limit/restore writes, failed/partial ACK and persistent low-level quarantine");
+}
 int main(void)
 {
  unsigned versions[]={0x20010000,0x30000000,0x10000000,0x40010000},i,ctl,limit,before;
@@ -576,15 +670,19 @@ int main(void)
  assert(device.reg_data.seq_entries==255 && writes==255);
  msm_spm_free_program(&device);assert(!device.modes && !device.reg_data.reg_seq_entry_shadow);
  assert(allocations==frees);
+ voltage_ack_tests();
  puts("PASS: actual SAW MMIO: version maps, live AVS/IRQ readback, lost writes, PMIC idle/timeout, per-device counts, mapped RAM bounds, start-address overflow and program cleanup");
  return 0;
 }
 '''
 
 with tempfile.TemporaryDirectory(prefix='dora-spm-transactions-') as tmp:
+    resource.setrlimit(resource.RLIMIT_CORE, (0, 0))
     for name, contents in [('regulator', preamble + production + tests),
                            ('saw', api_preamble + api_production + api_tests),
-                           ('registers', register_preamble + register_types +
+                           ('registers', '#define CONFIG_MSM_AVS_HW 1\n' + register_preamble + register_types +
+                            register_production + register_tests),
+                           ('registers-no-legacy-avs', register_preamble + register_types +
                             register_production + register_tests)]:
         c, binary = Path(tmp) / (name + '.c'), Path(tmp) / name
         c.write_text(contents)
@@ -593,3 +691,34 @@ with tempfile.TemporaryDirectory(prefix='dora-spm-transactions-') as tmp:
                        ['-std=gnu11', '-O1', '-Wall', '-Wextra', '-Werror', '-pthread',
                         *flags, str(c), '-o', str(binary)], check=True)
         subprocess.run([str(binary)], check=True, timeout=30)
+    # Each mutation compiles, then must fail the very same production-code
+    # invariants. Rejecting only a source-text pattern would miss these paths.
+    mutations = [
+        ('unsafe-AVS-restore', 'msm_spm_drv_set_vdd',
+         'set_vdd_bail:\n',
+         'set_vdd_bail:\n\tdev->reg_shadow[MSM_SPM_REG_SAW_AVS_CTL] |= BIT(27);\n'
+         '\tmsm_spm_drv_flush_shadow(dev, MSM_SPM_REG_SAW_AVS_CTL);\n', True),
+        ('lost-low-level-quarantine', 'msm_spm_drv_set_vdd',
+         'return msm_spm_drv_fault(dev, ret);', 'return ret;', True),
+        ('unconfirmed-AVS-stop', 'msm_spm_drv_disable_avs',
+         'BIT(0) ? 0 : -EIO;', 'BIT(0) ? 0 : 0;', True),
+        ('fake-AVS-off-build', 'msm_spm_drv_set_vdd',
+         'if (avs_enabled)\n\t\treturn -EOPNOTSUPP;',
+         'if (avs_enabled && false)\n\t\treturn -EOPNOTSUPP;', False),
+        ('unknown-supply-cache-reuse', 'msm_spm_drv_get_vdd',
+         'if (dev->transaction_error)\n\t\treturn dev->transaction_error;',
+         'if (false)\n\t\treturn dev->transaction_error;', True),
+    ]
+    for name, target, before, after, legacy in mutations:
+        body = function(register_production, target)
+        assert before in body, name
+        changed = register_production.replace(body, body.replace(before, after, 1), 1)
+        c, binary = Path(tmp) / (name + '.c'), Path(tmp) / name
+        c.write_text(('#define CONFIG_MSM_AVS_HW 1\n' if legacy else '') +
+                     register_preamble + register_types + changed + register_tests)
+        subprocess.run(shlex.split(os.environ.get('HOSTCC', 'cc')) +
+                       ['-std=gnu11', '-O1', '-Wall', '-Wextra', '-Werror', '-pthread',
+                        *flags, str(c), '-o', str(binary)], check=True)
+        result = subprocess.run([str(binary)], capture_output=True, timeout=30)
+        assert result.returncode != 0, 'unsafe SPM mutation accepted: ' + name
+    print('PASS: %d unsafe AVS/PMIC acknowledgement and quarantine mutations rejected' % len(mutations))

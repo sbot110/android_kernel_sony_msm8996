@@ -1,0 +1,26 @@
+{
+  "stage10_head": "61d3e0663162c6cf2507e6653d8ac2e0d2ce9803",
+  "source_head": "1b8871be2d2ce04f7361816fa90aa686e5ece1a3",
+  "source_tree": "793f1e179b1fd5ed9ffda85d21d939001d851a63",
+  "stage10_ancestor": true,
+  "work_branch_preserved": "0c295b15b6d0fb59a64e13b9e0ef2070818ef2a1",
+  "reference_515_read_only_sha": "0f955fbca80d3ccc7834f5524b1a5dc25a7ad6c9",
+  "source_files": {
+    "Documentation/sony/dora-stage65b-initrd-experiment.json": "70cf22079c68b5128523bbf2b6f0df55b4f8424888b429083da9832b9688561a",
+    "arch/arm64/Kconfig.debug": "49ab3bbd3062dcfe8b0a8b994e7d4dd09cfbd5ab41b4b728936917d734a85aee",
+    "arch/arm64/boot/dts/qcom/msm8996-sony-xperia-tone.dtsi": "2ea746373e55892e816ca03a7bf463cce8f6d860434c37bde0895abddb817a82",
+    "arch/arm64/configs/tone_dora_defconfig": "f0dae1b374af2df65b333f81c82d6bb7f2f575b9c06dfcf488075f2f72c0905e",
+    "arch/arm64/kernel/Makefile": "f189611990172cf75fbd5cab7912a9cf1aaf0db9baad2c338a12cd3eaf705a07",
+    "arch/arm64/kernel/dora-boot-trace.c": "efb8feb043e01b5657bc5c74bafa421016180a74d7a10ba464a0e88fd379ed3a",
+    "arch/arm64/kernel/setup.c": "501d4dafa1e2c98c6bd342ddc2beb01b81c511ded0060d6b49fb3d6dc7fd85c7",
+    "drivers/irqchip/irq-gic-v3.c": "4757382f889a67e89eb333e7efe16c501ddb95b26b94a8d8c6e4b69a81688732",
+    "include/linux/dora-boot-trace.h": "75374f03fe049f745d522ec6c13e09afa6cf84ac271f607de1cffbfaefaa4fc7",
+    "init/main.c": "815f0e18491474fddc267f4d2956d9b8cbd68a25b7947010f246ceac36f05cba",
+    "scripts/dora/build-boot-image.py": "d5e65e4382f5cb945c6b975a67f32b391b33eb0d063b0d8fce44a26d689ca788",
+    "scripts/dora/build.sh": "f88aca658f76deda2332e67d7d4f6308e480582bf70567c3f71babe148e154fb",
+    "scripts/dora/check-boot-handoff.py": "3badd3eaf4a7975b41f21cef0b6b802a6b4e29c9090f0d68ce09ac862838e140",
+    "scripts/dora/check-boot-trace.py": "2abd3953397d6737a38c54775064cc4138e0b6dc8f2111b50cd9c801a1ebb2a8",
+    "scripts/dora/check-early-irq.py": "53ed842353e9f9336006e7afcc71087c3a5f6a614c3a81e7e091a70d573326c6",
+    "scripts/dora/decode-boot-trace.py": "c5251cf7b6a797b246e2aa49f74027118af8b6d011e298f89d307de00d662e7b"
+  }
+}

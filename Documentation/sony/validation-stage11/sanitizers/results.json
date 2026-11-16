@@ -1,0 +1,232 @@
+[
+  {
+    "script": "check-cpu-clocks.py",
+    "env": {
+      "CPU_CLOCK_SANITIZE": "1",
+      "ASAN_OPTIONS": "detect_leaks=0",
+      "UBSAN_OPTIONS": "halt_on_error=1"
+    },
+    "exit": 0,
+    "source_sha": "1b8871be2d2ce04f7361816fa90aa686e5ece1a3"
+  },
+  {
+    "script": "check-cpu-hardware.py",
+    "env": {
+      "CPU_HW_SANITIZE": "1",
+      "ASAN_OPTIONS": "detect_leaks=0",
+      "UBSAN_OPTIONS": "halt_on_error=1"
+    },
+    "exit": 0,
+    "source_sha": "1b8871be2d2ce04f7361816fa90aa686e5ece1a3"
+  },
+  {
+    "script": "check-cpu-native.py",
+    "env": {
+      "CPU_NATIVE_SANITIZE": "1",
+      "ASAN_OPTIONS": "detect_leaks=0",
+      "UBSAN_OPTIONS": "halt_on_error=1"
+    },
+    "exit": 0,
+    "source_sha": "1b8871be2d2ce04f7361816fa90aa686e5ece1a3"
+  },
+  {
+    "script": "check-cpu-power-owner.py",
+    "env": {
+      "CPU_POWER_OWNER_SANITIZE": "1",
+      "ASAN_OPTIONS": "detect_leaks=0",
+      "UBSAN_OPTIONS": "halt_on_error=1"
+    },
+    "exit": 0,
+    "source_sha": "1b8871be2d2ce04f7361816fa90aa686e5ece1a3"
+  },
+  {
+    "script": "check-cpu-shared-power.py",
+    "env": {
+      "SHARED_POWER_SANITIZE": "1",
+      "ASAN_OPTIONS": "detect_leaks=0",
+      "UBSAN_OPTIONS": "halt_on_error=1"
+    },
+    "exit": 0,
+    "source_sha": "1b8871be2d2ce04f7361816fa90aa686e5ece1a3"
+  },
+  {
+    "script": "check-cpr-cpu-state.py",
+    "env": {
+      "CPR_CPU_STATE_SANITIZE": "1",
+      "ASAN_OPTIONS": "detect_leaks=0",
+      "UBSAN_OPTIONS": "halt_on_error=1"
+    },
+    "exit": 0,
+    "source_sha": "1b8871be2d2ce04f7361816fa90aa686e5ece1a3"
+  },
+  {
+    "script": "check-lmh-v1.py",
+    "env": {
+      "LMH_V1_SANITIZE": "1",
+      "ASAN_OPTIONS": "detect_leaks=0",
+      "UBSAN_OPTIONS": "halt_on_error=1"
+    },
+    "exit": 0,
+    "source_sha": "1b8871be2d2ce04f7361816fa90aa686e5ece1a3"
+  },
+  {
+    "script": "check-spm-transactions.py",
+    "env": {
+      "SPM_SANITIZE": "1",
+      "ASAN_OPTIONS": "detect_leaks=0",
+      "UBSAN_OPTIONS": "halt_on_error=1"
+    },
+    "exit": 0,
+    "source_sha": "1b8871be2d2ce04f7361816fa90aa686e5ece1a3"
+  },
+  {
+    "script": "check-first-stage-init.py",
+    "env": {
+      "FIRST_STAGE_SANITIZE": "1",
+      "ASAN_OPTIONS": "detect_leaks=0",
+      "UBSAN_OPTIONS": "halt_on_error=1"
+    },
+    "exit": 0,
+    "source_sha": "1b8871be2d2ce04f7361816fa90aa686e5ece1a3"
+  },
+  {
+    "script": "check-watchdog.py",
+    "env": {
+      "WATCHDOG_TEST_SANITIZE": "1",
+      "ASAN_OPTIONS": "detect_leaks=0",
+      "UBSAN_OPTIONS": "halt_on_error=1"
+    },
+    "exit": 0,
+    "source_sha": "1b8871be2d2ce04f7361816fa90aa686e5ece1a3"
+  },
+  {
+    "script": "check-usb-handoff.py",
+    "env": {
+      "USB_HANDOFF_SANITIZE": "1",
+      "ASAN_OPTIONS": "detect_leaks=0",
+      "UBSAN_OPTIONS": "halt_on_error=1"
+    },
+    "exit": 0,
+    "source_sha": "1b8871be2d2ce04f7361816fa90aa686e5ece1a3"
+  },
+  {
+    "script": "check-usb-parent-handoff.py",
+    "env": {
+      "USB_PARENT_SANITIZE": "1",
+      "ASAN_OPTIONS": "detect_leaks=0",
+      "UBSAN_OPTIONS": "halt_on_error=1"
+    },
+    "exit": 0,
+    "source_sha": "1b8871be2d2ce04f7361816fa90aa686e5ece1a3"
+  },
+  {
+    "script": "check-clock-reattach.py",
+    "env": {
+      "CCF_TEST_SANITIZE": "1",
+      "ASAN_OPTIONS": "detect_leaks=0",
+      "UBSAN_OPTIONS": "halt_on_error=1"
+    },
+    "exit": 0,
+    "source_sha": "1b8871be2d2ce04f7361816fa90aa686e5ece1a3"
+  },
+  {
+    "script": "check-clk-vdd.py",
+    "env": {
+      "CCF_TEST_SANITIZE": "1",
+      "ASAN_OPTIONS": "detect_leaks=0",
+      "UBSAN_OPTIONS": "halt_on_error=1"
+    },
+    "exit": 0,
+    "source_sha": "1b8871be2d2ce04f7361816fa90aa686e5ece1a3"
+  },
+  {
+    "script": "check-rpm-corners.py",
+    "env": {
+      "DORA_RPM_CORNERS_SANITIZE": "1",
+      "ASAN_OPTIONS": "detect_leaks=0",
+      "UBSAN_OPTIONS": "halt_on_error=1"
+    },
+    "exit": 0,
+    "source_sha": "1b8871be2d2ce04f7361816fa90aa686e5ece1a3"
+  },
+  {
+    "script": "check-minidump.py",
+    "env": {
+      "MINIDUMP_TEST_SANITIZE": "1",
+      "ASAN_OPTIONS": "detect_leaks=0",
+      "UBSAN_OPTIONS": "halt_on_error=1"
+    },
+    "exit": 0,
+    "source_sha": "1b8871be2d2ce04f7361816fa90aa686e5ece1a3"
+  },
+  {
+    "script": "check-early-irq.py",
+    "env": {
+      "EARLY_IRQ_SANITIZE": "1",
+      "ASAN_OPTIONS": "detect_leaks=0",
+      "UBSAN_OPTIONS": "halt_on_error=1"
+    },
+    "exit": 0,
+    "source_sha": "1b8871be2d2ce04f7361816fa90aa686e5ece1a3"
+  },
+  {
+    "script": "check-boot-trace.py",
+    "env": {
+      "BOOT_TRACE_SANITIZE": "1",
+      "ASAN_OPTIONS": "detect_leaks=0",
+      "UBSAN_OPTIONS": "halt_on_error=1"
+    },
+    "exit": 0,
+    "source_sha": "1b8871be2d2ce04f7361816fa90aa686e5ece1a3"
+  },
+  {
+    "script": "check-mmc-physical.py",
+    "env": {
+      "DORA_SANITIZERS": "address,undefined",
+      "ASAN_OPTIONS": "detect_leaks=0",
+      "UBSAN_OPTIONS": "halt_on_error=1"
+    },
+    "exit": 0,
+    "source_sha": "1b8871be2d2ce04f7361816fa90aa686e5ece1a3"
+  },
+  {
+    "script": "check-mmc-irq-faults.py",
+    "env": {
+      "DORA_SANITIZERS": "address,undefined",
+      "ASAN_OPTIONS": "detect_leaks=0",
+      "UBSAN_OPTIONS": "halt_on_error=1"
+    },
+    "exit": 0,
+    "source_sha": "1b8871be2d2ce04f7361816fa90aa686e5ece1a3"
+  },
+  {
+    "script": "check-rpm-native.py",
+    "env": {
+      "DORA_SANITIZERS": "address,undefined",
+      "ASAN_OPTIONS": "detect_leaks=0",
+      "UBSAN_OPTIONS": "halt_on_error=1"
+    },
+    "exit": 0,
+    "source_sha": "1b8871be2d2ce04f7361816fa90aa686e5ece1a3"
+  },
+  {
+    "script": "check-rpm-pm-order.py",
+    "env": {
+      "DORA_SANITIZERS": "address,undefined",
+      "ASAN_OPTIONS": "detect_leaks=0",
+      "UBSAN_OPTIONS": "halt_on_error=1"
+    },
+    "exit": 0,
+    "source_sha": "1b8871be2d2ce04f7361816fa90aa686e5ece1a3"
+  },
+  {
+    "script": "check-warning-inputs.py",
+    "env": {
+      "DORA_SANITIZERS": "address,undefined",
+      "ASAN_OPTIONS": "detect_leaks=0",
+      "UBSAN_OPTIONS": "halt_on_error=1"
+    },
+    "exit": 0,
+    "source_sha": "1b8871be2d2ce04f7361816fa90aa686e5ece1a3"
+  }
+]

@@ -1,0 +1,3 @@
+PASS: actual CPU owner plans/publication, parent preparations, prior CBF rates, MX AO identity, typed observations, partial failures, lifetime, quarantine, PM bookkeeping and concurrent claims/readers
+PASS: paired pre-MMIO read admission, shared PM freeze/reader drain, peer resume, retained parent checks, failed-read drain and in-flight retirement
+Host boundaries only: no CPU voltage lease, LMHv1/SAW exclusion, measured voltage or writable hardware qualification.

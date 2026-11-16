@@ -1,0 +1,3 @@
+PASS: production APM readback/SMC/timeout/quarantine/owner/retirement and CPR crossover/PM; concurrent consumers
+No physical CPU shared-gang guard or firmware handoff is qualified by these boundary models.
+PASS: production SAW bounded sequence builder/flush: bad length, terminator, capacity, offsets and byte replacement

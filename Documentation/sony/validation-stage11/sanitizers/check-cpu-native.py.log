@@ -1,0 +1,2 @@
+PASS: actual native APCC/CBF/ACD/PLL callbacks + engine, all bin0 rates, shared guard, leases, AUX, rollback, timeouts, readback, PM and unsupported boot state
+Host boundary models only: no physical CPR/SPM/APM gang guard or hardware/runtime qualification established.

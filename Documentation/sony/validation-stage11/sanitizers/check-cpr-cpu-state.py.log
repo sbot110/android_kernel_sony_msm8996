@@ -1,0 +1,2 @@
+PASS: actual HMSS consumer/node-state registry/readback, corner/rail quarantine closure, complete IRQ/debugfs failures, concurrent snapshots/withdrawal and PM
+Readback and host boundary checks do not establish autonomous CPR/SAW/LMH exclusion or measured CPU voltage.

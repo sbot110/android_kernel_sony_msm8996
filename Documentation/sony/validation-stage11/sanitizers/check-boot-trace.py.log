@@ -1,0 +1,2 @@
+PASS: production volatile boot records, independent CRC/sequence decoder, writer isolation and torn/corrupt captures
+No persistent region or physical boot-stage claim; /init exec is not Android completion.

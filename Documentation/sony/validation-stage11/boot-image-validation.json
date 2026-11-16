@@ -1,0 +1,404 @@
+{
+  "boot_test_ready": false,
+  "runtime_verified": false,
+  "status": "software inspection only",
+  "selftest_checks": 96,
+  "supplied_reserved_ranges": [],
+  "kernel_artifact": {
+    "path": "/workspace/stage11-artifacts/clean-out/arch/arm64/boot/Image.gz-dtb",
+    "compression": "gzip",
+    "compressed_stream_bytes": 9051760,
+    "decompressed_file_bytes": 19792384,
+    "text_offset": 524288,
+    "image_size": 22147072,
+    "runtime_extent": 22147072,
+    "runtime_zero_fill_bytes": 2354688,
+    "flags": 10,
+    "little_endian": true,
+    "layout": "single gzip stream followed by zero or more complete FDTs",
+    "appended_dtbs": [
+      {
+        "trailer_offset": 0,
+        "bytes": 190717,
+        "boot_cpuid_phys": 0,
+        "selection_tuples": {
+          "qcom,msm-id": [
+            246,
+            196608
+          ],
+          "qcom,board-id": [
+            8,
+            0
+          ],
+          "qcom,pmic-id": [
+            131081,
+            131082,
+            0,
+            0
+          ]
+        },
+        "selected_by_bootloader": "UNVERIFIED",
+        "reserved_ranges": [
+          {
+            "source": "/reserved-memory/mba@91500000",
+            "start": 2437939200,
+            "size": 2097152
+          },
+          {
+            "source": "/reserved-memory/adsp@8ea00000",
+            "start": 2392850432,
+            "size": 27262976
+          },
+          {
+            "source": "/reserved-memory/mpss@88800000",
+            "start": 2290089984,
+            "size": 102760448
+          },
+          {
+            "source": "/reserved-memory/smem-mem@86000000",
+            "start": 2248146944,
+            "size": 2097152
+          },
+          {
+            "source": "/reserved-memory/memory@85800000",
+            "start": 2239758336,
+            "size": 8388608
+          },
+          {
+            "source": "/reserved-memory/memory@86200000",
+            "start": 2250244096,
+            "size": 39845888
+          },
+          {
+            "source": "/reserved-memory/ramoops@a7f00000",
+            "start": 2817523712,
+            "size": 1048576
+          },
+          {
+            "source": "/reserved-memory/memory@83401000",
+            "start": 2202013696,
+            "size": 37744640
+          },
+          {
+            "source": "/reserved-memory/gpu@90400000",
+            "start": 2420113408,
+            "size": 8192
+          },
+          {
+            "source": "/reserved-memory/memory@90500000",
+            "start": 2421161984,
+            "size": 10485760
+          },
+          {
+            "source": "/reserved-memory/memory@90f00000",
+            "start": 2431647744,
+            "size": 5242880
+          }
+        ],
+        "dynamic_reserved_nodes": [
+          "/reserved-memory/rmtfs@86700000"
+        ],
+        "dt_bootargs": "maxcpus=2",
+        "stdout_path": "serial0",
+        "mmc_aliases": {
+          "mmc0": "/soc/sdhci@7464900",
+          "sdhc1": "/soc/sdhci@7464900",
+          "mmc1": "/soc/sdhci@74a4900",
+          "sdhc2": "/soc/sdhci@74a4900"
+        },
+        "declared_initrd": {},
+        "sha256": "e11333c8a73565305f8ab216a908b9eba5d1e9cc585d8e5f577d7fa636f8e9d9"
+      },
+      {
+        "trailer_offset": 190717,
+        "bytes": 190717,
+        "boot_cpuid_phys": 0,
+        "selection_tuples": {
+          "qcom,msm-id": [
+            246,
+            196608
+          ],
+          "qcom,board-id": [
+            8,
+            0
+          ],
+          "qcom,pmic-id": [
+            131081,
+            65555,
+            0,
+            0
+          ]
+        },
+        "selected_by_bootloader": "UNVERIFIED",
+        "reserved_ranges": [
+          {
+            "source": "/reserved-memory/mba@91500000",
+            "start": 2437939200,
+            "size": 2097152
+          },
+          {
+            "source": "/reserved-memory/adsp@8ea00000",
+            "start": 2392850432,
+            "size": 27262976
+          },
+          {
+            "source": "/reserved-memory/mpss@88800000",
+            "start": 2290089984,
+            "size": 102760448
+          },
+          {
+            "source": "/reserved-memory/smem-mem@86000000",
+            "start": 2248146944,
+            "size": 2097152
+          },
+          {
+            "source": "/reserved-memory/memory@85800000",
+            "start": 2239758336,
+            "size": 8388608
+          },
+          {
+            "source": "/reserved-memory/memory@86200000",
+            "start": 2250244096,
+            "size": 39845888
+          },
+          {
+            "source": "/reserved-memory/ramoops@a7f00000",
+            "start": 2817523712,
+            "size": 1048576
+          },
+          {
+            "source": "/reserved-memory/memory@83401000",
+            "start": 2202013696,
+            "size": 37744640
+          },
+          {
+            "source": "/reserved-memory/gpu@90400000",
+            "start": 2420113408,
+            "size": 8192
+          },
+          {
+            "source": "/reserved-memory/memory@90500000",
+            "start": 2421161984,
+            "size": 10485760
+          },
+          {
+            "source": "/reserved-memory/memory@90f00000",
+            "start": 2431647744,
+            "size": 5242880
+          }
+        ],
+        "dynamic_reserved_nodes": [
+          "/reserved-memory/rmtfs@86700000"
+        ],
+        "dt_bootargs": "maxcpus=2",
+        "stdout_path": "serial0",
+        "mmc_aliases": {
+          "mmc0": "/soc/sdhci@7464900",
+          "sdhc1": "/soc/sdhci@7464900",
+          "mmc1": "/soc/sdhci@74a4900",
+          "sdhc2": "/soc/sdhci@74a4900"
+        },
+        "declared_initrd": {},
+        "sha256": "98b6b27527932941ecdddf5190546b40234b181da2a73c2b3c55d251aa3ee327"
+      },
+      {
+        "trailer_offset": 381434,
+        "bytes": 191233,
+        "boot_cpuid_phys": 0,
+        "selection_tuples": {
+          "qcom,msm-id": [
+            246,
+            196609
+          ],
+          "qcom,board-id": [
+            8,
+            0
+          ],
+          "qcom,pmic-id": [
+            131081,
+            131082,
+            0,
+            0
+          ]
+        },
+        "selected_by_bootloader": "UNVERIFIED",
+        "reserved_ranges": [
+          {
+            "source": "/reserved-memory/mba@91500000",
+            "start": 2437939200,
+            "size": 2097152
+          },
+          {
+            "source": "/reserved-memory/adsp@8ea00000",
+            "start": 2392850432,
+            "size": 27262976
+          },
+          {
+            "source": "/reserved-memory/mpss@88800000",
+            "start": 2290089984,
+            "size": 102760448
+          },
+          {
+            "source": "/reserved-memory/smem-mem@86000000",
+            "start": 2248146944,
+            "size": 2097152
+          },
+          {
+            "source": "/reserved-memory/memory@85800000",
+            "start": 2239758336,
+            "size": 8388608
+          },
+          {
+            "source": "/reserved-memory/memory@86200000",
+            "start": 2250244096,
+            "size": 39845888
+          },
+          {
+            "source": "/reserved-memory/ramoops@a7f00000",
+            "start": 2817523712,
+            "size": 1048576
+          },
+          {
+            "source": "/reserved-memory/memory@83401000",
+            "start": 2202013696,
+            "size": 37744640
+          },
+          {
+            "source": "/reserved-memory/gpu@90400000",
+            "start": 2420113408,
+            "size": 8192
+          },
+          {
+            "source": "/reserved-memory/memory@90500000",
+            "start": 2421161984,
+            "size": 10485760
+          },
+          {
+            "source": "/reserved-memory/memory@90f00000",
+            "start": 2431647744,
+            "size": 5242880
+          }
+        ],
+        "dynamic_reserved_nodes": [
+          "/reserved-memory/rmtfs@86700000"
+        ],
+        "dt_bootargs": "maxcpus=2",
+        "stdout_path": "serial0",
+        "mmc_aliases": {
+          "mmc0": "/soc/sdhci@7464900",
+          "sdhc1": "/soc/sdhci@7464900",
+          "mmc1": "/soc/sdhci@74a4900",
+          "sdhc2": "/soc/sdhci@74a4900"
+        },
+        "declared_initrd": {},
+        "sha256": "92fa299993708b41bb3b7e24cfdcba73dd8218fd53b7767d0b8ab0dcbefbbf15"
+      },
+      {
+        "trailer_offset": 572667,
+        "bytes": 191233,
+        "boot_cpuid_phys": 0,
+        "selection_tuples": {
+          "qcom,msm-id": [
+            246,
+            196609
+          ],
+          "qcom,board-id": [
+            8,
+            0
+          ],
+          "qcom,pmic-id": [
+            131081,
+            65555,
+            0,
+            0
+          ]
+        },
+        "selected_by_bootloader": "UNVERIFIED",
+        "reserved_ranges": [
+          {
+            "source": "/reserved-memory/mba@91500000",
+            "start": 2437939200,
+            "size": 2097152
+          },
+          {
+            "source": "/reserved-memory/adsp@8ea00000",
+            "start": 2392850432,
+            "size": 27262976
+          },
+          {
+            "source": "/reserved-memory/mpss@88800000",
+            "start": 2290089984,
+            "size": 102760448
+          },
+          {
+            "source": "/reserved-memory/smem-mem@86000000",
+            "start": 2248146944,
+            "size": 2097152
+          },
+          {
+            "source": "/reserved-memory/memory@85800000",
+            "start": 2239758336,
+            "size": 8388608
+          },
+          {
+            "source": "/reserved-memory/memory@86200000",
+            "start": 2250244096,
+            "size": 39845888
+          },
+          {
+            "source": "/reserved-memory/ramoops@a7f00000",
+            "start": 2817523712,
+            "size": 1048576
+          },
+          {
+            "source": "/reserved-memory/memory@83401000",
+            "start": 2202013696,
+            "size": 37744640
+          },
+          {
+            "source": "/reserved-memory/gpu@90400000",
+            "start": 2420113408,
+            "size": 8192
+          },
+          {
+            "source": "/reserved-memory/memory@90500000",
+            "start": 2421161984,
+            "size": 10485760
+          },
+          {
+            "source": "/reserved-memory/memory@90f00000",
+            "start": 2431647744,
+            "size": 5242880
+          }
+        ],
+        "dynamic_reserved_nodes": [
+          "/reserved-memory/rmtfs@86700000"
+        ],
+        "dt_bootargs": "maxcpus=2",
+        "stdout_path": "serial0",
+        "mmc_aliases": {
+          "mmc0": "/soc/sdhci@7464900",
+          "sdhc1": "/soc/sdhci@7464900",
+          "mmc1": "/soc/sdhci@74a4900",
+          "sdhc2": "/soc/sdhci@74a4900"
+        },
+        "declared_initrd": {},
+        "sha256": "e0099b1be91141493f215583b173aad53961deff15eb21fd7fa8e96a03ce365d"
+      }
+    ],
+    "trailing_zero_padding": 0,
+    "entry_and_relocation": "UNVERIFIED",
+    "sha256": "627db615926244840bd7b3f6e287f4644f4e834d26c0136b64e9ad0c4b9edcbf"
+  },
+  "dtb_artifacts": [],
+  "missing_evidence": [
+    "phone kernel-entry/RPM/eMMC/GPT logs",
+    "actual DTB selection and relocation logs",
+    "watchdog/CPU/charging handoff qualification",
+    "userspace init/SELinux/APEX runtime validation",
+    "working original boot.img",
+    "identified LOS21 ramdisk/image",
+    "observed boot partition size",
+    "observed effective cmdline"
+  ]
+}

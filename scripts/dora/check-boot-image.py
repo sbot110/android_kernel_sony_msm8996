@@ -69,6 +69,35 @@ def cmdline_info(value):
                 effective_bootloader_cmdline="UNVERIFIED")
 
 
+def boot_id_info(data, sections, legacy_dt_size):
+    """Check both real v0 ID conventions without treating SHA1 as a signature.
+
+    AOSP v0 hashes each kernel/ramdisk/second payload and its LE32 size,
+    including the empty second size. Older Qualcomm mkbootimg also hashes
+    the LE32 dt_size after that, even when it is zero and DTBs are appended
+    to the kernel. A nonzero dt_size is rejected by boot_header beforehand.
+    Missing/mismatched IDs remain inspectable evidence, never verified IDs.
+    """
+    digest = hashlib.sha1()
+    for name in ("kernel", "ramdisk", "second"):
+        section = sections[name]
+        digest.update(data[section["offset"]:section["offset"] + section["size"]])
+        digest.update(struct.pack("<I", section["size"]))
+    aosp = digest.hexdigest()
+    digest.update(struct.pack("<I", legacy_dt_size))
+    expected = {"aosp_v0": aosp, "legacy_qcom_v0": digest.hexdigest()}
+    field = data[576:608]
+    encoded, padding = field[:20], field[20:]
+    matches = [name for name, value in expected.items()
+               if not any(padding) and encoded.hex() == value]
+    status = ("verified" if matches else "absent" if not any(field) else
+              "nonzero_id_padding" if any(padding) else "mismatch")
+    return dict(algorithm="SHA1", field=field.hex(), digest=encoded.hex(),
+                calculated=expected, matching_variants=matches, status=status,
+                verified=bool(matches), cryptographic_signature=False,
+                bootloader_acceptance="UNVERIFIED")
+
+
 def boot_header(data, partition_size=None):
     require(len(data) >= 1632 and data[:8] == b"ANDROID!",
             "unsupported wrapper or truncated Android header (ELF/Sony wrappers are not inferred)")
@@ -94,11 +123,23 @@ def boot_header(data, partition_size=None):
     extra_text = cstring(extra, "extra cmdline slot")
     name = data[48:64]
     name = cstring(name, "board name") if b"\0" in name else name
+    trailing = data[offset:]
+    trailing_kind = ("none" if not trailing else "zero_padding" if not any(trailing)
+                     else "nonzero_trailer_needs_separate_analysis")
     return dict(format="Android v0", header_version=version, page_size=page,
                 os_version=os_version, name=name.decode("ascii"),
                 cmdline=cmdline_info(first_text + extra_text), tags_address=ta,
                 sections=sections, payload_padded_end=offset, trailing_bytes=len(data) - offset,
                 trailing_sha256=hashlib.sha256(data[offset:]).hexdigest() if len(data) > offset else None,
+                image_id=boot_id_info(data, sections, version),
+                padding=dict(header_page_zero=not any(data[1632:page]),
+                             section_pages_zero=all(not any(data[item["offset"] + item["size"]:item["padded_end"]])
+                                                    for item in sections.values()),
+                             trailing_kind=trailing_kind,
+                             useful_image_bytes=offset,
+                             partition_dump_candidate=len(data) == 64 * 1024 * 1024 and
+                             trailing_kind == "zero_padding",
+                             partition_capacity_proven_by_file=False),
                 partition_size=dict(supplied_bytes=partition_size,
                                     checked=partition_size is not None,
                                     provenance="caller must supply observed GPT size; no BoardConfig default"),
@@ -274,9 +315,43 @@ def kernel_info(data):
     return dict(compression=compression, compressed_stream_bytes=consumed,
                 decompressed_file_bytes=len(image), text_offset=text_offset,
                 image_size=image_size, runtime_extent=max(image_size, len(image)) if image_size else None,
+                runtime_zero_fill_bytes=max(0, image_size - len(image)) if image_size else None,
                 flags=flags, little_endian=not bool(flags & 1), layout=layout,
                 appended_dtbs=trees, trailing_zero_padding=padding,
                 entry_and_relocation="UNVERIFIED", sha256=hashlib.sha256(data).hexdigest())
+
+
+def init_elf_info(data):
+    """Bounded ELF metadata only; never execute an init or resolve its loader."""
+    if not data.startswith(b"\x7fELF"):
+        return None
+    require(len(data) >= 16, "truncated init ELF identification")
+    if data[4:7] != b"\x02\x01\x01":
+        return dict(elf_class=data[4], byte_order=data[5], supported_aarch64=False)
+    require(len(data) >= 64, "truncated init ELF64 header")
+    values = struct.unpack_from("<16sHHIQQQIHHHHHH", data)
+    _, kind, machine, version, entry, phoff, _, _, ehsize, phsize, count, _, _, _ = values
+    require(version == 1 and ehsize == 64 and phsize == 56 and count <= 128,
+            "invalid init ELF64/program-header geometry")
+    require(phoff >= 64 and phoff + count * phsize <= len(data), "init ELF program headers outside file")
+    loads, interpreter = [], False
+    for index in range(count):
+        ptype, flags, offset, address, _, filesz, memsz, alignment = struct.unpack_from(
+            "<IIQQQQQQ", data, phoff + index * phsize)
+        require(offset + filesz <= len(data), "init ELF segment outside file")
+        if ptype == 1:
+            require(filesz <= memsz and address + memsz <= 1 << 64,
+                    "invalid init ELF load extent")
+            loads.append(dict(offset=offset, address=address, file_bytes=filesz,
+                              memory_bytes=memsz, flags=flags, alignment=alignment))
+        elif ptype == 3:
+            interpreter = True
+    entry_executable = any(item["flags"] & 1 and item["address"] <= entry <
+                           item["address"] + item["memory_bytes"] for item in loads)
+    return dict(elf_class=2, byte_order=1, machine=machine, type=kind, entry=entry,
+                supported_aarch64=machine == 183 and kind in (2, 3) and entry_executable,
+                has_dynamic_interpreter=interpreter, load_segments=loads,
+                entry_in_executable_segment=entry_executable, runtime_compatible="UNVERIFIED")
 
 
 def ramdisk_info(data, config=None):
@@ -286,6 +361,18 @@ def ramdisk_info(data, config=None):
     if config is not None and symbol:
         require("CONFIG_%s=y\n" % symbol in config, "ramdisk compression is not built in")
     names, offset, init = set(), 0, None
+    identity, duplicate_identity = {}, []
+    # Explicitly omit full fingerprint, incremental username and arbitrary
+    # properties. Public inspection metadata must not copy private ramdisk.
+    identity_keys = {
+        "ro.product.bootimage.device": "device",
+        "ro.product.bootimage.name": "product_name",
+        "ro.bootimage.build.version.release": "android_release",
+        "ro.bootimage.build.version.sdk": "sdk",
+        "ro.bootimage.build.id": "build_id",
+        "ro.bootimage.build.type": "build_type",
+        "ro.bootimage.build.tags": "build_tags",
+    }
     while True:
         require(offset + 110 <= len(payload) and payload[offset:offset + 6] in (b"070701", b"070702"),
                 "ramdisk is not a complete newc CPIO")
@@ -319,12 +406,29 @@ def ramdisk_info(data, config=None):
             require(stat.S_ISLNK(mode) or stat.S_ISREG(mode), "init is not a regular file or symlink")
             require(stat.S_ISLNK(mode) or mode & 0o111, "init is not executable")
             init = dict(mode=oct(mode), bytes=size, hardlink_count=fields[4],
-                        symlink=content.decode("utf-8") if stat.S_ISLNK(mode) else None)
+                        symlink=content.decode("utf-8") if stat.S_ISLNK(mode) else None,
+                        elf=init_elf_info(content) if stat.S_ISREG(mode) else None)
+        if name == "system/etc/ramdisk/build.prop" and stat.S_ISREG(mode):
+            require(size <= 65536, "ramdisk build identity exceeds inspection bound")
+            for line in content.decode("utf-8").splitlines():
+                key, separator, value = line.partition("=")
+                if separator and key in identity_keys:
+                    field = identity_keys[key]
+                    if field in identity:
+                        duplicate_identity.append(field)
+                    identity[field] = value
     require(init is not None, "ramdisk has no init entry")
     return dict(compression=compression, expanded_bytes=len(payload), entries=len(names), init=init,
                 fstab_entries=sorted(x for x in names if "fstab" in x),
                 sha256=hashlib.sha256(data).hexdigest(),
                 config_compression_checked=config is not None,
+                build_identity=identity, duplicate_identity_keys=duplicate_identity,
+                android14_dora_first_stage_candidate=(
+                    identity.get("android_release") == "14" and identity.get("sdk") == "34" and
+                    identity.get("device") == "dora" and
+                    identity.get("product_name", "").startswith("lineage_") and
+                    not duplicate_identity and bool(init.get("elf", {}).get("supported_aarch64"))
+                    if init.get("elf") else False),
                 interpreter_linker_policy_and_mount_writes="UNVERIFIED",
                 userspace_compatibility="UNVERIFIED")
 
@@ -361,9 +465,20 @@ def declared_layout(header, kernel, supplied_ranges):
         candidates.append(dict(index=index, overlaps=hazards))
     supplied_hazards = [[loaded["source"], reserved["source"]]
                         for loaded in ranges for reserved in supplied_ranges if overlap(loaded, reserved)]
+    packed = dict(source="header kernel packed input", start=sections["kernel"]["address"],
+                  size=sections["kernel"]["size"])
+    expanded = next((item for item in ranges if item["source"] == "header kernel expanded extent"), None)
     return dict(address_basis="declared header fields only; physical relocation/ownership UNVERIFIED",
                 ranges=ranges, load_overlaps=findings, supplied_range_overlaps=supplied_hazards,
                 dtb_candidates=candidates, selected_dtb="UNVERIFIED",
+                packed_kernel_input=packed,
+                in_place_decompression=dict(
+                    applicable=kernel["compression"] != "raw",
+                    input_output_overlap_if_same_origin=(overlap(packed, expanded) if expanded and
+                                                         kernel["compression"] != "raw" else None),
+                    actual_input_output_addresses="UNVERIFIED",
+                    loader_scratch_or_relocation="UNVERIFIED",
+                    safety_proven=False),
                 expanded_kernel_extent_known=kernel["runtime_extent"] is not None)
 
 
@@ -382,7 +497,7 @@ def compare_boot(left, right):
     fields = {}
     for key in ("bytes",):
         fields[key] = [left[key], right[key]]
-    for key in ("format", "page_size", "os_version", "tags_address", "sections", "cmdline", "trailing_bytes"):
+    for key in ("format", "page_size", "os_version", "tags_address", "sections", "cmdline", "trailing_bytes", "image_id", "padding"):
         fields["header." + key] = [left["header"][key], right["header"][key]]
     for key in ("compression", "compressed_stream_bytes", "decompressed_file_bytes", "text_offset", "image_size", "appended_dtbs"):
         fields["kernel." + key] = [left["kernel"][key], right["kernel"][key]]
@@ -514,6 +629,107 @@ def selftest():
     require(overlap(dict(start=1, size=2), dict(start=2, size=1)) and
             not overlap(dict(start=1, size=1), dict(start=2, size=1)), "half-open range fixture")
     checks += 1
+    # Keep the pre-existing parser fixtures above intact. ID inspection must
+    # distinguish both real v0 conventions and must never fabricate validity
+    # for an absent/corrupted ID or confuse padding size with GPT capacity.
+    require(info["header"]["image_id"]["status"] == "absent" and
+            not info["header"]["image_id"]["verified"], "missing ID promoted to verified")
+    checks += 1
+    for variant in ("aosp_v0", "legacy_qcom_v0"):
+        signed = bytearray(blob)
+        signed[576:596] = bytes.fromhex(info["header"]["image_id"]["calculated"][variant])
+        valid = boot_header(signed)
+        require(valid["image_id"]["matching_variants"] == [variant] and
+                valid["image_id"]["verified"] and
+                not valid["image_id"]["cryptographic_signature"], "v0 ID convention fixture")
+        checks += 1
+        bad = bytearray(signed)
+        bad[576] ^= 1
+        require(boot_header(bad)["image_id"]["status"] == "mismatch" and
+                not boot_header(bad)["image_id"]["verified"], "corrupted ID accepted")
+        checks += 1
+        bad = bytearray(signed)
+        bad[596] = 1
+        require(boot_header(bad)["image_id"]["status"] == "nonzero_id_padding" and
+                not boot_header(bad)["image_id"]["verified"], "ID padding accepted")
+        checks += 1
+        bad = bytearray(signed)
+        bad[2048] ^= 1
+        require(not boot_header(bad)["image_id"]["verified"], "ID ignored changed kernel payload")
+        checks += 1
+        bad = bytearray(signed)
+        bad[valid["sections"]["ramdisk"]["offset"]] ^= 1
+        require(not boot_header(bad)["image_id"]["verified"], "ID ignored changed ramdisk payload")
+        checks += 1
+        bad = bytearray(signed)
+        bad[64:68] = b"x=1\0"
+        require(boot_header(bad)["image_id"]["verified"],
+                "ID incorrectly hashes the header rather than payloads")
+        checks += 1
+    zero_tail = boot_header(blob + b"\0" * 4096)
+    require(zero_tail["padding"]["trailing_kind"] == "zero_padding" and
+            zero_tail["padding"]["useful_image_bytes"] == len(blob) and
+            not zero_tail["padding"]["partition_capacity_proven_by_file"], "zero padding/GPT fixture")
+    checks += 1
+    require(boot_header(blob + b"X")["padding"]["trailing_kind"] ==
+            "nonzero_trailer_needs_separate_analysis", "nonzero trailer classified as padding")
+    checks += 1
+    bad = bytearray(blob)
+    bad[1632] = 1
+    require(not boot_header(bad)["padding"]["header_page_zero"], "nonzero header padding missed")
+    checks += 1
+    bad = bytearray(blob)
+    bad[2048 + len(kernel)] = 1
+    require(not boot_header(bad)["padding"]["section_pages_zero"], "nonzero section padding missed")
+    checks += 1
+    dump = blob + b"\0" * (64 * 1024 * 1024 - len(blob))
+    require(boot_header(dump)["padding"]["partition_dump_candidate"] and
+            not boot_header(dump)["partition_size"]["checked"], "64MiB file promoted to observed GPT")
+    checks += 1
+    require(info["kernel"]["runtime_zero_fill_bytes"] == 4096 - len(image) and
+            info["layout"]["in_place_decompression"]["input_output_overlap_if_same_origin"] and
+            not info["layout"]["in_place_decompression"]["safety_proven"],
+            "BSS/in-place decompression risk omitted or declared safe")
+    checks += 1
+    elf = struct.pack("<16sHHIQQQIHHHHHH", b"\x7fELF\x02\x01\x01" + b"\0" * 9,
+                      2, 183, 1, 0x400000, 64, 0, 0, 64, 56, 1, 0, 0, 0)
+    elf += struct.pack("<IIQQQQQQ", 1, 5, 0, 0x400000, 0, 120, 256, 4096)
+    properties = (b"ro.product.bootimage.device=dora\nro.product.bootimage.name=lineage_dora\n"
+                  b"ro.bootimage.build.version.release=14\nro.bootimage.build.version.sdk=34\n"
+                  b"ro.bootimage.build.fingerprint=PRIVATE_FIXTURE_OMITTED\n")
+    def identity_archive(binary, props=properties):
+        return (entry("init", binary) + entry("system/etc/ramdisk/build.prop", props, 0o100644) +
+                entry("TRAILER!!!"))
+    identity = ramdisk_info(identity_archive(elf))
+    require(identity["android14_dora_first_stage_candidate"] and
+            identity["init"]["elf"]["supported_aarch64"] and
+            not identity["init"]["elf"]["has_dynamic_interpreter"] and
+            "PRIVATE_FIXTURE_OMITTED" not in json.dumps(identity), "bounded/private Android identity fixture")
+    checks += 1
+    bad = bytearray(elf)
+    struct.pack_into("<H", bad, 18, 62)
+    require(not ramdisk_info(identity_archive(bad))["android14_dora_first_stage_candidate"],
+            "foreign init architecture identified as AArch64")
+    checks += 1
+    bad = bytearray(elf)
+    struct.pack_into("<Q", bad, 24, 0x500000)
+    require(not init_elf_info(bad)["entry_in_executable_segment"], "invalid init entry not reported")
+    checks += 1
+    for replacement in (properties.replace(b"release=14", b"release=13"),
+                        properties.replace(b"sdk=34", b"sdk=33"),
+                        properties.replace(b"device=dora", b"device=other"),
+                        properties + b"ro.bootimage.build.version.sdk=34\n"):
+        require(not ramdisk_info(identity_archive(elf, replacement))["android14_dora_first_stage_candidate"],
+                "wrong or ambiguous ramdisk identity accepted")
+        checks += 1
+    rejects(init_elf_info, b"\x7fELF")
+    rejects(init_elf_info, elf[:100])
+    bad = bytearray(elf)
+    struct.pack_into("<Q", bad, 32, (1 << 64) - 1)
+    rejects(init_elf_info, bad)
+    bad = bytearray(elf)
+    struct.pack_into("<Q", bad, 64 + 32, len(elf) + 1)
+    rejects(init_elf_info, bad)
     return checks
 
 
@@ -569,7 +785,10 @@ def main():
                                   "watchdog/CPU/charging handoff qualification", "userspace init/SELinux/APEX runtime validation"]
     if not args.boot_image:
         report["missing_evidence"].append("working original boot.img")
-    if not args.ramdisk and not args.compare:
+    identified = any(report.get(key, {}).get("ramdisk", {}).get("android14_dora_first_stage_candidate")
+                     for key in ("reference_boot", "comparison_boot"))
+    identified |= report.get("ramdisk_artifact", {}).get("android14_dora_first_stage_candidate", False)
+    if not identified:
         report["missing_evidence"].append("identified LOS21 ramdisk/image")
     if args.partition_size is None:
         report["missing_evidence"].append("observed boot partition size")

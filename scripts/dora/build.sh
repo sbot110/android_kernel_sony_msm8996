@@ -48,6 +48,12 @@ python3 "$root/scripts/dora/check-cpu-power-owner.py" --self-test \
     --report "$out/cpu-power-owner-validation.json"
 python3 "$root/scripts/dora/check-cpr-cpu-state.py" --self-test \
     --report "$out/cpr-cpu-state-validation.json"
+python3 "$root/scripts/dora/check-lmh-v1.py" --self-test \
+    --report "$out/lmh-v1-validation.json"
+python3 "$root/scripts/dora/check-first-stage-init.py" --self-test \
+    --report "$out/first-stage-source-validation.json"
+python3 "$root/scripts/dora/check-boot-packaging.py" --self-test \
+    --report "$out/boot-packaging-source-validation.json"
 python3 "$root/scripts/dora/check-spm-transactions.py"
 python3 "$root/scripts/dora/check-watchdog.py" --self-test
 python3 "$root/scripts/dora/check-usb-handoff.py" --self-test \

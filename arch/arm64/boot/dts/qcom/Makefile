@@ -13,6 +13,12 @@ dtb-$(CONFIG_ARCH_QCOM) += msm8996-v3.0-sony-xperia-tone-dora.dtb \
 	msm8996-v3.1-pmi8996-sony-xperia-tone-dora.dtb
 dtb-$(CONFIG_ARCH_QCOM)	+= sdm845-mtp.dtb
 
+# Explicit targets only; excluded from dtb-y/always and the normal image list.
+targets += boot/msm8996-v3.0-sony-xperia-tone-dora-lineage21-boot.dtb \
+	boot/msm8996-sony-xperia-tone-dora-lineage21-boot.dtb \
+	boot/msm8996-v3.0-pmi8996-sony-xperia-tone-dora-lineage21-boot.dtb \
+	boot/msm8996-v3.1-pmi8996-sony-xperia-tone-dora-lineage21-boot.dtb
+
 always		:= $(dtb-y)
 subdir-y	:= $(dts-dirs)
 clean-files    := *.dtb *.dtbo

@@ -476,9 +476,11 @@ static int is_gpt_valid(struct parsed_partitions *state, u64 lba,
 static inline int
 is_pte_valid(const gpt_entry *pte, const u64 lastlba)
 {
+	/* efi_partition() subtracts these endpoints to compute an unsigned size. */
 	if ((!efi_guidcmp(pte->partition_type_guid, NULL_GUID)) ||
 	    le64_to_cpu(pte->starting_lba) > lastlba         ||
-	    le64_to_cpu(pte->ending_lba)   > lastlba)
+	    le64_to_cpu(pte->ending_lba)   > lastlba         ||
+	    le64_to_cpu(pte->ending_lba) < le64_to_cpu(pte->starting_lba))
 		return 0;
 	return 1;
 }

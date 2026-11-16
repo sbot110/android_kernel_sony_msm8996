@@ -1,0 +1,26 @@
+[
+  {
+    "sha": "33048f80b354c0a7af772b3c8fe56e09857cef4e",
+    "subject": "soc: qcom: quarantine failed SAW voltage acknowledgements before AVS recovery"
+  },
+  {
+    "sha": "699b707ce2d4fa2f51ca0c3fced80d2a185d75ed",
+    "subject": "clk: qcom: freeze and drain Dora CPU observations before MMIO"
+  },
+  {
+    "sha": "9b4b4757233e4ddfe61b993f76a9b959a77f18e3",
+    "subject": "thermal: qcom: port gated MSM8996 LMHv1 S11 and secure monitoring backend"
+  },
+  {
+    "sha": "1b1c634498624dc0a8c57a711f8f839ab82da5a5",
+    "subject": "dora: add isolated LOS21 first-stage DTs and reject reversed GPT extents"
+  },
+  {
+    "sha": "4b8e8cf1d543dfb5f5ee283f6ed19ca07b66776f",
+    "subject": "dora: package offline boot candidates with verified payloads and bounded source layouts"
+  },
+  {
+    "sha": "41d70cb58dd60a38b98b7ee1cb6264d86dace8b2",
+    "subject": "dora: compile LMHv1 and run first-stage and packaging checks in clean builds"
+  }
+]

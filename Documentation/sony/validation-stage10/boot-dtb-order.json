@@ -1,0 +1,195 @@
+{
+  "order_source": "supplied working Sony/LOS21 image selection tuples",
+  "status": "SOFTWARE_CHECKED / HARDWARE_UNVERIFIED",
+  "boot_test_ready": false,
+  "dtbs": [
+    {
+      "variant": "v3.0-pmi8994",
+      "filename": "msm8996-v3.0-sony-xperia-tone-dora-lineage21-boot.dtb",
+      "sha256": "09bc5c50feb763acc05e8d03d370f669df278e008cd6feae5f214c1ae30af5b8",
+      "selection_tuples": {
+        "qcom,msm-id": [
+          246,
+          196608
+        ],
+        "qcom,board-id": [
+          8,
+          0
+        ],
+        "qcom,pmic-id": [
+          131081,
+          131082,
+          0,
+          0
+        ]
+      },
+      "exact_normal_delta": [
+        [
+          "/",
+          "model"
+        ],
+        [
+          "/",
+          "sony,lineage21-boot"
+        ],
+        [
+          "/firmware/android",
+          "boot_devices"
+        ],
+        [
+          "/firmware/android/fstab/system",
+          "dev"
+        ],
+        [
+          "/firmware/android/fstab/vendor",
+          "dev"
+        ],
+        [
+          "/soc/sdhci@7464900",
+          "status"
+        ]
+      ]
+    },
+    {
+      "variant": "v3.1-pmi8994",
+      "filename": "msm8996-sony-xperia-tone-dora-lineage21-boot.dtb",
+      "sha256": "5ef77848c5e00548cb14e5a8c271ceb93ee2c3c7972d5ffaf4c1850c34a2995b",
+      "selection_tuples": {
+        "qcom,msm-id": [
+          246,
+          196609
+        ],
+        "qcom,board-id": [
+          8,
+          0
+        ],
+        "qcom,pmic-id": [
+          131081,
+          131082,
+          0,
+          0
+        ]
+      },
+      "exact_normal_delta": [
+        [
+          "/",
+          "model"
+        ],
+        [
+          "/",
+          "sony,lineage21-boot"
+        ],
+        [
+          "/firmware/android",
+          "boot_devices"
+        ],
+        [
+          "/firmware/android/fstab/system",
+          "dev"
+        ],
+        [
+          "/firmware/android/fstab/vendor",
+          "dev"
+        ],
+        [
+          "/soc/sdhci@7464900",
+          "status"
+        ]
+      ]
+    },
+    {
+      "variant": "v3.0-pmi8996",
+      "filename": "msm8996-v3.0-pmi8996-sony-xperia-tone-dora-lineage21-boot.dtb",
+      "sha256": "3af510c5b3fcc91601cfef2b0edb8751b31d073489c249367b9e9f45c5e893c4",
+      "selection_tuples": {
+        "qcom,msm-id": [
+          246,
+          196608
+        ],
+        "qcom,board-id": [
+          8,
+          0
+        ],
+        "qcom,pmic-id": [
+          131081,
+          65555,
+          0,
+          0
+        ]
+      },
+      "exact_normal_delta": [
+        [
+          "/",
+          "model"
+        ],
+        [
+          "/",
+          "sony,lineage21-boot"
+        ],
+        [
+          "/firmware/android",
+          "boot_devices"
+        ],
+        [
+          "/firmware/android/fstab/system",
+          "dev"
+        ],
+        [
+          "/firmware/android/fstab/vendor",
+          "dev"
+        ],
+        [
+          "/soc/sdhci@7464900",
+          "status"
+        ]
+      ]
+    },
+    {
+      "variant": "v3.1-pmi8996",
+      "filename": "msm8996-v3.1-pmi8996-sony-xperia-tone-dora-lineage21-boot.dtb",
+      "sha256": "66fedc462e7e3282cefa2189a5bb46e30a57a4c2e9bd79f3e06e432e944913d9",
+      "selection_tuples": {
+        "qcom,msm-id": [
+          246,
+          196609
+        ],
+        "qcom,board-id": [
+          8,
+          0
+        ],
+        "qcom,pmic-id": [
+          131081,
+          65555,
+          0,
+          0
+        ]
+      },
+      "exact_normal_delta": [
+        [
+          "/",
+          "model"
+        ],
+        [
+          "/",
+          "sony,lineage21-boot"
+        ],
+        [
+          "/firmware/android",
+          "boot_devices"
+        ],
+        [
+          "/firmware/android/fstab/system",
+          "dev"
+        ],
+        [
+          "/firmware/android/fstab/vendor",
+          "dev"
+        ],
+        [
+          "/soc/sdhci@7464900",
+          "status"
+        ]
+      ]
+    }
+  ]
+}

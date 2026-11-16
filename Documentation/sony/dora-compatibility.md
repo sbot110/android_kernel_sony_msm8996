@@ -1,3 +1,11 @@
+Stage10 (2026-11-16 UTC): actual Linux4.19/SDHC1/Android14 boot candidate
+packaged and independently unpacked; status OFFLINE BUILT/HARDWARE UNVERIFIED,
+not BOOTTESTREADY/BOOTED. F8131/F8132 and4SoC/PMIC/5LCD source support retained.
+WorkingreferenceLOS21/Sony4.4 suppliedramdisk confirmedAndroid14, unchanged.
+Newimage usesenforcing; sameuserspace/enforcingvendorABI and4.19phone runtime
+remainunverified. FullCPU/thermal/watchdog/charging ownership stillP0.
+Currentfacts: [Stage10report](dora-stage10-report.md).
+
 Stage 9: LOS21 is working on Sony 4.4.302+ according to the user; it is the
 runtime reference. Linux 4.19 has not booted on either model. Historical
 bpfloader/BoringSSL/vold messages are not current failures of that working

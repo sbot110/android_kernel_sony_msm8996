@@ -1,0 +1,385 @@
+{
+  "zip": {
+    "size": 11704070,
+    "sha256": "13615e75cbbc456cc6f32d960a2d07cf0c0dbc8bf4b302edb331e64e4c8a053a",
+    "entries": 1
+  },
+  "image": {
+    "size": 13283328,
+    "sha256": "f923f9b99c468484b713529577b84e3a137d1b9cbc09393e5593258009983820",
+    "format": "Android boot legacy QCOM v0; dt_size=0",
+    "page_size": 4096,
+    "header_fields": {
+      "kernel_size": 12047744,
+      "kernel_address": "0x80008000",
+      "ramdisk_size": 1224724,
+      "ramdisk_address": "0x81000000",
+      "second_size": 0,
+      "second_address": 0,
+      "tags_address": "0x80000100",
+      "legacy_dt_size": 0,
+      "os_version_raw": 469762474
+    },
+    "kernel_offset": 4096,
+    "ramdisk_offset": 12054528,
+    "payload_end": 13283328,
+    "trailing_bytes": 0,
+    "full_partition_dump": false,
+    "observed_partition_size": null,
+    "header_id": "26019fa18d9ecd502b29199901c11535675606d9",
+    "calculated_ids": {
+      "aosp_v0": "889c051b73d4f5cc6c04e1104f41b6155a6ea107",
+      "legacy_qcom_v0": "26019fa18d9ecd502b29199901c11535675606d9"
+    },
+    "id_matches_legacy_qcom_v0": true,
+    "id_matches_aosp_v0": false,
+    "security_bypass_present": "androidboot.selinux=permissive",
+    "cmdline_handling": "Full cmdline retained privately; permissive token must not enter new security-preserving build",
+    "recognized_outer_signature_or_avb_footer": false
+  },
+  "kernel": {
+    "compression": "gzip",
+    "gzip_stream_size": 10158160,
+    "decompressed_file_size": 26853396,
+    "text_offset": 524288,
+    "image_size": 30318592,
+    "flags": 10,
+    "dtbs": [
+      {
+        "index": 0,
+        "offset_in_kernel": 10158160,
+        "size": 470605,
+        "sha256": "f7c021adc0a5b11393f4b488d83e5c0c04e168530fcf842d5c1120ef13d1aa59",
+        "selection": {
+          "qcom,msm-id": [
+            246,
+            196608
+          ],
+          "qcom,board-id": [
+            8,
+            0
+          ],
+          "qcom,pmic-id": [
+            131081,
+            131082,
+            0,
+            0
+          ]
+        },
+        "android_firmware": {
+          "/firmware/android/vbmeta": {
+            "compatible": "android,vbmeta",
+            "parts": "vbmeta,boot,system,vendor,dtbo,recovery"
+          },
+          "/firmware/android/fstab": {
+            "compatible": "android,fstab"
+          },
+          "/firmware/android/fstab/vendor": {
+            "compatible": "android,vendor",
+            "dev": "/dev/block/by-name/oem",
+            "type": "squashfs",
+            "mnt_flags": "ro,barrier=1",
+            "fsmgr_flags": "wait",
+            "status": "ok"
+          },
+          "/firmware/android/fstab/system": {
+            "compatible": "android,system",
+            "dev": "/dev/block/by-name/system",
+            "type": "ext4",
+            "mnt_flags": "ro,barrier=1",
+            "fsmgr_flags": "wait",
+            "status": "ok"
+          }
+        }
+      },
+      {
+        "index": 1,
+        "offset_in_kernel": 10628765,
+        "size": 471117,
+        "sha256": "3902f356b3767594ba2e059dd10bda2687cc55f9db763aed0b6cfc0139c745c4",
+        "selection": {
+          "qcom,msm-id": [
+            246,
+            196609
+          ],
+          "qcom,board-id": [
+            8,
+            0
+          ],
+          "qcom,pmic-id": [
+            131081,
+            131082,
+            0,
+            0
+          ]
+        },
+        "android_firmware": {
+          "/firmware/android/vbmeta": {
+            "compatible": "android,vbmeta",
+            "parts": "vbmeta,boot,system,vendor,dtbo,recovery"
+          },
+          "/firmware/android/fstab": {
+            "compatible": "android,fstab"
+          },
+          "/firmware/android/fstab/vendor": {
+            "compatible": "android,vendor",
+            "dev": "/dev/block/by-name/oem",
+            "type": "squashfs",
+            "mnt_flags": "ro,barrier=1",
+            "fsmgr_flags": "wait",
+            "status": "ok"
+          },
+          "/firmware/android/fstab/system": {
+            "compatible": "android,system",
+            "dev": "/dev/block/by-name/system",
+            "type": "ext4",
+            "mnt_flags": "ro,barrier=1",
+            "fsmgr_flags": "wait",
+            "status": "ok"
+          }
+        }
+      },
+      {
+        "index": 2,
+        "offset_in_kernel": 11099882,
+        "size": 473675,
+        "sha256": "2976dca0af2632a02e473d958c68c5953494b6f393fcbeb8a1a3d370c42c9f47",
+        "selection": {
+          "qcom,msm-id": [
+            246,
+            196608
+          ],
+          "qcom,board-id": [
+            8,
+            0
+          ],
+          "qcom,pmic-id": [
+            131081,
+            65555,
+            0,
+            0
+          ]
+        },
+        "android_firmware": {
+          "/firmware/android/vbmeta": {
+            "compatible": "android,vbmeta",
+            "parts": "vbmeta,boot,system,vendor,dtbo,recovery"
+          },
+          "/firmware/android/fstab": {
+            "compatible": "android,fstab"
+          },
+          "/firmware/android/fstab/vendor": {
+            "compatible": "android,vendor",
+            "dev": "/dev/block/by-name/oem",
+            "type": "squashfs",
+            "mnt_flags": "ro,barrier=1",
+            "fsmgr_flags": "wait",
+            "status": "ok"
+          },
+          "/firmware/android/fstab/system": {
+            "compatible": "android,system",
+            "dev": "/dev/block/by-name/system",
+            "type": "ext4",
+            "mnt_flags": "ro,barrier=1",
+            "fsmgr_flags": "wait",
+            "status": "ok"
+          }
+        }
+      },
+      {
+        "index": 3,
+        "offset_in_kernel": 11573557,
+        "size": 474187,
+        "sha256": "1d9e7d3108ce79f4eb34620646037b2bf5d37e172b5bfa4a215ce5a115abfd5d",
+        "selection": {
+          "qcom,msm-id": [
+            246,
+            196609
+          ],
+          "qcom,board-id": [
+            8,
+            0
+          ],
+          "qcom,pmic-id": [
+            131081,
+            65555,
+            0,
+            0
+          ]
+        },
+        "android_firmware": {
+          "/firmware/android/vbmeta": {
+            "compatible": "android,vbmeta",
+            "parts": "vbmeta,boot,system,vendor,dtbo,recovery"
+          },
+          "/firmware/android/fstab": {
+            "compatible": "android,fstab"
+          },
+          "/firmware/android/fstab/vendor": {
+            "compatible": "android,vendor",
+            "dev": "/dev/block/by-name/oem",
+            "type": "squashfs",
+            "mnt_flags": "ro,barrier=1",
+            "fsmgr_flags": "wait",
+            "status": "ok"
+          },
+          "/firmware/android/fstab/system": {
+            "compatible": "android,system",
+            "dev": "/dev/block/by-name/system",
+            "type": "ext4",
+            "mnt_flags": "ro,barrier=1",
+            "fsmgr_flags": "wait",
+            "status": "ok"
+          }
+        }
+      }
+    ],
+    "release": "4.4.302+"
+  },
+  "ramdisk": {
+    "compression": "xz",
+    "expanded_bytes": 3589632,
+    "init": {
+      "elf": true,
+      "elf_class": 2,
+      "elf_endian": 1,
+      "machine": 183,
+      "sha256": "74f3afc4adce6e0f0ad02993e7701e353c0d7777c935e417fca8b4c19edbb5c5",
+      "bytes": 3587128,
+      "static_first_stage": true,
+      "first_stage_sources_present": true,
+      "magisk_markers_present": false,
+      "program_headers": [
+        {
+          "type": 6,
+          "flags": 4,
+          "offset": 64,
+          "vaddr": "0x200040",
+          "filesz": 560,
+          "memsz": 560,
+          "align": 8
+        },
+        {
+          "type": 1,
+          "flags": 4,
+          "offset": 0,
+          "vaddr": "0x200000",
+          "filesz": 1094072,
+          "memsz": 1094072,
+          "align": 4096
+        },
+        {
+          "type": 1,
+          "flags": 5,
+          "offset": 1097728,
+          "vaddr": "0x30c000",
+          "filesz": 2382840,
+          "memsz": 2382840,
+          "align": 4096
+        },
+        {
+          "type": 1,
+          "flags": 6,
+          "offset": 3481600,
+          "vaddr": "0x552000",
+          "filesz": 12616,
+          "memsz": 12616,
+          "align": 4096
+        },
+        {
+          "type": 1,
+          "flags": 6,
+          "offset": 3494240,
+          "vaddr": "0x556160",
+          "filesz": 3792,
+          "memsz": 115928,
+          "align": 4096
+        },
+        {
+          "type": 7,
+          "flags": 4,
+          "offset": 3481600,
+          "vaddr": "0x552000",
+          "filesz": 40,
+          "memsz": 42,
+          "align": 64
+        },
+        {
+          "type": 1685382482,
+          "flags": 4,
+          "offset": 3481600,
+          "vaddr": "0x552000",
+          "filesz": 12616,
+          "memsz": 16384,
+          "align": 1
+        },
+        {
+          "type": 1685382480,
+          "flags": 4,
+          "offset": 805428,
+          "vaddr": "0x2c4a34",
+          "filesz": 39980,
+          "memsz": 39980,
+          "align": 4
+        },
+        {
+          "type": 1685382481,
+          "flags": 6,
+          "offset": 0,
+          "vaddr": "0x0",
+          "filesz": 0,
+          "memsz": 0,
+          "align": 0
+        },
+        {
+          "type": 4,
+          "flags": 4,
+          "offset": 624,
+          "vaddr": "0x200270",
+          "filesz": 56,
+          "memsz": 56,
+          "align": 4
+        }
+      ],
+      "has_dynamic_interpreter": false
+    },
+    "standalone_fstab": false,
+    "policy_files": false,
+    "kernel_modules": false,
+    "first_stage_fstab_source": "embedded DT /firmware/android/fstab; system and vendor/oem",
+    "android_release": "14",
+    "sdk": "34",
+    "build_id": "AP2A.240905.003",
+    "target_device": "dora",
+    "build_type": "userdebug",
+    "build_tags": "test-keys",
+    "lineage_name": "lineage_dora"
+  },
+  "layout": {
+    "declared_kernel_compressed_range": [
+      "0x80008000",
+      "0x80b85580"
+    ],
+    "declared_kernel_expanded_range": [
+      "0x80008000",
+      "0x81cf2000"
+    ],
+    "declared_ramdisk_range": [
+      "0x81000000",
+      "0x8112b014"
+    ],
+    "spec_text_offset_candidate_range": [
+      "0x80080000",
+      "0x81d6a000"
+    ],
+    "declared_kernel_ramdisk_overlap": true,
+    "in_place_decompression_input_output_overlap": true,
+    "bootloader_decompression_destination": "UNKNOWN",
+    "bootloader_dtb_destination": "UNKNOWN",
+    "bootloader_ramdisk_relocation": "UNKNOWN",
+    "bootloader_dtb_selection": "UNVERIFIED",
+    "layout_safety_proven": false
+  },
+  "original_sha256_after": "f923f9b99c468484b713529577b84e3a137d1b9cbc09393e5593258009983820",
+  "privacy": "No ramdisk content or full fingerprint included; original and all extracted files retained privately outside Git"
+}

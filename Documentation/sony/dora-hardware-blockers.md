@@ -1,3 +1,19 @@
+# Dora Stage10: current remaining hardware blockers
+
+Создан actual offline boot image с4.19/SDHC1/Android14 ramdisk, прошедший
+независимую распаковку. Это НЕ BOOT TEST READY. SPMfailedACK/AVS, CPUreadpins,
+GPT range и LOS21by-name исправлены; LMHv1source backend compiled/gated.
+Полный sharedCPUvoltageguard/6leases/nativewriters, thermal/hotplug/retention,
+watchdogsecurehandoff, USBcharging и actualeMMC/Androidruntime не подтверждены.
+Inputboot.img теперь предоставлен и проанализирован: старые отсутствующие
+артефакты ниже относятся к историческому Stage9. ActualSonyRAM/relocation/GPT
+и logging/recovery evidence по-прежнему отсутствуют.
+[Stage10 report](dora-stage10-report.md), [P0closure](dora-stage10-p0-closure.md),
+[bootanalysis](dora-stage10-boot-image-analysis.md).
+
+Historical Stage9 blockers follow
+================================
+
 # Dora Linux 4.19: блокеры после этапа 9
 
 Начальный HEAD этапа 9:

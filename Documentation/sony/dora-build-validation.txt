@@ -1,3 +1,33 @@
+Dora Linux4.19.318 / Stage10 current validation (2026-11-16 UTC)
+============================================================
+ARTIFACT: OFFLINE BUILT / HARDWARE UNVERIFIED. KERNEL: BUILDABLE.
+BOOT TEST READY: NO; BOOTED: NO; DAILY USE READY: NO.
+Initial SHA: 1bd88af779cff6ec677282d150b338e90e897576
+Validated source SHA: 41d70cb58dd60a38b98b7ee1cb6264d86dace8b2
+Final publication SHA: final response / external stage10-publication-audit.json.
+7commits; 122 changed files. Frozen32 source/test/profile hashes match
+validated source commit; build used initialHEAD+workingchanges, dirty strings retained.
+Clean new O=/workspace/stage10-clean-out JOBS=3, exit0,
+2026-11-16T11:58:17.999832+00:00 .. 2026-11-16T12:08:35.909329+00:00.
+59check scripts/86default calls, all56previous retained;10ASan/UBSan runs pass.
+Compiler90/externaldtc29/bundleddtc15 pernormal/diagnostic/boot tree, zero new or
+removed warnings bynormalized message comparison. All4normalDTBs identical Stage9.
+Config delta only CONFIG_SONY_MSM8996_LMH_V1=y. 4normal+4diagnostic+4boot trees.
+No sourcecheck weakened, no warning suppression. git diff --check passes.
+Boot image /workspace/stage10-artifacts/boot-dora-lineage21-kernel419.img:
+10,985,472bytes; SHA256772f3cbf74580b5b9e6935d3f88635342acbd26d4b70b39ab2336864f138eeda.
+OfficialAOSP14 independent unpack/component+QCOMID+DTBorder+memory checks PASS.
+ProvidedAndroid14Dora ramdisk unchanged; sourcepermissive arg replacedbyenforcing.
+SourceCAFcandidate addresses notverifiedSonyfirmware/RAM/GPT; noclaim BOOTREADY.
+SPMfailedACK/AVS andCPUreadfreeze/bootstrap lifetimes fixed; gatedLMHv1source
+backend compiled andtested. Fullsharedvoltageownership/6leases/autonomousguard,
+thermaltripABI/watchdog/USBcharging/phoneeMMC/Androidruntime stillunqualified.
+Mainreport dora-stage10-report.md;P0closure/bootanalysis andvalidation-stage10/.
+No phone flash/fastbootboot/partitionaccess/device-vendor edits/privatepayloadGit.
+
+Historical Stage9 validation follows, unchanged
+=============================================
+
 Dora Linux 4.19.318 / Stage 9 current validation (2026-11-13 UTC)
 ==============================================================
 STATUS: BUILDABLE; BOOT TEST READY: NO; BOOTED: NO; DAILY USE READY: NO.

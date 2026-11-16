@@ -1,0 +1,8 @@
+{
+  "added": [
+    "CONFIG_SONY_MSM8996_LMH_V1=y"
+  ],
+  "removed": [],
+  "cpu_limits_unchanged": true,
+  "security_checks_preserved": true
+}

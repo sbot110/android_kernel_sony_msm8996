@@ -1,0 +1,44 @@
+{
+  "repository": "LineageOS/android_system_core",
+  "branch_observed": "lineage-21.0",
+  "commit": "ec299bf6da55702b7b9675d60a0faf2815f0dc6d",
+  "read_only": true,
+  "source_repositories_modified": false,
+  "contracts": [
+    {
+      "path": "init/devices.cpp",
+      "function": "DeviceHandler::GetBlockDeviceSymlinks",
+      "lines": [
+        410,
+        411,
+        421
+      ],
+      "finding": "Generic /dev/block/by-name links are emitted when matched boot device or boot_devices includes literal any.",
+      "url": "https://github.com/LineageOS/android_system_core/blob/ec299bf6da55702b7b9675d60a0faf2815f0dc6d/init/devices.cpp"
+    },
+    {
+      "path": "fs_mgr/libfstab/fstab.cpp",
+      "function": "GetBootDevices",
+      "lines": [
+        869,
+        883,
+        884
+      ],
+      "finding": "Reads DT /firmware/android/boot_devices when bootconfig/cmdline does not override.",
+      "url": "https://github.com/LineageOS/android_system_core/blob/ec299bf6da55702b7b9675d60a0faf2815f0dc6d/fs_mgr/libfstab/fstab.cpp"
+    },
+    {
+      "path": "init/first_stage_mount.cpp",
+      "function": "ReadFirstStageFstabAndroid",
+      "lines": [
+        141,
+        143,
+        144
+      ],
+      "finding": "Uses DT fstab first. first_stage_mount filtering only applies when falling back to default fstab.",
+      "url": "https://github.com/LineageOS/android_system_core/blob/ec299bf6da55702b7b9675d60a0faf2815f0dc6d/init/first_stage_mount.cpp"
+    }
+  ],
+  "reference_image_fstab": "Actual attached DT supplies boot_devices=any, system=/dev/block/by-name/system ext4, vendor=/dev/block/by-name/oem squashfs; read-only flags preserved",
+  "runtime_status": "Source compatible; first-stage execution and physical partition labels unverified"
+}

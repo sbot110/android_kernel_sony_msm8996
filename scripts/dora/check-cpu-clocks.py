@@ -140,6 +140,8 @@ OBSERVER_PREAMBLE = r'''
 #define __iomem
 #define __maybe_unused
 #define PAGE_SIZE 4096
+#define READ_ONCE(v) __atomic_load_n(&(v),__ATOMIC_RELAXED)
+#define WRITE_ONCE(v,x) __atomic_store_n(&(v),(x),__ATOMIC_RELAXED)
 #define BIT(n) (1U << (n))
 #define container_of(p, type, member) ((type *)((char *)(p) - offsetof(type, member)))
 struct clk_init_data;
@@ -149,11 +151,13 @@ static u32 registers[0x90000 / 4];
 static unsigned reads, change_at, change_offset, barriers, aux_reads;
 static u32 change_mask;
 static bool changing_aux;
+static void (*on_mmio_read)(void);
 static u32 readl_relaxed(const void *address)
 {
     size_t offset = (const char *)address - (const char *)registers;
     assert(offset < sizeof(registers) && !(offset & 3));
     reads++;
+    if(on_mmio_read) { void (*callback)(void)=on_mmio_read;on_mmio_read=NULL;callback(); }
     if (change_at && reads == change_at)
         registers[change_offset / 4] ^= change_mask;
     return registers[offset / 4];
@@ -207,14 +211,18 @@ static void *allocations[8];
 static unsigned allocation_count;
 static struct clk_init_data registered_init[2];
 static struct clk_hw *registered_hw[2];
-struct msm8996_cpu_power_port { bool cbf,retired,suspended; };
+struct msm8996_cpu_power_port { bool cbf,retired,suspended;unsigned readers; };
 static struct msm8996_cpu_power_port probe_port;
 static bool owner_enabled;
-static int owner_error,action_error,group_error,provider_error,pm_error;
+static int owner_error,action_error,group_error,provider_error,pm_error,read_error;
+static int probe_status_error;
+static unsigned bootstrap_readers;
+static bool freeze_after_registration;
 static bool observation_error;
 static unsigned owner_attaches,observations,retirements,groups,suspends,resumes,formats;
 static void (*managed_action)(void *);
 static void *managed_data;
+static int msm8996_cpu_power_probe_status(void) { return probe_status_error; }
 static struct msm8996_cpu_power_port *msm8996_cpu_power_attach(struct device *dev,bool cbf,
                     struct clk *xo,struct clk *aux,const struct msm8996_cpu_hw_plans *plans)
 {
@@ -232,10 +240,27 @@ static unsigned long msm8996_cpu_power_observe(struct msm8996_cpu_power_port *po
     assert(port==&probe_port && !port->retired && (port->cbf ? domain==2 : domain<2));
     observations++;return observation_error?0:rate;
 }
+static int msm8996_cpu_power_read_begin(struct msm8996_cpu_power_port *port,unsigned domain)
+{
+    if(!port){if(read_error)return read_error;bootstrap_readers++;return 0;}
+    assert(port==&probe_port && (port->cbf ? domain==2 : domain<2));
+    if(read_error)return read_error;
+    if(port->retired)return -ESHUTDOWN;
+    if(port->suspended)return -EBUSY;
+    port->readers++;return 0;
+}
+static unsigned long msm8996_cpu_power_read_end(struct msm8996_cpu_power_port *port,
+                    unsigned domain,unsigned long rate)
+{
+    unsigned long result;
+    if(!port){assert(bootstrap_readers==1);bootstrap_readers--;return rate;}
+    assert(port->readers==1);result=msm8996_cpu_power_observe(port,domain,rate);
+    port->readers--;return result;
+}
 static void msm8996_cpu_power_retire(void *data)
 {
     struct msm8996_cpu_power_port *port=data;
-    assert(port==&probe_port && !port->retired && allocation_count==2);
+    assert(port==&probe_port && !port->retired && !port->readers && allocation_count==2);
     port->retired=true;retirements++;
 }
 static int msm8996_cpu_power_suspend(struct msm8996_cpu_power_port *port)
@@ -288,7 +313,9 @@ static int devm_clk_hw_register(struct device *dev, struct clk_hw *hw)
 {
     (void)dev;assert(hw->init && hw->init->ops && registrations<2);
     registered_init[registrations]=*hw->init;hw->init=&registered_init[registrations];
-    registered_hw[registrations]=hw;registrations++;return 0;
+    registered_hw[registrations]=hw;registrations++;
+    if(freeze_after_registration){read_error=-EBUSY;probe_status_error=-EPROBE_DEFER;}
+    return 0;
 }
 static unsigned long clk_hw_get_rate(struct clk_hw *hw);
 static int devm_of_clk_add_hw_provider(struct device *dev, void *get,
@@ -303,11 +330,14 @@ static unsigned long clk_hw_get_rate(struct clk_hw *hw)
 { return hw->init->ops->recalc_rate(hw, probe_xo.rate); }
 static void reset(bool cbf, u32 mux)
 {
+    assert(!bootstrap_readers);
     memset(registers, 0, sizeof(registers));
     reads = change_at = barriers = aux_reads = 0;
     changing_aux = false;
+    on_mmio_read = NULL;
     auxiliary.rate = 600000000;
     clock.cbf = cbf;
+    clock.power = NULL;
     clock.base = registers;
     registers[(cbf ? 0x18 : 0x40) / 4] = mux;
 }
@@ -323,6 +353,8 @@ static unsigned long measured(void)
     assert(barriers >= 1);
     return rate;
 }
+static void bind_during_sample(void)
+{ clock.power=&probe_port; }
 static void probe_cleanup(struct platform_device *pdev)
 {
     if(managed_action){managed_action(managed_data);managed_action=NULL;managed_data=NULL;}
@@ -340,6 +372,12 @@ int main(void)
     struct platform_device pdev = { };
     char state[PAGE_SIZE];
     assert(!decoder_test());
+    /* CCF debug readers may run during initial owner publication. The same
+       owner snapshot must be used at begin/end even if binding changes
+       while registers are sampled; NULL must not release an unheld pin. */
+    reset(false,0);on_mmio_read=bind_during_sample;
+    assert(measured()==19200000 && clock.power==&probe_port && !probe_port.readers && !bootstrap_readers);
+    clock.power=NULL;
     /* XO and source-proven AUX bypass an unconfigured, disabled PLL. */
     reset(false, 0); assert(measured() == 19200000);
     reset(true, 0); assert(measured() == 19200000);
@@ -451,6 +489,13 @@ int main(void)
     owner_enabled=true;
     for(i=0;i<2;i++) {
         reset(i,0);probe_cbf=i;fuse_present=!i;fuse_error=0;
+        boundary=reads;probe_status_error=-EPROBE_DEFER;
+        assert(msm8996_boot_probe(&pdev)==-EPROBE_DEFER && reads==boundary && !registrations && !allocation_count);
+        probe_status_error=-ESHUTDOWN;
+        assert(msm8996_boot_probe(&pdev)==-ESHUTDOWN && reads==boundary && !registrations && !allocation_count);
+        probe_status_error=0;freeze_after_registration=true;
+        assert(msm8996_boot_probe(&pdev)==-EPROBE_DEFER && reads==boundary && !providers && !managed_action && !bootstrap_readers);
+        probe_cleanup(&pdev);freeze_after_registration=false;probe_status_error=read_error=0;
         owner_error=-EPROBE_DEFER;boundary=owner_attaches;
         assert(msm8996_boot_probe(&pdev)==-EPROBE_DEFER && owner_attaches==boundary+1 && !providers);
         assert(!managed_action);probe_cleanup(&pdev);
@@ -473,9 +518,17 @@ int main(void)
         assert(cpu_power_state_show(&pdev.dev,NULL,state)>0 && !strcmp(state,"readonly=1\n"));
         assert(formats);
         assert(!msm8996_boot_suspend(&pdev.dev) && probe_port.suspended);
+        boundary=reads;
+        for(j=0;j<registrations;j++)assert(!clk_hw_get_rate(registered_hw[j]));
+        assert(reads==boundary && !probe_port.readers);
         pm_error=-EAGAIN;assert(msm8996_boot_resume(&pdev.dev)==-EAGAIN && probe_port.suspended);
+        for(j=0;j<registrations;j++)assert(!clk_hw_get_rate(registered_hw[j]));
+        assert(reads==boundary && !probe_port.readers);
         pm_error=0;assert(!msm8996_boot_resume(&pdev.dev) && !probe_port.suspended);
         assert(suspends && resumes);
+        read_error=-EIO;
+        for(j=0;j<registrations;j++)assert(!clk_hw_get_rate(registered_hw[j]));
+        assert(reads==boundary && !probe_port.readers);read_error=0;
         boundary=observations;
         for(j=0;j<registrations;j++)assert(clk_hw_get_rate(registered_hw[j])==19200000);
         assert(observations>boundary);

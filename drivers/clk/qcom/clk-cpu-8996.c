@@ -140,12 +140,19 @@ static unsigned long msm8996_boot_recalc(struct clk_hw *hw,
 {
 	struct msm8996_boot_clk *clk = container_of(hw,
 					struct msm8996_boot_clk, hw);
+	struct msm8996_cpu_power_port *power = READ_ONCE(clk->power);
+	unsigned long rate;
 
+	/* Gate before the first register/AUX access. A PM freeze is transient,
+	 * while retirement/quarantine reject all new reads permanently.
+	 */
+	if (msm8996_cpu_power_read_begin(power, clk->domain))
+		return 0;
+	rate = msm8996_boot_read_rate(hw, xo);
 	/* A zero/unstable readback must reach the common owner as a fault,
 	 * rather than leave a stale successful sample in another domain.
 	 */
-	return msm8996_cpu_power_observe(clk->power, clk->domain,
-					msm8996_boot_read_rate(hw, xo));
+	return msm8996_cpu_power_read_end(power, clk->domain, rate);
 }
 
 static const struct clk_ops msm8996_boot_ops = {
@@ -186,6 +193,9 @@ static int msm8996_boot_probe(struct platform_device *pdev)
 	bool cbf = of_device_is_compatible(dev->of_node, "qcom,msm8996-cbf");
 	int ret;
 
+	ret = msm8996_cpu_power_probe_status();
+	if (ret)
+		return ret;
 	res = platform_get_resource(pdev, IORESOURCE_MEM, 0);
 	if (!res || resource_size(res) < (cbf ? 0xf038 : 0x80118))
 		return -EINVAL;
@@ -239,8 +249,10 @@ static int msm8996_boot_probe(struct platform_device *pdev)
 		ret = devm_clk_hw_register(dev, &clks[i].hw);
 		if (ret)
 			return ret;
-		if (!clk_hw_get_rate(&clks[i].hw))
-			return -EINVAL;
+		if (!clk_hw_get_rate(&clks[i].hw)) {
+			ret = msm8996_cpu_power_probe_status();
+			return ret ? ret : -EINVAL;
+		}
 		data->hws[i] = &clks[i].hw;
 	}
 	power = msm8996_cpu_power_attach(dev, cbf, xo, aux, selected);
@@ -254,7 +266,7 @@ static int msm8996_boot_probe(struct platform_device *pdev)
 		if (ret)
 			return ret;
 		for (i = 0; i < count; i++) {
-			clks[i].power = power;
+			WRITE_ONCE(clks[i].power, power);
 			if (!clk_hw_get_rate(&clks[i].hw))
 				return -EINVAL;
 		}

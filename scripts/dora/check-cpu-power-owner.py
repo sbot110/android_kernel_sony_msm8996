@@ -25,7 +25,7 @@ def production(path):
 
 
 def function(source, name):
-    match = re.search(r'^(?:static )?(?:inline )?(?:int|bool|void|unsigned long|struct \w+ \*)\s*' +
+    match = re.search(r'^(?:static )?(?:inline )?(?:int|bool|void|ssize_t|unsigned long|struct \w+ \*)\s*' +
                       re.escape(name) + r'\([^;]*?\)\s*\{', source, re.M | re.S)
     assert match, name
     pos, depth = match.end(), 1
@@ -39,6 +39,7 @@ PREAMBLE = r'''
 #include <assert.h>
 #include <errno.h>
 #include <pthread.h>
+#include <sched.h>
 #include <stdbool.h>
 #include <stdint.h>
 #include <stdarg.h>
@@ -67,6 +68,19 @@ typedef atomic_int atomic_t;
 static int atomic_read(atomic_t *a) { return atomic_load(a); }
 static int atomic_cmpxchg(atomic_t *a,int old,int value)
 { atomic_compare_exchange_strong(a,&old,value);return old; }
+static void atomic_inc(atomic_t *a) { atomic_fetch_add(a,1); }
+static bool atomic_dec_and_test(atomic_t *a) { assert(atomic_load(a)>0);return atomic_fetch_sub(a,1)==1; }
+struct wait_queue { pthread_mutex_t lock;pthread_cond_t condition; };
+static atomic_uint read_waits;
+#define DECLARE_WAIT_QUEUE_HEAD(n) struct wait_queue n={PTHREAD_MUTEX_INITIALIZER,PTHREAD_COND_INITIALIZER}
+#define wait_event(q,ready) do { \
+ atomic_fetch_add(&read_waits,1); \
+ assert(!pthread_mutex_lock(&(q).lock)); \
+ while(!(ready))assert(!pthread_cond_wait(&(q).condition,&(q).lock)); \
+ assert(!pthread_mutex_unlock(&(q).lock)); \
+} while(0)
+static void wake_up_all(struct wait_queue *q)
+{ assert(!pthread_mutex_lock(&q->lock));assert(!pthread_cond_broadcast(&q->condition));assert(!pthread_mutex_unlock(&q->lock)); }
 struct mutex { pthread_mutex_t value; };
 #define DEFINE_MUTEX(n) struct mutex n={PTHREAD_MUTEX_INITIALIZER}
 static void mutex_lock(struct mutex *m) { assert(!pthread_mutex_lock(&m->value)); }
@@ -200,8 +214,9 @@ static void ccf_recalc(void)
 {
  /* CCF holds prepare_lock. Taking owner_lock in observe would deadlock an
   * attach preparing real parents while holding its lifecycle mutex. */
- if(cpu_power_port[1].claimed && !cpu_power_port[1].retired)
-  (void)msm8996_cpu_power_observe(&cpu_power_port[1],2,cbf_readback);
+ if(cpu_power_port[1].claimed && !cpu_power_port[1].retired &&
+    !msm8996_cpu_power_read_begin(&cpu_power_port[1],2))
+  (void)msm8996_cpu_power_read_end(&cpu_power_port[1],2,cbf_readback);
 }
 static void node_refs(void)
 {
@@ -218,6 +233,9 @@ static void fixture(void)
  memset(cpu_power_prepared,0,sizeof(cpu_power_prepared));memset(cpu_power_plan,0,sizeof(cpu_power_plan));
  memset(&cpu_power_plans,0,sizeof(cpu_power_plans));cpu_power_plans_valid=false;
  memset(cpu_power_rate,0,sizeof(cpu_power_rate));atomic_store(&cpu_power_fault,0);
+ assert(!atomic_read(&cpu_power_readers));memset(cpu_power_domain_readers,0,sizeof(cpu_power_domain_readers));
+ memset(cpu_power_bootstrap_readers,0,sizeof(cpu_power_bootstrap_readers));
+ atomic_store(&read_waits,0);
  for(i=0;i<4;i++)cpu_power_reg_error[i]=-EPROBE_DEFER;
  tree_root=(struct device_node){.available=true};
  apcc_node=(struct device_node){.parent=&tree_root,.available=true};cbf_node=apcc_node;
@@ -243,7 +261,7 @@ static void fixture(void)
 static struct msm8996_cpu_power_port *attach(bool cbf)
 { return msm8996_cpu_power_attach(cbf?&cbf_dev:&apcc_dev,cbf,&clocks[0],&clocks[1],cbf?NULL:&plans); }
 static struct msm8996_cpu_power_port *good_attach(bool cbf)
-{ struct msm8996_cpu_power_port *p=attach(cbf);assert(!IS_ERR_OR_NULL(p));node_refs();return p; }
+{ struct msm8996_cpu_power_port *p=attach(cbf);assert(!IS_ERR_OR_NULL(p) && !atomic_read(&cpu_power_readers));node_refs();return p; }
 static unsigned blockers(char *buffer)
 { char *p=strstr(buffer,"blockers=0x");unsigned value;assert(p && sscanf(p,"blockers=0x%x",&value)==1);return value; }
 static void status(struct msm8996_cpu_power_port *p,char *buffer)
@@ -262,20 +280,59 @@ static void *observer_race(void *arg)
  struct msm8996_cpu_power_port *p=arg;unsigned i;char buffer[512];
  for(i=0;i<1000;i++){
   assert(!pthread_mutex_lock(&prepare_lock));
-  assert(msm8996_cpu_power_observe(p,2,672000000)==672000000);
+  assert(!msm8996_cpu_power_read_begin(p,2));
+  assert(msm8996_cpu_power_read_end(p,2,672000000)==672000000);
   assert(!pthread_mutex_unlock(&prepare_lock));
   assert(msm8996_cpu_power_format(p,buffer,sizeof(buffer))>0);
   assert(strstr(buffer,"readonly=1") && strstr(buffer,"voltage_leases=0"));
  }
  return NULL;
 }
+static atomic_bool pm_done;
+static void *suspend_readers(void *arg)
+{ int ret=msm8996_cpu_power_suspend(arg);atomic_store(&pm_done,true);return (void *)(intptr_t)ret; }
+static void *retire_readers(void *arg)
+{ msm8996_cpu_power_retire(arg);atomic_store(&pm_done,true);return NULL; }
+static void wait_for_freeze(struct msm8996_cpu_power_port *p,bool retire)
+{
+ unsigned i;int ret;unsigned long rate;
+ for(i=0;i<1000000;i++) {
+  ret=msm8996_cpu_power_read_begin(p,2);
+  if(ret) { assert(ret==(retire?-ESHUTDOWN:-EBUSY));return; }
+  rate=msm8996_cpu_power_read_end(p,2,672000000);
+  assert(rate==672000000 || (retire && !rate));sched_yield();
+ }
+ assert(!"suspend/retire failed to close MMIO read admission");
+}
+static void wait_for_drain(void)
+{
+ unsigned i;
+ for(i=0;i<1000000;i++) {
+  if(atomic_load(&read_waits) || atomic_load(&pm_done))break;
+  sched_yield();
+ }
+ assert(atomic_load(&read_waits) && !atomic_load(&pm_done));
+}
 int main(void)
 {
  struct msm8996_cpu_power_port *a,*b;char buffer[512];unsigned i,before,success;pthread_t threads[6];void *result;
  unsigned long saved_rate;
  fixture();dora=false;assert(!attach(false));assert(msm8996_cpu_power_observe(NULL,99,123)==123);
+ assert(!msm8996_cpu_power_read_begin(NULL,99) && msm8996_cpu_power_read_end(NULL,99,123)==123);
+ assert(!msm8996_cpu_power_probe_status());
  assert(!msm8996_cpu_power_suspend(NULL) && !msm8996_cpu_power_resume(NULL));
  assert(msm8996_cpu_power_format(NULL,buffer,sizeof(buffer))==-EOPNOTSUPP && !prepares);
+ fixture();assert(!msm8996_cpu_power_probe_status() && !msm8996_cpu_power_read_begin(NULL,0));
+ assert(atomic_read(&cpu_power_readers)==1 && cpu_power_bootstrap_readers[0]==1);
+ assert(msm8996_cpu_power_read_end(NULL,0,19200000)==19200000 && !atomic_read(&cpu_power_readers));
+ /* A pre-claim invalid sample is an ordinary probe error, not a fake baseline
+  * or a permanent rail fault: there has been no hardware transaction. */
+ assert(!msm8996_cpu_power_read_begin(NULL,0));assert(!msm8996_cpu_power_read_end(NULL,0,0));
+ assert(!atomic_read(&cpu_power_readers) && !atomic_read(&cpu_power_fault));
+ assert(!msm8996_cpu_power_read_begin(NULL,0));a=attach(false);
+ assert(!IS_ERR_OR_NULL(a) && atomic_read(&cpu_power_readers)==1);
+ assert(msm8996_cpu_power_read_end(NULL,0,19200000)==19200000);
+ assert(!atomic_read(&cpu_power_readers) && !cpu_power_domain_readers[0] && !atomic_read(&cpu_power_fault));
  fixture();assert(PTR_ERR(msm8996_cpu_power_attach(NULL,false,&clocks[0],&clocks[1],&plans))==-EINVAL);
  for(i=0;i<4;i++){fixture();supply_missing=true;missing_supply=i;preclaim_failure(-EINVAL);}
  fixture();supply_node[0].regulator_name="foreign";preclaim_failure(-EINVAL);
@@ -323,6 +380,68 @@ int main(void)
  for(i=0;i<4;i++)assert(!pthread_join(threads[i],NULL));
  node_refs();
 
+ /* PM must reject BEFORE register access, drain an already active reader,
+  * and keep both banks closed until the second consumer has resumed. */
+ fixture();a=good_attach(false);b=good_attach(true);
+ hmss_node.available=mx_parent.available=true;
+ assert(!msm8996_cpu_power_read_begin(b,2));atomic_store(&pm_done,false);
+ assert(!pthread_create(&threads[0],NULL,suspend_readers,a));
+ wait_for_freeze(b,false);wait_for_drain();assert(atomic_read(&cpu_power_readers)==1);
+ assert(msm8996_cpu_power_probe_status()==-EPROBE_DEFER && msm8996_cpu_power_read_begin(NULL,0)==-EBUSY);
+ assert(msm8996_cpu_power_read_end(b,2,672000000)==672000000);
+ assert(!pthread_join(threads[0],&result) && !result && atomic_load(&pm_done));
+ assert(!msm8996_cpu_power_suspend(b));before=typed_cpr+typed_rpm;status(a,buffer);
+ assert(typed_cpr+typed_rpm==before && strstr(buffer,"cpr=-16/-16/-16") && strstr(buffer,"mx_ao=-16"));
+ assert(!msm8996_cpu_power_resume(a));assert(msm8996_cpu_power_read_begin(a,0)==-EBUSY);
+ assert(!msm8996_cpu_power_resume(b));assert(!msm8996_cpu_power_read_begin(a,0));
+ assert(msm8996_cpu_power_read_end(a,0,652800000)==652800000 && !atomic_read(&cpu_power_readers));
+ /* A rate/zero read failure still drains, preserving the original fault. */
+ assert(!msm8996_cpu_power_read_begin(b,2));assert(!msm8996_cpu_power_read_end(b,2,0));
+ assert(!atomic_read(&cpu_power_readers) && atomic_read(&cpu_power_fault)==-EIO);
+ assert(msm8996_cpu_power_read_begin(a,0)==-EIO);
+ fixture();a=good_attach(false);b=good_attach(true);
+ assert(!msm8996_cpu_power_suspend(a));clocks[1].rate=300000000;
+ assert(msm8996_cpu_power_resume(a)==-EIO && cpu_power_port[0].suspended);
+ clocks[1].rate=600000000;assert(msm8996_cpu_power_resume(a)==-EIO && !unprepares);
+ /* Removal cannot let devres unmap while a callback holds a read pin. */
+ fixture();a=good_attach(false);b=good_attach(true);
+ assert(!msm8996_cpu_power_read_begin(b,2));atomic_store(&pm_done,false);
+ assert(!pthread_create(&threads[0],NULL,retire_readers,a));
+ wait_for_freeze(b,true);wait_for_drain();assert(atomic_read(&cpu_power_readers)==1);
+ assert(!msm8996_cpu_power_read_end(b,2,672000000));
+ assert(!pthread_join(threads[0],NULL) && atomic_load(&pm_done) && !atomic_read(&cpu_power_readers));
+ assert(PTR_ERR(attach(false))==-ESHUTDOWN && !unprepares);
+ /* The same drain must include an initial NULL-owner sample at suspend. */
+ fixture();a=good_attach(false);b=good_attach(true);
+ assert(!msm8996_cpu_power_read_begin(NULL,0));atomic_store(&pm_done,false);
+ assert(!pthread_create(&threads[0],NULL,suspend_readers,a));
+ wait_for_freeze(b,false);wait_for_drain();assert(atomic_read(&cpu_power_readers)==1);
+ assert(msm8996_cpu_power_read_begin(NULL,2)==-EBUSY && msm8996_cpu_power_probe_status()==-EPROBE_DEFER);
+ assert(msm8996_cpu_power_read_end(NULL,0,19200000)==19200000);
+ assert(!pthread_join(threads[0],&result) && !result && atomic_load(&pm_done));
+ assert(!msm8996_cpu_power_resume(a) && !msm8996_cpu_power_read_begin(NULL,0));
+ assert(msm8996_cpu_power_read_end(NULL,0,19200000)==19200000 && !atomic_read(&cpu_power_readers));
+ /* An unbound/probing clock must participate in retirement before its
+  * owner pointer is published; NULL cannot bypass the shared read drain. */
+ fixture();a=good_attach(false);b=good_attach(true);
+ assert(!msm8996_cpu_power_read_begin(NULL,2));atomic_store(&pm_done,false);
+ assert(!pthread_create(&threads[0],NULL,retire_readers,a));
+ wait_for_freeze(b,true);wait_for_drain();assert(atomic_read(&cpu_power_readers)==1);
+ assert(msm8996_cpu_power_probe_status()==-ESHUTDOWN && msm8996_cpu_power_read_begin(NULL,0)==-ESHUTDOWN);
+ assert(!msm8996_cpu_power_read_end(NULL,2,672000000));
+ assert(!pthread_join(threads[0],NULL) && atomic_load(&pm_done) && !atomic_read(&cpu_power_readers));
+ fixture();a=good_attach(false);assert(!msm8996_cpu_power_read_end(a,0,652800000));
+ assert(atomic_read(&cpu_power_fault)==-EIO && !atomic_read(&cpu_power_readers));
+ fixture();a=good_attach(false);assert(msm8996_cpu_power_read_begin(a,3)==-EIO);
+ assert(!atomic_read(&cpu_power_readers) && atomic_read(&cpu_power_fault)==-EIO);
+ /* Late APCC probe while a CBF peer is suspended must defer before plans,
+  * counted parent changes or ownership claims, then succeed after resume. */
+ fixture();b=good_attach(true);assert(!msm8996_cpu_power_suspend(b));before=prepares;
+ assert(PTR_ERR(attach(false))==-EPROBE_DEFER && !cpu_power_port[0].claimed && !cpu_power_plans_valid);
+ assert(prepares==before && module_pins==1 && !atomic_read(&cpu_power_fault));node_refs();
+ assert(!msm8996_cpu_power_resume(b));a=good_attach(false);
+ assert(cpu_power_plans_valid && cpu_power_port[0].claimed && prepares==before && !atomic_read(&cpu_power_fault));
+
  fixture();b=good_attach(true);cbf_readback=4000000000UL;
  assert(msm8996_cpu_power_observe(b,2,4000000000UL)==4000000000UL);
  assert(PTR_ERR(attach(false))==-ERANGE && !cpu_power_plans_valid && !cpu_power_port[0].claimed);
@@ -353,6 +472,7 @@ int main(void)
  for(i=0;i<6;i++){assert(!pthread_join(threads[i],&result));if(!IS_ERR_OR_NULL(result))success++;else assert(PTR_ERR(result)==-EBUSY);}
  assert(success==1 && prepares==2 && module_pins==2);node_refs();
  puts("PASS: actual CPU owner plans/publication, parent preparations, prior CBF rates, MX AO identity, typed observations, partial failures, lifetime, quarantine, PM bookkeeping and concurrent claims/readers");
+ puts("PASS: paired pre-MMIO read admission, shared PM freeze/reader drain, peer resume, retained parent checks, failed-read drain and in-flight retirement");
  puts("Host boundaries only: no CPU voltage lease, LMHv1/SAW exclusion, measured voltage or writable hardware qualification.");
  return 0;
 }
@@ -437,6 +557,16 @@ def main():
         ('foreign-mx-resource', 'cpu_power_supplies', 'value != 2', 'false'),
         ('wrong-mx-sets', 'cpu_power_supplies', 'value != 1', 'false'),
         ('clear-quarantine-on-resume', 'msm8996_cpu_power_resume', 'ret = atomic_read(&cpu_power_fault);', 'ret = 0;'),
+        ('read-during-shared-freeze', 'msm8996_cpu_power_read_begin', 'if (cpu_power_frozen())', 'if (cpu_power_frozen() && false)'),
+        ('skip-suspend-reader-drain', 'msm8996_cpu_power_suspend', 'wait_event(cpu_power_read_drain, !atomic_read(&cpu_power_readers));', '(void)0;'),
+        ('skip-retirement-reader-drain', 'msm8996_cpu_power_retire', 'wait_event(cpu_power_read_drain, !atomic_read(&cpu_power_readers));', '(void)0;'),
+        ('retain-dead-read-pin', 'msm8996_cpu_power_read_end', 'last = atomic_dec_and_test(&cpu_power_readers);', 'last = atomic_dec_and_test(&cpu_power_readers); atomic_inc(&cpu_power_readers);'),
+        ('resume-with-wrong-parent-rate', 'msm8996_cpu_power_resume', 'clk_get_rate(cpu_power_parent[1]) != 600000000', 'false'),
+        ('sample-supplies-during-freeze', 'msm8996_cpu_power_format', 'if (!fault && !suspended)', 'if (!fault)'),
+        ('attach-during-peer-freeze', 'msm8996_cpu_power_attach', 'ret = cpu_power_frozen() ? -EPROBE_DEFER : 0;', 'ret = 0;'),
+        ('unbound-mmio-bypasses-freeze', 'msm8996_cpu_power_read_begin', 'if (!port && !cpu_power_dora())', 'if (!port)'),
+        ('unbound-read-pin-never-drains', 'msm8996_cpu_power_read_end', 'if (!port && !cpu_power_dora())', 'if (!port)'),
+        ('probe-status-ignores-freeze', 'msm8996_cpu_power_probe_status', 'if (!ret && cpu_power_frozen())', 'if (!ret && cpu_power_frozen() && false)'),
         ('rewrite-published-plans', 'cpu_power_copy_plans', 'if (cpu_power_plans_valid)', 'if (false)'),
         ('ignore-prior-cbf-rate', 'cpu_power_copy_plans', 'if (!cpu_power_rate[i])', 'if (true)'),
     ]

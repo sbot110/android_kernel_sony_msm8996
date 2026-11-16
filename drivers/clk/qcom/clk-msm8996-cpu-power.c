@@ -16,6 +16,7 @@
 #include <linux/regulator/qcom-rpm-corner.h>
 #include <linux/spinlock.h>
 #include <linux/string.h>
+#include <linux/wait.h>
 #include <dt-bindings/clock/qcom,gcc-msm8996.h>
 
 #include "clk-msm8996-cpu-power.h"
@@ -54,6 +55,10 @@ static struct msm8996_cpu_hw_plans cpu_power_plans;
 static bool cpu_power_plans_valid;
 static unsigned long cpu_power_rate[CPU_POWER_DOMAINS];
 static atomic_t cpu_power_fault = ATOMIC_INIT(0);
+static atomic_t cpu_power_readers = ATOMIC_INIT(0);
+static unsigned int cpu_power_domain_readers[CPU_POWER_DOMAINS];
+static unsigned int cpu_power_bootstrap_readers[CPU_POWER_DOMAINS];
+static DECLARE_WAIT_QUEUE_HEAD(cpu_power_read_drain);
 static int cpu_power_reg_error[4] = {
 	-EPROBE_DEFER, -EPROBE_DEFER, -EPROBE_DEFER, -EPROBE_DEFER,
 };
@@ -69,10 +74,39 @@ static int cpu_power_fail(int error)
 	return atomic_read(&cpu_power_fault);
 }
 
+/* Called with observation_lock. This freezes both ports: APCC and CBF share
+ * their parents and CPU power dependencies. A peer resuming first is not a
+ * grant to read the other bank before its supplier/consumer PM ordering ends.
+ */
+static bool cpu_power_frozen(void)
+{
+	unsigned int i;
+
+	for (i = 0; i < ARRAY_SIZE(cpu_power_port); i++)
+		if (cpu_power_port[i].claimed && cpu_power_port[i].suspended)
+			return true;
+	return false;
+}
+
 static bool cpu_power_dora(void)
 {
 	return of_machine_is_compatible("sony,dora-row") ||
 		of_machine_is_compatible("somc,dora-row");
+}
+
+int msm8996_cpu_power_probe_status(void)
+{
+	unsigned long flags;
+	int ret;
+
+	if (!cpu_power_dora())
+		return 0;
+	raw_spin_lock_irqsave(&cpu_power_observation_lock, flags);
+	ret = atomic_read(&cpu_power_fault);
+	if (!ret && cpu_power_frozen())
+		ret = -EPROBE_DEFER;
+	raw_spin_unlock_irqrestore(&cpu_power_observation_lock, flags);
+	return ret;
 }
 
 static int cpu_power_supplies(struct device *dev)
@@ -213,6 +247,7 @@ struct msm8996_cpu_power_port *msm8996_cpu_power_attach(struct device *dev,
 {
 	struct msm8996_cpu_power_port *port = &cpu_power_port[cbf];
 	struct clk *parent[2];
+	unsigned long flags;
 	unsigned int i;
 	int ret;
 
@@ -236,6 +271,15 @@ struct msm8996_cpu_power_port *msm8996_cpu_power_attach(struct device *dev,
 		ret = port->retired ? -ESHUTDOWN : -EBUSY;
 		goto error;
 	}
+	/* A peer's system-PM freeze is a deferred probe, not an uncertain
+	 * hardware transaction. Do not publish plans or claim another port
+	 * whose initial readback is necessarily blocked by that freeze.
+	 */
+	raw_spin_lock_irqsave(&cpu_power_observation_lock, flags);
+	ret = cpu_power_frozen() ? -EPROBE_DEFER : 0;
+	raw_spin_unlock_irqrestore(&cpu_power_observation_lock, flags);
+	if (ret)
+		goto error;
 	parent[0] = clk_get(dev, "xo");
 	if (IS_ERR(parent[0])) {
 		ret = PTR_ERR(parent[0]);
@@ -268,9 +312,11 @@ struct msm8996_cpu_power_port *msm8996_cpu_power_attach(struct device *dev,
 	/* No hardware operation before identity/plans/supplier validation. */
 	get_device(dev);
 	__module_get(THIS_MODULE);
+	raw_spin_lock_irqsave(&cpu_power_observation_lock, flags);
 	port->dev = dev;
 	port->mask = cbf ? BIT(2) : BIT(0) | BIT(1);
 	WRITE_ONCE(port->claimed, true);
+	raw_spin_unlock_irqrestore(&cpu_power_observation_lock, flags);
 	if (cpu_power_parent[0]) {
 		clk_put(parent[1]);
 		clk_put(parent[0]);
@@ -291,6 +337,37 @@ struct msm8996_cpu_power_port *msm8996_cpu_power_attach(struct device *dev,
 error:
 	mutex_unlock(&cpu_power_lock);
 	return ERR_PTR(ret);
+}
+
+int msm8996_cpu_power_read_begin(struct msm8996_cpu_power_port *port,
+		unsigned int domain)
+{
+	unsigned long flags;
+	int ret;
+
+	if (!port && !cpu_power_dora())
+		return 0;
+	raw_spin_lock_irqsave(&cpu_power_observation_lock, flags);
+	ret = atomic_read(&cpu_power_fault);
+	if (ret)
+		goto out;
+	if (domain >= CPU_POWER_DOMAINS ||
+	    (port && (!(port->mask & BIT(domain)) || !port->claimed || port->retired))) {
+		ret = cpu_power_fail(-EIO);
+		goto out;
+	}
+	if (cpu_power_frozen()) {
+		ret = -EBUSY;
+		goto out;
+	}
+	if (port)
+		cpu_power_domain_readers[domain]++;
+	else
+		cpu_power_bootstrap_readers[domain]++;
+	atomic_inc(&cpu_power_readers);
+out:
+	raw_spin_unlock_irqrestore(&cpu_power_observation_lock, flags);
+	return ret;
 }
 
 unsigned long msm8996_cpu_power_observe(struct msm8996_cpu_power_port *port,
@@ -327,15 +404,54 @@ invalid:
 	return 0;
 }
 
+unsigned long msm8996_cpu_power_read_end(struct msm8996_cpu_power_port *port,
+		unsigned int domain, unsigned long rate)
+{
+	unsigned long flags;
+	bool last;
+
+	if (!port && !cpu_power_dora())
+		return rate;
+	/* Validation can fault, but the counted read must still drain so that
+	 * probe unwind or suspend can finish before maps/parents are retired.
+	 */
+	if (port)
+		rate = msm8996_cpu_power_observe(port, domain, rate);
+	raw_spin_lock_irqsave(&cpu_power_observation_lock, flags);
+	if (domain >= CPU_POWER_DOMAINS ||
+	    (port && (!(port->mask & BIT(domain)) || !cpu_power_domain_readers[domain])) ||
+	    (!port && !cpu_power_bootstrap_readers[domain])) {
+		cpu_power_fail(-EIO);
+		rate = 0;
+		last = false;
+	} else {
+		if (port)
+			cpu_power_domain_readers[domain]--;
+		else
+			cpu_power_bootstrap_readers[domain]--;
+		last = atomic_dec_and_test(&cpu_power_readers);
+	}
+	if (atomic_read(&cpu_power_fault))
+		rate = 0;
+	raw_spin_unlock_irqrestore(&cpu_power_observation_lock, flags);
+	if (last)
+		wake_up_all(&cpu_power_read_drain);
+	return rate;
+}
+
 void msm8996_cpu_power_retire(void *data)
 {
 	struct msm8996_cpu_power_port *port = data;
+	unsigned long flags;
 
 	if (!port)
 		return;
 	mutex_lock(&cpu_power_lock);
+	raw_spin_lock_irqsave(&cpu_power_observation_lock, flags);
 	WRITE_ONCE(port->retired, true);
 	cpu_power_fail(-ESHUTDOWN);
+	raw_spin_unlock_irqrestore(&cpu_power_observation_lock, flags);
+	wait_event(cpu_power_read_drain, !atomic_read(&cpu_power_readers));
 	/* No parent unprepare/put: running CPUs and uncertain firmware state
 	 * have no qualified handoff/release protocol. The static SoC tombstone
 	 * retains the exact counted references, never a guessed OFF baseline.
@@ -345,28 +461,45 @@ void msm8996_cpu_power_retire(void *data)
 
 int msm8996_cpu_power_suspend(struct msm8996_cpu_power_port *port)
 {
+	unsigned long flags;
 	int ret;
 
 	if (!port)
 		return 0;
 	mutex_lock(&cpu_power_lock);
+	raw_spin_lock_irqsave(&cpu_power_observation_lock, flags);
 	ret = atomic_read(&cpu_power_fault);
 	if (!ret)
 		port->suspended = true;
+	raw_spin_unlock_irqrestore(&cpu_power_observation_lock, flags);
+	wait_event(cpu_power_read_drain, !atomic_read(&cpu_power_readers));
 	mutex_unlock(&cpu_power_lock);
 	return ret;
 }
 
 int msm8996_cpu_power_resume(struct msm8996_cpu_power_port *port)
 {
+	unsigned long flags;
 	int ret;
 
 	if (!port)
 		return 0;
 	mutex_lock(&cpu_power_lock);
 	ret = atomic_read(&cpu_power_fault);
+	/* This checks retained software parent contracts, not physical PLL lock
+	 * or CPU supply ownership. GCC's supplier link orders normal PM; fresh
+	 * APCC/CBF MMIO is still sampled by the observer after the shared freeze.
+	 */
+	if (!ret && port->suspended &&
+	    (!cpu_power_prepared[0] || !cpu_power_prepared[1] ||
+	     !cpu_power_parent[0] || !cpu_power_parent[1] ||
+	     clk_get_rate(cpu_power_parent[0]) != 19200000 ||
+	     clk_get_rate(cpu_power_parent[1]) != 600000000))
+		ret = cpu_power_fail(-EIO);
+	raw_spin_lock_irqsave(&cpu_power_observation_lock, flags);
 	if (!ret)
 		port->suspended = false;
+	raw_spin_unlock_irqrestore(&cpu_power_observation_lock, flags);
 	mutex_unlock(&cpu_power_lock);
 	return ret;
 }
@@ -435,14 +568,17 @@ ssize_t msm8996_cpu_power_format(struct msm8996_cpu_power_port *port,
 		return -EOPNOTSUPP;
 	mutex_lock(&cpu_power_lock);
 	fault = atomic_read(&cpu_power_fault);
-	if (!fault)
-		cpu_power_resources();
 	for (i = 0; i < ARRAY_SIZE(cpu_power_port); i++) {
 		if (cpu_power_port[i].claimed && !cpu_power_port[i].retired)
 			online |= cpu_power_port[i].mask;
 		if (cpu_power_port[i].suspended)
 			suspended |= cpu_power_port[i].mask;
 	}
+	if (!fault && !suspended)
+		cpu_power_resources();
+	else if (suspended)
+		for (i = 0; i < ARRAY_SIZE(cpu_power_reg_error); i++)
+			cpu_power_reg_error[i] = -EBUSY;
 	/* These are missing real implementations, not switchable DT grants.
 	 * Observed endpoint state never stands in for six owned voltage leases.
 	 */

@@ -76,6 +76,7 @@ static DECLARE_BITMAP(irqs_ignore_restore, MAX_IRQ);
 struct redist_region {
 	void __iomem		*redist_base;
 	phys_addr_t		phys_base;
+	resource_size_t		size;
 	bool			single_redist;
 };
 
@@ -848,12 +849,20 @@ static void __init gic_dist_init(void)
 static int gic_iterate_rdists(int (*fn)(struct redist_region *, void __iomem *))
 {
 	int ret = -ENODEV;
-	int i;
+	unsigned int i;
 
 	for (i = 0; i < gic_data.nr_redist_regions; i++) {
-		void __iomem *ptr = gic_data.redist_regions[i].redist_base;
+		struct redist_region *region = &gic_data.redist_regions[i];
+		void __iomem *ptr = region->redist_base;
+		u64 offset = 0, stride;
 		u64 typer;
 		u32 reg;
+
+		/* RD_base and SGI_base must both belong to this mapping. Do not
+		 * trust a missing LAST bit to terminate before the next device.
+		 */
+		if (region->size < SZ_64K * 2)
+			continue;
 
 		reg = readl_relaxed(ptr + GICR_PIDR2) & GIC_PIDR2_ARCH_MASK;
 		if (reg != GIC_PIDR2_ARCH_GICv3 &&
@@ -871,13 +880,21 @@ static int gic_iterate_rdists(int (*fn)(struct redist_region *, void __iomem *))
 			if (gic_data.redist_regions[i].single_redist)
 				break;
 
-			if (gic_data.redist_stride) {
-				ptr += gic_data.redist_stride;
-			} else {
-				ptr += SZ_64K * 2; /* Skip RD_base + SGI_base */
+			stride = gic_data.redist_stride;
+			if (!stride) {
+				stride = SZ_64K * 2; /* Skip RD_base + SGI_base */
 				if (typer & GICR_TYPER_VLPIS)
-					ptr += SZ_64K * 2; /* Skip VLPI_base + reserved page */
+					stride += SZ_64K * 2;
 			}
+			/* Subtract before adding, so malformed 64-bit strides cannot
+			 * wrap and restart the walk. A bound is not a hardware ACK.
+			 */
+			if (stride < SZ_64K * 2 || stride & (SZ_64K - 1) ||
+			    stride > region->size - offset ||
+			    region->size - offset - stride < SZ_64K * 2)
+				break;
+			offset += stride;
+			ptr = region->redist_base + offset;
 		} while (!(typer & GICR_TYPER_LAST));
 	}
 
@@ -1522,7 +1539,6 @@ static int __init gic_init_bases(void __iomem *dist_base,
 
 	gic_data.domain = irq_domain_create_tree(handle, &gic_irq_domain_ops,
 						 &gic_data);
-	irq_domain_update_bus_token(gic_data.domain, DOMAIN_BUS_WIRED);
 	gic_data.rdists.rdist = alloc_percpu(typeof(*gic_data.rdists.rdist));
 	gic_data.rdists.has_vlpis = true;
 	gic_data.rdists.has_direct_lpi = true;
@@ -1531,6 +1547,7 @@ static int __init gic_init_bases(void __iomem *dist_base,
 		err = -ENOMEM;
 		goto out_free;
 	}
+	irq_domain_update_bus_token(gic_data.domain, DOMAIN_BUS_WIRED);
 
 	gic_data.has_rss = !!(typer & GICD_TYPER_RSS);
 	pr_info("Distributor has %sRange Selector support\n",
@@ -1736,6 +1753,7 @@ static int __init gicv3_of_init(struct device_node *node, struct device_node *pa
 			goto out_unmap_rdist;
 		}
 		rdist_regs[i].phys_base = res.start;
+		rdist_regs[i].size = resource_size(&res);
 	}
 
 	if (of_property_read_u64(node, "redistributor-stride", &redist_stride))
@@ -1786,12 +1804,14 @@ static struct
 } acpi_data __initdata;
 
 static void __init
-gic_acpi_register_redist(phys_addr_t phys_base, void __iomem *redist_base)
+gic_acpi_register_redist(phys_addr_t phys_base, void __iomem *redist_base,
+			 resource_size_t size)
 {
 	static int count = 0;
 
 	acpi_data.redist_regs[count].phys_base = phys_base;
 	acpi_data.redist_regs[count].redist_base = redist_base;
+	acpi_data.redist_regs[count].size = size;
 	acpi_data.redist_regs[count].single_redist = acpi_data.single_redist;
 	count++;
 }
@@ -1810,7 +1830,7 @@ gic_acpi_parse_madt_redist(struct acpi_subtable_header *header,
 		return -ENOMEM;
 	}
 
-	gic_acpi_register_redist(redist->base_address, redist_base);
+	gic_acpi_register_redist(redist->base_address, redist_base, redist->length);
 	return 0;
 }
 
@@ -1832,7 +1852,7 @@ gic_acpi_parse_madt_gicc(struct acpi_subtable_header *header,
 	if (!redist_base)
 		return -ENOMEM;
 
-	gic_acpi_register_redist(gicc->gicr_base_address, redist_base);
+	gic_acpi_register_redist(gicc->gicr_base_address, redist_base, size);
 	return 0;
 }
 

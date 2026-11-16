@@ -34,7 +34,13 @@
 	qcom,pmic-id = <0x20009 0x2000a 0 0>; /* PM8994 + PMI8994 */
 	qcom,board-id = <8 0>;
 
+	aliases {
+		/* Sony 4.4 serial0 is BLSP2 DM1, not DM2 at 0x075b1000. */
+		serial0 = &blsp2_uart1;
+	};
+
 	chosen {
+		stdout-path = "serial0";
 		/* Retain the upstream Tone bring-up CPU limit until on-device tests. */
 		bootargs = "maxcpus=2";
 	};
@@ -111,8 +117,20 @@
 	};
 };
 
-&blsp2_uart2 {
+&blsp2_uart1 {
 	status = "okay";
+};
+
+&blsp2_uart2 {
+	status = "disabled";
+};
+
+&{/timer} {
+	/* Sony 4.4's final MSM8996 tree supplies this system-counter rate.
+	 * Do not depend on an unobserved CNTFRQ_EL0 value from Sony S1.
+	 * This does not change a timer register or its PPI selection.
+	 */
+	clock-frequency = <19200000>;
 };
 
 &hsusb_phy1 {

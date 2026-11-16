@@ -89,6 +89,7 @@ struct gic_chip_data {
 	u64			redist_stride;
 	u32			nr_redist_regions;
 	bool			has_rss;
+	bool			rwp_fail_stop;
 	unsigned int		irq_nr;
 	struct partition_desc	*ppi_descs[16];
 
@@ -197,6 +198,12 @@ static void gic_do_wait_for_rwp(void __iomem *base, u32 bit)
 	while (readl_relaxed_no_log(base + GICD_CTLR) & bit) {
 		count--;
 		if (!count) {
+			/* Dora cannot treat a software deadline as a completed
+			 * distributor/redistributor write. The void IRQ callbacks
+			 * cannot propagate this error: stop before later GIC writes.
+			 */
+			if (gic_data.rwp_fail_stop)
+				panic("GICv3: RWP ACK timeout at %p, mask %#x\n", base, bit);
 			pr_err_ratelimited("RWP timeout, gone fishing\n");
 			return;
 		}
@@ -1718,6 +1725,10 @@ static int __init gicv3_of_init(struct device_node *node, struct device_node *pa
 	u32 nr_redist_regions;
 	int err, i, ignore_irqs_len;
 	u32 ignore_restore_irqs[MAX_IRQS_IGNORE] = {0};
+
+	/* Board policy, not a switchable DT ownership/verification grant. */
+	gic_data.rwp_fail_stop = of_machine_is_compatible("sony,dora-row") ||
+				 of_machine_is_compatible("somc,dora-row");
 
 	dist_base = of_iomap(node, 0);
 	if (!dist_base) {

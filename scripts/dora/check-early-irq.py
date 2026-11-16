@@ -20,7 +20,7 @@ SOURCE = ROOT / 'drivers/irqchip/irq-gic-v3.c'
 
 
 def function(source, name):
-    match = re.search(r'^static int (?:__init )?' + name + r'\([^;]*?\)\s*\{', source, re.M | re.S)
+    match = re.search(r'^static (?:int|void) (?:__init )?' + name + r'\([^;]*?\)\s*\{', source, re.M | re.S)
     assert match, name
     end, depth = match.end(), 1
     while depth:
@@ -34,6 +34,7 @@ PREAMBLE = r'''
 #include <errno.h>
 #include <stdbool.h>
 #include <stdint.h>
+#include <setjmp.h>
 #include <stdlib.h>
 #include <string.h>
 typedef uint32_t u32;
@@ -61,12 +62,25 @@ static struct {
     struct { u32 gicd_typer; int *rdist; bool has_vlpis, has_direct_lpi; } rdists;
     u64 redist_stride;
     u32 nr_redist_regions, irq_nr;
-    bool has_rss;
+    bool has_rss, rwp_fail_stop;
 } gic_data;
 static int supports_deactivate_key, gic_irq_domain_ops, domain_storage, percpu_storage;
 static int fail_domain, fail_percpu, tokens, removed, freed, initialized;
 static unsigned char banks[2][0x100000], dist[0x10000];
 static unsigned reads, visits, found_at;
+static unsigned rwp_reads, rwp_clear_after, rwp_delays, rwp_warnings, rwp_panics;
+static jmp_buf panic_target;
+static u32 readl_relaxed_no_log(const void *p)
+{
+    assert(p == dist + GICD_CTLR);
+    rwp_reads++;
+    return rwp_clear_after && rwp_reads >= rwp_clear_after ? 0 : 1;
+}
+static void cpu_relax(void) {}
+static void udelay(unsigned delay) { assert(delay == 1); rwp_delays++; }
+#define pr_err_ratelimited(...) ((void)rwp_warnings++)
+static _Noreturn void panic(const char *format, ...)
+{ (void)format; rwp_panics++; longjmp(panic_target, 1); }
 static bool is_hyp_mode_available(void) { return false; }
 static void *irq_domain_create_tree(struct fwnode_handle *h, int *ops, void *d)
 { (void)h; (void)ops; (void)d; return fail_domain ? NULL : &domain_storage; }
@@ -161,6 +175,21 @@ int main(void)
     reset(r, 1, 0);
     assert(!gic_init_bases(dist, r, 1, 0, NULL));
     assert(tokens == 1 && initialized == 1 && !freed && !removed);
+    /* A real clear is necessary; expiry must not return on Dora. */
+    gic_data.rwp_fail_stop = true;
+    rwp_clear_after = 3;
+    gic_do_wait_for_rwp(dist, 1);
+    assert(rwp_reads == 3 && rwp_delays == 2 && !rwp_warnings && !rwp_panics);
+    rwp_reads = rwp_delays = rwp_clear_after = 0;
+    if (!setjmp(panic_target)) {
+        gic_do_wait_for_rwp(dist, 1);
+        abort(); /* Returning would continue initialization without ACK. */
+    }
+    assert(rwp_panics == 1 && rwp_reads == 1000000 && !rwp_warnings);
+    /* Preserve the existing policy for unrelated boards. */
+    gic_data.rwp_fail_stop = false; rwp_reads = 0;
+    gic_do_wait_for_rwp(dist, 1);
+    assert(rwp_reads == 1000000 && rwp_warnings == 1 && rwp_panics == 1);
     return 0;
 }
 '''
@@ -168,7 +197,7 @@ int main(void)
 
 def exercise(source, expect_success=True):
     header = (ROOT / 'include/linux/irqchip/arm-gic-v3.h').read_text()
-    names = ('GICD_TYPER', 'GICD_PIDR2', 'GICD_TYPER_RSS', 'GICD_TYPER_MBIS',
+    names = ('GICD_CTLR', 'GICD_TYPER', 'GICD_PIDR2', 'GICD_TYPER_RSS', 'GICD_TYPER_MBIS',
              'GICD_TYPER_IRQS', 'GIC_PIDR2_ARCH_MASK', 'GIC_PIDR2_ARCH_GICv3',
              'GIC_PIDR2_ARCH_GICv4', 'GICR_TYPER', 'GICR_PIDR2',
              'GICR_TYPER_VLPIS', 'GICR_TYPER_LAST')
@@ -176,7 +205,8 @@ def exercise(source, expect_success=True):
                         for name in names)
     structure = re.search(r'struct redist_region \{.*?\n\};', source, re.S)[0]
     harness = PREAMBLE + '\n#define SZ_64K 0x10000\n' + defines + '\n' + structure
-    harness += BOUNDARIES + function(source, 'gic_iterate_rdists')
+    harness += BOUNDARIES + function(source, 'gic_do_wait_for_rwp')
+    harness += '\n' + function(source, 'gic_iterate_rdists')
     harness += '\n' + function(source, 'gic_init_bases') + TESTS
     with tempfile.TemporaryDirectory(prefix='dora-early-irq-') as tmp:
         code, binary = Path(tmp) / 'gic.c', Path(tmp) / 'gic'
@@ -194,6 +224,8 @@ def main():
     parser.add_argument('--dtb', type=Path, action='append', default=[])
     args = parser.parse_args()
     source = SOURCE.read_text()
+    assert 'of_machine_is_compatible("sony,dora-row")' in source
+    assert 'of_machine_is_compatible("somc,dora-row")' in source
     # Both firmware descriptions must retain the actual mapping length.
     for contract in ('rdist_regs[i].size = resource_size(&res)',
                      'redist_regs[count].size = size',
@@ -217,6 +249,7 @@ def main():
         anchor = '\tgic_data.rdists.rdist = alloc_percpu'
         bad = bad.replace(anchor, token + anchor)
         exercise(bad, False)
+        exercise(source.replace('if (gic_data.rwp_fail_stop)', 'if (false)'), False)
     if args.dtb:
         parse = runpy.run_path(str(ROOT / 'scripts/dora/check-power-dt.py'))['parse_fdt']
         for path in args.dtb:
@@ -236,7 +269,7 @@ def main():
                     except AssertionError:
                         continue
                     raise AssertionError('unsafe DT accepted: ' + prop)
-    print('PASS: production GICv3 mapping bounds, LAST/stride failures, four-core walk and allocation cleanup')
+    print('PASS: production GICv3 mapping bounds, LAST/stride failures, allocation cleanup and Dora RWP ACK fail-stop')
     print('Host checks do not establish physical IRQ/timer/watchdog or Sony S1 handoff.')
 
 

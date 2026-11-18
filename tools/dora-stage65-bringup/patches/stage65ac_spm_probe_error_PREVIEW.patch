@@ -1,0 +1,26 @@
+--- a/drivers/soc/qcom/spm.c
++++ b/drivers/soc/qcom/spm.c
+@@ -102,16 +102,17 @@
+ 	struct qcom_spm_drvdata *drv;
+ 	int cpu;
+ 
+-	if (!spm_global_drvdata)
+-		return -EPROBE_DEFER;
+-
++	/* Report a failed SAW3 probe instead of masking it as deferral. */
+ 	for_each_possible_cpu(cpu) {
+ 		drv = per_cpu(cpu_spm_drvdata, cpu);
++		if (IS_ERR(drv))
++			return PTR_ERR(drv);
+ 		if (!drv)
+ 			return -EPROBE_DEFER;
+-		if (IS_ERR(drv))
+-			return PTR_ERR(drv);
+-	}
++	}
++
++	if (!spm_global_drvdata)
++		return -EPROBE_DEFER;
+ 
+ 	return 0;
+ }

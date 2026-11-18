@@ -1,0 +1,39 @@
+--- a/drivers/regulator/kryo-regulator.c
++++ b/drivers/regulator/kryo-regulator.c
+@@ -854,7 +854,7 @@
+ 
+ static int kryo_regulator_lpm_prepare(struct kryo_regulator *kvreg)
+ {
+-	int vdd_volt_uv, bhs_volt, vdd_vlvl = 0;
++	int vdd_volt_uv, bhs_volt, vdd_vlvl;
+ 	unsigned long flags;
+ 
+ 	spin_lock_irqsave(&kvreg->slock, flags);
+@@ -863,18 +863,16 @@
+ 	kvreg->pre_lpm_state_volt = kvreg->volt;
+ 
+ 	if (kvreg->mode == LDO_MODE) {
+-		if (!vdd_vlvl) {
+-			vdd_vlvl = msm_spm_get_vdd(SHARED_CPU_REG_NUM);
+-			if (vdd_vlvl < 0) {
+-				kvreg_err(kvreg, "could not get vdd supply voltage level, rc=%d\n",
+-					  vdd_vlvl);
+-				spin_unlock_irqrestore(&kvreg->slock, flags);
+-				return NOTIFY_BAD;
+-			}
+-
+-			vdd_volt_uv = vdd_vlvl * VDD_SUPPLY_STEP_UV
+-				+ VDD_SUPPLY_MIN_UV;
++		vdd_vlvl = msm_spm_get_vdd(SHARED_CPU_REG_NUM);
++		if (vdd_vlvl < 0) {
++			kvreg_err(kvreg, "could not get vdd supply voltage level, rc=%d\n",
++				  vdd_vlvl);
++			spin_unlock_irqrestore(&kvreg->slock, flags);
++			return NOTIFY_BAD;
+ 		}
++
++		vdd_volt_uv = vdd_vlvl * VDD_SUPPLY_STEP_UV
++			+ VDD_SUPPLY_MIN_UV;
+ 		kvreg_debug(kvreg, "switching to BHS mode, vdd_apcc=%d uV, current LDO Vref=%d, LPM enter count=%lx\n",
+ 			    vdd_volt_uv, kvreg->volt, kvreg->lpm_enter_count);
+ 

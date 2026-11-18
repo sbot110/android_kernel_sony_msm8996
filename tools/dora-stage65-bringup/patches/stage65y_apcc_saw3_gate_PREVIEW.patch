@@ -1,0 +1,34 @@
+--- a/drivers/clk/qcom/clk-cpu-8996.c
++++ b/drivers/clk/qcom/clk-cpu-8996.c
+@@ -18,10 +18,11 @@
+ #include <asm/cputype.h>
+ #include <soc/qcom/kryo-l2-accessors.h>
+ 
+ #include "clk-alpha-pll.h"
+ #include "clk-regmap.h"
++#include <soc/qcom/spm.h>
+ 
+ enum _pmux_input {
+ 	DIV_2_INDEX = 0,
+ 	PLL_INDEX,
+ 	ACD_INDEX,
+@@ -720,10 +721,19 @@
+ 
+ 	regmap = devm_regmap_init_mmio(dev, base, &cpu_msm8996_regmap_config);
+ 	if (IS_ERR(regmap))
+ 		return PTR_ERR(regmap);
+ 
++	/*
++	 * Stage 65Y diagnostic proposal: do not reprogram CPU PLL/mux
++	 * before the SAW3 voltage backend has completed probe.
++	 * This does NOT validate the S11 rail voltage or PLL lock.
++	 */
++	ret = msm_spm_probe_done();
++	if (ret)
++		return ret;
++
+ 	ret = qcom_cpu_clk_msm8996_register_clks(dev, regmap);
+ 	if (ret)
+ 		return ret;
+ 
+ 	data->hws[0] = &pwrcl_pmux.clkr.hw;

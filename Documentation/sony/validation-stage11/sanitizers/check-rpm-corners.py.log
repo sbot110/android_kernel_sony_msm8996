@@ -1,0 +1,5 @@
+PASS: actual corn/vfc/swen aggregation, BOTH/AO, ACK timeout/offline/partial rollback, initial quarantine, forced sync, PM and competing consumers
+PASS: final-rdev resource lifetime and offline callbacks retain valid state
+PASS: typed read-only RPM snapshots, unknown initial votes, lifecycle/quarantine errors and concurrent readers
+PASS: exact-node snapshots avoid regulator acquisition, with PM/defer/quarantine and heap-free/unregister races
+Host fault/locking model only; RPM firmware, physical voltage and on-device suspend remain unverified.

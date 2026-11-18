@@ -1,14 +1,6 @@
+/* SPDX-License-Identifier: GPL-2.0-only */
 /*
- * Copyright (c) 2012-2020, The Linux Foundation. All rights reserved.
- *
- * This program is free software; you can redistribute it and/or modify
- * it under the terms of the GNU General Public License version 2 and
- * only version 2 as published by the Free Software Foundation.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
+ * Copyright (c) 2012-2018, 2020, The Linux Foundation. All rights reserved.
  *
  */
 
@@ -271,12 +263,10 @@ enum mdss_mdp_csc_type {
 	MDSS_MDP_CSC_RGB2YUV_601L,
 	MDSS_MDP_CSC_RGB2YUV_601FR,
 	MDSS_MDP_CSC_RGB2YUV_709L,
-	MDSS_MDP_CSC_RGB2YUV_709FR,
 	MDSS_MDP_CSC_RGB2YUV_2020L,
 	MDSS_MDP_CSC_RGB2YUV_2020FR,
 	MDSS_MDP_CSC_YUV2YUV,
 	MDSS_MDP_CSC_RGB2RGB,
-	MDSS_MDP_CSC_RGB2RGB_L,
 	MDSS_MDP_MAX_CSC
 };
 
@@ -304,11 +294,11 @@ enum mdss_mdp_fetch_type {
 	MDSS_MDP_FETCH_UBWC,
 };
 
-/**
+/*
  * enum mdp_commit_stage_type - Indicate different commit stages
  *
  * @MDP_COMMIT_STATE_WAIT_FOR_PINGPONG:	At the stage of being ready to
-*			wait for pingpong buffer.
+ *			wait for pingpong buffer.
  * @MDP_COMMIT_STATE_PINGPONG_DONE:		At the stage that pingpong
  *			buffer is ready.
  */
@@ -427,11 +417,11 @@ struct mdss_mdp_ctl_intfs_ops {
 	int (*display_fnc)(struct mdss_mdp_ctl *ctl, void *arg);
 	int (*wait_fnc)(struct mdss_mdp_ctl *ctl, void *arg);
 	int (*wait_pingpong)(struct mdss_mdp_ctl *ctl, void *arg);
-	u32 (*read_line_cnt_fnc)(struct mdss_mdp_ctl *);
-	int (*add_vsync_handler)(struct mdss_mdp_ctl *,
-					struct mdss_mdp_vsync_handler *);
-	int (*remove_vsync_handler)(struct mdss_mdp_ctl *,
-					struct mdss_mdp_vsync_handler *);
+	u32 (*read_line_cnt_fnc)(struct mdss_mdp_ctl *p);
+	int (*add_vsync_handler)(struct mdss_mdp_ctl *p,
+					struct mdss_mdp_vsync_handler *q);
+	int (*remove_vsync_handler)(struct mdss_mdp_ctl *p,
+					struct mdss_mdp_vsync_handler *q);
 	int (*config_fps_fnc)(struct mdss_mdp_ctl *ctl, int new_fps);
 	int (*restore_fnc)(struct mdss_mdp_ctl *ctl, bool locked);
 	int (*early_wake_up_fnc)(struct mdss_mdp_ctl *ctl);
@@ -449,7 +439,7 @@ struct mdss_mdp_ctl_intfs_ops {
 
 	/* to update lineptr, [1..yres] - enable, 0 - disable */
 	int (*update_lineptr)(struct mdss_mdp_ctl *ctl, bool enable);
-	int (*avr_ctrl_fnc)(struct mdss_mdp_ctl *, bool enable);
+	int (*avr_ctrl_fnc)(struct mdss_mdp_ctl *ctl, bool enable);
 
 	/* to wait for vsync */
 	int (*wait_for_vsync_fnc)(struct mdss_mdp_ctl *ctl);
@@ -589,6 +579,8 @@ struct mdss_mdp_ctl {
 	bool commit_in_progress;
 	struct mutex ds_lock;
 	bool need_vsync_on;
+	/* pack alignment for DSI or RGB Panels */
+	bool pack_align_msb;
 };
 
 struct mdss_mdp_mixer {
@@ -978,7 +970,7 @@ struct mdss_overlay_private {
 	u32 sd_enabled;
 	u32 sc_enabled;
 
-	struct sw_sync_timeline *vsync_timeline;
+	struct mdss_timeline *vsync_timeline;
 	struct mdss_mdp_vsync_handler vsync_retire_handler;
 	int retire_cnt;
 	bool kickoff_released;
@@ -1019,7 +1011,7 @@ struct mdss_mdp_set_ot_params {
 
 struct mdss_mdp_commit_cb {
 	void *data;
-	int (*commit_cb_fnc) (enum mdp_commit_stage_type commit_state,
+	int (*commit_cb_fnc)(enum mdp_commit_stage_type commit_state,
 		void *data);
 };
 
@@ -1603,7 +1595,7 @@ static inline bool mdss_mdp_is_lineptr_supported(struct mdss_mdp_ctl *ctl)
 	pinfo = &ctl->panel_data->panel_info;
 
 	return (ctl->is_video_mode || ((pinfo->type == MIPI_CMD_PANEL)
-			&& (pinfo->te.tear_check_en)) ? true : false);
+			&& (pinfo->te.tear_check_en)));
 }
 
 static inline bool mdss_mdp_is_map_needed(struct mdss_data_type *mdata,
@@ -1997,8 +1989,6 @@ int mdss_mdp_cmd_set_autorefresh_mode(struct mdss_mdp_ctl *ctl, int frame_cnt);
 int mdss_mdp_cmd_get_autorefresh_mode(struct mdss_mdp_ctl *ctl);
 int mdss_mdp_ctl_cmd_set_autorefresh(struct mdss_mdp_ctl *ctl, int frame_cnt);
 int mdss_mdp_ctl_cmd_get_autorefresh(struct mdss_mdp_ctl *ctl);
-int mdss_mdp_enable_panel_disable_mode(struct msm_fb_data_type *mfd,
-	bool disable_panel);
 void mdss_mdp_ctl_event_timer(void *data);
 int mdss_mdp_pp_get_version(struct mdp_pp_feature_version *version);
 int mdss_mdp_layer_pre_commit_cwb(struct msm_fb_data_type *mfd,

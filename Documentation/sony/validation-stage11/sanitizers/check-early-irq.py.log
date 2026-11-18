@@ -1,0 +1,2 @@
+PASS: production GICv3 mapping bounds, LAST/stride failures, allocation cleanup and Dora RWP ACK fail-stop
+Host checks do not establish physical IRQ/timer/watchdog or Sony S1 handoff.

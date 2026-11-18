@@ -1,0 +1,106 @@
+{
+  "status": "PASS: independent AOSP extraction and byte-for-byte comparison",
+  "unpacker_sha256": "a9d260978a63bd06a24b6347e7dee8a28ff96639793caea15dff6aa491316308",
+  "unpacker_source": "AOSP android-14.0.0_r1 system/tools/mkbootimg/unpack_bootimg.py",
+  "reference_boot_bytes": 13283328,
+  "reference_boot_sha256": "f923f9b99c468484b713529577b84e3a137d1b9cbc09393e5593258009983820",
+  "reference_kernel_release": "4.4.302+ (Stage10-identical supplied working reference)",
+  "ramdisk_preserved_in_both_images": true,
+  "images": {
+    "stage11": {
+      "bytes": 11051008,
+      "sha256": "c7a248e58f04fc72c4640d144f5e6f1a47dc32c85c50f020cefd3cae2ea9dfd2",
+      "aosp_unpack_exit": 0,
+      "aosp_kernel_equals_built_payload": true,
+      "aosp_ramdisk_equals_working_reference": true,
+      "ramdisk_bytes": 1224724,
+      "ramdisk_sha256": "9a532793e779b33bad98df1576ec9b661bc04457f4f3f9148b31ba8d42d4f41e",
+      "kernel_payload_sha256": "725a60106736e6eeabc45f93a0178e6a57d7f5958679d44c1414038252a146d2",
+      "decompressed_image_sha256": "df80903f8168bd233559836d283e409266344faad1bdc627cc57afa1e8de15df",
+      "decompressed_image_equals_clean_build": true,
+      "qcom_legacy_id_verified_independently": true,
+      "qcom_legacy_id": "35afd6abb3972411a1bbe916a87557342ef46380",
+      "header_addresses": {
+        "kernel": 2148007936,
+        "ramdisk": 2188378112,
+        "tags": 2186280960
+      },
+      "page_size": 4096,
+      "text_offset": 524288,
+      "image_size": 22147072,
+      "flags": 10,
+      "ordered_dtbs": [
+        {
+          "bytes": 190758,
+          "sha256": "3b9f15d92beba0234c34465754a9a5f30b6ba8287b9a11600c63645404bd2d9f"
+        },
+        {
+          "bytes": 191274,
+          "sha256": "db5479cdaba00d4111c3bf24ad7093c384f7b866d42fb0bce1d16e2832bc8d17"
+        },
+        {
+          "bytes": 190758,
+          "sha256": "04e9dc339d8dfac76704463c83875419a43fdc806d15fca1e5c33a4ea998f250"
+        },
+        {
+          "bytes": 191274,
+          "sha256": "adb380173e6148c2281a0b3761934294eb0d67259be54703d3197d148ad855e1"
+        }
+      ],
+      "boot_test_ready": false,
+      "hardware_test_performed": false
+    },
+    "initrd822": {
+      "bytes": 11051008,
+      "sha256": "3c33a57da1c473cf239dbd9fdc0b3cad26206461b4ba8151c371c86d60941c18",
+      "aosp_unpack_exit": 0,
+      "aosp_kernel_equals_built_payload": true,
+      "aosp_ramdisk_equals_working_reference": true,
+      "ramdisk_bytes": 1224724,
+      "ramdisk_sha256": "9a532793e779b33bad98df1576ec9b661bc04457f4f3f9148b31ba8d42d4f41e",
+      "kernel_payload_sha256": "725a60106736e6eeabc45f93a0178e6a57d7f5958679d44c1414038252a146d2",
+      "decompressed_image_sha256": "df80903f8168bd233559836d283e409266344faad1bdc627cc57afa1e8de15df",
+      "decompressed_image_equals_clean_build": true,
+      "qcom_legacy_id_verified_independently": true,
+      "qcom_legacy_id": "35afd6abb3972411a1bbe916a87557342ef46380",
+      "header_addresses": {
+        "kernel": 2148007936,
+        "ramdisk": 2183135232,
+        "tags": 2186280960
+      },
+      "page_size": 4096,
+      "text_offset": 524288,
+      "image_size": 22147072,
+      "flags": 10,
+      "ordered_dtbs": [
+        {
+          "bytes": 190758,
+          "sha256": "3b9f15d92beba0234c34465754a9a5f30b6ba8287b9a11600c63645404bd2d9f"
+        },
+        {
+          "bytes": 191274,
+          "sha256": "db5479cdaba00d4111c3bf24ad7093c384f7b866d42fb0bce1d16e2832bc8d17"
+        },
+        {
+          "bytes": 190758,
+          "sha256": "04e9dc339d8dfac76704463c83875419a43fdc806d15fca1e5c33a4ea998f250"
+        },
+        {
+          "bytes": 191274,
+          "sha256": "adb380173e6148c2281a0b3761934294eb0d67259be54703d3197d148ad855e1"
+        }
+      ],
+      "boot_test_ready": false,
+      "hardware_test_performed": false
+    }
+  },
+  "differential_changed_file_offsets": [
+    22
+  ],
+  "only_changed_field": "ramdisk_addr at header bytes20..23",
+  "same_qcom_payload_id_expected": true,
+  "cmdline_inherited_but_selinux_enforcing_and_maxcpus2": true,
+  "raw_cmdline_and_payload_kept_private": true,
+  "booted": false,
+  "boot_test_ready": false
+}

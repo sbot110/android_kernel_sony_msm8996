@@ -1,0 +1,11 @@
+{
+  "source": "user_statement",
+  "current_4_4_boots": true,
+  "twrp_recently_checked": true,
+  "recovery_method": "TWRP",
+  "exact_recovery_check_time": null,
+  "quote": "Сейчас загружается LOS 21 / 4.4; TWRP недавно проверен",
+  "failure_time_diagnostic_channel": "NOT YET CONFIRMED",
+  "actual_phone_commands_executed_by_codex": false,
+  "recorded_at_utc": "2026-11-16T19:38:12.171612+00:00"
+}

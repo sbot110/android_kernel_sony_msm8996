@@ -1,0 +1,160 @@
+{
+  "schema": "dora-stage12-test-manifest-v1",
+  "test": "B",
+  "status": "NOT EXECUTED",
+  "created_utc": "2026-11-16T19:47:47.878659+00:00",
+  "execution_utc": null,
+  "preflight_status": "STOP",
+  "preflight_code_git_sha": "fb4a5613c054a632da3c3c2d1adcd365a057c9b4",
+  "kernel_source_git_sha": "1b8871be2d2ce04f7361816fa90aa686e5ece1a3",
+  "stage11_published_git_sha": "30102a011d83b4dd0d30f3d47add10fba5fe45bb",
+  "image_name": "boot-dora-lineage21-kernel419-stage11-initrd822-experiment.img",
+  "image": {
+    "sha256": "3c33a57da1c473cf239dbd9fdc0b3cad26206461b4ba8151c371c86d60941c18",
+    "bytes": 11051008,
+    "header": {
+      "kernel_addr": 2148007936,
+      "ramdisk_addr": 2183135232,
+      "tags_addr": 2186280960,
+      "page_size": 4096,
+      "kernel_size": 9815824,
+      "ramdisk_size": 1224724,
+      "second_size": 0,
+      "second_addr": 0,
+      "header_sha256": "69ff662c871d99b7e90cc16dda73b4dd8647ef582fd3e661f1a27bbdefe5d94e",
+      "legacy_dt_size": 0,
+      "payload_padded_end": 11051008,
+      "qcom_id": "35afd6abb3972411a1bbe916a87557342ef46380",
+      "cmdline_sha256": "62cf439de43a398f4eb04cfbf61d2261a486dd88b5431ca571441430550e08a1",
+      "os_version_word": 469762474
+    },
+    "kernel_release": "4.19.318-dora-4.19+",
+    "kernel_payload_sha256": "725a60106736e6eeabc45f93a0178e6a57d7f5958679d44c1414038252a146d2",
+    "kernel_payload_bytes": 9815824,
+    "image_sha256": "df80903f8168bd233559836d283e409266344faad1bdc627cc57afa1e8de15df",
+    "image_size_with_bss": 22147072,
+    "dtbs": [
+      {
+        "qcom,msm-id": [
+          246,
+          196608
+        ],
+        "qcom,board-id": [
+          8,
+          0
+        ],
+        "qcom,pmic-id": [
+          131081,
+          131082,
+          0,
+          0
+        ],
+        "sha256": "3b9f15d92beba0234c34465754a9a5f30b6ba8287b9a11600c63645404bd2d9f",
+        "bytes": 190758
+      },
+      {
+        "qcom,msm-id": [
+          246,
+          196609
+        ],
+        "qcom,board-id": [
+          8,
+          0
+        ],
+        "qcom,pmic-id": [
+          131081,
+          131082,
+          0,
+          0
+        ],
+        "sha256": "db5479cdaba00d4111c3bf24ad7093c384f7b866d42fb0bce1d16e2832bc8d17",
+        "bytes": 191274
+      },
+      {
+        "qcom,msm-id": [
+          246,
+          196608
+        ],
+        "qcom,board-id": [
+          8,
+          0
+        ],
+        "qcom,pmic-id": [
+          131081,
+          65555,
+          0,
+          0
+        ],
+        "sha256": "04e9dc339d8dfac76704463c83875419a43fdc806d15fca1e5c33a4ea998f250",
+        "bytes": 190758
+      },
+      {
+        "qcom,msm-id": [
+          246,
+          196609
+        ],
+        "qcom,board-id": [
+          8,
+          0
+        ],
+        "qcom,pmic-id": [
+          131081,
+          65555,
+          0,
+          0
+        ],
+        "sha256": "adb380173e6148c2281a0b3761934294eb0d67259be54703d3197d148ad855e1",
+        "bytes": 191274
+      }
+    ],
+    "ramdisk": {
+      "compression": "xz",
+      "sha256": "9a532793e779b33bad98df1576ec9b661bc04457f4f3f9148b31ba8d42d4f41e",
+      "bytes": 1224724,
+      "init_sha256": "74f3afc4adce6e0f0ad02993e7701e353c0d7777c935e417fca8b4c19edbb5c5"
+    },
+    "hardware_qualified": false
+  },
+  "sony_s1": {
+    "reference": "1299-4832_S1_Boot_MSM8996_LA2.0_O_204",
+    "current_live_capture": null
+  },
+  "recovery": {
+    "current_access": "USER CONFIRMED RECENT TWRP CHECK",
+    "source": "user_statement",
+    "actual_recheck_date": null,
+    "historical_restore": "previous successful TWRP boot restore from Stage65 user evidence",
+    "backup_currently_available_in_this_environment": false
+  },
+  "current_working_boot": {
+    "user_confirmed": "LOS21 / kernel4.4 currently boots",
+    "runtime_captured_here": false,
+    "partition_identity": null,
+    "partition_bytes": null,
+    "full_read_sha256": null
+  },
+  "restoration_method": {
+    "plan": "TWRP restore of boot only using verified full64M backup, after target/extent check and separate user permission",
+    "backup_path": "/mnt/d/dora515-noreloc-flash/boot-stable-verified-full64M.img",
+    "backup_expected_bytes": 67108864,
+    "backup_expected_sha256": "07200b77a75f989533a477da355544dd25f1be99ee8c763df7ca75e5108d3178",
+    "write_commands_issued": false,
+    "current_restore_readiness": "STOP"
+  },
+  "diagnostic_channel": "UNCONFIRMED",
+  "observed_behavior": null,
+  "outcome_classification": null,
+  "hardware_permission_requested": false,
+  "hardware_permission_received": false,
+  "device_commands_executed_here": false,
+  "protected_partitions": [
+    "FOTAKernel",
+    "userdata",
+    "persist",
+    "modem",
+    "TA",
+    "GPT",
+    "bootloader"
+  ],
+  "next_gate": "analyze actual Test A, resolve own gates, then separately request NEW Test B authorization"
+}

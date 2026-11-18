@@ -1,0 +1,172 @@
+{
+  "status": "PASS",
+  "scope": "build formats and exact DTB payload only",
+  "bootloader_selection": "UNVERIFIED",
+  "device_boot": "UNTESTED",
+  "linked_implementations": [
+    "qusb2_phy_probe",
+    "msm8996_dora_init_tbl",
+    "ufs_qcom_phy_qmp_14nm_probe",
+    "glink_rpm_probe",
+    "qcom_apcs_ipc_probe",
+    "pmic_gpio_probe",
+    "pmic_mpp_probe",
+    "simple_pm_bus_probe",
+    "mdss_dsi_panel_driver_detection",
+    "bpf_int_jit_compile",
+    "qcom_smd_rpm_probe",
+    "msm_bus_device_probe",
+    "msm8996_boot_probe",
+    "qcom_rpm_corner_sync",
+    "rpm_corner_probe",
+    "sdhci_msm_probe",
+    "mmc_gpiod_request_uim2",
+    "msm8996_cpu_transaction_set_rate",
+    "msm8996_cpu_hw_read_plans",
+    "clk_vdd_class_reattach",
+    "msm8996_cpu_native_shared_init",
+    "msm8996_cpu_native_bind",
+    "qcom_genpd_regulator_probe",
+    "qpnp_wled_probe",
+    "msm8996_gfx_probe",
+    "cpr3_hmss_regulator_probe",
+    "cpr3_mmss_regulator_probe",
+    "kryo_regulator_probe",
+    "msm_apm_probe"
+  ],
+  "image_header": {
+    "text_offset": 524288,
+    "image_size": 22147072,
+    "flags": 10
+  },
+  "appended_dtbs": [
+    {
+      "path": "qcom/msm8996-v3.0-sony-xperia-tone-dora.dtb",
+      "offset": 9051760,
+      "size": 190717,
+      "qcom,msm-id": [
+        246,
+        196608
+      ],
+      "qcom,board-id": [
+        8,
+        0
+      ],
+      "qcom,pmic-id": [
+        131081,
+        131082,
+        0,
+        0
+      ]
+    },
+    {
+      "path": "qcom/msm8996-v3.0-pmi8996-sony-xperia-tone-dora.dtb",
+      "offset": 9242477,
+      "size": 190717,
+      "qcom,msm-id": [
+        246,
+        196608
+      ],
+      "qcom,board-id": [
+        8,
+        0
+      ],
+      "qcom,pmic-id": [
+        131081,
+        65555,
+        0,
+        0
+      ]
+    },
+    {
+      "path": "qcom/msm8996-sony-xperia-tone-dora.dtb",
+      "offset": 9433194,
+      "size": 191233,
+      "qcom,msm-id": [
+        246,
+        196609
+      ],
+      "qcom,board-id": [
+        8,
+        0
+      ],
+      "qcom,pmic-id": [
+        131081,
+        131082,
+        0,
+        0
+      ]
+    },
+    {
+      "path": "qcom/msm8996-v3.1-pmi8996-sony-xperia-tone-dora.dtb",
+      "offset": 9624427,
+      "size": 191233,
+      "qcom,msm-id": [
+        246,
+        196609
+      ],
+      "qcom,board-id": [
+        8,
+        0
+      ],
+      "qcom,pmic-id": [
+        131081,
+        65555,
+        0,
+        0
+      ]
+    }
+  ],
+  "artifacts": [
+    {
+      "path": "vmlinux",
+      "size": 24770104,
+      "sha256": "ec9b0f8e281d0d0b434efd01ffaae3823bead62c0975afe3da2490f128e95044"
+    },
+    {
+      "path": ".config",
+      "size": 137490,
+      "sha256": "40179cb0f4f02fe0105a167bd55a675a004b4c6a9b9dffc6369540019f90751c"
+    },
+    {
+      "path": "System.map",
+      "size": 3766673,
+      "sha256": "3bcdc40ee664d02f0329cede550d1d25058273fdcafd7389fee587720bd2979c"
+    },
+    {
+      "path": "arch/arm64/boot/Image",
+      "size": 19792384,
+      "sha256": "df80903f8168bd233559836d283e409266344faad1bdc627cc57afa1e8de15df"
+    },
+    {
+      "path": "arch/arm64/boot/Image.gz",
+      "size": 9051760,
+      "sha256": "3a5418ab714e7f8cd349afd88faaadd847b01a3a1bd47f237e697a57934acf5c"
+    },
+    {
+      "path": "arch/arm64/boot/dts/qcom/msm8996-v3.0-sony-xperia-tone-dora.dtb",
+      "size": 190717,
+      "sha256": "e11333c8a73565305f8ab216a908b9eba5d1e9cc585d8e5f577d7fa636f8e9d9"
+    },
+    {
+      "path": "arch/arm64/boot/dts/qcom/msm8996-v3.0-pmi8996-sony-xperia-tone-dora.dtb",
+      "size": 190717,
+      "sha256": "98b6b27527932941ecdddf5190546b40234b181da2a73c2b3c55d251aa3ee327"
+    },
+    {
+      "path": "arch/arm64/boot/dts/qcom/msm8996-sony-xperia-tone-dora.dtb",
+      "size": 191233,
+      "sha256": "92fa299993708b41bb3b7e24cfdcba73dd8218fd53b7767d0b8ab0dcbefbbf15"
+    },
+    {
+      "path": "arch/arm64/boot/dts/qcom/msm8996-v3.1-pmi8996-sony-xperia-tone-dora.dtb",
+      "size": 191233,
+      "sha256": "e0099b1be91141493f215583b173aad53961deff15eb21fd7fa8e96a03ce365d"
+    },
+    {
+      "path": "arch/arm64/boot/Image.gz-dtb",
+      "size": 9815660,
+      "sha256": "627db615926244840bd7b3f6e287f4644f4e834d26c0136b64e9ad0c4b9edcbf"
+    }
+  ]
+}

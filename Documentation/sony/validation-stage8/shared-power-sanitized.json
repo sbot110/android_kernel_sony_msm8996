@@ -1,0 +1,6 @@
+{
+  "production_functions": 23,
+  "unsafe_mutations_rejected": 10,
+  "hardware_verified": false,
+  "live_cpu_backend": false
+}

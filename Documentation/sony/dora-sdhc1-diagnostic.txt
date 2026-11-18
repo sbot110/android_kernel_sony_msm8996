@@ -1,0 +1,45 @@
+Experimental SDHC1-only Dora device trees
+
+Source-qualification: PASS for separate experimental DT artifacts only.
+See dora-sdhc1-qualification.md and the final clean-build report.
+This is not BOOT TEST READY or runtime verification.
+
+The four qcom/diagnostic/*-sdhc1-diagnostic.dts files inherit the corresponding
+real normal DTS, including each SoC/PMIC variant override. Their only changes
+are an explicit experimental model, the empty sony,sdhc1-diagnostic root
+marker and SDHC1 status = "okay". SDHC2, UFS and all other hardware gates stay
+identical to the normal compiled trees. No diagnostic target is listed in
+dtb-y, normal build.sh, or any default image concatenation list.
+
+The integration audit must close the source clock, IRQ and PM prerequisites
+before selecting a diagnostic tree for any runtime attempt. Compiling a DTB
+does not close those gates. Electrical behavior, RPM request ACKs on a phone,
+bootloader DT selection, partition access, HS200/HS400 integrity and suspend
+remain unverified. This workflow does not build boot.img or flash a device.
+
+Normal validation runs:
+  python3 scripts/dora/check-sdhc1-diagnostic.py --default-only \
+    NORMAL_V30_PMI8994.dtb NORMAL_V30_PMI8996.dtb \
+    NORMAL_V31_PMI8994.dtb NORMAL_V31_PMI8996.dtb \
+    --config NORMAL_OUT/.config --selftest
+The supplied paths must retain their real standard variant basenames.
+
+After the integration source audit passes, the explicit optional DT-only build
+uses an existing normal build output containing its config and four DTBs:
+  OUT_DIR=/path/to/normal-out DIAGNOSTIC_OUT_DIR=/path/to/separate-diag-out \
+    scripts/dora/build-sdhc1-diagnostic.sh
+
+The diagnostic O= must be new or empty; existing files and descendant symlinks
+are rejected. Choose a fresh output path for each invocation. The builder
+copies the normal .config to that separate O= directory, runs
+olddefconfig and requires exact config equality. It invokes only the four
+unlisted diagnostic %.dtb targets. Normal config, four DTBs and existing
+kernel/boot artifacts are hash-checked for preservation. The full comparator
+checks every node and raw property, including all phandles, plus child order,
+FDT header semantics and reservation entries. It permits exactly the three
+documented property changes and records hashes with qualification=not_assessed.
+
+The optional build is never called by the default build. Its output must not
+be copied into the normal DTB directory or appended to the normal Image.gz-dtb.
+The completed source qualification, validated source SHA and clean-build/DT
+evidence are recorded in dora-build-validation.txt and validation-stage5/.

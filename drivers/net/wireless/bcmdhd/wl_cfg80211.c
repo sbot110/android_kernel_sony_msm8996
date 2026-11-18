@@ -499,8 +499,14 @@ static s32 wl_cfg80211_tdls_oper(struct wiphy *wiphy, struct net_device *dev,
 	u8 *peer, enum nl80211_tdls_operation oper);
 #endif
 #endif /* LINUX_VERSION > KERNEL_VERSION(3,2,0) || WL_COMPAT_WIRELESS */
+static void wl_scan_done(struct cfg80211_scan_request *request, bool aborted)
+{
+	struct cfg80211_scan_info info = { .aborted = aborted };
+	cfg80211_scan_done(request, &info);
+}
+
 #ifdef WL_SCHED_SCAN
-static int wl_cfg80211_sched_scan_stop(struct wiphy *wiphy, struct net_device *dev);
+static int wl_cfg80211_sched_scan_stop(struct wiphy *wiphy, struct net_device *dev, u64 reqid);
 #endif
 #if defined(WL_VIRTUAL_APSTA) || defined(DUAL_STA_STATIC_IF)
 bcm_struct_cfgdev*
@@ -1482,7 +1488,7 @@ wl_cfg80211_add_virtual_iface(struct wiphy *wiphy,
 #if (LINUX_VERSION_CODE >= KERNEL_VERSION(4, 1, 0))
 	unsigned char name_assign_type,
 #endif /* (LINUX_VERSION_CODE >= KERNEL_VERSION(4, 1, 0)) */
-	enum nl80211_iftype type, u32 *flags,
+	enum nl80211_iftype type,
 	struct vif_params *params)
 {
 	s32 err = -ENODEV;
@@ -1950,7 +1956,7 @@ wl_cfg80211_del_virtual_iface(struct wiphy *wiphy, bcm_struct_cfgdev *cfgdev)
 
 static s32
 wl_cfg80211_change_virtual_iface(struct wiphy *wiphy, struct net_device *ndev,
-	enum nl80211_iftype type, u32 *flags,
+	enum nl80211_iftype type,
 	struct vif_params *params)
 {
 	s32 ap = 0;
@@ -4571,7 +4577,8 @@ wl_cfg80211_connect(struct wiphy *wiphy, struct net_device *dev,
 #endif
 #ifdef WL_SCHED_SCAN
 	if (cfg->sched_scan_req) {
-		wl_cfg80211_sched_scan_stop(wiphy, bcmcfg_to_prmry_ndev(cfg));
+		wl_cfg80211_sched_scan_stop(wiphy, bcmcfg_to_prmry_ndev(cfg),
+			cfg->sched_scan_req->reqid);
 	}
 #endif
 #if defined(ESCAN_RESULT_PATCH)
@@ -5824,7 +5831,7 @@ static s32 wl_cfg80211_suspend(struct wiphy *wiphy)
 		}
 	spin_lock_irqsave(&cfg->cfgdrv_lock, flags);
 	if (cfg->scan_request) {
-		cfg80211_scan_done(cfg->scan_request, true);
+		wl_scan_done(cfg->scan_request, true);
 		cfg->scan_request = NULL;
 	}
 	for_each_ndev(cfg, iter, next) {
@@ -6877,7 +6884,7 @@ wl_cfg80211_mgmt_tx(struct wiphy *wiphy, bcm_struct_cfgdev *cfgdev,
 
 #ifndef CONFIG_MACH_SONY_KAGURA
 	if (len > (action_frame->len + DOT11_MGMT_HDR_LEN)) {
-		WL_ERR(("invalid action frame length:%zu\n"));
+		WL_ERR(("invalid action frame length:%zu\n", len));
 		return BCME_BADARG;
 		goto exit;
 	}
@@ -8856,7 +8863,7 @@ wl_cfg80211_sched_scan_start(struct wiphy *wiphy,
 }
 
 static int
-wl_cfg80211_sched_scan_stop(struct wiphy *wiphy, struct net_device *dev)
+wl_cfg80211_sched_scan_stop(struct wiphy *wiphy, struct net_device *dev, u64 reqid)
 {
 	struct bcm_cfg80211 *cfg = wiphy_priv(wiphy);
 
@@ -9230,7 +9237,7 @@ static s32 wl_setup_wiphy(struct wireless_dev *wdev, struct device *sdiofunc_dev
 	wdev->wiphy->max_sched_scan_ssids = MAX_PFN_LIST_COUNT;
 	wdev->wiphy->max_match_sets = MAX_PFN_LIST_COUNT;
 	wdev->wiphy->max_sched_scan_ie_len = WL_SCAN_IE_LEN_MAX;
-	wdev->wiphy->flags |= WIPHY_FLAG_SUPPORTS_SCHED_SCAN;
+	wdev->wiphy->max_sched_scan_reqs = 1;
 #endif /* WL_SCHED_SCAN */
 	wdev->wiphy->interface_modes =
 		BIT(NL80211_IFTYPE_STATION)
@@ -10665,13 +10672,17 @@ wl_bss_roaming_done(struct bcm_cfg80211 *cfg, struct net_device *ndev,
 	printk("wl_bss_roaming_done succeeded to " MACDBG "\n",
 		MAC2STRDBG((const u8*)(&e->addr)));
 
-	cfg80211_roamed(ndev,
-#if (LINUX_VERSION_CODE > KERNEL_VERSION(2, 6, 39)) || defined(WL_COMPAT_WIRELESS)
-		notify_channel,
-#endif
-		curbssid,
-		conn_info->req_ie, conn_info->req_ie_len,
-		conn_info->resp_ie, conn_info->resp_ie_len, GFP_KERNEL);
+	{
+		struct cfg80211_roam_info info = {
+			.channel = notify_channel,
+			.bssid = curbssid,
+			.req_ie = conn_info->req_ie,
+			.req_ie_len = conn_info->req_ie_len,
+			.resp_ie = conn_info->resp_ie,
+			.resp_ie_len = conn_info->resp_ie_len,
+		};
+		cfg80211_roamed(ndev, &info, GFP_KERNEL);
+	}
 	WL_DBG(("Report roaming result\n"));
 
 	memcpy(&cfg->last_roamed_addr, (void *)&e->addr, ETHER_ADDR_LEN);
@@ -11012,7 +11023,7 @@ scan_done_out:
 	del_timer_sync(&cfg->scan_timeout);
 	spin_lock_irqsave(&cfg->cfgdrv_lock, flags);
 	if (cfg->scan_request) {
-		cfg80211_scan_done(cfg->scan_request, false);
+		wl_scan_done(cfg->scan_request, false);
 		cfg->scan_request = NULL;
 	}
 	spin_unlock_irqrestore(&cfg->cfgdrv_lock, flags);
@@ -11739,10 +11750,10 @@ void wl_terminate_event_handler(void)
 	}
 }
 
-static void wl_scan_timeout(unsigned long data)
+static void wl_scan_timeout(struct timer_list *timer)
 {
 	wl_event_msg_t msg;
-	struct bcm_cfg80211 *cfg = (struct bcm_cfg80211 *)data;
+	struct bcm_cfg80211 *cfg = from_timer(cfg, timer, scan_timeout);
 	struct wireless_dev *wdev = NULL;
 	struct net_device *ndev = NULL;
 	struct wl_scan_results *bss_list;
@@ -11813,9 +11824,9 @@ static void wl_del_roam_timeout(struct bcm_cfg80211 *cfg)
 
 }
 
-static void wl_roam_timeout(unsigned long data)
+static void wl_roam_timeout(struct timer_list *timer)
 {
-	struct bcm_cfg80211 *cfg = (struct bcm_cfg80211 *)data;
+	struct bcm_cfg80211 *cfg = from_timer(cfg, timer, roam_timeout);
 	dhd_pub_t *dhdp = (dhd_pub_t *)(cfg->pub);
 
 	WL_ERR(("roam timer expired\n"));
@@ -12031,13 +12042,14 @@ static s32 wl_notify_escan_complete(struct bcm_cfg80211 *cfg,
 	if (cfg->sched_scan_req && !cfg->scan_request) {
 		WL_PNO((">>> REPORTING SCHED SCAN RESULTS \n"));
 		if (!aborted)
-			cfg80211_sched_scan_results(cfg->sched_scan_req->wiphy);
+			cfg80211_sched_scan_results(cfg->sched_scan_req->wiphy,
+				cfg->sched_scan_req->reqid);
 		cfg->sched_scan_running = FALSE;
 		cfg->sched_scan_req = NULL;
 	}
 #endif /* WL_SCHED_SCAN */
 	if (likely(cfg->scan_request)) {
-		cfg80211_scan_done(cfg->scan_request, aborted);
+		wl_scan_done(cfg->scan_request, aborted);
 		cfg->scan_request = NULL;
 		DHD_OS_SCAN_WAKE_UNLOCK((dhd_pub_t *)(cfg->pub));
 		DHD_ENABLE_RUNTIME_PM((dhd_pub_t *)(cfg->pub));
@@ -12659,9 +12671,7 @@ static s32 wl_init_scan(struct bcm_cfg80211 *cfg)
 	wl_escan_init_sync_id(cfg);
 
 	/* Init scan_timeout timer */
-	init_timer(&cfg->scan_timeout);
-	cfg->scan_timeout.data = (unsigned long) cfg;
-	cfg->scan_timeout.function = wl_scan_timeout;
+	timer_setup(&cfg->scan_timeout, wl_scan_timeout, 0);
 
 	return err;
 }
@@ -12672,9 +12682,7 @@ static s32 wl_init_roam_timeout(struct bcm_cfg80211 *cfg)
 	int err = 0;
 
 	/* Init roam timer */
-	init_timer(&cfg->roam_timeout);
-	cfg->roam_timeout.data = (unsigned long) cfg;
-	cfg->roam_timeout.function = wl_roam_timeout;
+	timer_setup(&cfg->roam_timeout, wl_roam_timeout, 0);
 
 	return err;
 }
@@ -13873,7 +13881,7 @@ _Pragma("GCC diagnostic pop")
 
 	spin_lock_irqsave(&cfg->cfgdrv_lock, flags);
 	if (cfg->scan_request) {
-		cfg80211_scan_done(cfg->scan_request, true);
+		wl_scan_done(cfg->scan_request, true);
 		cfg->scan_request = NULL;
 	}
 	spin_unlock_irqrestore(&cfg->cfgdrv_lock, flags);
@@ -14097,7 +14105,7 @@ int wl_cfg80211_cleanup(void)
 	ndev = bcmcfg_to_prmry_ndev(cfg);
 	spin_lock_irqsave(&cfg->cfgdrv_lock, flags);
 	if (cfg->scan_request) {
-		cfg80211_scan_done(cfg->scan_request, true);
+		wl_scan_done(cfg->scan_request, true);
 		cfg->scan_request = NULL;
 	}
 	spin_unlock_irqrestore(&cfg->cfgdrv_lock, flags);
@@ -15071,7 +15079,7 @@ static const struct rfkill_ops wl_rfkill_ops = {
 
 static int wl_rfkill_set(void *data, bool blocked)
 {
-	struct bcm_cfg80211 *cfg = (struct bcm_cfg80211 *)data;
+	struct bcm_cfg80211 *cfg = data;
 
 	WL_DBG(("Enter \n"));
 	WL_DBG(("RF %s\n", blocked ? "blocked" : "unblocked"));
@@ -15929,7 +15937,7 @@ int wl_cfg80211_scan_stop(bcm_struct_cfgdev *cfgdev)
 #else
 	if (cfg->scan_request && cfg->scan_request->dev == cfgdev) {
 #endif
-		cfg80211_scan_done(cfg->scan_request, true);
+		wl_scan_done(cfg->scan_request, true);
 		cfg->scan_request = NULL;
 		clear_flag = 1;
 	}

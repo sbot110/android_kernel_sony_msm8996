@@ -1,6 +1,5 @@
+// SPDX-License-Identifier: GPL-2.0
 /*
- * linux/kernel/irq/pm.c
- *
  * Copyright (C) 2009 Rafael J. Wysocki <rjw@sisk.pl>, Novell Inc.
  *
  * This file contains power management functions related to interrupts.
@@ -11,7 +10,7 @@
 #include <linux/interrupt.h>
 #include <linux/suspend.h>
 #include <linux/syscore_ops.h>
-#include <linux/wakeup_reason.h>
+
 #include "internals.h"
 
 bool irq_pm_check_wakeup(struct irq_desc *desc)
@@ -149,6 +148,8 @@ static void resume_irq(struct irq_desc *desc)
 
 	/* Pretend that it got disabled ! */
 	desc->depth++;
+	irq_state_set_disabled(desc);
+	irq_state_set_masked(desc);
 resume:
 	desc->istate &= ~IRQS_SUSPENDED;
 	__enable_irq(desc);

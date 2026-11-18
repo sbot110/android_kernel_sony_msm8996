@@ -1,0 +1,3 @@
+PASS: actual LMHv1 S11 before-rise/after-drop,850mV boundary, lost/partial ACK, ambiguous-range veto, abort quarantine, real MMIO readback and sticky faults
+PASS: original service0x13 SCM sensor/profile/intensity ABI, bounded pagination, malformed packets, capability failures, raw intensity, no fabricated unthrottle
+PASS: actual published-node snapshots, source profile request, IRQ poll/rearm, noirq/PM mismatch, concurrent retirement and drain-before-free lifecycle

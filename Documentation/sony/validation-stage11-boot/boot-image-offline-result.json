@@ -1,0 +1,288 @@
+{
+  "status": "OFFLINE BUILT / HARDWARE UNVERIFIED",
+  "boot_test_ready": false,
+  "booted": false,
+  "daily_use_ready": false,
+  "intended_use": "offline candidate; not qualified for flashing",
+  "input_reference_sha256": "f923f9b99c468484b713529577b84e3a137d1b9cbc09393e5593258009983820",
+  "ramdisk_sha256": "9a532793e779b33bad98df1576ec9b661bc04457f4f3f9148b31ba8d42d4f41e",
+  "ramdisk_unchanged": true,
+  "image_sha256": "df80903f8168bd233559836d283e409266344faad1bdc627cc57afa1e8de15df",
+  "kernel_release": "4.19.318",
+  "kernel_payload_sha256": "725a60106736e6eeabc45f93a0178e6a57d7f5958679d44c1414038252a146d2",
+  "image_id_variant": "legacy_qcom_v0",
+  "image_id": "35afd6abb3972411a1bbe916a87557342ef46380",
+  "bytes": 11051008,
+  "sha256": "c7a248e58f04fc72c4640d144f5e6f1a47dc32c85c50f020cefd3cae2ea9dfd2",
+  "reference_file_size_cap": 13283328,
+  "actual_partition_size": null,
+  "partition_size_inferred": false,
+  "relative_size_fits_reference": true,
+  "page_size": 4096,
+  "command_line_changes": [
+    {
+      "removed_key": "androidboot.selinux",
+      "reason": "security bypass is not inherited"
+    }
+  ],
+  "selinux_enforcing": true,
+  "maxcpus": 2,
+  "original_header_addresses_preserved": false,
+  "header_address_reason": "source-backed MSM8996 LK candidate; original declared overlap rejected",
+  "layout": {
+    "addresses": {
+      "kernel": 2148007936,
+      "ramdisk": 2188378112,
+      "tags": 2186280960,
+      "ddr_base": 2147483648,
+      "decompression_input": 2452623360,
+      "decompression_output": 2463674368
+    },
+    "ranges": [
+      {
+        "source": "kernel runtime (file + BSS)",
+        "start": 2148007936,
+        "size": 22147072
+      },
+      {
+        "source": "compressed initrd",
+        "start": 2188378112,
+        "size": 1224724
+      },
+      {
+        "source": "selected DTB workspace",
+        "start": 2186280960,
+        "size": 2097152
+      }
+    ],
+    "scratch_ranges": [
+      {
+        "source": "compressed staging",
+        "start": 2452623360,
+        "size": 9815824
+      },
+      {
+        "source": "expanded staging",
+        "start": 2463674368,
+        "size": 22147072
+      }
+    ],
+    "fixed_reservations_checked_for_all_trees": true,
+    "declared_load_ranges_disjoint": true,
+    "source_scratch_ranges_disjoint": true,
+    "actual_ram_map_verified": false,
+    "actual_loader_relocation_verified": false,
+    "dynamic_reserved_memory_and_firmware_ownership": "HARDWARE UNVERIFIED",
+    "profile_provenance": [
+      {
+        "repository": "msm8916-mainline/lk2nd",
+        "commit": "e8af1985b6b42f490abcdf9a86dd4855f3511326",
+        "path": "app/aboot/aboot.c",
+        "git_blob_sha1": "0f81acb26f2351b00f3487ee7761efe85e4ca1ec",
+        "sha256": "a2b4b3064dd48c266571bfeb2556521cf0322df55d44765272f02e531c3fac94",
+        "url": "https://github.com/msm8916-mainline/lk2nd/blob/e8af1985b6b42f490abcdf9a86dd4855f3511326/app/aboot/aboot.c",
+        "lines": {
+          "header_override": [
+            378,
+            389
+          ],
+          "scratch_decompression": [
+            1948,
+            1974
+          ],
+          "override_call": [
+            1999,
+            2013
+          ],
+          "memory_header_to_dt": [
+            1147,
+            1175
+          ]
+        }
+      },
+      {
+        "repository": "msm8916-mainline/lk2nd",
+        "commit": "e8af1985b6b42f490abcdf9a86dd4855f3511326",
+        "path": "platform/msm8996/include/platform/iomap.h",
+        "git_blob_sha1": "3b7dfd11fd566d46f98f9d738e5a094b93b7feaf",
+        "sha256": "dbce09115f905025fd5d90ed1d6ac215a8f90a042ca0d8533c97b3b635282f86",
+        "url": "https://github.com/msm8916-mainline/lk2nd/blob/e8af1985b6b42f490abcdf9a86dd4855f3511326/platform/msm8996/include/platform/iomap.h",
+        "lines": {
+          "destination_offsets": [
+            685,
+            689
+          ]
+        }
+      },
+      {
+        "repository": "msm8916-mainline/lk2nd",
+        "commit": "e8af1985b6b42f490abcdf9a86dd4855f3511326",
+        "path": "project/msm8996.mk",
+        "git_blob_sha1": "d4b6dac93f638861d294c83af12aa3b13cbf838d",
+        "sha256": "495097058d637d30074b2b8eeb044e72c919ff65ae663c7f10e8bcccf2833dab",
+        "url": "https://github.com/msm8916-mainline/lk2nd/blob/e8af1985b6b42f490abcdf9a86dd4855f3511326/project/msm8996.mk",
+        "lines": {
+          "ignore_header_enabled": [
+            37,
+            37
+          ]
+        }
+      },
+      {
+        "repository": "msm8916-mainline/lk2nd",
+        "commit": "e8af1985b6b42f490abcdf9a86dd4855f3511326",
+        "path": "target/msm8996/rules.mk",
+        "git_blob_sha1": "ed6bae04a1a79519b1a465f75ca867496a211b0e",
+        "sha256": "e0cf27fead2521596ee2397e759eff649c6d4a7d96e12b0c5b602cf1fdd7f251",
+        "url": "https://github.com/msm8916-mainline/lk2nd/blob/e8af1985b6b42f490abcdf9a86dd4855f3511326/target/msm8996/rules.mk",
+        "lines": {
+          "loader_and_scratch": [
+            11,
+            21
+          ]
+        }
+      },
+      {
+        "repository": "msm8916-mainline/lk2nd",
+        "commit": "e8af1985b6b42f490abcdf9a86dd4855f3511326",
+        "path": "target/msm8996/meminfo.c",
+        "git_blob_sha1": "c65525f8e5f5f962225d7c0b8480acfc2fd7a12a",
+        "sha256": "e68106273731d91f74b0cb6d17707fd4e3261c651c00165559e7ef2898a18beb",
+        "url": "https://github.com/msm8916-mainline/lk2nd/blob/e8af1985b6b42f490abcdf9a86dd4855f3511326/target/msm8996/meminfo.c",
+        "lines": {
+          "runtime_ram_table": [
+            37,
+            81
+          ],
+          "scratch_capacity": [
+            86,
+            94
+          ]
+        }
+      },
+      {
+        "repository": "msm8916-mainline/lk2nd",
+        "commit": "e8af1985b6b42f490abcdf9a86dd4855f3511326",
+        "path": "platform/msm_shared/dev_tree.c",
+        "git_blob_sha1": "eb137b7fe061a628f53215808c804ba5b2ac2ac7",
+        "sha256": "7d06e2503b9380ee9dbcec98af0f70184ffb988d243132ffcbd3c74bba968463",
+        "url": "https://github.com/msm8916-mainline/lk2nd/blob/e8af1985b6b42f490abcdf9a86dd4855f3511326/platform/msm_shared/dev_tree.c",
+        "lines": {
+          "dt_growth": [
+            2023,
+            2076
+          ]
+        }
+      },
+      {
+        "repository": "msm8916-mainline/lk2nd",
+        "commit": "e8af1985b6b42f490abcdf9a86dd4855f3511326",
+        "path": "platform/msm_shared/include/dev_tree.h",
+        "git_blob_sha1": "754e4af9fc1abe88c592ebd1166287fa7b3a1534",
+        "sha256": "8772bfa30bd4c0238fb0792894e926931cc2f4fce7d0ff87e0d8fb7b133f2b05",
+        "url": "https://github.com/msm8916-mainline/lk2nd/blob/e8af1985b6b42f490abcdf9a86dd4855f3511326/platform/msm_shared/include/dev_tree.h",
+        "lines": {
+          "dt_pad_size": [
+            49,
+            49
+          ]
+        }
+      },
+      {
+        "repository": "msm8916-mainline/lk2nd",
+        "commit": "e8af1985b6b42f490abcdf9a86dd4855f3511326",
+        "path": "platform/msm8996/platform.c",
+        "git_blob_sha1": "8ef3df2ba72a0f1ca954d3530296b7337eb2ffcb",
+        "sha256": "f5c3003c34b79875cc608d79eb20935b04c3d2486afc7dc1abe1b720fbd0cc76",
+        "url": "https://github.com/msm8916-mainline/lk2nd/blob/e8af1985b6b42f490abcdf9a86dd4855f3511326/platform/msm8996/platform.c",
+        "lines": {
+          "scratch_default_mmu_table": [
+            66,
+            75
+          ],
+          "ddr_base_and_kernel_mmu_mapping": [
+            114,
+            141
+          ],
+          "platform_get_ddr_start": [
+            211,
+            214
+          ]
+        }
+      }
+    ]
+  },
+  "dtb_selection_order": [
+    {
+      "qcom,msm-id": [
+        246,
+        196608
+      ],
+      "qcom,board-id": [
+        8,
+        0
+      ],
+      "qcom,pmic-id": [
+        131081,
+        131082,
+        0,
+        0
+      ]
+    },
+    {
+      "qcom,msm-id": [
+        246,
+        196609
+      ],
+      "qcom,board-id": [
+        8,
+        0
+      ],
+      "qcom,pmic-id": [
+        131081,
+        131082,
+        0,
+        0
+      ]
+    },
+    {
+      "qcom,msm-id": [
+        246,
+        196608
+      ],
+      "qcom,board-id": [
+        8,
+        0
+      ],
+      "qcom,pmic-id": [
+        131081,
+        65555,
+        0,
+        0
+      ]
+    },
+    {
+      "qcom,msm-id": [
+        246,
+        196609
+      ],
+      "qcom,board-id": [
+        8,
+        0
+      ],
+      "qcom,pmic-id": [
+        131081,
+        65555,
+        0,
+        0
+      ]
+    }
+  ],
+  "hardware_blockers": [
+    "actual Sony loader and RAM/relocation evidence",
+    "complete CPU CPR/SPM/APM/LMHv1 transfer and six leases",
+    "watchdog secure handoff",
+    "USB/charging protections and ownership",
+    "phone eMMC/GPT/first-stage/SELinux/runtime logs"
+  ]
+}

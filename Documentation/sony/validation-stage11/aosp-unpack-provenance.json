@@ -1,0 +1,5 @@
+{
+  "url": "https://android.googlesource.com/platform/system/tools/mkbootimg/+/refs/tags/android-14.0.0_r1/unpack_bootimg.py",
+  "sha256": "a9d260978a63bd06a24b6347e7dee8a28ff96639793caea15dff6aa491316308",
+  "new_boot_image_unpack": "NOT RUN: PRIVATE INPUT MISSING"
+}

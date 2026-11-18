@@ -1,0 +1,3 @@
+PASS: production GPT range validation, bounded label copy, partition lifetime and PARTNAME/PARTN uevents
+Host GPT-read/uevent boundaries only; no partition discovery, filesystem mount or Android boot verified.
+First-stage metadata checks do not prove loader acceptance, eMMC detection, SELinux policy or Android boot.

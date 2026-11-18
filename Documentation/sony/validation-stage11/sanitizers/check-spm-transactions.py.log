@@ -1,0 +1,7 @@
+PASS: production SPM transactions: main/AVS exclusion, partial/lost ACK, quarantine, modes, SMC, real readback, bounded steps, AVS floor, boot handoff
+PASS: actual SAW APIs: signed errors, alias quarantine, counted atomic-safe lifetime, deterministic in-flight IPI retirement, persistent owner/reprobe and no unowned bootstrap MMIO
+PASS: PMIC ACK before AVS restore, true AVS detection in both builds, lost-stop/limit/restore writes, failed/partial ACK and persistent low-level quarantine
+PASS: actual SAW MMIO: version maps, live AVS/IRQ readback, lost writes, PMIC idle/timeout, per-device counts, mapped RAM bounds, start-address overflow and program cleanup
+PASS: PMIC ACK before AVS restore, true AVS detection in both builds, lost-stop/limit/restore writes, failed/partial ACK and persistent low-level quarantine
+PASS: actual SAW MMIO: version maps, live AVS/IRQ readback, lost writes, PMIC idle/timeout, per-device counts, mapped RAM bounds, start-address overflow and program cleanup
+PASS: 5 unsafe AVS/PMIC acknowledgement and quarantine mutations rejected

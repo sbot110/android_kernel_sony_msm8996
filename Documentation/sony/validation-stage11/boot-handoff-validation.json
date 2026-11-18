@@ -1,0 +1,796 @@
+{
+  "status": "OFFLINE ARITHMETIC CHECKED / HARDWARE UNVERIFIED",
+  "boot_test_ready": false,
+  "image": {
+    "compression": "raw",
+    "compressed_stream_bytes": 19792384,
+    "decompressed_file_bytes": 19792384,
+    "text_offset": 524288,
+    "image_size": 22147072,
+    "runtime_extent": 22147072,
+    "runtime_zero_fill_bytes": 2354688,
+    "flags": 10,
+    "little_endian": true,
+    "layout": "raw Image trailing DTB boundary is not inferred",
+    "appended_dtbs": [],
+    "trailing_zero_padding": 0,
+    "entry_and_relocation": "UNVERIFIED",
+    "sha256": "df80903f8168bd233559836d283e409266344faad1bdc627cc57afa1e8de15df"
+  },
+  "dtbs": [
+    {
+      "bytes": 190758,
+      "boot_cpuid_phys": 0,
+      "selection_tuples": {
+        "qcom,msm-id": [
+          246,
+          196608
+        ],
+        "qcom,board-id": [
+          8,
+          0
+        ],
+        "qcom,pmic-id": [
+          131081,
+          131082,
+          0,
+          0
+        ]
+      },
+      "selected_by_bootloader": "UNVERIFIED",
+      "reserved_ranges": [
+        {
+          "source": "/reserved-memory/mba@91500000",
+          "start": 2437939200,
+          "size": 2097152
+        },
+        {
+          "source": "/reserved-memory/adsp@8ea00000",
+          "start": 2392850432,
+          "size": 27262976
+        },
+        {
+          "source": "/reserved-memory/mpss@88800000",
+          "start": 2290089984,
+          "size": 102760448
+        },
+        {
+          "source": "/reserved-memory/smem-mem@86000000",
+          "start": 2248146944,
+          "size": 2097152
+        },
+        {
+          "source": "/reserved-memory/memory@85800000",
+          "start": 2239758336,
+          "size": 8388608
+        },
+        {
+          "source": "/reserved-memory/memory@86200000",
+          "start": 2250244096,
+          "size": 39845888
+        },
+        {
+          "source": "/reserved-memory/ramoops@a7f00000",
+          "start": 2817523712,
+          "size": 1048576
+        },
+        {
+          "source": "/reserved-memory/memory@83401000",
+          "start": 2202013696,
+          "size": 37744640
+        },
+        {
+          "source": "/reserved-memory/gpu@90400000",
+          "start": 2420113408,
+          "size": 8192
+        },
+        {
+          "source": "/reserved-memory/memory@90500000",
+          "start": 2421161984,
+          "size": 10485760
+        },
+        {
+          "source": "/reserved-memory/memory@90f00000",
+          "start": 2431647744,
+          "size": 5242880
+        }
+      ],
+      "dynamic_reserved_nodes": [
+        "/reserved-memory/rmtfs@86700000"
+      ],
+      "dt_bootargs": "maxcpus=2",
+      "stdout_path": "serial0",
+      "mmc_aliases": {
+        "mmc0": "/soc/sdhci@7464900",
+        "sdhc1": "/soc/sdhci@7464900",
+        "mmc1": "/soc/sdhci@74a4900",
+        "sdhc2": "/soc/sdhci@74a4900"
+      },
+      "declared_initrd": {},
+      "sha256": "3b9f15d92beba0234c34465754a9a5f30b6ba8287b9a11600c63645404bd2d9f"
+    },
+    {
+      "bytes": 191274,
+      "boot_cpuid_phys": 0,
+      "selection_tuples": {
+        "qcom,msm-id": [
+          246,
+          196609
+        ],
+        "qcom,board-id": [
+          8,
+          0
+        ],
+        "qcom,pmic-id": [
+          131081,
+          131082,
+          0,
+          0
+        ]
+      },
+      "selected_by_bootloader": "UNVERIFIED",
+      "reserved_ranges": [
+        {
+          "source": "/reserved-memory/mba@91500000",
+          "start": 2437939200,
+          "size": 2097152
+        },
+        {
+          "source": "/reserved-memory/adsp@8ea00000",
+          "start": 2392850432,
+          "size": 27262976
+        },
+        {
+          "source": "/reserved-memory/mpss@88800000",
+          "start": 2290089984,
+          "size": 102760448
+        },
+        {
+          "source": "/reserved-memory/smem-mem@86000000",
+          "start": 2248146944,
+          "size": 2097152
+        },
+        {
+          "source": "/reserved-memory/memory@85800000",
+          "start": 2239758336,
+          "size": 8388608
+        },
+        {
+          "source": "/reserved-memory/memory@86200000",
+          "start": 2250244096,
+          "size": 39845888
+        },
+        {
+          "source": "/reserved-memory/ramoops@a7f00000",
+          "start": 2817523712,
+          "size": 1048576
+        },
+        {
+          "source": "/reserved-memory/memory@83401000",
+          "start": 2202013696,
+          "size": 37744640
+        },
+        {
+          "source": "/reserved-memory/gpu@90400000",
+          "start": 2420113408,
+          "size": 8192
+        },
+        {
+          "source": "/reserved-memory/memory@90500000",
+          "start": 2421161984,
+          "size": 10485760
+        },
+        {
+          "source": "/reserved-memory/memory@90f00000",
+          "start": 2431647744,
+          "size": 5242880
+        }
+      ],
+      "dynamic_reserved_nodes": [
+        "/reserved-memory/rmtfs@86700000"
+      ],
+      "dt_bootargs": "maxcpus=2",
+      "stdout_path": "serial0",
+      "mmc_aliases": {
+        "mmc0": "/soc/sdhci@7464900",
+        "sdhc1": "/soc/sdhci@7464900",
+        "mmc1": "/soc/sdhci@74a4900",
+        "sdhc2": "/soc/sdhci@74a4900"
+      },
+      "declared_initrd": {},
+      "sha256": "db5479cdaba00d4111c3bf24ad7093c384f7b866d42fb0bce1d16e2832bc8d17"
+    },
+    {
+      "bytes": 190758,
+      "boot_cpuid_phys": 0,
+      "selection_tuples": {
+        "qcom,msm-id": [
+          246,
+          196608
+        ],
+        "qcom,board-id": [
+          8,
+          0
+        ],
+        "qcom,pmic-id": [
+          131081,
+          65555,
+          0,
+          0
+        ]
+      },
+      "selected_by_bootloader": "UNVERIFIED",
+      "reserved_ranges": [
+        {
+          "source": "/reserved-memory/mba@91500000",
+          "start": 2437939200,
+          "size": 2097152
+        },
+        {
+          "source": "/reserved-memory/adsp@8ea00000",
+          "start": 2392850432,
+          "size": 27262976
+        },
+        {
+          "source": "/reserved-memory/mpss@88800000",
+          "start": 2290089984,
+          "size": 102760448
+        },
+        {
+          "source": "/reserved-memory/smem-mem@86000000",
+          "start": 2248146944,
+          "size": 2097152
+        },
+        {
+          "source": "/reserved-memory/memory@85800000",
+          "start": 2239758336,
+          "size": 8388608
+        },
+        {
+          "source": "/reserved-memory/memory@86200000",
+          "start": 2250244096,
+          "size": 39845888
+        },
+        {
+          "source": "/reserved-memory/ramoops@a7f00000",
+          "start": 2817523712,
+          "size": 1048576
+        },
+        {
+          "source": "/reserved-memory/memory@83401000",
+          "start": 2202013696,
+          "size": 37744640
+        },
+        {
+          "source": "/reserved-memory/gpu@90400000",
+          "start": 2420113408,
+          "size": 8192
+        },
+        {
+          "source": "/reserved-memory/memory@90500000",
+          "start": 2421161984,
+          "size": 10485760
+        },
+        {
+          "source": "/reserved-memory/memory@90f00000",
+          "start": 2431647744,
+          "size": 5242880
+        }
+      ],
+      "dynamic_reserved_nodes": [
+        "/reserved-memory/rmtfs@86700000"
+      ],
+      "dt_bootargs": "maxcpus=2",
+      "stdout_path": "serial0",
+      "mmc_aliases": {
+        "mmc0": "/soc/sdhci@7464900",
+        "sdhc1": "/soc/sdhci@7464900",
+        "mmc1": "/soc/sdhci@74a4900",
+        "sdhc2": "/soc/sdhci@74a4900"
+      },
+      "declared_initrd": {},
+      "sha256": "04e9dc339d8dfac76704463c83875419a43fdc806d15fca1e5c33a4ea998f250"
+    },
+    {
+      "bytes": 191274,
+      "boot_cpuid_phys": 0,
+      "selection_tuples": {
+        "qcom,msm-id": [
+          246,
+          196609
+        ],
+        "qcom,board-id": [
+          8,
+          0
+        ],
+        "qcom,pmic-id": [
+          131081,
+          65555,
+          0,
+          0
+        ]
+      },
+      "selected_by_bootloader": "UNVERIFIED",
+      "reserved_ranges": [
+        {
+          "source": "/reserved-memory/mba@91500000",
+          "start": 2437939200,
+          "size": 2097152
+        },
+        {
+          "source": "/reserved-memory/adsp@8ea00000",
+          "start": 2392850432,
+          "size": 27262976
+        },
+        {
+          "source": "/reserved-memory/mpss@88800000",
+          "start": 2290089984,
+          "size": 102760448
+        },
+        {
+          "source": "/reserved-memory/smem-mem@86000000",
+          "start": 2248146944,
+          "size": 2097152
+        },
+        {
+          "source": "/reserved-memory/memory@85800000",
+          "start": 2239758336,
+          "size": 8388608
+        },
+        {
+          "source": "/reserved-memory/memory@86200000",
+          "start": 2250244096,
+          "size": 39845888
+        },
+        {
+          "source": "/reserved-memory/ramoops@a7f00000",
+          "start": 2817523712,
+          "size": 1048576
+        },
+        {
+          "source": "/reserved-memory/memory@83401000",
+          "start": 2202013696,
+          "size": 37744640
+        },
+        {
+          "source": "/reserved-memory/gpu@90400000",
+          "start": 2420113408,
+          "size": 8192
+        },
+        {
+          "source": "/reserved-memory/memory@90500000",
+          "start": 2421161984,
+          "size": 10485760
+        },
+        {
+          "source": "/reserved-memory/memory@90f00000",
+          "start": 2431647744,
+          "size": 5242880
+        }
+      ],
+      "dynamic_reserved_nodes": [
+        "/reserved-memory/rmtfs@86700000"
+      ],
+      "dt_bootargs": "maxcpus=2",
+      "stdout_path": "serial0",
+      "mmc_aliases": {
+        "mmc0": "/soc/sdhci@7464900",
+        "sdhc1": "/soc/sdhci@7464900",
+        "mmc1": "/soc/sdhci@74a4900",
+        "sdhc2": "/soc/sdhci@74a4900"
+      },
+      "declared_initrd": {},
+      "sha256": "adb380173e6148c2281a0b3761934294eb0d67259be54703d3197d148ad855e1"
+    }
+  ],
+  "candidate_layouts": [
+    {
+      "addresses": {
+        "kernel": 2148007936,
+        "ramdisk": 2188378112,
+        "tags": 2186280960,
+        "ddr_base": 2147483648,
+        "decompression_input": 2452623360,
+        "decompression_output": 2463674368
+      },
+      "ranges": [
+        {
+          "source": "kernel runtime (file + BSS)",
+          "start": 2148007936,
+          "size": 22147072
+        },
+        {
+          "source": "compressed initrd",
+          "start": 2188378112,
+          "size": 1224724
+        },
+        {
+          "source": "selected DTB workspace",
+          "start": 2186280960,
+          "size": 2097152
+        }
+      ],
+      "scratch_ranges": [
+        {
+          "source": "compressed staging",
+          "start": 2452623360,
+          "size": 9815824
+        },
+        {
+          "source": "expanded staging",
+          "start": 2463674368,
+          "size": 22147072
+        }
+      ],
+      "fixed_reservations_checked_for_all_trees": true,
+      "declared_load_ranges_disjoint": true,
+      "source_scratch_ranges_disjoint": true,
+      "actual_ram_map_verified": false,
+      "actual_loader_relocation_verified": false,
+      "dynamic_reserved_memory_and_firmware_ownership": "HARDWARE UNVERIFIED",
+      "profile_provenance": [
+        {
+          "repository": "msm8916-mainline/lk2nd",
+          "commit": "e8af1985b6b42f490abcdf9a86dd4855f3511326",
+          "path": "app/aboot/aboot.c",
+          "git_blob_sha1": "0f81acb26f2351b00f3487ee7761efe85e4ca1ec",
+          "sha256": "a2b4b3064dd48c266571bfeb2556521cf0322df55d44765272f02e531c3fac94",
+          "url": "https://github.com/msm8916-mainline/lk2nd/blob/e8af1985b6b42f490abcdf9a86dd4855f3511326/app/aboot/aboot.c",
+          "lines": {
+            "header_override": [
+              378,
+              389
+            ],
+            "scratch_decompression": [
+              1948,
+              1974
+            ],
+            "override_call": [
+              1999,
+              2013
+            ],
+            "memory_header_to_dt": [
+              1147,
+              1175
+            ]
+          }
+        },
+        {
+          "repository": "msm8916-mainline/lk2nd",
+          "commit": "e8af1985b6b42f490abcdf9a86dd4855f3511326",
+          "path": "platform/msm8996/include/platform/iomap.h",
+          "git_blob_sha1": "3b7dfd11fd566d46f98f9d738e5a094b93b7feaf",
+          "sha256": "dbce09115f905025fd5d90ed1d6ac215a8f90a042ca0d8533c97b3b635282f86",
+          "url": "https://github.com/msm8916-mainline/lk2nd/blob/e8af1985b6b42f490abcdf9a86dd4855f3511326/platform/msm8996/include/platform/iomap.h",
+          "lines": {
+            "destination_offsets": [
+              685,
+              689
+            ]
+          }
+        },
+        {
+          "repository": "msm8916-mainline/lk2nd",
+          "commit": "e8af1985b6b42f490abcdf9a86dd4855f3511326",
+          "path": "project/msm8996.mk",
+          "git_blob_sha1": "d4b6dac93f638861d294c83af12aa3b13cbf838d",
+          "sha256": "495097058d637d30074b2b8eeb044e72c919ff65ae663c7f10e8bcccf2833dab",
+          "url": "https://github.com/msm8916-mainline/lk2nd/blob/e8af1985b6b42f490abcdf9a86dd4855f3511326/project/msm8996.mk",
+          "lines": {
+            "ignore_header_enabled": [
+              37,
+              37
+            ]
+          }
+        },
+        {
+          "repository": "msm8916-mainline/lk2nd",
+          "commit": "e8af1985b6b42f490abcdf9a86dd4855f3511326",
+          "path": "target/msm8996/rules.mk",
+          "git_blob_sha1": "ed6bae04a1a79519b1a465f75ca867496a211b0e",
+          "sha256": "e0cf27fead2521596ee2397e759eff649c6d4a7d96e12b0c5b602cf1fdd7f251",
+          "url": "https://github.com/msm8916-mainline/lk2nd/blob/e8af1985b6b42f490abcdf9a86dd4855f3511326/target/msm8996/rules.mk",
+          "lines": {
+            "loader_and_scratch": [
+              11,
+              21
+            ]
+          }
+        },
+        {
+          "repository": "msm8916-mainline/lk2nd",
+          "commit": "e8af1985b6b42f490abcdf9a86dd4855f3511326",
+          "path": "target/msm8996/meminfo.c",
+          "git_blob_sha1": "c65525f8e5f5f962225d7c0b8480acfc2fd7a12a",
+          "sha256": "e68106273731d91f74b0cb6d17707fd4e3261c651c00165559e7ef2898a18beb",
+          "url": "https://github.com/msm8916-mainline/lk2nd/blob/e8af1985b6b42f490abcdf9a86dd4855f3511326/target/msm8996/meminfo.c",
+          "lines": {
+            "runtime_ram_table": [
+              37,
+              81
+            ],
+            "scratch_capacity": [
+              86,
+              94
+            ]
+          }
+        },
+        {
+          "repository": "msm8916-mainline/lk2nd",
+          "commit": "e8af1985b6b42f490abcdf9a86dd4855f3511326",
+          "path": "platform/msm_shared/dev_tree.c",
+          "git_blob_sha1": "eb137b7fe061a628f53215808c804ba5b2ac2ac7",
+          "sha256": "7d06e2503b9380ee9dbcec98af0f70184ffb988d243132ffcbd3c74bba968463",
+          "url": "https://github.com/msm8916-mainline/lk2nd/blob/e8af1985b6b42f490abcdf9a86dd4855f3511326/platform/msm_shared/dev_tree.c",
+          "lines": {
+            "dt_growth": [
+              2023,
+              2076
+            ]
+          }
+        },
+        {
+          "repository": "msm8916-mainline/lk2nd",
+          "commit": "e8af1985b6b42f490abcdf9a86dd4855f3511326",
+          "path": "platform/msm_shared/include/dev_tree.h",
+          "git_blob_sha1": "754e4af9fc1abe88c592ebd1166287fa7b3a1534",
+          "sha256": "8772bfa30bd4c0238fb0792894e926931cc2f4fce7d0ff87e0d8fb7b133f2b05",
+          "url": "https://github.com/msm8916-mainline/lk2nd/blob/e8af1985b6b42f490abcdf9a86dd4855f3511326/platform/msm_shared/include/dev_tree.h",
+          "lines": {
+            "dt_pad_size": [
+              49,
+              49
+            ]
+          }
+        },
+        {
+          "repository": "msm8916-mainline/lk2nd",
+          "commit": "e8af1985b6b42f490abcdf9a86dd4855f3511326",
+          "path": "platform/msm8996/platform.c",
+          "git_blob_sha1": "8ef3df2ba72a0f1ca954d3530296b7337eb2ffcb",
+          "sha256": "f5c3003c34b79875cc608d79eb20935b04c3d2486afc7dc1abe1b720fbd0cc76",
+          "url": "https://github.com/msm8916-mainline/lk2nd/blob/e8af1985b6b42f490abcdf9a86dd4855f3511326/platform/msm8996/platform.c",
+          "lines": {
+            "scratch_default_mmu_table": [
+              66,
+              75
+            ],
+            "ddr_base_and_kernel_mmu_mapping": [
+              114,
+              141
+            ],
+            "platform_get_ddr_start": [
+              211,
+              214
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "addresses": {
+        "kernel": 2148007936,
+        "ramdisk": 2183135232,
+        "tags": 2186280960,
+        "ddr_base": 2147483648,
+        "decompression_input": 2452623360,
+        "decompression_output": 2463674368
+      },
+      "ranges": [
+        {
+          "source": "kernel runtime (file + BSS)",
+          "start": 2148007936,
+          "size": 22147072
+        },
+        {
+          "source": "compressed initrd",
+          "start": 2183135232,
+          "size": 1224724
+        },
+        {
+          "source": "selected DTB workspace",
+          "start": 2186280960,
+          "size": 2097152
+        }
+      ],
+      "scratch_ranges": [
+        {
+          "source": "compressed staging",
+          "start": 2452623360,
+          "size": 9815824
+        },
+        {
+          "source": "expanded staging",
+          "start": 2463674368,
+          "size": 22147072
+        }
+      ],
+      "fixed_reservations_checked_for_all_trees": true,
+      "declared_load_ranges_disjoint": true,
+      "source_scratch_ranges_disjoint": true,
+      "actual_ram_map_verified": false,
+      "actual_loader_relocation_verified": false,
+      "dynamic_reserved_memory_and_firmware_ownership": "HARDWARE UNVERIFIED",
+      "profile_provenance": [
+        {
+          "repository": "msm8916-mainline/lk2nd",
+          "commit": "e8af1985b6b42f490abcdf9a86dd4855f3511326",
+          "path": "app/aboot/aboot.c",
+          "git_blob_sha1": "0f81acb26f2351b00f3487ee7761efe85e4ca1ec",
+          "sha256": "a2b4b3064dd48c266571bfeb2556521cf0322df55d44765272f02e531c3fac94",
+          "url": "https://github.com/msm8916-mainline/lk2nd/blob/e8af1985b6b42f490abcdf9a86dd4855f3511326/app/aboot/aboot.c",
+          "lines": {
+            "header_override": [
+              378,
+              389
+            ],
+            "scratch_decompression": [
+              1948,
+              1974
+            ],
+            "override_call": [
+              1999,
+              2013
+            ],
+            "memory_header_to_dt": [
+              1147,
+              1175
+            ]
+          }
+        },
+        {
+          "repository": "msm8916-mainline/lk2nd",
+          "commit": "e8af1985b6b42f490abcdf9a86dd4855f3511326",
+          "path": "platform/msm8996/include/platform/iomap.h",
+          "git_blob_sha1": "3b7dfd11fd566d46f98f9d738e5a094b93b7feaf",
+          "sha256": "dbce09115f905025fd5d90ed1d6ac215a8f90a042ca0d8533c97b3b635282f86",
+          "url": "https://github.com/msm8916-mainline/lk2nd/blob/e8af1985b6b42f490abcdf9a86dd4855f3511326/platform/msm8996/include/platform/iomap.h",
+          "lines": {
+            "destination_offsets": [
+              685,
+              689
+            ]
+          }
+        },
+        {
+          "repository": "msm8916-mainline/lk2nd",
+          "commit": "e8af1985b6b42f490abcdf9a86dd4855f3511326",
+          "path": "project/msm8996.mk",
+          "git_blob_sha1": "d4b6dac93f638861d294c83af12aa3b13cbf838d",
+          "sha256": "495097058d637d30074b2b8eeb044e72c919ff65ae663c7f10e8bcccf2833dab",
+          "url": "https://github.com/msm8916-mainline/lk2nd/blob/e8af1985b6b42f490abcdf9a86dd4855f3511326/project/msm8996.mk",
+          "lines": {
+            "ignore_header_enabled": [
+              37,
+              37
+            ]
+          }
+        },
+        {
+          "repository": "msm8916-mainline/lk2nd",
+          "commit": "e8af1985b6b42f490abcdf9a86dd4855f3511326",
+          "path": "target/msm8996/rules.mk",
+          "git_blob_sha1": "ed6bae04a1a79519b1a465f75ca867496a211b0e",
+          "sha256": "e0cf27fead2521596ee2397e759eff649c6d4a7d96e12b0c5b602cf1fdd7f251",
+          "url": "https://github.com/msm8916-mainline/lk2nd/blob/e8af1985b6b42f490abcdf9a86dd4855f3511326/target/msm8996/rules.mk",
+          "lines": {
+            "loader_and_scratch": [
+              11,
+              21
+            ]
+          }
+        },
+        {
+          "repository": "msm8916-mainline/lk2nd",
+          "commit": "e8af1985b6b42f490abcdf9a86dd4855f3511326",
+          "path": "target/msm8996/meminfo.c",
+          "git_blob_sha1": "c65525f8e5f5f962225d7c0b8480acfc2fd7a12a",
+          "sha256": "e68106273731d91f74b0cb6d17707fd4e3261c651c00165559e7ef2898a18beb",
+          "url": "https://github.com/msm8916-mainline/lk2nd/blob/e8af1985b6b42f490abcdf9a86dd4855f3511326/target/msm8996/meminfo.c",
+          "lines": {
+            "runtime_ram_table": [
+              37,
+              81
+            ],
+            "scratch_capacity": [
+              86,
+              94
+            ]
+          }
+        },
+        {
+          "repository": "msm8916-mainline/lk2nd",
+          "commit": "e8af1985b6b42f490abcdf9a86dd4855f3511326",
+          "path": "platform/msm_shared/dev_tree.c",
+          "git_blob_sha1": "eb137b7fe061a628f53215808c804ba5b2ac2ac7",
+          "sha256": "7d06e2503b9380ee9dbcec98af0f70184ffb988d243132ffcbd3c74bba968463",
+          "url": "https://github.com/msm8916-mainline/lk2nd/blob/e8af1985b6b42f490abcdf9a86dd4855f3511326/platform/msm_shared/dev_tree.c",
+          "lines": {
+            "dt_growth": [
+              2023,
+              2076
+            ]
+          }
+        },
+        {
+          "repository": "msm8916-mainline/lk2nd",
+          "commit": "e8af1985b6b42f490abcdf9a86dd4855f3511326",
+          "path": "platform/msm_shared/include/dev_tree.h",
+          "git_blob_sha1": "754e4af9fc1abe88c592ebd1166287fa7b3a1534",
+          "sha256": "8772bfa30bd4c0238fb0792894e926931cc2f4fce7d0ff87e0d8fb7b133f2b05",
+          "url": "https://github.com/msm8916-mainline/lk2nd/blob/e8af1985b6b42f490abcdf9a86dd4855f3511326/platform/msm_shared/include/dev_tree.h",
+          "lines": {
+            "dt_pad_size": [
+              49,
+              49
+            ]
+          }
+        },
+        {
+          "repository": "msm8916-mainline/lk2nd",
+          "commit": "e8af1985b6b42f490abcdf9a86dd4855f3511326",
+          "path": "platform/msm8996/platform.c",
+          "git_blob_sha1": "8ef3df2ba72a0f1ca954d3530296b7337eb2ffcb",
+          "sha256": "f5c3003c34b79875cc608d79eb20935b04c3d2486afc7dc1abe1b720fbd0cc76",
+          "url": "https://github.com/msm8916-mainline/lk2nd/blob/e8af1985b6b42f490abcdf9a86dd4855f3511326/platform/msm8996/platform.c",
+          "lines": {
+            "scratch_default_mmu_table": [
+              66,
+              75
+            ],
+            "ddr_base_and_kernel_mmu_mapping": [
+              114,
+              141
+            ],
+            "platform_get_ddr_start": [
+              211,
+              214
+            ]
+          }
+        }
+      ]
+    }
+  ],
+  "literal_working_header_kernel_initrd_overlap": true,
+  "literal_kernel_respects_text_offset_alignment": false,
+  "reported_working_initrd": {
+    "provenance": "User Stage 11 instructions; original capture not available in this environment",
+    "reference_kernel": "4.4.302+",
+    "sony_s1": "1299-4832_S1_Boot_MSM8996_LA2.0_O_204",
+    "linux_initrd_start": 2183135232,
+    "linux_initrd_end": 2184359956,
+    "initrd_bytes": 1224724,
+    "reference_header_ramdisk_addr": 2164260864,
+    "actual_x0_fdt": "UNKNOWN",
+    "relocating_component": "UNKNOWN"
+  },
+  "ramdisk_bytes_source": "reported Stage 65B + Stage 10 metadata; payload required for packaging",
+  "ramdisk_payload_checked": false,
+  "original_stage10_image_available": false,
+  "unchanged_experiment_fields": [
+    "kernel_addr",
+    "tags_addr",
+    "scratch_addr",
+    "DTB tuple order"
+  ],
+  "changed_experiment_field": "header ramdisk_addr: 0x82700000 -> 0x82200000",
+  "loader_may_ignore_header": true,
+  "actual_fdt_x0": "UNKNOWN",
+  "persistent_diagnostic_region": "NONE QUALIFIED; writes disabled",
+  "selftest_negative_cases": 6,
+  "compiled_memory_reg": [
+    "00000000000000000000000000000000",
+    "00000000000000000000000000000000",
+    "00000000000000000000000000000000",
+    "00000000000000000000000000000000"
+  ],
+  "memory_reg_requires_firmware_fixup": true,
+  "input_sha256": {
+    "/workspace/stage11-artifacts/clean-out/arch/arm64/boot/Image": "df80903f8168bd233559836d283e409266344faad1bdc627cc57afa1e8de15df",
+    "/workspace/stage11-artifacts/clean-out/arch/arm64/boot/Image.gz": "3a5418ab714e7f8cd349afd88faaadd847b01a3a1bd47f237e697a57934acf5c",
+    "/workspace/stage11-artifacts/boot-out/arch/arm64/boot/dts/qcom/boot/msm8996-v3.0-sony-xperia-tone-dora-lineage21-boot.dtb": "3b9f15d92beba0234c34465754a9a5f30b6ba8287b9a11600c63645404bd2d9f",
+    "/workspace/stage11-artifacts/boot-out/arch/arm64/boot/dts/qcom/boot/msm8996-sony-xperia-tone-dora-lineage21-boot.dtb": "db5479cdaba00d4111c3bf24ad7093c384f7b866d42fb0bce1d16e2832bc8d17",
+    "/workspace/stage11-artifacts/boot-out/arch/arm64/boot/dts/qcom/boot/msm8996-v3.0-pmi8996-sony-xperia-tone-dora-lineage21-boot.dtb": "04e9dc339d8dfac76704463c83875419a43fdc806d15fca1e5c33a4ea998f250",
+    "/workspace/stage11-artifacts/boot-out/arch/arm64/boot/dts/qcom/boot/msm8996-v3.1-pmi8996-sony-xperia-tone-dora-lineage21-boot.dtb": "adb380173e6148c2281a0b3761934294eb0d67259be54703d3197d148ad855e1"
+  }
+}

@@ -1,0 +1,6 @@
+PASS: all four fixtures match the flattened Sony 4.4 reference data
+PASS: v3.0-pmi8994 final Sony GPU/PMIC data, native links and active CX policy
+PASS: v3.0-pmi8996 final Sony GPU/PMIC data, native links and active CX policy
+PASS: v3.1-pmi8994 final Sony GPU/PMIC data, native links and active CX policy
+PASS: v3.1-pmi8996 final Sony GPU/PMIC data, native links and active CX policy
+Source data only: F8131/F8132 runtime and Sony bootloader DTB selection are unverified.

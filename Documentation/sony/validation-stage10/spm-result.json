@@ -1,0 +1,38 @@
+{
+  "component": "SPM failed PMIC ACK / AVS recovery",
+  "software_status": "FIXED",
+  "hardware_verified": false,
+  "source_sha256": {
+    "drivers/soc/qcom/msm-spm.c": "169fb6191022abe1fb93820d79e1e6aed292fc831a776f45ed8803094228aa6d",
+    "drivers/soc/qcom/spm_devices.c": "f308fe03171559b007a7ecd682792fa94e065f3982ae8b976edad3a518f7c02c",
+    "drivers/soc/qcom/spm_driver.h": "ac6fc4e9d3ec6e8d05835834d92bc3ed3bc7b011f991e61c30d3234e44004bdf",
+    "scripts/dora/check-spm-transactions.py": "48b1f61b270328234a6626bc35e704c15e6a48492edbc93183aae21754caf574",
+    "scripts/dora/check-cpu-shared-power.py": "912d10a2bca259402f71482237d9b7507d085719bd016105ca9e4749e46c3593"
+  },
+  "spm_production_harnesses": 4,
+  "spm_unsafe_mutations_rejected": 5,
+  "shared_power_unsafe_mutations_rejected": 12,
+  "sanitized_runs": 2,
+  "leak_detection": false,
+  "targeted_normal_compile_exit": 0,
+  "targeted_legacy_compile_exit": 0,
+  "compiler_warnings": {
+    "targeted": 0,
+    "targeted-legacy-avs": 0
+  },
+  "logs": [
+    "/workspace/stage10-spm-test.log",
+    "/workspace/stage10-spm-sanitized.log",
+    "/workspace/stage10-spm-targeted.log",
+    "/workspace/stage10-spm-targeted-legacy-avs.log",
+    "/workspace/stage10-spm-shared-test.log",
+    "/workspace/stage10-spm-shared-sanitized.log"
+  ],
+  "limitations": [
+    "Register readback does not prove autonomous CPR/SAW/firmware exclusion",
+    "CONFIG_MSM_AVS_HW absent on Dora: active AVS returns EOPNOTSUPP before VCTL; no fake inactive state",
+    "PMIC sent-data/FSM status is not an ADC measurement or fresh firmware ownership grant",
+    "Retention PMIC_DATA3 and power collapse remain unqualified",
+    "No CPU/DTS activation or native callback binding"
+  ]
+}

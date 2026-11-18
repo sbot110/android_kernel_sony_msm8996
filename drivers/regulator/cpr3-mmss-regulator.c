@@ -11,6 +11,10 @@
  * GNU General Public License for more details.
  */
 
+/* Sony MSM8996 frontend from 0c295b15b6d0fb59a64e13b9e0ef2070818ef2a1.
+ * Voltage/fuse data are retained; common CPR3 API is provided by this tree.
+ */
+
 #define pr_fmt(fmt) "%s: " fmt, __func__
 
 #include <linux/bitops.h>
@@ -1170,8 +1174,10 @@ static int cpr3_mmss_regulator_probe(struct platform_device *pdev)
 	match = of_match_node(cpr_regulator_match_table, dev->of_node);
 	if (match)
 		ctrl->soc_revision = (uintptr_t)match->data;
-	else
+	else {
 		cpr3_err(ctrl, "could not find compatible string match\n");
+		return -EINVAL;
+	}
 
 	rc = cpr3_map_fuse_base(ctrl, pdev);
 	if (rc) {

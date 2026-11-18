@@ -1,0 +1,53 @@
+Stage 6 GCC/MMCC same-owner bootstrap reattachment
+=================================================
+Scope: persistent built-in MSM8996 providers with pinned device/consumer
+handles. This is bounded partial-probe liveness recovery, not general clock
+recovery and not removal of RPM or clock quarantine.
+
+The previous CCF deinit removed its last handoff record while retaining the
+HIGH vote and permanently orphaning the class. The new explicit API may
+reconstruct that record only for the identical enrolled owner and intact
+class, after all registered clocks unwound, with exactly one HIGH vote and
+zero other votes, no prior class/provider fault, no uncertain enable, and
+the last confirmed level still HIGH. It allocates the record first, then
+forces fresh provider ACKs. It transfers the existing count; it neither
+enables another consumer nor releases HIGH. Ownership stays unknown until
+the complete provider is registered and the existing hardware ownership
+audit qualifies handoff. Late probe uses the same protocol.
+
+Any lost per-clock vote makes reattachment ineligible. Failed ACK during
+reattachment permanently closes this path; later retries cannot clear it.
+An existing primary class errno survives unwind. Allocation failure alone
+does not alter hardware and can be retried. Other owners fail. No global
+list pointer remains into a freed class; only the built-in pinned objects
+opt into reconstruction. Lock order is prepare -> class list -> class.
+
+msm8996_voltage_init enrolls its pinned device and calls this API on a
+same-device retry. Existing regulator handles, counts, bootstrap L12 load,
+physical/corner quarantine and source fmax maps are retained. It does not
+call regulator_put/disable to guess unknown boot hardware inactive.
+
+Tests
+-----
+check-clk-vdd.py retains its real prepare/rate/parent/rollback tests and now
+checks orphan eligibility, wrong owner, allocation failure, fresh ACK,
+sticky lost-ACK quarantine, retained counts and primary error preservation.
+check-clock-reattach.py executes the real GCC probe body with explicit API
+models for MMIO, supply and registration. It injects deferred/hard/timeout
+failures at every modeled boundary, including partial registration/provider
+publication, then unwinds actual CCF class/core lifecycle code. A bad GPLL0
+readback fails. Eight threads exercise same-owner retries and concurrent
+vote/unvote under real pthread locks. Four unsafe code mutations are rejected.
+check-clock-voltage.py separately executes the real voltage adapter; physical
+and RPM tests separately execute the real ACK/quarantine/lifetime code.
+
+Limits
+------
+The registration APIs are modeled, not a complete clk_register/devres or
+phone execution. Full MMCC probe/child-population unwind is not executed by
+the new harness; its shared CCF/voltage code is tested. Critical/prepared
+clocks that lose counted ownership still block reattachment. Parent/rate
+uncertainty, PLL lock timeout and failed RPM state remain quarantined by
+existing code. No clock PM callback is added: existing supplier/early-replay
+ordering and tests remain required. This API does not qualify suspend,
+thermal/power collapse, device hot removal, or an unknown hardware state.

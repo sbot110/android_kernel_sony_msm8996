@@ -1,0 +1,9 @@
+{
+  "truncated appended DTB": "appended DTB missing, changed or out of order: qcom/msm8996-v3.1-pmi8996-sony-xperia-tone-dora.dtb",
+  "reordered appended DTBs": "appended DTB missing, changed or out of order: qcom/msm8996-v3.0-sony-xperia-tone-dora.dtb",
+  "duplicate appended DTB": "appended DTB missing, changed or out of order: qcom/msm8996-v3.0-pmi8996-sony-xperia-tone-dora.dtb",
+  "unexpected trailing byte": "unexpected trailing bytes or stale appended DTBs",
+  "bad ARM64 magic": "invalid ARM64 Image magic",
+  "missing real RPM corner implementation": "required provider/implementation absent from System.map: qcom_rpm_corner_sync",
+  "trailing gzip payload": "Image.gz has a truncated stream or trailing data"
+}

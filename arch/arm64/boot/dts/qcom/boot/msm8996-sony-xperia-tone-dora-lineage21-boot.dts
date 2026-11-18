@@ -1,0 +1,8 @@
+// SPDX-License-Identifier: GPL-2.0-only
+/* Opt-in offline LOS21 selection; never a normal DTB or runtime proof. */
+#include "../diagnostic/msm8996-sony-xperia-tone-dora-sdhc1-diagnostic.dts"
+#include "msm8996-sony-xperia-tone-lineage21-boot.dtsi"
+
+/ {
+	model = "Sony Xperia X Performance (LOS21 offline SDHC1 boot: v3.1-pmi8994)";
+};

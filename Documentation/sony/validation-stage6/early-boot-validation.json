@@ -1,0 +1,72 @@
+{
+  "status": "PASS (software checks only)",
+  "boot_test_ready": false,
+  "trees": [
+    {
+      "path": "/workspace/stage6-final-clean-out/arch/arm64/boot/dts/qcom/msm8996-v3.0-sony-xperia-tone-dora.dtb",
+      "sdhc1_policy": "disabled",
+      "pstore": "compiled/reserved; persistence unverified",
+      "watchdog_nodes": [],
+      "watchdog_driver": false,
+      "serial_nodes": [
+        "/soc/serial@75b1000"
+      ],
+      "stdout_path": "",
+      "actual_console": "UNVERIFIED",
+      "actual_rpm_ack": "UNVERIFIED",
+      "emmc_gpt": "UNVERIFIED"
+    },
+    {
+      "path": "/workspace/stage6-final-clean-out/arch/arm64/boot/dts/qcom/msm8996-v3.0-pmi8996-sony-xperia-tone-dora.dtb",
+      "sdhc1_policy": "disabled",
+      "pstore": "compiled/reserved; persistence unverified",
+      "watchdog_nodes": [],
+      "watchdog_driver": false,
+      "serial_nodes": [
+        "/soc/serial@75b1000"
+      ],
+      "stdout_path": "",
+      "actual_console": "UNVERIFIED",
+      "actual_rpm_ack": "UNVERIFIED",
+      "emmc_gpt": "UNVERIFIED"
+    },
+    {
+      "path": "/workspace/stage6-final-clean-out/arch/arm64/boot/dts/qcom/msm8996-sony-xperia-tone-dora.dtb",
+      "sdhc1_policy": "disabled",
+      "pstore": "compiled/reserved; persistence unverified",
+      "watchdog_nodes": [],
+      "watchdog_driver": false,
+      "serial_nodes": [
+        "/soc/serial@75b1000"
+      ],
+      "stdout_path": "",
+      "actual_console": "UNVERIFIED",
+      "actual_rpm_ack": "UNVERIFIED",
+      "emmc_gpt": "UNVERIFIED"
+    },
+    {
+      "path": "/workspace/stage6-final-clean-out/arch/arm64/boot/dts/qcom/msm8996-v3.1-pmi8996-sony-xperia-tone-dora.dtb",
+      "sdhc1_policy": "disabled",
+      "pstore": "compiled/reserved; persistence unverified",
+      "watchdog_nodes": [],
+      "watchdog_driver": false,
+      "serial_nodes": [
+        "/soc/serial@75b1000"
+      ],
+      "stdout_path": "",
+      "actual_console": "UNVERIFIED",
+      "actual_rpm_ack": "UNVERIFIED",
+      "emmc_gpt": "UNVERIFIED"
+    }
+  ],
+  "blockers": [
+    "writable CPU adapter/CPR/SPM ownership incomplete",
+    "watchdog handoff unqualified",
+    "serial/USB transport unverified",
+    "bootloader DTB selection and merged cmdline unverified",
+    "firmware charging/DPDM ownership unqualified",
+    "phone RPM/eMMC/GPT logs missing",
+    "actual working boot.img unavailable",
+    "actual LOS21 ramdisk unavailable"
+  ]
+}

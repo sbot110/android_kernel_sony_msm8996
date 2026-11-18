@@ -1,0 +1,36 @@
+{
+  "tool": "Official AOSP unpack_bootimg.py, unchanged",
+  "project": "platform/system/tools/mkbootimg",
+  "requested_tag": "android-14.0.0_r1",
+  "commit": "028bdc06ce87ab1ee23204feb5cd5ee406484618",
+  "git_blob_sha1": "a3f1a508796b5af54216397b05637f1f5e692a3d",
+  "tool_sha256": "a9d260978a63bd06a24b6347e7dee8a28ff96639793caea15dff6aa491316308",
+  "tool_size": 23223,
+  "pinned_url": "https://android.googlesource.com/platform/system/tools/mkbootimg/+/028bdc06ce87ab1ee23204feb5cd5ee406484618/unpack_bootimg.py",
+  "source_preserved_unmodified": true,
+  "third_party_python_dependencies": [],
+  "reference_unpacked_successfully": true,
+  "reference_components": [
+    {
+      "component": "kernel",
+      "size": 12047744,
+      "sha256": "2780f84885f686aba71bfb2157317e4281834e2af9ff7e61b06d5be10af53cad",
+      "identical": true
+    },
+    {
+      "component": "ramdisk",
+      "size": 1224724,
+      "sha256": "9a532793e779b33bad98df1576ec9b661bc04457f4f3f9148b31ba8d42d4f41e",
+      "identical": true
+    }
+  ],
+  "reference_private_log": "/workspace/stage10-private/roundtrip-reference-aosp.log",
+  "working_command": [
+    "python3",
+    "/workspace/stage10-tools/unpack_bootimg.py",
+    "--boot_img",
+    "/workspace/stage10-private/boot-reference/original-boot.img",
+    "--out",
+    "/workspace/stage10-private/roundtrip-reference"
+  ]
+}

@@ -14,6 +14,10 @@
 #ifndef __MSM_BCL_H
 #define __MSM_BCL_H
 
+#include <linux/device.h>
+#include <linux/errno.h>
+#include <linux/sysfs.h>
+
 #define BCL_NAME_MAX_LEN 20
 
 enum bcl_trip_type {
@@ -28,6 +32,11 @@ enum bcl_param {
 	BCL_PARAM_MAX,
 };
 
+/* Threshold storage must outlive enabled monitoring and its callbacks.
+ * External owners must serialize enable/disable/threshold replacement.
+ * Disable drains ordered notifications; self-disable in a callback excludes
+ * only that current callback, whose owner must remain valid until it returns.
+ */
 struct bcl_threshold {
 	int                     trip_value;
 	enum bcl_trip_type      type;
@@ -62,7 +71,7 @@ struct bcl_param_data {
 	struct bcl_threshold    *thresh[BCL_TRIP_MAX];
 };
 
-#ifdef CONFIG_MSM_BCL_CTL
+#ifdef CONFIG_SONY_MSM8996_BCL
 struct bcl_param_data *msm_bcl_register_param(enum bcl_param,
 	struct bcl_driver_ops *, char *);
 int msm_bcl_unregister_param(struct bcl_param_data *);

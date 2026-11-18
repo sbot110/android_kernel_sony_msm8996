@@ -1,0 +1,2 @@
+PASS: production PM phases, supplier ordering, RPM hooks and MMC clock-provider lookup faults
+Host PM/OF/transport model only; real suspend and RPM IRQ/ACK timing remain untested.

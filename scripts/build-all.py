@@ -1,30 +1,6 @@
 #! /usr/bin/env python2
-
-# Copyright (c) 2009-2015, 2017, 2019, The Linux Foundation. All rights reserved.
-#
-# Redistribution and use in source and binary forms, with or without
-# modification, are permitted provided that the following conditions are met:
-#     * Redistributions of source code must retain the above copyright
-#       notice, this list of conditions and the following disclaimer.
-#     * Redistributions in binary form must reproduce the above copyright
-#       notice, this list of conditions and the following disclaimer in the
-#       documentation and/or other materials provided with the distribution.
-#     * Neither the name of The Linux Foundation nor
-#       the names of its contributors may be used to endorse or promote
-#       products derived from this software without specific prior written
-#       permission.
-#
-# THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
-# AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
-# IMPLIED WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND
-# NON-INFRINGEMENT ARE DISCLAIMED.  IN NO EVENT SHALL THE COPYRIGHT OWNER OR
-# CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL,
-# EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO,
-# PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS;
-# OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY,
-# WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR
-# OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF
-# ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+# SPDX-License-Identifier: GPL-2.0-only
+# Copyright (c) 2009-2015, 2017-18, The Linux Foundation. All rights reserved.
 
 # Build the kernel for all targets using the Android build environment.
 
@@ -60,9 +36,8 @@ if not os.environ.get('CROSS_COMPILE'):
 
 def check_kernel():
     """Ensure that PWD is a kernel directory"""
-    if (not os.path.isfile('MAINTAINERS') or
-        not os.path.isfile('arch/arm64/configs/msm_defconfig')):
-        fail("This doesn't seem to be an MSM kernel dir")
+    if not os.path.isfile('MAINTAINERS'):
+        fail("This doesn't seem to be a kernel dir")
 
 def check_build():
     """Ensure that the build directory is present."""
@@ -269,18 +244,11 @@ class Builder():
 
         # Build targets can be dependent upon the completion of
         # previous build targets, so build them one at a time.
-        if os.environ.get('ARCH') == "arm64":
-            cmd_line = ['make',
-                'INSTALL_HDR_PATH=%s' % hdri_dir,
-                'INSTALL_MOD_PATH=%s' % modi_dir,
-                'O=%s' % dest_dir,
-                'REAL_CC=%s' % clang_bin]
-        else:
-            cmd_line = ['make',
-                'INSTALL_HDR_PATH=%s' % hdri_dir,
-                'INSTALL_MOD_PATH=%s' % modi_dir,
-                'O=%s' % dest_dir]
-
+        cmd_line = ['make',
+            'INSTALL_HDR_PATH=%s' % hdri_dir,
+            'INSTALL_MOD_PATH=%s' % modi_dir,
+            'O=%s' % dest_dir,
+            'REAL_CC=%s' % clang_bin]
         build_targets = []
         for c in make_command:
             if re.match(r'^-{1,2}\w', c):
@@ -295,17 +263,6 @@ class Builder():
 def scan_configs():
     """Get the full list of defconfigs appropriate for this tree."""
     names = []
-    arch_pats = (
-        r'[fm]sm[0-9]*_defconfig',
-        r'apq*_defconfig',
-        r'qsd*_defconfig',
-	r'mpq*_defconfig',
-	r'sdm*_defconfig',
-        )
-    for p in arch_pats:
-        for n in glob.glob('arch/arm/configs/' + p):
-            name = os.path.basename(n)[:-10]
-            names.append(Builder(name, n))
     for defconfig in glob.glob('arch/arm*/configs/vendor/*_defconfig'):
         target = os.path.basename(defconfig)[:-10]
         name = target + "-llvm"

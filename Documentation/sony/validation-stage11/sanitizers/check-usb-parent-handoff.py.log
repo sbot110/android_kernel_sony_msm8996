@@ -1,0 +1,1 @@
+PASS: actual DWC3-QCOM probe rejects Dora before allocation/reset/clocks/UTMI/VBUS; generic path retained

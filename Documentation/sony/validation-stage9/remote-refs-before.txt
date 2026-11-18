@@ -1,0 +1,10 @@
+d8587034624fdf13432814248e4d63fa2771879c	refs/heads/4.9-test-not-startable
+2e5470fd532fec62f20265062b34c5a0d7cd453f	refs/heads/Lineageos-21
+d686db8c1cbc1299c95e4ca15da0fcc306d88126	refs/heads/dora-full-state-20261017
+e9f1a7be0c13e1447a0cf398af31a9efe5868ad1	refs/heads/kernel-4.19-701905467803253630
+8c7ad7e9221f299530e89d944e3399703d915760	refs/heads/kernel-5.15
+c10cec83039a46d98c4fddc278c508978558119c	refs/heads/kernel-5.5
+0c295b15b6d0fb59a64e13b9e0ef2070818ef2a1	refs/heads/main
+3a9646ed5ade6c62483c46d4a85f27653bfcb191	refs/heads/wpa2-dora-debug
+e9f1a7be0c13e1447a0cf398af31a9efe5868ad1	refs/pull/1/head
+280eebe2de495e32dc5456d45ba8db9f2f499fe6	refs/pull/1/merge

@@ -1,0 +1,130 @@
+Sony Dora legacy SMB charger source port
+========================================
+
+Scope and provenance
+--------------------
+This imports the actual PMI8994/PMI8996 Qualcomm SMB charger and Sony Tone
+charging/USB extensions. It is a source/API port, not an on-device charging
+validation. Both F8131 and F8132 require separate physical testing.
+
+Reference: sbot110/android_kernel_sony_msm8996, original 4.4 source snapshot
+0c295b15b6d0fb59a64e13b9e0ef2070818ef2a1, drivers/power/supply/qcom/
+qpnp-smbcharger{,_extension,_extension_usb}.[ch] and battery.c.
+
+The old parallel-battery helper is imported as battery-legacy.c with private
+sony_legacy_batt_init/deinit names. Its legacy initialization and voter state
+cannot be replaced by calling the newer qcom_batt_init() with an invented
+charger_param structure. Existing native charger implementations remain intact.
+No replacement measurement, always-success hardware operation, or fixed SOC is
+introduced by this port. Existing optional fake-capacity debug controls from
+the reference are not enabled or assigned a fixed battery value.
+
+Configuration and real dependencies
+-----------------------------------
+QPNP_SMBCHARGER is a built-in option. Native pmic-voter APIs are not exported
+for independent modules, so this port does not claim module support.
+QPNP_SMBCHARGER_EXTENSION retains Sony policy and diagnostics. Required
+providers include MFD_SPMI_PMIC, real SPMI regmap, REGULATOR, EXTCON, INPUT,
+RTC_CLASS, QPNP_REVID via the legacy VADC dependency, OF_BATTERYDATA,
+SENSORS_QPNP_ADC_VOLTAGE and SONY_MSM8996_BCL.
+QPNP_SMBCHARGER_RTC_DEVICE names the actual RTC, default rtc0; this does not
+require setting the system time from that RTC. PM8XXX RTC provides the PM8994
+RTC binding. See the FG port report for battery-profile and SRAM dependencies.
+
+The SMB charger binds qcom,qpnp-smbcharger below the PMIC platform hierarchy.
+It obtains the parent regmap and discovers real charger subtypes and register
+bases from the child DT nodes. Missing mandatory peripheral bases are errors.
+No register addresses are fabricated to make probe succeed. Appropriate DT
+interrupt names, regulator constraints, VADC phandles, battery profile, thermal
+policy and BCL provider must all be ported before the driver can initialize.
+
+Dora DT policy must preserve the original batterydata-tone-dora-send.dtsi and
+its Sony calibration/JEITA settings, including the complete thermal tables.
+For example the reference dora board sets 1800mA fast-charge current and
+1700mA USB 9V limit; this source port does not change these policy values or
+assert that they are safe without matching DT/battery hardware and testing.
+
+4.19 API and confirmed source corrections
+----------------------------------------
+* Legacy VADC calls use the isolated qpnp-legacy-adc.h API and its real
+  measurement implementation rather than colliding with newer ADC types.
+* Sony unplug and ID-polling wakelocks use checked native wakeup_sources with
+  balanced unregister. Legacy timeout jiffies are converted to milliseconds.
+* The old EXTCON_USB_SPEED pseudo-connector becomes the standard USB_SS
+  property of EXTCON_USB. Provider capability is registered before use;
+  connection notifications use extcon_set_state_sync().
+* IRQ lookup/request errors propagate, including -EPROBE_DEFER. The archived
+  draft wrongly returned success on request failure. Only successfully
+  requested IRQs are freed or disabled, and enabled IRQ wake states are
+  tracked and balanced.
+* All work items and their locks exist before sysfs/power-supply/control
+  publication. Cleanup stops entry points and IRQ producers, drains actual
+  work/ADC monitoring, then unregisters supplies and destroys voters.
+* Partial initialization has staged cleanup for input, LED, USB polling,
+  workqueue, power supplies, wakeup sources and legacy battery state.
+* power_supply_get_by_name() cached references are acquired under a mutex,
+  retained for consumer lifetime and released after asynchronous users drain.
+* The legacy battery class uses 4.19 class_groups; notifier, class, work,
+  voters and cached supply references have a balanced teardown path.
+* A successful USB current request no longer falls through to -EINVAL.
+  Missing ADC voltage data remains an error instead of a negative voltage.
+* Unset voter names are checked before the Sony current-state strcmp calls.
+* PMIC revid errors and node references are handled correctly; unknown PMIC
+  subtypes fail probe instead of leaving the charger current tables unset.
+  RTC read failures do not feed uninitialized elapsed-time values into AICL
+  interrupt accounting.
+* Failed FG battery-type/resistance reads preserve existing safety votes and
+  do not dereference NULL or reuse the wrong power-supply union member.
+* OTG regulator callbacks are stopped/drained and explicitly unregistered
+  before their voter dependencies are destroyed. DPDM enable ownership is
+  tracked per regulator consumer and balanced during teardown/shutdown.
+* The charger LED uses brightness_set_blocking(), since its FG/regmap access
+  may sleep. Secure register writes use a mutex; threaded IRQs permit this
+  with both fast and qcom,can-sleep parent regmaps.
+* The retained parallel-battery helper bounds its percentage/current controls,
+  handles zero FCC without division by zero and supports its main-only stepper
+  path without dereferencing an absent parallel power supply.
+* Shutdown quiesces real sysfs/control, IRQ, VADC and work producers before
+  the original synchronous force-5V restart workaround. The source/USB-UV
+  handlers remain only as hardware completions during that sequence, then
+  every exit disables them too. Voters/regmap stay alive for the required
+  shutdown writes; background HVDCP/APSD/thermal work cannot race those writes.
+  Source/UV event completions and wait verification use checked RT_STS reads;
+  a failed register read is not reported as a low/rising/falling hardware event.
+
+Remaining USB electrical/provider limits
+---------------------------------------
+Dora has microUSB. The original external-TypeC setting belongs to kagura and
+keyaki, not dora. That optional legacy path uses the old Sony TYPEC_MODE ABI
+(power_supply_type UFP/DFP/polling requests), which must not be confused with
+4.19 enum power_supply_typec_mode. A requested but unavailable external-TypeC
+provider now consistently returns -EPROBE_DEFER; there is no retry-count
+fallback that pretends the dependency is present. Dora must not enable that
+board property.
+
+The legacy 3.3V D+/D- request had value13, now occupied by the native FORCE_5V
+command. This port uses a distinct private command, and returns -EOPNOTSUPP
+because no current 4.19 USB PHY provider implements that exact electrical
+state. Unknown DP/DM commands return -EINVAL instead of reporting success.
+The existing Sony floating/proprietary and HVDCP detection logic is retained,
+but its required VADC/USB DPDM power-supply backend must be supplied and
+validated. Floating detection also queries the legacy USB DP_DM property,
+which the imported USB supply implementation currently does not provide.
+That path reports an error; it is not considered working from compilation.
+
+Native PHY DPDM regulator enable/disable support alone does not implement the
+legacy DP/DM voltage/pulse power-supply ABI. Do not claim HVDCP/floating charger
+support until the real backend and device tests are complete. USB/OTG, cable
+insertion/removal, cold/warm/hot charging limits, termination/recharge, battery
+profile, unplug notification, suspend/resume and thermal shutdown all need
+physical validation on both F8131 and F8132.
+
+Validation
+----------
+The charger, battery-legacy and native pmic-voter objects compile together
+with Sony extensions enabled using ARM64 GCC12.2 and the real ADC/BCL config.
+The final isolated object build after independent lifecycle/API review has no
+errors or warnings in dora-charger-final-build.log in the cloud workspace;
+this is not a hardware-test log or a portable build artifact.
+The root hardware-stage report records the subsequent combined image link
+and exact final source revision. No device was flashed or boot-tested here.

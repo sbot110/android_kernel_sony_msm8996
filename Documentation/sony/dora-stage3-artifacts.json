@@ -1,0 +1,273 @@
+{
+  "status": "PASS",
+  "scope": "build formats and exact DTB payload only",
+  "bootloader_selection": "UNVERIFIED",
+  "device_boot": "UNTESTED",
+  "linked_implementations": [
+    "qusb2_phy_probe",
+    "msm8996_dora_init_tbl",
+    "ufs_qcom_phy_qmp_14nm_probe",
+    "glink_rpm_probe",
+    "qcom_apcs_ipc_probe",
+    "pmic_gpio_probe",
+    "pmic_mpp_probe",
+    "simple_pm_bus_probe",
+    "mdss_dsi_panel_driver_detection",
+    "bpf_int_jit_compile",
+    "qcom_smd_rpm_probe",
+    "msm_bus_device_probe",
+    "msm8996_boot_probe",
+    "qcom_genpd_regulator_probe",
+    "qpnp_wled_probe",
+    "msm8996_gfx_probe",
+    "cpr3_hmss_regulator_probe",
+    "cpr3_mmss_regulator_probe",
+    "kryo_regulator_probe",
+    "msm_apm_probe"
+  ],
+  "image_header": {
+    "text_offset": 524288,
+    "image_size": 21999616,
+    "flags": 10
+  },
+  "appended_dtbs": [
+    {
+      "path": "qcom/msm8996-v3.0-sony-xperia-tone-dora.dtb",
+      "offset": 8941036,
+      "size": 185796,
+      "qcom,msm-id": [
+        246,
+        196608
+      ],
+      "qcom,board-id": [
+        8,
+        0
+      ],
+      "qcom,pmic-id": [
+        131081,
+        131082,
+        0,
+        0
+      ]
+    },
+    {
+      "path": "qcom/msm8996-v3.0-pmi8996-sony-xperia-tone-dora.dtb",
+      "offset": 9126832,
+      "size": 185796,
+      "qcom,msm-id": [
+        246,
+        196608
+      ],
+      "qcom,board-id": [
+        8,
+        0
+      ],
+      "qcom,pmic-id": [
+        131081,
+        65555,
+        0,
+        0
+      ]
+    },
+    {
+      "path": "qcom/msm8996-sony-xperia-tone-dora.dtb",
+      "offset": 9312628,
+      "size": 186296,
+      "qcom,msm-id": [
+        246,
+        196609
+      ],
+      "qcom,board-id": [
+        8,
+        0
+      ],
+      "qcom,pmic-id": [
+        131081,
+        131082,
+        0,
+        0
+      ]
+    },
+    {
+      "path": "qcom/msm8996-v3.1-pmi8996-sony-xperia-tone-dora.dtb",
+      "offset": 9498924,
+      "size": 186296,
+      "qcom,msm-id": [
+        246,
+        196609
+      ],
+      "qcom,board-id": [
+        8,
+        0
+      ],
+      "qcom,pmic-id": [
+        131081,
+        65555,
+        0,
+        0
+      ]
+    }
+  ],
+  "artifacts": [
+    {
+      "path": "vmlinux",
+      "size": 24608688,
+      "sha256": "6e1501fc86c71bb68e51f18636cd5fbc894a98b934ef72886be71d53ab2ab8d7"
+    },
+    {
+      "path": ".config",
+      "size": 137397,
+      "sha256": "428701a56321209c6bbf0bd5030a7bcfd6e4ef5aeacf99265e61e100e8d1d2e9"
+    },
+    {
+      "path": "System.map",
+      "size": 3751661,
+      "sha256": "846e097956962da7036f1d567bf601d005d22a93f586d74cdd7c8fe8a4b8d44b"
+    },
+    {
+      "path": "arch/arm64/boot/Image",
+      "size": 19651072,
+      "sha256": "a511e747ad890763e176cd5fadbe3d4e3e10124937f08e4075cd1475ea897045"
+    },
+    {
+      "path": "arch/arm64/boot/Image.gz",
+      "size": 8941036,
+      "sha256": "968e0cc2d819482c95ce91e6bc4cb9e0870c003146c045f5192180e52f201871"
+    },
+    {
+      "path": "arch/arm64/boot/dts/qcom/msm8996-v3.0-sony-xperia-tone-dora.dtb",
+      "size": 185796,
+      "sha256": "e4796f351aea99a25f96c5ca61f1b496b6730003fdfd705358b5a954a1e099a0"
+    },
+    {
+      "path": "arch/arm64/boot/dts/qcom/msm8996-v3.0-pmi8996-sony-xperia-tone-dora.dtb",
+      "size": 185796,
+      "sha256": "a0762b5e80306a75f94d3312cfbad2619d4dd2d65915b5e807851f0e54d32191"
+    },
+    {
+      "path": "arch/arm64/boot/dts/qcom/msm8996-sony-xperia-tone-dora.dtb",
+      "size": 186296,
+      "sha256": "97055e878810bbdfde922ce6cc26bca183e2a3bd7a5299eca193695f311d13d1"
+    },
+    {
+      "path": "arch/arm64/boot/dts/qcom/msm8996-v3.1-pmi8996-sony-xperia-tone-dora.dtb",
+      "size": 186296,
+      "sha256": "869e4e38de07e14c8f8a87af2696855b4891c4ffc2b642fce0719f0a85056006"
+    },
+    {
+      "path": "arch/arm64/boot/Image.gz-dtb",
+      "size": 9685220,
+      "sha256": "da180fd1b7ef6fff36faf6c2d2ff886617faca7808ded238cfc520b547d18677"
+    }
+  ],
+  "kernel_status": "BUILDABLE",
+  "initial_head": "1b2d146ae22ee973750a2ca3151f1496badc4867",
+  "validated_source_head": "799e29584b029fe34b8344a726989d4836d258d5",
+  "branch": "kernel-4.19-701905467803253630",
+  "kernel_release": "4.19.318-dora-4.19+",
+  "clean_build": {
+    "exit_code": 0,
+    "fresh_output_directory": true,
+    "jobs": 4,
+    "cpu_quota": 2,
+    "command": "OUT_DIR=/workspace/work/dora-stage3-clean-20261102 JOBS=4 scripts/dora/build.sh",
+    "source_tree_clean_during_build": true,
+    "log_sha256": "da8cb92079b4222f691e8955a82c1cd369869b9139e856be424c7d38894d7f27"
+  },
+  "warnings": {
+    "compiler_and_linker": 97,
+    "categories": {
+      "GNU-stack linker warning": 1,
+      "-Wformat=": 41,
+      "-Waddress": 7,
+      "-Wunused-result": 1,
+      "-Wvla": 1,
+      "-Wunused-function": 2,
+      "-Wunused-value": 1,
+      "BITS_TO_BYTES redefinition": 41,
+      "-Wformat-extra-args": 1,
+      "-Wbool-operation": 1
+    },
+    "independent_dtc_per_variant": 29
+  },
+  "resolved_config": {
+    "explicit_assignments": 285,
+    "required_builtins": 101,
+    "CPU_FREQ": "n",
+    "CPU_IDLE": "n",
+    "NR_CPUS": "4",
+    "maxcpus": 2
+  },
+  "physical_tests": {
+    "F8131": "UNTESTED",
+    "F8132": "UNTESTED",
+    "LOS21_runtime": "UNTESTED",
+    "boot_img": "NOT_CREATED"
+  },
+  "activation_guards": {
+    "UFS_host": "disabled: missing GCC CX corner votes",
+    "display": "disabled: missing MMCC digital corner votes",
+    "CPU_voltage": "disabled: missing coordinated ACD/CPR/RPM transition",
+    "GPU_CPR_buck_corner": "disabled: incomplete RPM/MX/buck dependencies",
+    "SMBcharger": "not instantiated"
+  },
+  "source_commits": [
+    {
+      "sha": "c5856c8a796aa18cdc9cf20b1f81e6e391a2ff1a",
+      "subject": "clk: qcom: expose the MSM8996 AGGRE0 MPU configuration gate"
+    },
+    {
+      "sha": "5221f71df402daab41af1ab724f00d2925cba988",
+      "subject": "pinctrl: qcom: preserve Sony Dora PMIC input and boot pin states"
+    },
+    {
+      "sha": "91ec54e2b790c0f45af0dce37fd10d2903e3121d",
+      "subject": "phy: qcom: unwind failed UFS analog power-up before collapsing rails"
+    },
+    {
+      "sha": "1587230d0d184579cb6d380b25b90f839f6a90f8",
+      "subject": "regulator: qcom: restore MSM8996 CPR and power controller frontends"
+    },
+    {
+      "sha": "3ce06d3ca149541f8709cb45dd1e337194983ea6",
+      "subject": "clk: qcom: observe MSM8996 firmware CPU and CBF clocks safely"
+    },
+    {
+      "sha": "d3489d74ae35d5d760c618fa9b769ebf92113774",
+      "subject": "bus: qcom: connect MSM8996 bandwidth votes to the native RPM transport"
+    },
+    {
+      "sha": "861f25215d286462d80decbea3f98c68fad75955",
+      "subject": "clk: qcom: separate MSM8996 GFX clocks from their CPR dependencies"
+    },
+    {
+      "sha": "ad816b9496de4bdfc09376a6c80f28f99063e8c9",
+      "subject": "video: msm: restore Sony Dora display providers and fail-closed probing"
+    },
+    {
+      "sha": "c16e704c5cca85f5d4c09751255dc0848f4c8a40",
+      "subject": "regulator: cpr3: reject an unmatched MMSS hardware revision"
+    },
+    {
+      "sha": "81c5f32c64e88d27f586a2dee1bb3eca837221e8",
+      "subject": "arm64: dts: qcom: restore four genuine Sony Dora hardware datasets"
+    },
+    {
+      "sha": "799e29584b029fe34b8344a726989d4836d258d5",
+      "subject": "build: dora: validate all four safety-gated hardware variants"
+    }
+  ],
+  "post_build_whitespace_cleanup": {
+    "sha": "ce85cc2ec39d3e88132aabcde7840187f9ff0a23",
+    "file": "arch/arm64/boot/dts/qcom/msm8996-sony-xperia-tone-safety.dtsi",
+    "change": "one empty EOF line removed; all source content unchanged after rstrip",
+    "all_four_dtbs_rebuilt_exit": 0,
+    "all_artifact_sha256_unchanged": true
+  },
+  "checks": {
+    "unique_scripts_in_build": 20,
+    "enabled_provider_references_per_variant": 254,
+    "raw_original_reference_comparison_exit": 0,
+    "artifact_negative_mutations_rejected": 6
+  }
+}

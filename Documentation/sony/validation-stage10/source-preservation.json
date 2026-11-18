@@ -1,0 +1,7 @@
+{
+  "normal_four_dtbs_byte_identical_to_stage9": true,
+  "sony44_ref": "0c295b15b6d0fb59a64e13b9e0ef2070818ef2a1",
+  "built_source_hashes_match": true,
+  "changed_source_test_and_profile_files": 32,
+  "protected_path_changes": []
+}

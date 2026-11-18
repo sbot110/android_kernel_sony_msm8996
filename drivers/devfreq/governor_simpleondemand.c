@@ -19,8 +19,7 @@
 #define DFSO_UPTHRESHOLD	(90)
 #define DFSO_DOWNDIFFERENCTIAL	(5)
 static int devfreq_simple_ondemand_func(struct devfreq *df,
-					unsigned long *freq,
-					u32 *flag)
+					unsigned long *freq)
 {
 	int err;
 	struct devfreq_dev_status *stat;
@@ -140,7 +139,7 @@ static int devfreq_simple_ondemand_handler(struct devfreq *devfreq,
 }
 
 static struct devfreq_governor devfreq_simple_ondemand = {
-	.name = "simple_ondemand",
+	.name = DEVFREQ_GOV_SIMPLE_ONDEMAND,
 	.get_target_freq = devfreq_simple_ondemand_func,
 	.event_handler = devfreq_simple_ondemand_handler,
 };

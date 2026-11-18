@@ -1,0 +1,206 @@
+{
+  "stage": 8,
+  "status": "BUILDABLE",
+  "boot_test_ready": false,
+  "booted": false,
+  "daily_use_ready": false,
+  "runtime_verified": false,
+  "initial_sha": "6dfd2314c958294d13291885e3ce463e2d7a9257",
+  "validated_source_sha": "ecedc54e29a31665a761085b33adeeed280dab61",
+  "build_invocation_head": "6dfd2314c958294d13291885e3ce463e2d7a9257",
+  "build_source": "Initial HEAD plus frozen working-tree changes; all built source hashes match validated source commit; commits created after verification",
+  "final_sha_location": "final reply and external stage8-publication-audit.json; last commit documentation/evidence only",
+  "commit_count": 6,
+  "changed_file_count": 76,
+  "source_commits": [
+    {
+      "sha": "96cc943e6a6c783fd941371f1d54dca83f351810",
+      "subject": "clk: qcom: keep MSM8996 native CPU bindings and boot limits exclusive"
+    },
+    {
+      "sha": "d942cc1887944343a110fcb91d9dff5d553b220c",
+      "subject": "soc: qcom: retain confirmed APM CPR and SAW state on failure"
+    },
+    {
+      "sha": "2c36565055dde0d4ae57c22b314e8b7f96e31b71",
+      "subject": "clk: preserve recovery floors and reject faulted handoff completion"
+    },
+    {
+      "sha": "2745b1bd319d4acf3cf627948f98a6fd8863f832",
+      "subject": "usb: dwc3: gate Dora parent before firmware charging state changes"
+    },
+    {
+      "sha": "ecedc54e29a31665a761085b33adeeed280dab61",
+      "subject": "dora: qualify shared power and USB parent code in every build"
+    }
+  ],
+  "out_dir": "/workspace/stage8-final-clean-out",
+  "jobs": 3,
+  "build_exit": 0,
+  "build_start_utc": "2026-11-05T21:17:40Z",
+  "build_end_utc": "2026-11-05T21:27:19Z",
+  "diagnostic_out_dir": "/workspace/stage8-diagnostic-out",
+  "diagnostic_exit": 0,
+  "normal_dtb_count": 4,
+  "diagnostic_dtb_count": 4,
+  "normal_artifacts_preserved": true,
+  "normal_dtbs_identical_to_stage7": true,
+  "final_config_identical_to_stage7": true,
+  "check_scripts": 54,
+  "existing_check_scripts_preserved": 52,
+  "default_check_executions": 81,
+  "diagnostic_check_executions": 2,
+  "extra_eight_tree_early_boot_executions": 1,
+  "extra_eight_tree_usb_parent_executions": 1,
+  "sanitized_runs": 5,
+  "shared_power_production_functions": 23,
+  "shared_power_unsafe_mutations_rejected": 10,
+  "usb_parent_unsafe_source_mutations_rejected": 3,
+  "usb_parent_invalid_root_fixture_rejected": true,
+  "stage7_watchdog_cases_preserved": 69,
+  "stage7_usb_cases_preserved": 42,
+  "boot_parser_selftests": 66,
+  "compiler_warnings": 90,
+  "compiler_added": 0,
+  "compiler_removed": 0,
+  "dtc_version": "1.6.1",
+  "dtc_warnings_by_tree": {
+    "qcom/msm8996-v3.0-sony-xperia-tone-dora.dtb": 29,
+    "qcom/msm8996-v3.0-pmi8996-sony-xperia-tone-dora.dtb": 29,
+    "qcom/msm8996-sony-xperia-tone-dora.dtb": 29,
+    "qcom/msm8996-v3.1-pmi8996-sony-xperia-tone-dora.dtb": 29
+  },
+  "dtc_added": 0,
+  "dtc_removed": 0,
+  "bundled_dtc_warnings_by_tree": {
+    "qcom/msm8996-v3.0-sony-xperia-tone-dora.dtb": 15,
+    "qcom/msm8996-v3.0-pmi8996-sony-xperia-tone-dora.dtb": 15,
+    "qcom/msm8996-sony-xperia-tone-dora.dtb": 15,
+    "qcom/msm8996-v3.1-pmi8996-sony-xperia-tone-dora.dtb": 15
+  },
+  "artifacts": [
+    {
+      "path": "vmlinux",
+      "size": 24697176,
+      "sha256": "8526accc9170c64e85d178876a2a368b232fdf937fe9a0e6736b38c5848066d0"
+    },
+    {
+      "path": ".config",
+      "size": 137437,
+      "sha256": "881bcb0d1ca79e0c79c99166bbb07b1d4a7af4389229f366c5e5f2393a47806c"
+    },
+    {
+      "path": "System.map",
+      "size": 3762583,
+      "sha256": "724391627c529c08d60cc053b6e526981b85587de8bd13b1a1e9737163acc263"
+    },
+    {
+      "path": "arch/arm64/boot/Image",
+      "size": 19724800,
+      "sha256": "48588c6cf8e46d70a23ba0ad160fee087eba64043923f27341b02afaadf551fd"
+    },
+    {
+      "path": "arch/arm64/boot/Image.gz",
+      "size": 8971147,
+      "sha256": "431e48bd2348601af70bce6d41859bd2a64e6bc3643c200af4a845d85a328cd6"
+    },
+    {
+      "path": "arch/arm64/boot/dts/qcom/msm8996-v3.0-sony-xperia-tone-dora.dtb",
+      "size": 190467,
+      "sha256": "19909bd2890d8659963e109cc1142f0d170ed224720819c06a4332148e6da796"
+    },
+    {
+      "path": "arch/arm64/boot/dts/qcom/msm8996-v3.0-pmi8996-sony-xperia-tone-dora.dtb",
+      "size": 190467,
+      "sha256": "aba6f8bad183021eb9c83f790e3765543707032e5f1a2438c2d33a2da23defe7"
+    },
+    {
+      "path": "arch/arm64/boot/dts/qcom/msm8996-sony-xperia-tone-dora.dtb",
+      "size": 190983,
+      "sha256": "1a756b98048e44665a293e75b889d0429df24e455477d79c5fe8fa5d1b2c8204"
+    },
+    {
+      "path": "arch/arm64/boot/dts/qcom/msm8996-v3.1-pmi8996-sony-xperia-tone-dora.dtb",
+      "size": 190983,
+      "sha256": "c7f88e14289d790bf50cac7dd1afc7c9656e7d82e6b84a5ea23135e8bfa8bdd1"
+    },
+    {
+      "path": "arch/arm64/boot/Image.gz-dtb",
+      "size": 9734047,
+      "sha256": "d5b5aa6bdb4cdf594424ad5a23f8033da1e7816865cd21192cff8bb1fdf087e7"
+    }
+  ],
+  "cpu_shared_power": "Partial: real APM endpoint/range ownership and readback, CPR crossover quarantine, bounded SAW sequence preparation; full shared gang guard missing",
+  "live_cpu_adapter": "Not active; native callbacks unbound, active provider read-only; unique binding and peer fuse/CFA checks strengthened",
+  "cpr_spm_apm": "APM/CPR timeout no longer lowers VDD from unknown supply; signed errors, PM freeze, retired APM raw handles and reprobe tombstone; full SAW lifetime/AVS/collapse ownership unimplemented",
+  "cpu_limits": "maxcpus=2, CPU_FREQ=n, CPU_IDLE=n; original plans/limits unchanged; native RPM S8-S11 remain disabled",
+  "gcc_ccf": "Recovery floor monotonic, faulted/uncertain handoff incomplete; existing same-owner HIGH reattach preserved; lost per-clock ownership remains blocked",
+  "gcc_voltage_contracts": 56,
+  "mmcc_voltage_contracts": 49,
+  "watchdog": "Stage7 source/DTB provenance and production tests retained; bark12s/pet10s; bootloader/secure/access/routing handoff unverified and activation gated",
+  "usb_charging": "Dora DWC3 parent now rejects before allocation/reset/clocks/UTMI/VBUS; PHY gate retained; USB/ADB unavailable; actual firmware charging/DPDM/VBUS/ID safety unqualified",
+  "rpm_pmic": "Physical S4/L12/L13/L20/L21 BOTH ACK, logical corners and quarantine/recovery preserved; no phone measurements",
+  "sdhc1": "Four separate source-qualified experimental DTBs; normal SDHC1 off, no actual eMMC/CID/IRQ/GPT/HS400 logs; new shared CPU backend not activated",
+  "sdhc2": "disabled",
+  "ufs": "disabled",
+  "display_gpu": "gated; four SoC/PMIC variants and five LCD-ID 1080p60 panels preserved; no AUO120/dynamic FPS",
+  "boot_image_qualification": "Kernel artifacts inspected; accessible roots search found no working boot.img/identified LOS21 ramdisk; actual header/partition/loader data absent; no boot image created",
+  "f8131": "source/config/DT only; no phone runtime",
+  "f8132": "source/config/DT and DSDS/UIM2 restrictions only; no DSDS/phone runtime",
+  "los21": "Source/config/ABI checks retained; bpfloader/BoringSSL/vold runtime errors unresolved",
+  "phone_flash": false,
+  "fastboot_boot": false,
+  "emmc_write": false,
+  "device_vendor_edits": false,
+  "new_branch": false,
+  "force_push": false,
+  "remaining_p0": [
+    "Transferable shared CPU CPR/SPM/APM/LMH guard, real six leases/prepared parents and thermal/collapse/retention integration",
+    "SAW raw-handle lifetime and persistent ownership/quarantine through reprobe",
+    "Lost per-clock ownership or unknown parent/rate/PLL state",
+    "Watchdog bootloader/secure firmware handoff",
+    "USB/charging/DPDM/VBUS/ID/BC1.2/FG/BCL/JEITA protections integration",
+    "Real boot.img/LOS21 ramdisk/GPT size/loader selection/load/cmdline/recovery/logging artifacts",
+    "Phone RPM/eMMC/early-init observations"
+  ],
+  "remaining_p1": [
+    "Display/incell/backlight",
+    "Adreno530/KGSL/CPR/MX/CX/SMMU/secure ABI",
+    "Modem/DSDS/audio/camera",
+    "Full suspend"
+  ],
+  "resume_verification": {
+    "verification_date_client": "2026-11-11",
+    "initial_target_sha": "6dfd2314c958294d13291885e3ce463e2d7a9257",
+    "current_remote_target_sha": "6dfd2314c958294d13291885e3ce463e2d7a9257",
+    "source_sha": "ecedc54e29a31665a761085b33adeeed280dab61",
+    "implementation_check_files_verified": 15,
+    "normal_artifact_hashes_verified": true,
+    "diagnostic_artifact_hashes_verified": true,
+    "config_verified": true,
+    "archived_logs_integrity_verified": true,
+    "source_changed_since_clean_build": false,
+    "new_full_build_required": false,
+    "no_stage8_push_yet": true,
+    "external_ref_changes_before_our_push": {
+      "refs/heads/kernel-5.15": {
+        "initial": null,
+        "before_publication": "ad3dcab528daa2c19877658f268be9925ba6c897"
+      },
+      "refs/heads/kernel-5.5": {
+        "initial": "030f0b026abcc01b990cc7f8b04b9e65fb9bbe74",
+        "before_publication": "c10cec83039a46d98c4fddc278c508978558119c"
+      }
+    }
+  },
+  "external_ref_changes_observed_before_our_push": {
+    "refs/heads/kernel-5.15": {
+      "initial": null,
+      "prepush": "ad3dcab528daa2c19877658f268be9925ba6c897"
+    },
+    "refs/heads/kernel-5.5": {
+      "initial": "030f0b026abcc01b990cc7f8b04b9e65fb9bbe74",
+      "prepush": "c10cec83039a46d98c4fddc278c508978558119c"
+    }
+  }
+}

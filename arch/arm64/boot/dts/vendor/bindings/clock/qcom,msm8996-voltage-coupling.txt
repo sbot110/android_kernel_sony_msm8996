@@ -1,0 +1,57 @@
+Sony MSM8996 v3 GCC/MMCC digital voltage coupling
+================================================
+
+The native qcom,gcc-msm8996 and qcom,mmcc-msm8996 controllers can use the
+final Sony MSM8996 v3 frequency-to-corner plans. Dora requires this mode;
+it is also selected explicitly by sony,msm8996-voltage-coupling.
+
+Required properties when coupling is selected:
+- vdd-dig-supply: typed logical-corner regulator for PM8994 S1/CX, provided
+  by qcom,msm8996-rpm-corner-resource with resource-name "smpa", id 1.
+  The child must cover ACTIVE and SLEEP sets (qcom,set = <3>).
+- For MMCC only:
+  - mmpll4-dig-supply: another consumer of that same S1 corner regulator.
+  - mmpll4-analog-supply: physical PM8994 L12 regulator, exactly 1800000 uV.
+
+Optional property:
+- sony,msm8996-voltage-coupling: boolean enabling these Sony v3 contracts on
+  an explicitly audited board. It does not describe unrelated SoC revisions.
+
+Do not connect vdd-dig or mmpll4-dig to a physical microvolt regulator or
+dummy supply. Consumers issue logical corner 1/3/4/5/7 for source levels
+NONE/LOWER/LOW/NOMINAL/HIGH; only the typed provider translates wire values.
+
+Controllers must be built in. Probe obtains a real ACKed HIGH lease before
+clock hardware writes. CCF retains the highest-corner handoff until unused
+clocks have been parked and boot clock ownership/rates are known. Unknown
+boot-active parents retain HIGH and prohibit lowering. Probe retries reuse
+one bounded device reference and consumer lease; a failed probe does not
+release the voltage of unknown firmware clocks. Manual bind/unbind is not
+offered. The retained reference also covers dynamic platform removal.
+Deferred probes after the global handoff still acquire a tracked HIGH lease.
+Any enabled raw PLL lacking a prepared main-output owner retains HIGH too.
+Only complete clock ownership can release that lease; failed release retains
+the recorded vote. This may conservatively keep HIGH after early cleanup.
+
+The raw *_EARLY PLLs remain internal parents on a coupled board; their DT
+numeric IDs are not exported, since the source limits describe main outputs,
+not raw VCO frequencies. Use the regulated main-output and source clocks.
+GPLL0 main remains read-only, critical and observed at the source 600 MHz;
+an unexpected firmware rate fails probe without reprogramming the root.
+
+L12 is an ordinary physical RPM rail. Any voltage/enable/disable error makes
+the analog class uncertain and permanently quarantines further PLL operations;
+a cached consumer enable count cannot recover a lost physical SWEN ACK.
+Physical L12 SLEEP programming and suspend/resume require separate validation.
+
+Example:
+  &gcc {
+      sony,msm8996-voltage-coupling;
+      vdd-dig-supply = <&pm8994_s1_corner>;
+  };
+  &mmcc {
+      sony,msm8996-voltage-coupling;
+      vdd-dig-supply = <&pm8994_s1_corner>;
+      mmpll4-dig-supply = <&pm8994_s1_corner>;
+      mmpll4-analog-supply = <&pm8994_l12>;
+  };

@@ -1,0 +1,350 @@
+{
+  "source_files": [
+    {
+      "source": "/workspace/stage9-qualified-clean-out/.config",
+      "destination": "final.config",
+      "source_sha256": "881bcb0d1ca79e0c79c99166bbb07b1d4a7af4389229f366c5e5f2393a47806c",
+      "archived_sha256": "881bcb0d1ca79e0c79c99166bbb07b1d4a7af4389229f366c5e5f2393a47806c"
+    },
+    {
+      "source": "/workspace/stage9-qualified-clean-out/toolchain.txt",
+      "destination": "toolchain.txt",
+      "source_sha256": "ba51457fb25554f19818c0ff6c24c441f42cd46c2d9086a5bc3dc28db6b6ce46",
+      "archived_sha256": "ba51457fb25554f19818c0ff6c24c441f42cd46c2d9086a5bc3dc28db6b6ce46"
+    },
+    {
+      "source": "/workspace/stage9-qualified-clean-out/SHA256SUMS",
+      "destination": "SHA256SUMS",
+      "source_sha256": "a2fa45bc1f3f5c009bb8347c1dca3c2290f7f2d4573db961ab6392d9e473277d",
+      "archived_sha256": "a2fa45bc1f3f5c009bb8347c1dca3c2290f7f2d4573db961ab6392d9e473277d"
+    },
+    {
+      "source": "/workspace/stage9-qualified-clean-out/artifact-validation.json",
+      "destination": "artifact-validation.json",
+      "source_sha256": "1cc6deb283a30f839cc0038c2759f882124c36bb4d29f0cd5d5d9423582b87cf",
+      "archived_sha256": "1cc6deb283a30f839cc0038c2759f882124c36bb4d29f0cd5d5d9423582b87cf"
+    },
+    {
+      "source": "/workspace/stage9-qualified-clean-out/early-boot-validation.json",
+      "destination": "early-boot-validation.json",
+      "source_sha256": "773014e4375f84ac39f501a3589c05a0341468320bccf79fed60b2cc4313706c",
+      "archived_sha256": "773014e4375f84ac39f501a3589c05a0341468320bccf79fed60b2cc4313706c"
+    },
+    {
+      "source": "/workspace/stage9-qualified-clean-out/boot-image-validation.json",
+      "destination": "boot-image-validation.json",
+      "source_sha256": "d6e90832698ba76d66d515a955f07379516d5a0e4421291ebd4c63c8dda05e39",
+      "archived_sha256": "d6e90832698ba76d66d515a955f07379516d5a0e4421291ebd4c63c8dda05e39"
+    },
+    {
+      "source": "/workspace/stage9-qualified-clean-out/usb-handoff-validation.json",
+      "destination": "usb-handoff-validation.json",
+      "source_sha256": "043792cd60ab204c277d8313ed2985fba8ab6bbff7129bada8eb3fc042c868e9",
+      "archived_sha256": "043792cd60ab204c277d8313ed2985fba8ab6bbff7129bada8eb3fc042c868e9"
+    },
+    {
+      "source": "/workspace/stage9-qualified-clean-out/cpu-shared-power-validation.json",
+      "destination": "cpu-shared-power-validation.json",
+      "source_sha256": "fd778b9e528b2866b8744210d83c1086a0972768467c78d842036135c8df3f84",
+      "archived_sha256": "fd778b9e528b2866b8744210d83c1086a0972768467c78d842036135c8df3f84"
+    },
+    {
+      "source": "/workspace/stage9-qualified-clean-out/cpu-power-owner-validation.json",
+      "destination": "cpu-power-owner-validation.json",
+      "source_sha256": "0bf074856eeddda5318a2e2eb56e5869e2fa89ce157a8492bc20fd34c52eb26f",
+      "archived_sha256": "0bf074856eeddda5318a2e2eb56e5869e2fa89ce157a8492bc20fd34c52eb26f"
+    },
+    {
+      "source": "/workspace/stage9-qualified-clean-out/cpr-cpu-state-validation.json",
+      "destination": "cpr-cpu-state-validation.json",
+      "source_sha256": "8d2dd1e2c835f02b26eadc0094069c87db89f5c253ba0512fd54e2812187b612",
+      "archived_sha256": "8d2dd1e2c835f02b26eadc0094069c87db89f5c253ba0512fd54e2812187b612"
+    },
+    {
+      "source": "/workspace/stage9-qualified-clean-out/usb-parent-handoff-validation.json",
+      "destination": "usb-parent-handoff-validation.json",
+      "source_sha256": "40b5906854455d4b723dbefae4d16c16f2b989bc508a9a6ad05829c09f9dfe21",
+      "archived_sha256": "40b5906854455d4b723dbefae4d16c16f2b989bc508a9a6ad05829c09f9dfe21"
+    },
+    {
+      "source": "/workspace/stage9-diagnostic-out/sdhc1-diagnostic-validation.json",
+      "destination": "sdhc1-diagnostic-validation.json",
+      "source_sha256": "1e9fd06b6020aafc327b7a872dae5097dc3b53a2caebd6da1d32d760f229e994",
+      "archived_sha256": "1e9fd06b6020aafc327b7a872dae5097dc3b53a2caebd6da1d32d760f229e994"
+    },
+    {
+      "source": "/workspace/stage9-diagnostic-out/normal-inputs.sha256",
+      "destination": "diagnostic-normal-inputs.sha256",
+      "source_sha256": "de25fbd3e18ae466a4b97a5779acab9d9f18b403d5a41aefb4179fd5ca068719",
+      "archived_sha256": "de25fbd3e18ae466a4b97a5779acab9d9f18b403d5a41aefb4179fd5ca068719"
+    },
+    {
+      "source": "/workspace/stage9-early-eight-trees.json",
+      "destination": "early-boot-eight-trees.json",
+      "source_sha256": "6cd7eea322c577cb2ba5c8a4ee74c4f9f4dece13d3b2834d0b31d2ba4b0cbc4c",
+      "archived_sha256": "6cd7eea322c577cb2ba5c8a4ee74c4f9f4dece13d3b2834d0b31d2ba4b0cbc4c"
+    },
+    {
+      "source": "/workspace/stage9-usb-parent-eight-trees.json",
+      "destination": "usb-parent-eight-trees.json",
+      "source_sha256": "6ca75b979dced092ddd1cf0c29351c6cc664538328639754719ae3c3cbec1ecf",
+      "archived_sha256": "6ca75b979dced092ddd1cf0c29351c6cc664538328639754719ae3c3cbec1ecf"
+    },
+    {
+      "source": "/workspace/stage9-boot-artifact-search.json",
+      "destination": "boot-artifact-search.json",
+      "source_sha256": "efb2384a015a7280aac8ed26819d9da7cdfcbbedc001931515878a70112e2366",
+      "archived_sha256": "efb2384a015a7280aac8ed26819d9da7cdfcbbedc001931515878a70112e2366"
+    },
+    {
+      "source": "/workspace/stage9-architecture-audit.txt",
+      "destination": "cpu-architecture-audit.txt",
+      "source_sha256": "b56f366887777c711b711bc94e6ecc7d64f0290c67a8c347d566456bab65b518",
+      "archived_sha256": "b56f366887777c711b711bc94e6ecc7d64f0290c67a8c347d566456bab65b518"
+    },
+    {
+      "source": "/workspace/stage9-refs-before.txt",
+      "destination": "remote-refs-before.txt",
+      "source_sha256": "60429c47172fdb3eec6802a03818d94b51362a67e6fd4ef041bedbb43ea6d5ca",
+      "archived_sha256": "60429c47172fdb3eec6802a03818d94b51362a67e6fd4ef041bedbb43ea6d5ca"
+    },
+    {
+      "source": "/workspace/stage9-refs-resume.txt",
+      "destination": "remote-refs-resume.txt",
+      "source_sha256": "629d86a9683fbf8d3fff0b85c323078491601c60cc2902d178213d7b0508943d",
+      "archived_sha256": "629d86a9683fbf8d3fff0b85c323078491601c60cc2902d178213d7b0508943d"
+    },
+    {
+      "source": "/workspace/stage9-build-source-manifest.json",
+      "destination": "built-source-sha256.json",
+      "source_sha256": "923df94bea74b5491557759d4a7abc5993ac3a377eeb22530ad054082f6a730b",
+      "archived_sha256": "923df94bea74b5491557759d4a7abc5993ac3a377eeb22530ad054082f6a730b"
+    },
+    {
+      "source": "/workspace/stage9-build-start.txt",
+      "destination": "build-start-utc.txt",
+      "source_sha256": "5ac383164ef91d3799504f1167b576454ad0c5c436cde3298ea8e2be1db9c8c9",
+      "archived_sha256": "5ac383164ef91d3799504f1167b576454ad0c5c436cde3298ea8e2be1db9c8c9"
+    },
+    {
+      "source": "/workspace/stage9-build-end.txt",
+      "destination": "build-end-utc.txt",
+      "source_sha256": "f613a30bb05e65e80e4518d9ac6b7e383da206f0da41f37e0ad62332d16a5da8",
+      "archived_sha256": "f613a30bb05e65e80e4518d9ac6b7e383da206f0da41f37e0ad62332d16a5da8"
+    },
+    {
+      "source": "/workspace/stage9-clean-build.exit",
+      "destination": "build-return-code.txt",
+      "source_sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa",
+      "archived_sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
+    },
+    {
+      "source": "/workspace/stage9-diagnostic.exit",
+      "destination": "diagnostic-return-code.txt",
+      "source_sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa",
+      "archived_sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
+    },
+    {
+      "source": "/workspace/stage9-resume-preserved/manifest.json",
+      "destination": "resume-preserved-manifest.json",
+      "source_sha256": "d434a91577bf5fecfa954d2d32ae06013b1ba361e06607632d2d53ebf9fe45b4",
+      "archived_sha256": "d434a91577bf5fecfa954d2d32ae06013b1ba361e06607632d2d53ebf9fe45b4"
+    },
+    {
+      "source": "/workspace/stage9-sanitizer-results.json",
+      "destination": "sanitizer-results.json",
+      "source_sha256": "d7a8ab91e1729b1e3f5fde4304582b13ebc7eb82ea4c0232f8d379d29e70c6c3",
+      "archived_sha256": "d7a8ab91e1729b1e3f5fde4304582b13ebc7eb82ea4c0232f8d379d29e70c6c3"
+    },
+    {
+      "source": "/workspace/stage9-owner-sanitized.json",
+      "destination": "owner-sanitized.json",
+      "source_sha256": "0bf074856eeddda5318a2e2eb56e5869e2fa89ce157a8492bc20fd34c52eb26f",
+      "archived_sha256": "0bf074856eeddda5318a2e2eb56e5869e2fa89ce157a8492bc20fd34c52eb26f"
+    },
+    {
+      "source": "/workspace/stage9-cpr-sanitized.json",
+      "destination": "cpr-sanitized.json",
+      "source_sha256": "8d2dd1e2c835f02b26eadc0094069c87db89f5c253ba0512fd54e2812187b612",
+      "archived_sha256": "8d2dd1e2c835f02b26eadc0094069c87db89f5c253ba0512fd54e2812187b612"
+    },
+    {
+      "source": "/workspace/stage9-shared-power-sanitized.json",
+      "destination": "shared-power-sanitized.json",
+      "source_sha256": "fd778b9e528b2866b8744210d83c1086a0972768467c78d842036135c8df3f84",
+      "archived_sha256": "fd778b9e528b2866b8744210d83c1086a0972768467c78d842036135c8df3f84"
+    },
+    {
+      "source": "/workspace/stage9-qualified-clean-out/build.log",
+      "destination": "full-build.log.gz",
+      "source_sha256": "5e9f2511810c16858773a26dfa6cca9579596836ffb17e036800886d34249990",
+      "archived_sha256": "6cdac501ee595df4ad3dce2c4f4ce9696dd3de0d44b50b042cdfaab3688d13e3"
+    },
+    {
+      "source": "/workspace/stage9-clean-build.log",
+      "destination": "full-pipeline.log.gz",
+      "source_sha256": "ff73fc62aac43f8a95641662f7c5dd9e20b72b7959ae57da5cd54e83d7dfbbfa",
+      "archived_sha256": "353fdf06ca1adb5921be99de620fe7119ba5e15be438424cd3bdd3759a99e7c3"
+    },
+    {
+      "source": "/workspace/stage9-diagnostic.log",
+      "destination": "diagnostic-pipeline.log.gz",
+      "source_sha256": "db4325289edfaf0553e7ab7eb6a8e71450f821f0fab7eca2e73321b25fd97264",
+      "archived_sha256": "6005ee2bc52483eb9519fc4b674b9cd3b81b002ca4ad80bf5c61519855c5e889"
+    },
+    {
+      "source": "/workspace/stage9-early-eight-trees.log",
+      "destination": "early-eight-trees.log.gz",
+      "source_sha256": "d6451a2d80412808d95a74d6a0e48437b628637d13744d5d09df26b39fe2047f",
+      "archived_sha256": "46f5fe6a13b5cb97991419551be90bd96cb126b05377338fc691cb60ac663f8a"
+    },
+    {
+      "source": "/workspace/stage9-usb-parent-eight-trees.log",
+      "destination": "usb-parent-eight-trees.log.gz",
+      "source_sha256": "fa38ff99c776806f0f300c1a5f65e4c4d96077e3c74a26a277c1cccd6ebfc61c",
+      "archived_sha256": "7bfbbb227dbdbbf6fbeda5f9ad411dba5c36f1fcbe46c7c826d4a8d16dee24dc"
+    },
+    {
+      "source": "/workspace/stage9-resume-preserved/working-tree.diff",
+      "destination": "resume-preserved.diff.gz",
+      "source_sha256": "3bb73eca8d68359f148f75ff1f65d04a4005cd111d51b98b9e2077f6fc462a2f",
+      "archived_sha256": "76ecfb9f9ea89840cf88a2ef575516194b4d7d52d3a031489b92381d44c07664"
+    },
+    {
+      "source": "/workspace/stage9-owner-sanitized.log",
+      "destination": "owner-sanitized.log.gz",
+      "source_sha256": "942ccac985fbadd7c5fb7d66fddec4bd9928a5b851962d89cc93f6f63530bc70",
+      "archived_sha256": "d17e82b8ca2bc20f0d85c7f468659618a26bf3804357f027028530cdbd631428"
+    },
+    {
+      "source": "/workspace/stage9-cpr-sanitized.log",
+      "destination": "cpr-sanitized.log.gz",
+      "source_sha256": "0863a0bae7558b96aea5d155981f9e5b3b1bda65845a64582ad55737de3cf103",
+      "archived_sha256": "b006d3d6d27305235e8547456a4cf419ce6ad10c9513be6dc16c845d260a3fc9"
+    },
+    {
+      "source": "/workspace/stage9-spm-sanitized.log",
+      "destination": "spm-sanitized.log.gz",
+      "source_sha256": "1f4a29ebbac3b127daa4a4db2d771a7f975ca6dad2e532bf1e2cfffd74168ba2",
+      "archived_sha256": "3c20575b42e03535dc41d2d670060a6f78d927f025508b3c3380daffcafde024"
+    },
+    {
+      "source": "/workspace/stage9-rpm-sanitized.log",
+      "destination": "rpm-sanitized.log.gz",
+      "source_sha256": "58a527df556dde6dfcfa3561bf307a29de7b65c97fad61733b1fa868b092cd47",
+      "archived_sha256": "8ed3fd7429cf03aace2d2380052803ff16fcf478b7e7caa10846a41d2b9db9d0"
+    },
+    {
+      "source": "/workspace/stage9-provider-sanitized.log",
+      "destination": "provider-sanitized.log.gz",
+      "source_sha256": "d7bc29fb9222d270c7a82ca003c9a69c12a7b470bd0e336cb8629b6e79ceebba",
+      "archived_sha256": "6d17817098156d2013632247cbd427f47ce0b00f3c10cad54f88332ce81a386d"
+    },
+    {
+      "source": "/workspace/stage9-shared-power-sanitized.log",
+      "destination": "shared-power-sanitized.log.gz",
+      "source_sha256": "c784b9013dfacd87120a2037d711d1326fb61891d2e121c5a6a576cf428428f7",
+      "archived_sha256": "812a8909a10ec3d7bd5039effd0ebfe801e48c51c341b5db46d5db3034f44b97"
+    },
+    {
+      "source": "/workspace/stage9-ccf-sanitized.log",
+      "destination": "ccf-sanitized.log.gz",
+      "source_sha256": "5bf103fdec1a1e6dbd9ee6cb9c91fc719ffde9fe2af67ff665cc6da1fa382980",
+      "archived_sha256": "86a08b651acc30e01b591870a1bafb3e866fe08353a38057040f4776a8fccb06"
+    },
+    {
+      "source": "/workspace/stage9-native-sanitized.log",
+      "destination": "native-sanitized.log.gz",
+      "source_sha256": "8dd3773fc9f884baca0c6b42b86642b4e29e74b3911a5472a5e61a0a5aa290e4",
+      "archived_sha256": "fd56b3a85b7a2675b9dcb17dc896994edcd19ef26a9d8787551e6380db9b196f"
+    },
+    {
+      "source": "/workspace/stage9-targeted-owner-final.log",
+      "destination": "targeted-owner-build.log.gz",
+      "source_sha256": "ec46c29d48b1822167fa8af1f0213b7a5b637c8c69119023f994a882007d9337",
+      "archived_sha256": "6c9d8f4384e010b454a24a6b1e325fefa2254fdae5be3678471b7aaf20808026"
+    },
+    {
+      "source": "/workspace/stage9-cpr-resume-build.log",
+      "destination": "targeted-cpr-build.log.gz",
+      "source_sha256": "345deb2bb86d7cb016612368000e1c37a50c918e0903523afeac0d3347f26f77",
+      "archived_sha256": "ee1aa19268bd19ad116e7a656780fa7cd28598513ca44f0e6266fe3ba465f02d"
+    },
+    {
+      "source": "/workspace/stage9-spm-resume-target.log",
+      "destination": "targeted-spm-build.log.gz",
+      "source_sha256": "42aa443241a473a95dcf4088c866a652e07bc13b04fd8d4495db9c9d4205abea",
+      "archived_sha256": "fdf11dd1d96d4a0f5cf44b2dd239aa84a5cf55b27fbd62914dc4e2b2bf482741"
+    },
+    {
+      "source": "/workspace/stage9-extra-cpu-dt.log",
+      "destination": "extra-cpu-dt.log.gz",
+      "source_sha256": "8cb70fb868b8c834c1435cbe3b41d1ae9e746c29758013cccf79764b94811f56",
+      "archived_sha256": "45e4c0d1a2af85fba8b7c96c6ff16ece66d3563770545a8a0b15a07a3fca39b5"
+    },
+    {
+      "source": "/workspace/stage9-resume-preservation.json",
+      "destination": "resume-preservation.json",
+      "source_sha256": "4bccf1286481a7f545a87c2a36d599abb207b1faff6e885c167687c4001e2f8b",
+      "archived_sha256": "4bccf1286481a7f545a87c2a36d599abb207b1faff6e885c167687c4001e2f8b"
+    },
+    {
+      "source": "/workspace/stage9-first-clean-build.log",
+      "destination": "first-failed-workflow.log.gz",
+      "source_sha256": "d6151bfb51bde9bf4f638cee8b0d3aadf9a1cdd6601ba55de2438aed492516e5",
+      "archived_sha256": "c568f953657df93156e708b9b7559a750d831414541c1d5de8958d87f69668c4"
+    },
+    {
+      "source": "/workspace/stage9-first-kernel-build.log",
+      "destination": "first-kernel-build.log.gz",
+      "source_sha256": "5d247dc87d964153c0bb2830252f9cefea75d5c63b2ae395256ab709b0dcf7ad",
+      "archived_sha256": "e81eadfec85752b22cac55182659feb260700f3b8aab56cbaecd12c67aaa9d49"
+    },
+    {
+      "source": "/workspace/stage9-first-clean-build.exit",
+      "destination": "first-workflow-return-code.txt",
+      "source_sha256": "4355a46b19d348dc2f57c046f8ef63d4538ebb936000f3c9ee954a27460dd865",
+      "archived_sha256": "4355a46b19d348dc2f57c046f8ef63d4538ebb936000f3c9ee954a27460dd865"
+    },
+    {
+      "source": "/workspace/stage9-first-build-start.txt",
+      "destination": "first-build-start-utc.txt",
+      "source_sha256": "f5b79fe682e09eb975aed86b28b3a47746e88274227706ac9e9ee657fdfb0db9",
+      "archived_sha256": "f5b79fe682e09eb975aed86b28b3a47746e88274227706ac9e9ee657fdfb0db9"
+    },
+    {
+      "source": "/workspace/stage9-first-build-end.txt",
+      "destination": "first-build-end-utc.txt",
+      "source_sha256": "e00703534d9eeff000d52c8971b41f3b642d68efdaa0fc42af97767b26b8a9a5",
+      "archived_sha256": "e00703534d9eeff000d52c8971b41f3b642d68efdaa0fc42af97767b26b8a9a5"
+    },
+    {
+      "source": "/workspace/stage9-first-build-source-manifest.json",
+      "destination": "first-built-source-sha256.json",
+      "source_sha256": "12ac272ed933bda2ffc4d3ed31905681adfa20d4c3648e183406e0f48580c94f",
+      "archived_sha256": "12ac272ed933bda2ffc4d3ed31905681adfa20d4c3648e183406e0f48580c94f"
+    },
+    {
+      "source": "/workspace/stage9-rehearsal.log",
+      "destination": "validation-rehearsal.log.gz",
+      "source_sha256": "c995e314f5d36a419d77eecaf73e850fe80a5b45de7cd62b6b081c3b26a8e9b0",
+      "archived_sha256": "78af617afa22483f2372871c8ce7f436d78aa7b4c3c6dc500f44a8b8f4958820"
+    },
+    {
+      "source": "/workspace/stage9-rehearsal.exit",
+      "destination": "validation-rehearsal-return-code.txt",
+      "source_sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa",
+      "archived_sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
+    },
+    {
+      "source": "/workspace/stage9-source-freeze-timing.json",
+      "destination": "source-freeze-timing.json",
+      "source_sha256": "c72ea00757f4aa571a0aa688b0b14fe8eab81401c6efe6ad826494741b79c219",
+      "archived_sha256": "c72ea00757f4aa571a0aa688b0b14fe8eab81401c6efe6ad826494741b79c219"
+    }
+  ],
+  "stage8_checked_in_evidence_unchanged": true,
+  "full_and_diagnostic_workflows_exit_zero": true,
+  "source_manifest_matches": true,
+  "phone_hardware_verified": false
+}

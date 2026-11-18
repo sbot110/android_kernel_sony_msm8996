@@ -1,0 +1,8 @@
+{
+  "raw_cmdline_published": false,
+  "security_bypasses": [],
+  "maxcpus": 2,
+  "selinux": "enforcing",
+  "forced_lcd_panel": false,
+  "unverified_loader_append": true
+}

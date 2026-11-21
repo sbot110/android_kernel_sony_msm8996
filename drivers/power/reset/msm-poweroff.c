@@ -110,7 +110,7 @@ module_param_call(download_mode, dload_set, param_get_int,
 
 #ifdef SUPPORT_DISABLE_RAMDUMP
 static int disable_ramdump;
-static int ramdump_disable_set(const char *val, struct kernel_param *kp);
+static int ramdump_disable_set(const char *val, const struct kernel_param *kp);
 module_param_call(disable_ramdump, ramdump_disable_set, param_get_int,
 			&disable_ramdump, 0644);
 #endif
@@ -176,7 +176,7 @@ static bool get_dload_mode(void)
 }
 
 #ifdef SUPPORT_DISABLE_RAMDUMP
-static int ramdump_disable_set(const char *val, struct kernel_param *kp)
+static int ramdump_disable_set(const char *val, const struct kernel_param *kp)
 {
 	int ret;
 	int old_val = disable_ramdump;

@@ -1,0 +1,283 @@
+{
+  "format": "dora-stage12-collector-delivery-v2",
+  "date_utc": "2026-11-21",
+  "initial_sha": "7ca79547620ac740582f8b3fe9cafceed11bb943",
+  "collector_source_sha": "d3bf66d5b380a19d5fc3152c01565030ddf409db",
+  "kernel_source_sha": "1b8871be2d2ce04f7361816fa90aa686e5ece1a3",
+  "allowed_branch": "kernel-4.19-701905467803253630",
+  "phone_commands_executed": false,
+  "phone_partition_writes_or_reboots": false,
+  "hardware_test_A": "NOT EXECUTED",
+  "hardware_test_B": "NOT EXECUTED",
+  "boot_test_ready": false,
+  "kernel_dtb_cmdline_ramdisk_unchanged": true,
+  "new_kernel_build_required": false,
+  "original_33_host_checks_preserved": true,
+  "host_test_cases": 70,
+  "sources": {
+    "scripts/dora/dora-stage12-hardware-preflight.sh": {
+      "bytes": 37367,
+      "sha256": "844de2dbaa361c5be5919cc11ea150c612fa34f05677ab20837fbc37f5218f15"
+    },
+    "scripts/dora/check-stage12-preflight.py": {
+      "bytes": 23097,
+      "sha256": "46016e3a1e300dd7f30a024d721569f9fceb69f8396e4c6cd8f932046f66ea31"
+    },
+    "scripts/dora/decode-boot-trace.py": {
+      "bytes": 2518,
+      "sha256": "c5251cf7b6a797b246e2aa49f74027118af8b6d011e298f89d307de00d662e7b"
+    },
+    "Documentation/sony/dora-stage12-readonly-guide.md": {
+      "bytes": 9896,
+      "sha256": "b1803edb774688b94b45f4598b5fde11c4dead07259f1e88306b470f7c6dbf8d"
+    }
+  },
+  "artifact_checks": {
+    "image_A": {
+      "check": "image_A",
+      "status": "PASS",
+      "reason": "real file: SHA/size, independent legacy QCOM/gzip/XZ/CPIO/FDT checks",
+      "evidence": {
+        "sha256": "c7a248e58f04fc72c4640d144f5e6f1a47dc32c85c50f020cefd3cae2ea9dfd2",
+        "bytes": 11051008,
+        "header": {
+          "kernel_addr": 2148007936,
+          "ramdisk_addr": 2188378112,
+          "tags_addr": 2186280960,
+          "page_size": 4096,
+          "kernel_size": 9815824,
+          "ramdisk_size": 1224724,
+          "second_size": 0,
+          "second_addr": 0,
+          "header_sha256": "21606ef0c94f7c7e9237f1baa92103b9fd0c418d71d680472fbb129fcae06447",
+          "legacy_dt_size": 0,
+          "payload_padded_end": 11051008,
+          "qcom_id": "35afd6abb3972411a1bbe916a87557342ef46380",
+          "cmdline_sha256": "62cf439de43a398f4eb04cfbf61d2261a486dd88b5431ca571441430550e08a1",
+          "os_version_word": 469762474
+        },
+        "kernel_release": "4.19.318-dora-4.19+",
+        "kernel_payload_sha256": "725a60106736e6eeabc45f93a0178e6a57d7f5958679d44c1414038252a146d2",
+        "kernel_payload_bytes": 9815824,
+        "image_sha256": "df80903f8168bd233559836d283e409266344faad1bdc627cc57afa1e8de15df",
+        "image_size_with_bss": 22147072,
+        "dtbs": [
+          {
+            "qcom,msm-id": [
+              246,
+              196608
+            ],
+            "qcom,board-id": [
+              8,
+              0
+            ],
+            "qcom,pmic-id": [
+              131081,
+              131082,
+              0,
+              0
+            ],
+            "sha256": "3b9f15d92beba0234c34465754a9a5f30b6ba8287b9a11600c63645404bd2d9f",
+            "bytes": 190758
+          },
+          {
+            "qcom,msm-id": [
+              246,
+              196609
+            ],
+            "qcom,board-id": [
+              8,
+              0
+            ],
+            "qcom,pmic-id": [
+              131081,
+              131082,
+              0,
+              0
+            ],
+            "sha256": "db5479cdaba00d4111c3bf24ad7093c384f7b866d42fb0bce1d16e2832bc8d17",
+            "bytes": 191274
+          },
+          {
+            "qcom,msm-id": [
+              246,
+              196608
+            ],
+            "qcom,board-id": [
+              8,
+              0
+            ],
+            "qcom,pmic-id": [
+              131081,
+              65555,
+              0,
+              0
+            ],
+            "sha256": "04e9dc339d8dfac76704463c83875419a43fdc806d15fca1e5c33a4ea998f250",
+            "bytes": 190758
+          },
+          {
+            "qcom,msm-id": [
+              246,
+              196609
+            ],
+            "qcom,board-id": [
+              8,
+              0
+            ],
+            "qcom,pmic-id": [
+              131081,
+              65555,
+              0,
+              0
+            ],
+            "sha256": "adb380173e6148c2281a0b3761934294eb0d67259be54703d3197d148ad855e1",
+            "bytes": 191274
+          }
+        ],
+        "ramdisk": {
+          "compression": "xz",
+          "sha256": "9a532793e779b33bad98df1576ec9b661bc04457f4f3f9148b31ba8d42d4f41e",
+          "bytes": 1224724,
+          "init_sha256": "74f3afc4adce6e0f0ad02993e7701e353c0d7777c935e417fca8b4c19edbb5c5"
+        },
+        "hardware_qualified": false
+      }
+    },
+    "image_B": {
+      "check": "image_B",
+      "status": "PASS",
+      "reason": "real file: SHA/size, independent legacy QCOM/gzip/XZ/CPIO/FDT checks",
+      "evidence": {
+        "sha256": "3c33a57da1c473cf239dbd9fdc0b3cad26206461b4ba8151c371c86d60941c18",
+        "bytes": 11051008,
+        "header": {
+          "kernel_addr": 2148007936,
+          "ramdisk_addr": 2183135232,
+          "tags_addr": 2186280960,
+          "page_size": 4096,
+          "kernel_size": 9815824,
+          "ramdisk_size": 1224724,
+          "second_size": 0,
+          "second_addr": 0,
+          "header_sha256": "69ff662c871d99b7e90cc16dda73b4dd8647ef582fd3e661f1a27bbdefe5d94e",
+          "legacy_dt_size": 0,
+          "payload_padded_end": 11051008,
+          "qcom_id": "35afd6abb3972411a1bbe916a87557342ef46380",
+          "cmdline_sha256": "62cf439de43a398f4eb04cfbf61d2261a486dd88b5431ca571441430550e08a1",
+          "os_version_word": 469762474
+        },
+        "kernel_release": "4.19.318-dora-4.19+",
+        "kernel_payload_sha256": "725a60106736e6eeabc45f93a0178e6a57d7f5958679d44c1414038252a146d2",
+        "kernel_payload_bytes": 9815824,
+        "image_sha256": "df80903f8168bd233559836d283e409266344faad1bdc627cc57afa1e8de15df",
+        "image_size_with_bss": 22147072,
+        "dtbs": [
+          {
+            "qcom,msm-id": [
+              246,
+              196608
+            ],
+            "qcom,board-id": [
+              8,
+              0
+            ],
+            "qcom,pmic-id": [
+              131081,
+              131082,
+              0,
+              0
+            ],
+            "sha256": "3b9f15d92beba0234c34465754a9a5f30b6ba8287b9a11600c63645404bd2d9f",
+            "bytes": 190758
+          },
+          {
+            "qcom,msm-id": [
+              246,
+              196609
+            ],
+            "qcom,board-id": [
+              8,
+              0
+            ],
+            "qcom,pmic-id": [
+              131081,
+              131082,
+              0,
+              0
+            ],
+            "sha256": "db5479cdaba00d4111c3bf24ad7093c384f7b866d42fb0bce1d16e2832bc8d17",
+            "bytes": 191274
+          },
+          {
+            "qcom,msm-id": [
+              246,
+              196608
+            ],
+            "qcom,board-id": [
+              8,
+              0
+            ],
+            "qcom,pmic-id": [
+              131081,
+              65555,
+              0,
+              0
+            ],
+            "sha256": "04e9dc339d8dfac76704463c83875419a43fdc806d15fca1e5c33a4ea998f250",
+            "bytes": 190758
+          },
+          {
+            "qcom,msm-id": [
+              246,
+              196609
+            ],
+            "qcom,board-id": [
+              8,
+              0
+            ],
+            "qcom,pmic-id": [
+              131081,
+              65555,
+              0,
+              0
+            ],
+            "sha256": "adb380173e6148c2281a0b3761934294eb0d67259be54703d3197d148ad855e1",
+            "bytes": 191274
+          }
+        ],
+        "ramdisk": {
+          "compression": "xz",
+          "sha256": "9a532793e779b33bad98df1576ec9b661bc04457f4f3f9148b31ba8d42d4f41e",
+          "bytes": 1224724,
+          "init_sha256": "74f3afc4adce6e0f0ad02993e7701e353c0d7777c935e417fca8b4c19edbb5c5"
+        },
+        "hardware_qualified": false
+      }
+    },
+    "A_B_differential": {
+      "check": "A_B_differential",
+      "status": "PASS",
+      "reason": "only header ramdisk_addr may differ; does not establish Sony relocation",
+      "evidence": {
+        "changed_offsets": [
+          22
+        ],
+        "same_payload_and_cmdline": true
+      }
+    },
+    "AOSP_independent_unpack": {
+      "check": "AOSP_independent_unpack",
+      "status": "PASS",
+      "reason": "both actual images unpacked; kernel and ramdisk byte equality; temporary host files removed"
+    },
+    "trace_symbol_map": {
+      "check": "trace_symbol_map",
+      "status": "PASS",
+      "reason": "exact Stage 11 System.map SHA256; not a persistent capture channel"
+    }
+  },
+  "operator_statement_recorded_at_utc": "2026-11-16T19:38:12.171612+00:00",
+  "missing_working_backup_measured": false,
+  "unchanged_other_branch_work_sha": "0c295b15b6d0fb59a64e13b9e0ef2070818ef2a1"
+}

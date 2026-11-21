@@ -1,5 +1,11 @@
 # Stage 12: hardware validation остановлена на preflight
 
+Обновление 2026-11-21: исправлен read-only collector, 70 host checks PASS,
+подготовлен новый переносимый kit. Hardware Test A/B остаются NOT EXECUTED,
+preflight STOP. [Изменения и новые доказательства](dora-stage12-collector-update-2026-11-21.md).
+Ниже сохранён первоначальный отчёт; его script/kit SHA и 33 tests относятся
+к предыдущей поставке, не к новому комплекту.
+
 **Preflight: STOP. Hardware Test A: NOT EXECUTED. Hardware Test B: NOT EXECUTED.**
 Ни прошивка, ни временный запуск, ни перезагрузка, ни восстановление телефона
 в этом сеансе не выполнялись. Нового аппаратного результата Linux 4.19 нет.

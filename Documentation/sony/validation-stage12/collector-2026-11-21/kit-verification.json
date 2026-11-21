@@ -1,0 +1,19 @@
+{
+  "status": "PASS: HOST PACKAGING ONLY",
+  "archive_bytes": 794697,
+  "archive_sha256": "39b743d9b612e7ca74cc2f8ec5cd6c76ed62d257bca9fc609eb1a45629605b9b",
+  "collector_source_sha": "d3bf66d5b380a19d5fc3152c01565030ddf409db",
+  "collector_script_sha256": "844de2dbaa361c5be5919cc11ea150c612fa34f05677ab20837fbc37f5218f15",
+  "entries": 9,
+  "all_zip_entries_byte_equal": true,
+  "images_and_private_backup_excluded": true,
+  "hardware_test_A": "NOT EXECUTED",
+  "hardware_test_B": "NOT EXECUTED",
+  "boot_test_ready": false,
+  "extracted_zip_checksums_pass": true,
+  "standalone_default_AOSP_discovery": "PASS",
+  "standalone_preflight_exit": 2,
+  "standalone_preflight_status": "STOP",
+  "real_stage11_A_B_revalidated": true,
+  "device_connection_attempted": false
+}

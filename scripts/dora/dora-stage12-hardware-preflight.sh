@@ -13,6 +13,7 @@ No CLI argument can qualify unknown Sony S1/CPU/watchdog hardware contracts.
 import argparse
 import datetime
 import hashlib
+import io
 import json
 import lzma
 import os
@@ -23,7 +24,10 @@ import stat
 import struct
 import subprocess
 import sys
+import tarfile
 import tempfile
+import threading
+import time
 import zlib
 
 BRANCH = 'kernel-4.19-701905467803253630'
@@ -162,7 +166,7 @@ def check_ramdisk(data):
             require(init is not None and sha(init) == INIT_SHA, 'working /init differs')
             require(init[:7] == b'\x7fELF\x02\x01\x01' and struct.unpack_from('<H', init, 18)[0] == 183, 'init architecture')
             return dict(compression='xz', sha256=sha(data), bytes=len(data), init_sha256=sha(init))
-        if name.removeprefix(b'./') == b'init\0':
+        if (name[2:] if name.startswith(b'./') else name) == b'init\0':
             require(init is None, 'duplicate /init'); init = raw[pos:pos + length]
         pos = align(pos + length, 4)
     raise ValueError('CPIO trailer missing')
@@ -171,8 +175,6 @@ def check_ramdisk(data):
 def inspect_image(data, label):
     require(label in PINS, 'unknown candidate')
     header, parts = boot_sections(data)
-    require((header['kernel_addr'], header['ramdisk_addr'], header['tags_addr']) ==
-            (0x80080000, 0x82700000 if label == 'A' else 0x82200000, 0x82500000), 'candidate addresses changed')
     require(header['qcom_id'] == QCOM_ID, 'unexpected QCOM image ID')
     require((header['kernel_addr'], header['tags_addr'], header['ramdisk_addr']) ==
             (0x80080000, 0x82500000, PINS[label][2]), 'wrong address candidate')
@@ -225,90 +227,216 @@ def checked_target(state):
     return size
 
 
-def collect_adb(args, destination, runner=subprocess.run):
+def capture_provenance(state, live):
+    timestamp = state.get('captured_utc')
+    require(isinstance(timestamp, str), 'missing capture timestamp')
+    captured = datetime.datetime.fromisoformat(timestamp.replace('Z', '+00:00'))
+    require(captured.tzinfo is not None, 'capture timestamp must include timezone')
+    age = (datetime.datetime.now(datetime.timezone.utc) - captured).total_seconds()
+    require(age >= -60, 'capture timestamp is in the future')
+    complete = state.get('capture_status') == 'COMPLETE'
+    same_boot = (isinstance(state.get('boot_id_before'), str) and
+                 state.get('boot_id_before') == state.get('boot_id_after'))
+    require(state.get('capture_status') not in ('IN_PROGRESS', 'PARTIAL/REJECTED'), 'capture incomplete/rejected; retain partial evidence for analysis')
+    if state.get('format') == 'dora-stage12-device-v2':
+        require(complete and same_boot, 'v2 capture lacks completed same-boot evidence')
+    return dict(source='live_adb' if live else 'imported_historical_capture', captured_utc=timestamp,
+                age_seconds=round(max(age, 0), 1), complete=complete, same_boot_verified=same_boot,
+                current_connection_observed=bool(live and complete and same_boot))
+
+
+def bounded_command(argv, limit, timeout=20):
+    """Bound both pipes while reading, including a hung/oversized adb.exe.
+
+    Reader threads work with pipes on both POSIX and Windows. communicate()
+    would buffer unbounded output before a caller could check its length.
+    """
+    process = subprocess.Popen(argv, stdin=subprocess.DEVNULL, stdout=subprocess.PIPE,
+                               stderr=subprocess.PIPE)
+    buffers, failures = [bytearray(), bytearray()], []
+    overflow = threading.Event()
+
+    def drain(index, stream, bound):
+        try:
+            while True:
+                chunk = stream.read1(min(65536, bound - len(buffers[index]) + 1))
+                if not chunk:
+                    return
+                if len(buffers[index]) + len(chunk) > bound:
+                    overflow.set()
+                    return
+                buffers[index].extend(chunk)
+        except OSError as error:
+            failures.append(error)
+            overflow.set()
+
+    readers = [threading.Thread(target=drain, args=(index, stream, bound), daemon=True)
+               for index, stream, bound in ((0, process.stdout, limit), (1, process.stderr, 65536))]
+    deadline = time.monotonic() + timeout
+    try:
+        for reader in readers:
+            reader.start()
+        while process.poll() is None or any(reader.is_alive() for reader in readers):
+            require(not overflow.is_set(), 'read-only command exceeded stdout/stderr bound or pipe failed')
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                raise subprocess.TimeoutExpired(argv, timeout)
+            overflow.wait(min(remaining, 0.02))
+        require(not overflow.is_set() and not failures, 'read-only command exceeded stdout/stderr bound or pipe failed')
+        require(process.returncode == 0, 'read-only command failed')
+        return bytes(buffers[0])
+    finally:
+        if process.poll() is None:
+            process.kill()
+        process.wait(timeout=5)
+        for reader in readers:
+            reader.join(timeout=1)
+        for reader, stream in zip(readers, (process.stdout, process.stderr)):
+            if not reader.is_alive():
+                stream.close()
+
+
+def validate_capture(name, data):
+    # exec-out has no reliable remote exit-status framing: cat/tar error text
+    # can arrive with host exit 0. A transport success is not artifact evidence.
+    if name == 'pstore-before-test.tar':
+        require(len(data) >= 1024 and len(data) % 512 == 0 and not any(data[-1024:]), 'invalid pstore tar framing')
+        with tarfile.open(fileobj=io.BytesIO(data), mode='r:') as archive:
+            for count, member in enumerate(archive, 1):
+                require(count <= 16384 and member.size <= 8 * 1024 * 1024, 'pstore tar bounds')
+    elif name == 'runtime.fdt':
+        fdt_nodes(data)
+    elif name == 'dora_boot_trace.bin':
+        require(len(data) == 2048 and data[:4] == b'DRB1' and not any(data[4:64]), 'invalid trace size/anchor')
+        sequences = set()
+        for slot in range(1, 32):
+            raw = data[slot * 64:(slot + 1) * 64]
+            if not any(raw):
+                continue
+            magic, version, size, sequence, stage, checksum = struct.unpack_from('<IHHQII', raw)
+            committed = struct.unpack_from('<Q', raw, 56)[0]
+            require((magic, version, size) == (0x31425244, 1, 64) and stage == slot <= 22, 'invalid trace record identity')
+            require(sequence and sequence not in sequences and committed == sequence ^ ((1 << 64) - 1), 'uncommitted/torn trace sequence')
+            require(zlib.crc32(raw[:20] + b'\0' * 4 + raw[24:56]) & 0xffffffff == checksum, 'trace CRC32 mismatch')
+            sequences.add(sequence)
+    else:
+        require(bool(data.strip()) and b'\0' not in data, 'empty/binary text capture')
+        require(not data.lstrip().startswith((b'cat:', b'dmesg:', b'tar:', b'/system/bin/sh:', b'sh:')), 'remote error text is not a capture')
+
+
+def collect_adb(args, destination, runner=bounded_command):
     require(destination is not None, '--collect-adb requires a NEW --output-dir')
     require(re.fullmatch(r'[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}', args.collect_adb) is not None, 'invalid exact ADB serial')
-    executable = args.adb or shutil.which('adb') or shutil.which('adb.exe')
+    executable = args.adb.resolve() if args.adb else shutil.which('adb') or shutil.which('adb.exe')
     require(executable is not None, 'ADB client unavailable; run on the connected WSL host')
     prefix = [str(executable), '-s', args.collect_adb]
 
-    def command(words, binary=False, timeout=20):
-        result = runner(prefix + words, stdin=subprocess.DEVNULL, stdout=subprocess.PIPE,
-                        stderr=subprocess.PIPE, timeout=timeout, check=False)
-        require(result.returncode == 0, 'read-only ADB command failed: ' + words[0])
+    def command(words, binary=False, timeout=20, limit=65536):
+        result = runner(prefix + words, limit=limit, timeout=timeout)
+        require(len(result) <= limit, 'read-only ADB output bound')
         if binary:
-            return result.stdout
-        return result.stdout.decode('utf-8', errors='replace').strip()
+            return result
+        return result.decode('utf-8', errors='replace').strip()
 
-    require(command(['get-state']) == 'device', 'ADB device is not online/authorized; no mode switch attempted')
-    require(command(['shell', 'getprop', 'ro.product.device']) in ('dora', 'lineage_dora'),
-            'wrong device; raw capture refused')
-    state = dict(capture_kind='read-only-adb', captured_utc=datetime.datetime.now(datetime.timezone.utc).isoformat(),
+    state = dict(format='dora-stage12-device-v2', capture_kind='read-only-adb',
+                 capture_status='IN_PROGRESS', captured_utc=datetime.datetime.now(datetime.timezone.utc).isoformat(),
                  serial_sha256=sha(args.collect_adb.encode()))
-    # First preserve whatever is readable now. This is BEFORE A, not hang evidence.
-    try:
-        pstore = command(['exec-out', 'tar', '-C', '/sys/fs/pstore', '-cf', '-', '.'], True)
-        require(len(pstore) <= 8 * 1024 * 1024, 'pstore archive bound')
-        (destination / 'pstore-before-test.tar').write_bytes(pstore)
-        state['pstore_archive_sha256'] = sha(pstore)
-    except (ValueError, subprocess.TimeoutExpired):
-        state['pstore_capture'] = 'UNAVAILABLE; does not prove no kernel execution'
-    for key, words in {
-        'device': ['shell', 'getprop', 'ro.product.device'],
-        'model': ['shell', 'getprop', 'ro.product.model'],
-        'release': ['shell', 'uname', '-r'],
-        'boot_completed': ['shell', 'getprop', 'sys.boot_completed'],
-        'lineage': ['shell', 'getprop', 'ro.lineage.version'],
-        'bootloader': ['shell', 'getprop', 'ro.bootloader'],
-        'boot_reason': ['shell', 'getprop', 'ro.boot.bootreason'],
-        'uid': ['shell', 'id', '-u'],
-    }.items():
-        state[key] = command(words)
-    require(state['device'] in ('dora', 'lineage_dora'), 'wrong device; partition reads refused')
-    for alias in ('/dev/block/bootdevice/by-name/boot', '/dev/block/platform/soc/7464900.sdhci/by-name/boot', '/dev/block/by-name/boot'):
+
+    def persist():
+        temporary = destination / 'device-state.json.tmp'
+        temporary.write_text(json.dumps(state, indent=2) + '\n')
+        temporary.replace(destination / 'device-state.json')
+
+    def remember(key, value):
+        state[key] = value
+        persist()
+        return value
+
+    def boot_id():
+        value = command(['shell', 'cat', '/proc/sys/kernel/random/boot_id'])
+        require(re.fullmatch(r'[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}', value) is not None, 'invalid/unavailable boot ID')
+        return value
+
+    def artifact(name, words, limit=16 * 1024 * 1024):
         try:
-            path = command(['shell', 'readlink', '-f', alias])
-        except ValueError:
-            continue
-        if re.fullmatch(r'/dev/block/mmcblk0p[1-9][0-9]*', path):
-            state['boot_path'] = path; state['boot_alias'] = alias; break
-    require('boot_path' in state, 'canonical boot alias unavailable')
-    block = state['boot_path'].rsplit('/', 1)[1]
-    uevent = command(['shell', 'cat', '/sys/class/block/' + block + '/uevent'])
-    values = dict(line.split('=', 1) for line in uevent.splitlines() if '=' in line)
-    state['partname'] = values.get('PARTNAME')
-    sectors = command(['shell', 'cat', '/sys/class/block/' + block + '/size'])
-    require(sectors.isdecimal(), 'invalid sysfs partition capacity')
-    state['boot_bytes'] = int(sectors) * 512
-    checked_target(state)  # Never open a partition before these independent checks.
-    for name, words in {
-        'cmdline.txt': ['exec-out', 'cat', '/proc/cmdline'],
-        'runtime.fdt': ['exec-out', 'cat', '/sys/firmware/fdt'],
-        'dmesg.txt': ['shell', 'dmesg'],
-        'iomem.txt': ['exec-out', 'cat', '/proc/iomem'],
-        'interrupts.txt': ['exec-out', 'cat', '/proc/interrupts'],
-        'dora_boot_trace.bin': ['exec-out', 'cat', '/proc/dora_boot_trace'],
-    }.items():
-        try:
-            payload = command(words, True); require(len(payload) <= 16 * 1024 * 1024, 'capture bound')
+            payload = command(words, True, limit=limit)
+            validate_capture(name, payload)
             (destination / name).write_bytes(payload)
-            state[name + '_sha256'] = sha(payload)
-        except (ValueError, subprocess.TimeoutExpired):
-            state[name] = 'UNAVAILABLE'
-    if args.read_boot:
-        try:
-            require(state['uid'] == '0', 'full boot read requires existing root ADB; no root/remount/reboot is attempted')
-            size = command(['shell', 'blockdev', '--getsize64', state['boot_path']])
-            require(size.isdecimal() and int(size) == state['boot_bytes'], 'sysfs/blockdev capacity disagreement')
-            data = command(['exec-out', 'cat', state['boot_path']], True, 120)
-            require(len(data) == state['boot_bytes'], 'incomplete/oversized current boot read')
-            (destination / 'current-boot-readonly.img').write_bytes(data)
-            state['current_boot_sha256'] = sha(data)
-        except (OSError, ValueError, subprocess.TimeoutExpired) as error:
-            # Keep successful identity/runtime/sysfs captures. A partial dump
-            # is never saved as a usable image or a restoration backup.
-            state['raw_boot_read_error'] = str(error)
-    (destination / 'device-state.json').write_text(json.dumps(state, indent=2) + '\n')
+            remember(name + '_sha256', sha(payload))
+        except (OSError, ValueError, struct.error, tarfile.TarError, subprocess.TimeoutExpired) as error:
+            remember(name, 'UNAVAILABLE/INVALID: ' + str(error))
+
+    def capture():
+        require(command(['get-state']) == 'device', 'ADB device is not online/authorized; no mode switch attempted')
+        remember('device', command(['shell', 'getprop', 'ro.product.device']))
+        require(state['device'] in ('dora', 'lineage_dora'), 'wrong device; raw capture refused')
+        remember('boot_id_before', boot_id())
+        # Preserve readable pstore BEFORE A. An empty/invalid archive proves
+        # nothing about entry of a different kernel on a previous attempt.
+        artifact('pstore-before-test.tar', ['exec-out', 'tar', '-C', '/sys/fs/pstore', '-cf', '-', '.'], 8 * 1024 * 1024)
+        for key, words in {
+            'device': ['shell', 'getprop', 'ro.product.device'],
+            'model': ['shell', 'getprop', 'ro.product.model'],
+            'release': ['shell', 'uname', '-r'],
+            'boot_completed': ['shell', 'getprop', 'sys.boot_completed'],
+            'lineage': ['shell', 'getprop', 'ro.lineage.version'],
+            'bootloader': ['shell', 'getprop', 'ro.bootloader'],
+            'boot_reason': ['shell', 'getprop', 'ro.boot.bootreason'],
+            'uid': ['shell', 'id', '-u'],
+        }.items():
+            remember(key, command(words))
+        require(state['device'] in ('dora', 'lineage_dora'), 'wrong device; partition reads refused')
+        for alias in ('/dev/block/bootdevice/by-name/boot', '/dev/block/platform/soc/7464900.sdhci/by-name/boot', '/dev/block/by-name/boot'):
+            try:
+                path = command(['shell', 'readlink', '-f', alias])
+            except ValueError:
+                continue
+            if re.fullmatch(r'/dev/block/mmcblk0p[1-9][0-9]*', path):
+                remember('boot_path', path); remember('boot_alias', alias); break
+        require('boot_path' in state, 'canonical boot alias unavailable')
+        block = state['boot_path'].rsplit('/', 1)[1]
+        uevent = command(['shell', 'cat', '/sys/class/block/' + block + '/uevent'])
+        values = dict(line.split('=', 1) for line in uevent.splitlines() if '=' in line)
+        remember('partname', values.get('PARTNAME'))
+        sectors = command(['shell', 'cat', '/sys/class/block/' + block + '/size'])
+        require(sectors.isdecimal(), 'invalid sysfs partition capacity')
+        remember('boot_bytes', int(sectors) * 512)
+        checked_target(state)  # Never open a partition before these independent checks.
+        for name, words in {
+            'cmdline.txt': ['exec-out', 'cat', '/proc/cmdline'],
+            'runtime.fdt': ['exec-out', 'cat', '/sys/firmware/fdt'],
+            'dmesg.txt': ['shell', 'dmesg'],
+            'iomem.txt': ['exec-out', 'cat', '/proc/iomem'],
+            'interrupts.txt': ['exec-out', 'cat', '/proc/interrupts'],
+            'dora_boot_trace.bin': ['exec-out', 'cat', '/proc/dora_boot_trace'],
+        }.items():
+            artifact(name, words)
+        if args.read_boot:
+            try:
+                require(state['uid'] == '0', 'full boot read requires existing root ADB; no root/remount/reboot is attempted')
+                size = command(['shell', 'blockdev', '--getsize64', state['boot_path']])
+                require(size.isdecimal() and int(size) == state['boot_bytes'], 'sysfs/blockdev capacity disagreement')
+                data = command(['exec-out', 'cat', state['boot_path']], True, 120, state['boot_bytes'])
+                require(len(data) == state['boot_bytes'], 'incomplete/oversized current boot read')
+                (destination / 'current-boot-readonly.img').write_bytes(data)
+                remember('current_boot_sha256', sha(data))
+            except (OSError, ValueError, subprocess.TimeoutExpired) as error:
+                # No partial image is saved as a usable restoration backup.
+                remember('raw_boot_read_error', str(error))
+        remember('boot_id_after', boot_id())
+        require(state['boot_id_before'] == state['boot_id_after'], 'boot ID changed during capture; evidence spans different boots')
+
+    persist()
+    try:
+        capture()
+        state['capture_status'] = 'COMPLETE'
+    except (OSError, ValueError, subprocess.TimeoutExpired) as error:
+        state['capture_status'] = 'PARTIAL/REJECTED'
+        state['capture_error'] = str(error)
+        raise
+    finally:
+        state['capture_finished_utc'] = datetime.datetime.now(datetime.timezone.utc).isoformat()
+        persist()
     return state
 
 
@@ -390,10 +518,14 @@ def evaluate(args):
             check('operator_statement', 'STOP', str(error))
     reported = operator.get('source') == 'user_statement'
     check('current_4_4_user_confirmation', 'PASS' if reported and operator.get('current_4_4_boots') is True else 'STOP',
-          'user statement only; runtime capture checked separately', dict(confirmed=bool(reported and operator.get('current_4_4_boots') is True)))
+          'user statement only; original date retained and current runtime checked separately',
+          dict(confirmed=bool(reported and operator.get('current_4_4_boots') is True),
+               statement_time_utc=operator.get('recorded_at_utc'), rerun_refreshes_statement=False))
     check('recovery_access', 'PASS' if reported and operator.get('twrp_recently_checked') is True else 'STOP',
           'current TWRP access must be confirmed; historical Stage 65 recovery alone is insufficient',
-          dict(source='user_statement' if reported else 'UNAVAILABLE', confirmed=bool(reported and operator.get('twrp_recently_checked') is True)))
+          dict(source='user_statement' if reported else 'UNAVAILABLE', confirmed=bool(reported and operator.get('twrp_recently_checked') is True),
+               statement_time_utc=operator.get('recorded_at_utc'), exact_recovery_check_time=operator.get('exact_recovery_check_time'),
+               rerun_refreshes_statement=False))
     state = {}
     try:
         if args.collect_adb:
@@ -401,12 +533,22 @@ def evaluate(args):
         elif args.device_state:
             state = json.loads(read_file(args.device_state, 1024 * 1024))
         size = checked_target(state)
-        check('boot_target_and_capacity', 'PASS', 'canonical internal eMMC PARTNAME=boot, sysfs capacity equals full backup extent',
+        provenance = capture_provenance(state, bool(args.collect_adb))
+        live = provenance['current_connection_observed']
+        check('capture_provenance', 'PASS' if live else 'WARN', 'imported data remains historical; rerunning preflight does not refresh it', provenance)
+        check('boot_target_and_capacity', 'PASS' if live else 'WARN', 'captured canonical internal eMMC PARTNAME=boot, sysfs capacity equals full backup extent',
               {k: state.get(k) for k in ('capture_kind', 'serial_sha256', 'boot_path', 'boot_alias', 'partname', 'boot_bytes')})
         stable = state.get('release') == '4.4.302+' and state.get('boot_completed') == '1' and state.get('lineage', '').startswith('21.0-')
-        check('current_reference_runtime', 'PASS' if stable else 'STOP', 'read-only uname/getprop of CURRENT system',
+        check('current_reference_runtime', ('PASS' if live else 'WARN') if stable else 'STOP', 'captured uname/getprop; imported evidence is not a current runtime observation',
               {k: state.get(k) for k in ('release', 'boot_completed', 'lineage', 'bootloader')})
+        check('measured_S1_identity', 'PASS' if state.get('bootloader') == S1 else 'STOP',
+              'compare measured bootloader with reference; equality does not qualify its memory/CPU/watchdog contracts',
+              dict(measured=state.get('bootloader'), expected=S1, capture_source=provenance['source']))
     except (OSError, ValueError, subprocess.TimeoutExpired) as error:
+        if args.collect_adb and output and (output / 'device-state.json').is_file():
+            partial = json.loads(read_file(output / 'device-state.json', 1024 * 1024))
+            check('capture_provenance', 'STOP', 'partial evidence preserved; no complete current runtime observation',
+                  {key: partial.get(key) for key in ('captured_utc', 'capture_finished_utc', 'capture_status', 'capture_error')})
         check('boot_target_and_capacity', 'STOP', str(error))
         check('current_reference_runtime', 'STOP', 'no successful current runtime capture; user statement is preserved separately')
     current = args.boot_dump or (output / 'current-boot-readonly.img' if output and args.read_boot else None)

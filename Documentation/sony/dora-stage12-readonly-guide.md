@@ -8,15 +8,16 @@ diagnostic contracts are unqualified. The shipped preflight therefore returns
 There are no force/approve/risk-acceptance switches. Host test PASS is separate
 from the preflight decision.
 
-The user confirmed that LOS 21 / Sony 4.4 currently boots and that TWRP was
-recently checked. This is recorded as a current user confirmation, not invented
-ADB output. The earlier Stage 65 restore alone is not used as current evidence.
+The user previously confirmed that LOS 21 / Sony 4.4 boots and that TWRP was
+recently checked. The original statement date is retained; a later tool run
+does not make it a fresh check or measured ADB output. The earlier Stage 65
+restore alone is not used as current evidence.
 
 ## Files and invocation
 
 The portable script is
 `scripts/dora/dora-stage12-hardware-preflight.sh`. It contains its independent
-Python parser and needs bash/Python3 standard library. Both F8131 and F8132 use
+Python parser and needs bash/Python 3.8+ standard library. Both F8131 and F8132 use
 the four pinned dora DTBs; no PMIC/revision is selected from the SIM model.
 
 Default mode reads regular host files into memory and emits JSON on stdout.
@@ -84,6 +85,25 @@ interrupts and volatile trace if readable. A missing/unreadable capture is
 reported as such. The script never invokes `adb root`, remount, recovery,
 fastboot or a shell command supplied by the caller.
 
+The collector checks `/proc/sys/kernel/random/boot_id` before and after the
+sequence. A disconnect/failure preserves successful fields and a
+`PARTIAL/REJECTED` status in `device-state.json`; a different boot ID rejects the
+combined capture. Every successful field is checkpointed with atomic host-file
+replacement. Retain partial evidence for review; it is not a complete capture.
+
+Both stdout and stderr are limited while each ADB process is running, with a
+per-command timeout. The limits are 64 KiB for metadata/stderr, 8 MiB for the
+pstore tar, 16 MiB for other logs, and exactly the admitted partition capacity
+for an optional full boot read. Over-limit processes are terminated on the
+host; no phone reset is issued. Explicit `--adb ./adb.exe` paths are resolved
+before use instead of selecting another executable from PATH.
+
+`exec-out` transport success alone does not prove that remote `cat`/`tar`
+succeeded. The collector validates tar framing/headers, FDT structure, and
+trace size/anchor/magic/version/sequence/CRC before saving them as artifacts.
+Remote error text with host exit 0 is reported as unavailable/invalid evidence.
+An empty valid pstore archive still does not prove absence of kernel execution.
+
 The target must resolve to internal `/dev/block/mmcblk0pN`, sysfs must identify
 **PARTNAME=boot**, and capacity must equal the 67,108,864-byte known backup extent.
 FOTAKernel/other partitions and a wrong phone/size are rejected before a raw
@@ -108,8 +128,14 @@ bash ./dora-stage12-hardware-preflight.sh \
   --boot-dump ./stage12-reference-capture-02/current-boot-readonly.img
 ```
 
-Imported JSON is reported evidence, not an attestation or hardware qualification
-grant. The dump must match its recorded SHA256. Return `preflight.json`/JSON
+Imported JSON is historical reported evidence, not a current connection,
+attestation or hardware qualification grant. Its original timestamp and age
+are reported; importing it never refreshes the runtime/capacity observation.
+Legacy captures without same-boot checkpoints remain historical. Incomplete,
+future-dated or inconsistent v2 captures are rejected. The measured Sony S1
+version is compared separately with the reference instead of assumed from it.
+Rerunning the tool also does not refresh the date of the user's TWRP statement.
+The dump must match its recorded SHA256. Return `preflight.json`/JSON
 stdout for analysis; retain raw dumps/cmdline/device identifiers privately.
 
 ## Tail and temporary-boot decisions

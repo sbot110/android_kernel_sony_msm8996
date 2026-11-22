@@ -1,0 +1,980 @@
+{
+  "source_commit": "0c295b15b6d0fb59a64e13b9e0ef2070818ef2a1",
+  "source_files": {
+    "gcc": "drivers/clk/msm/clock-gcc-8996.c",
+    "mmcc": "drivers/clk/msm/clock-mmss-8996.c"
+  },
+  "final_compatibles": {
+    "gcc": "qcom,gcc-8996-v3",
+    "mmcc": "qcom,mmsscc-8996-v3"
+  },
+  "fixups": {
+    "gcc": "msm_clocks_gcc_8996_v2_fixup (also selected by v3 compatible)",
+    "mmcc": "msm_mmsscc_8996_v3_fixup (not v2)"
+  },
+  "levels": [
+    "NONE",
+    "LOWER",
+    "LOW",
+    "NOMINAL",
+    "HIGH"
+  ],
+  "logical_corners": [
+    1,
+    3,
+    4,
+    5,
+    7
+  ],
+  "analog_microvolts": [
+    0,
+    1800000,
+    1800000,
+    1800000,
+    1800000
+  ],
+  "controllers": {
+    "gcc": {
+      "gpll4": {
+        "analog": false,
+        "fmax": {
+          "NOMINAL": 384000000
+        },
+        "source_line": 188
+      },
+      "ufs_axi_clk_src": {
+        "analog": false,
+        "fmax": {
+          "LOWER": 19200000,
+          "LOW": 100000000,
+          "NOMINAL": 200000000,
+          "HIGH": 240000000
+        },
+        "source_line": 213
+      },
+      "pcie_aux_clk_src": {
+        "analog": false,
+        "fmax": {
+          "LOWER": 9600000,
+          "LOW": 19200000,
+          "NOMINAL": 19200000,
+          "HIGH": 19200000
+        },
+        "source_line": 233
+      },
+      "usb30_master_clk_src": {
+        "analog": false,
+        "fmax": {
+          "LOWER": 60000000,
+          "LOW": 133333000,
+          "NOMINAL": 200000000,
+          "HIGH": 240000000
+        },
+        "source_line": 254
+      },
+      "usb20_master_clk_src": {
+        "analog": false,
+        "fmax": {
+          "LOWER": 19200000,
+          "LOW": 60000000,
+          "NOMINAL": 120000000
+        },
+        "source_line": 274
+      },
+      "ufs_ice_core_clk_src": {
+        "analog": false,
+        "fmax": {
+          "LOWER": 19200000,
+          "LOW": 150000000,
+          "NOMINAL": 300000000
+        },
+        "source_line": 296
+      },
+      "blsp1_qup1_i2c_apps_clk_src": {
+        "analog": false,
+        "fmax": {
+          "LOWER": 19200000,
+          "LOW": 50000000
+        },
+        "source_line": 317
+      },
+      "blsp1_qup1_spi_apps_clk_src": {
+        "analog": false,
+        "fmax": {
+          "LOWER": 19200000,
+          "LOW": 25000000,
+          "NOMINAL": 50000000
+        },
+        "source_line": 341
+      },
+      "blsp1_qup2_i2c_apps_clk_src": {
+        "analog": false,
+        "fmax": {
+          "LOWER": 19200000,
+          "LOW": 50000000
+        },
+        "source_line": 362
+      },
+      "blsp1_qup2_spi_apps_clk_src": {
+        "analog": false,
+        "fmax": {
+          "LOWER": 19200000,
+          "LOW": 25000000,
+          "NOMINAL": 50000000
+        },
+        "source_line": 386
+      },
+      "blsp1_qup3_i2c_apps_clk_src": {
+        "analog": false,
+        "fmax": {
+          "LOWER": 19200000,
+          "LOW": 50000000
+        },
+        "source_line": 407
+      },
+      "blsp1_qup3_spi_apps_clk_src": {
+        "analog": false,
+        "fmax": {
+          "LOWER": 19200000,
+          "LOW": 25000000,
+          "NOMINAL": 50000000
+        },
+        "source_line": 431
+      },
+      "blsp1_qup4_i2c_apps_clk_src": {
+        "analog": false,
+        "fmax": {
+          "LOWER": 19200000,
+          "LOW": 50000000
+        },
+        "source_line": 452
+      },
+      "blsp1_qup4_spi_apps_clk_src": {
+        "analog": false,
+        "fmax": {
+          "LOWER": 19200000,
+          "LOW": 25000000,
+          "NOMINAL": 50000000
+        },
+        "source_line": 476
+      },
+      "blsp1_qup5_i2c_apps_clk_src": {
+        "analog": false,
+        "fmax": {
+          "LOWER": 19200000,
+          "LOW": 50000000
+        },
+        "source_line": 497
+      },
+      "blsp1_qup5_spi_apps_clk_src": {
+        "analog": false,
+        "fmax": {
+          "LOWER": 19200000,
+          "LOW": 25000000,
+          "NOMINAL": 50000000
+        },
+        "source_line": 521
+      },
+      "blsp1_qup6_i2c_apps_clk_src": {
+        "analog": false,
+        "fmax": {
+          "LOWER": 19200000,
+          "LOW": 50000000
+        },
+        "source_line": 542
+      },
+      "blsp1_qup6_spi_apps_clk_src": {
+        "analog": false,
+        "fmax": {
+          "LOWER": 19200000,
+          "LOW": 25000000,
+          "NOMINAL": 50000000
+        },
+        "source_line": 566
+      },
+      "blsp1_uart1_apps_clk_src": {
+        "analog": false,
+        "fmax": {
+          "LOWER": 19200000,
+          "LOW": 31580000,
+          "NOMINAL": 63160000
+        },
+        "source_line": 599
+      },
+      "blsp1_uart2_apps_clk_src": {
+        "analog": false,
+        "fmax": {
+          "LOWER": 19200000,
+          "LOW": 31580000,
+          "NOMINAL": 63160000
+        },
+        "source_line": 632
+      },
+      "blsp1_uart3_apps_clk_src": {
+        "analog": false,
+        "fmax": {
+          "LOWER": 19200000,
+          "LOW": 31580000,
+          "NOMINAL": 63160000
+        },
+        "source_line": 665
+      },
+      "blsp1_uart4_apps_clk_src": {
+        "analog": false,
+        "fmax": {
+          "LOWER": 19200000,
+          "LOW": 31580000,
+          "NOMINAL": 63160000
+        },
+        "source_line": 698
+      },
+      "blsp1_uart5_apps_clk_src": {
+        "analog": false,
+        "fmax": {
+          "LOWER": 19200000,
+          "LOW": 31580000,
+          "NOMINAL": 63160000
+        },
+        "source_line": 731
+      },
+      "blsp1_uart6_apps_clk_src": {
+        "analog": false,
+        "fmax": {
+          "LOWER": 19200000,
+          "LOW": 31580000,
+          "NOMINAL": 63160000
+        },
+        "source_line": 764
+      },
+      "blsp2_qup1_i2c_apps_clk_src": {
+        "analog": false,
+        "fmax": {
+          "LOWER": 19200000,
+          "LOW": 50000000
+        },
+        "source_line": 785
+      },
+      "blsp2_qup1_spi_apps_clk_src": {
+        "analog": false,
+        "fmax": {
+          "LOWER": 19200000,
+          "LOW": 25000000,
+          "NOMINAL": 50000000
+        },
+        "source_line": 809
+      },
+      "blsp2_qup2_i2c_apps_clk_src": {
+        "analog": false,
+        "fmax": {
+          "LOWER": 19200000,
+          "LOW": 50000000
+        },
+        "source_line": 830
+      },
+      "blsp2_qup2_spi_apps_clk_src": {
+        "analog": false,
+        "fmax": {
+          "LOWER": 19200000,
+          "LOW": 25000000,
+          "NOMINAL": 50000000
+        },
+        "source_line": 854
+      },
+      "blsp2_qup3_i2c_apps_clk_src": {
+        "analog": false,
+        "fmax": {
+          "LOWER": 19200000,
+          "LOW": 50000000
+        },
+        "source_line": 875
+      },
+      "blsp2_qup3_spi_apps_clk_src": {
+        "analog": false,
+        "fmax": {
+          "LOWER": 19200000,
+          "LOW": 25000000,
+          "NOMINAL": 50000000
+        },
+        "source_line": 899
+      },
+      "blsp2_qup4_i2c_apps_clk_src": {
+        "analog": false,
+        "fmax": {
+          "LOWER": 19200000,
+          "LOW": 50000000
+        },
+        "source_line": 920
+      },
+      "blsp2_qup4_spi_apps_clk_src": {
+        "analog": false,
+        "fmax": {
+          "LOWER": 19200000,
+          "LOW": 25000000,
+          "NOMINAL": 50000000
+        },
+        "source_line": 944
+      },
+      "blsp2_qup5_i2c_apps_clk_src": {
+        "analog": false,
+        "fmax": {
+          "LOWER": 19200000,
+          "LOW": 50000000
+        },
+        "source_line": 965
+      },
+      "blsp2_qup5_spi_apps_clk_src": {
+        "analog": false,
+        "fmax": {
+          "LOWER": 19200000,
+          "LOW": 25000000,
+          "NOMINAL": 50000000
+        },
+        "source_line": 989
+      },
+      "blsp2_qup6_i2c_apps_clk_src": {
+        "analog": false,
+        "fmax": {
+          "LOWER": 19200000,
+          "LOW": 50000000
+        },
+        "source_line": 1010
+      },
+      "blsp2_qup6_spi_apps_clk_src": {
+        "analog": false,
+        "fmax": {
+          "LOWER": 19200000,
+          "LOW": 25000000,
+          "NOMINAL": 50000000
+        },
+        "source_line": 1034
+      },
+      "blsp2_uart1_apps_clk_src": {
+        "analog": false,
+        "fmax": {
+          "LOWER": 19200000,
+          "LOW": 31580000,
+          "NOMINAL": 63160000
+        },
+        "source_line": 1067
+      },
+      "blsp2_uart2_apps_clk_src": {
+        "analog": false,
+        "fmax": {
+          "LOWER": 19200000,
+          "LOW": 31580000,
+          "NOMINAL": 63160000
+        },
+        "source_line": 1100
+      },
+      "blsp2_uart3_apps_clk_src": {
+        "analog": false,
+        "fmax": {
+          "LOWER": 19200000,
+          "LOW": 31580000,
+          "NOMINAL": 63160000
+        },
+        "source_line": 1133
+      },
+      "blsp2_uart4_apps_clk_src": {
+        "analog": false,
+        "fmax": {
+          "LOWER": 19200000,
+          "LOW": 31580000,
+          "NOMINAL": 63160000
+        },
+        "source_line": 1166
+      },
+      "blsp2_uart5_apps_clk_src": {
+        "analog": false,
+        "fmax": {
+          "LOWER": 19200000,
+          "LOW": 31580000,
+          "NOMINAL": 63160000
+        },
+        "source_line": 1199
+      },
+      "blsp2_uart6_apps_clk_src": {
+        "analog": false,
+        "fmax": {
+          "LOWER": 19200000,
+          "LOW": 31580000,
+          "NOMINAL": 63160000
+        },
+        "source_line": 1232
+      },
+      "gp1_clk_src": {
+        "analog": false,
+        "fmax": {
+          "LOWER": 50000000,
+          "LOW": 100000000,
+          "NOMINAL": 200000000
+        },
+        "source_line": 1254
+      },
+      "gp2_clk_src": {
+        "analog": false,
+        "fmax": {
+          "LOWER": 50000000,
+          "LOW": 100000000,
+          "NOMINAL": 200000000
+        },
+        "source_line": 1276
+      },
+      "gp3_clk_src": {
+        "analog": false,
+        "fmax": {
+          "LOWER": 50000000,
+          "LOW": 100000000,
+          "NOMINAL": 200000000
+        },
+        "source_line": 1298
+      },
+      "pdm2_clk_src": {
+        "analog": false,
+        "fmax": {
+          "LOWER": 19200000,
+          "LOW": 60000000
+        },
+        "source_line": 1336
+      },
+      "qspi_ser_clk_src": {
+        "analog": false,
+        "fmax": {
+          "LOWER": 80200000,
+          "LOW": 160400000,
+          "NOMINAL": 320000000
+        },
+        "source_line": 1358
+      },
+      "sdcc1_apps_clk_src": {
+        "analog": false,
+        "fmax": {
+          "LOWER": 19200000,
+          "LOW": 50000000,
+          "NOMINAL": 400000000
+        },
+        "source_line": 1385
+      },
+      "sdcc1_ice_core_clk_src": {
+        "analog": false,
+        "fmax": {
+          "LOWER": 19200000,
+          "LOW": 150000000,
+          "NOMINAL": 300000000
+        },
+        "source_line": 1407
+      },
+      "sdcc2_apps_clk_src": {
+        "analog": false,
+        "fmax": {
+          "LOWER": 19200000,
+          "LOW": 50000000,
+          "NOMINAL": 200000000
+        },
+        "source_line": 1435
+      },
+      "sdcc3_apps_clk_src": {
+        "analog": false,
+        "fmax": {
+          "LOWER": 19200000,
+          "LOW": 50000000,
+          "NOMINAL": 200000000
+        },
+        "source_line": 1461
+      },
+      "sdcc4_apps_clk_src": {
+        "analog": false,
+        "fmax": {
+          "LOWER": 19200000,
+          "LOW": 50000000,
+          "NOMINAL": 100000000
+        },
+        "source_line": 1486
+      },
+      "tsif_ref_clk_src": {
+        "analog": false,
+        "fmax": {
+          "LOWER": 105500
+        },
+        "source_line": 1506
+      },
+      "usb20_mock_utmi_clk_src": {
+        "analog": false,
+        "fmax": {
+          "LOWER": 19200000,
+          "LOW": 60000000
+        },
+        "source_line": 1525
+      },
+      "usb30_mock_utmi_clk_src": {
+        "analog": false,
+        "fmax": {
+          "LOWER": 40000000,
+          "LOW": 60000000
+        },
+        "source_line": 1544
+      },
+      "usb3_phy_aux_clk_src": {
+        "analog": false,
+        "fmax": {
+          "LOWER": 1200000
+        },
+        "source_line": 1563
+      }
+    },
+    "mmcc": {
+      "mmpll0": {
+        "analog": false,
+        "fmax": {
+          "LOWER": 400000000,
+          "NOMINAL": 800000000
+        },
+        "source_line": 138
+      },
+      "mmpll1": {
+        "analog": false,
+        "fmax": {
+          "LOWER": 405000000,
+          "NOMINAL": 810000000,
+          "LOW": 405000000,
+          "HIGH": 810000000
+        },
+        "source_line": 158
+      },
+      "mmpll4": {
+        "analog": true,
+        "fmax": {
+          "LOWER": 480000000,
+          "NOMINAL": 960000000
+        },
+        "source_line": 178
+      },
+      "mmpll3": {
+        "analog": false,
+        "fmax": {
+          "LOWER": 520000000,
+          "NOMINAL": 1040000000,
+          "LOW": 520000000,
+          "HIGH": 1040000000
+        },
+        "source_line": 196
+      },
+      "ahb_clk_src": {
+        "analog": false,
+        "fmax": {
+          "LOWER": 40000000,
+          "NOMINAL": 80000000
+        },
+        "source_line": 221
+      },
+      "mmpll2": {
+        "analog": false,
+        "fmax": {
+          "LOWER": 1000000000,
+          "LOW": 1000000000,
+          "NOMINAL": 1000000000,
+          "HIGH": 1000000000
+        },
+        "source_line": 236
+      },
+      "mmpll8": {
+        "analog": false,
+        "fmax": {
+          "LOWER": 1000000000,
+          "LOW": 1000000000,
+          "NOMINAL": 1000000000,
+          "HIGH": 1000000000
+        },
+        "source_line": 275
+      },
+      "mmpll9": {
+        "analog": true,
+        "fmax": {
+          "LOWER": 624000000,
+          "NOMINAL": 1248000000,
+          "LOW": 624000000,
+          "HIGH": 1248000000
+        },
+        "source_line": 314
+      },
+      "mmpll5": {
+        "analog": false,
+        "fmax": {
+          "LOWER": 412500000,
+          "LOW": 825000000,
+          "NOMINAL": 825000000,
+          "HIGH": 825000000
+        },
+        "source_line": 354
+      },
+      "csi0_clk_src": {
+        "analog": false,
+        "fmax": {
+          "LOWER": 100000000,
+          "LOW": 200000000,
+          "NOMINAL": 480000000,
+          "HIGH": 600000000
+        },
+        "source_line": 452
+      },
+      "vfe0_clk_src": {
+        "analog": false,
+        "fmax": {
+          "LOWER": 100000000,
+          "LOW": 300000000,
+          "NOMINAL": 480000000,
+          "HIGH": 600000000
+        },
+        "source_line": 498
+      },
+      "vfe1_clk_src": {
+        "analog": false,
+        "fmax": {
+          "LOWER": 100000000,
+          "LOW": 300000000,
+          "NOMINAL": 480000000,
+          "HIGH": 600000000
+        },
+        "source_line": 544
+      },
+      "csi1_clk_src": {
+        "analog": false,
+        "fmax": {
+          "LOWER": 100000000,
+          "LOW": 200000000,
+          "NOMINAL": 480000000,
+          "HIGH": 600000000
+        },
+        "source_line": 588
+      },
+      "csi2_clk_src": {
+        "analog": false,
+        "fmax": {
+          "LOWER": 100000000,
+          "LOW": 200000000,
+          "NOMINAL": 480000000,
+          "HIGH": 600000000
+        },
+        "source_line": 632
+      },
+      "csi3_clk_src": {
+        "analog": false,
+        "fmax": {
+          "LOWER": 100000000,
+          "LOW": 200000000,
+          "NOMINAL": 480000000,
+          "HIGH": 600000000
+        },
+        "source_line": 676
+      },
+      "maxi_clk_src": {
+        "analog": false,
+        "fmax": {
+          "LOWER": 75000000,
+          "LOW": 171430000,
+          "NOMINAL": 320000000,
+          "HIGH": 405000000
+        },
+        "source_line": 712
+      },
+      "cpp_clk_src": {
+        "analog": false,
+        "fmax": {
+          "LOWER": 100000000,
+          "LOW": 200000000,
+          "NOMINAL": 480000000,
+          "HIGH": 640000000
+        },
+        "source_line": 739
+      },
+      "jpeg0_clk_src": {
+        "analog": false,
+        "fmax": {
+          "LOWER": 75000000,
+          "LOW": 150000000,
+          "NOMINAL": 320000000,
+          "HIGH": 480000000
+        },
+        "source_line": 764
+      },
+      "jpeg2_clk_src": {
+        "analog": false,
+        "fmax": {
+          "LOWER": 75000000,
+          "LOW": 150000000,
+          "NOMINAL": 266670000,
+          "HIGH": 320000000
+        },
+        "source_line": 788
+      },
+      "jpeg_dma_clk_src": {
+        "analog": false,
+        "fmax": {
+          "LOWER": 75000000,
+          "LOW": 150000000,
+          "NOMINAL": 320000000,
+          "HIGH": 480000000
+        },
+        "source_line": 813
+      },
+      "mdp_clk_src": {
+        "analog": false,
+        "fmax": {
+          "LOWER": 171430000,
+          "LOW": 275000000,
+          "NOMINAL": 330000000,
+          "HIGH": 412500000
+        },
+        "source_line": 852
+      },
+      "pclk0_clk_src": {
+        "analog": false,
+        "fmax": {
+          "LOWER": 175000000,
+          "LOW": 280000000,
+          "NOMINAL": 350000000
+        },
+        "source_line": 891
+      },
+      "pclk1_clk_src": {
+        "analog": false,
+        "fmax": {
+          "LOWER": 175000000,
+          "LOW": 280000000,
+          "NOMINAL": 350000000
+        },
+        "source_line": 930
+      },
+      "video_core_clk_src": {
+        "analog": false,
+        "fmax": {
+          "LOWER": 75000000,
+          "LOW": 150000000,
+          "NOMINAL": 346666667,
+          "HIGH": 520000000
+        },
+        "source_line": 971
+      },
+      "fd_core_clk_src": {
+        "analog": false,
+        "fmax": {
+          "LOWER": 100000000,
+          "LOW": 200000000,
+          "NOMINAL": 400000000
+        },
+        "source_line": 993
+      },
+      "cci_clk_src": {
+        "analog": false,
+        "fmax": {
+          "LOWER": 19200000,
+          "LOW": 50000000,
+          "NOMINAL": 100000000
+        },
+        "source_line": 1016
+      },
+      "csiphy0_3p_clk_src": {
+        "analog": false,
+        "fmax": {
+          "LOWER": 100000000,
+          "LOW": 200000000,
+          "NOMINAL": 320000000,
+          "HIGH": 384000000
+        },
+        "source_line": 1046
+      },
+      "csiphy1_3p_clk_src": {
+        "analog": false,
+        "fmax": {
+          "LOWER": 100000000,
+          "LOW": 200000000,
+          "NOMINAL": 320000000,
+          "HIGH": 384000000
+        },
+        "source_line": 1076
+      },
+      "csiphy2_3p_clk_src": {
+        "analog": false,
+        "fmax": {
+          "LOWER": 100000000,
+          "LOW": 200000000,
+          "NOMINAL": 320000000,
+          "HIGH": 384000000
+        },
+        "source_line": 1106
+      },
+      "camss_gp0_clk_src": {
+        "analog": false,
+        "fmax": {
+          "LOWER": 50000000,
+          "LOW": 100000000,
+          "NOMINAL": 200000000
+        },
+        "source_line": 1131
+      },
+      "camss_gp1_clk_src": {
+        "analog": false,
+        "fmax": {
+          "LOWER": 50000000,
+          "LOW": 100000000,
+          "NOMINAL": 200000000
+        },
+        "source_line": 1156
+      },
+      "mclk0_clk_src": {
+        "analog": false,
+        "fmax": {
+          "LOWER": 33330000,
+          "LOW": 66670000,
+          "NOMINAL": 68570000
+        },
+        "source_line": 1185
+      },
+      "mclk1_clk_src": {
+        "analog": false,
+        "fmax": {
+          "LOWER": 33330000,
+          "LOW": 66670000,
+          "NOMINAL": 68570000
+        },
+        "source_line": 1214
+      },
+      "mclk2_clk_src": {
+        "analog": false,
+        "fmax": {
+          "LOWER": 33330000,
+          "LOW": 66670000,
+          "NOMINAL": 68570000
+        },
+        "source_line": 1243
+      },
+      "mclk3_clk_src": {
+        "analog": false,
+        "fmax": {
+          "LOWER": 33330000,
+          "LOW": 66670000,
+          "NOMINAL": 68570000
+        },
+        "source_line": 1272
+      },
+      "csi0phytimer_clk_src": {
+        "analog": false,
+        "fmax": {
+          "LOWER": 100000000,
+          "NOMINAL": 266670000,
+          "LOW": 200000000
+        },
+        "source_line": 1301
+      },
+      "csi1phytimer_clk_src": {
+        "analog": false,
+        "fmax": {
+          "LOWER": 100000000,
+          "NOMINAL": 266670000,
+          "LOW": 200000000
+        },
+        "source_line": 1329
+      },
+      "csi2phytimer_clk_src": {
+        "analog": false,
+        "fmax": {
+          "LOWER": 100000000,
+          "NOMINAL": 266670000,
+          "LOW": 200000000
+        },
+        "source_line": 1357
+      },
+      "rbbmtimer_clk_src": {
+        "analog": false,
+        "fmax": {
+          "LOWER": 19200000
+        },
+        "source_line": 1376
+      },
+      "byte0_clk_src": {
+        "analog": false,
+        "fmax": {
+          "LOWER": 131250000,
+          "LOW": 210000000,
+          "NOMINAL": 262500000
+        },
+        "source_line": 1413
+      },
+      "byte1_clk_src": {
+        "analog": false,
+        "fmax": {
+          "LOWER": 131250000,
+          "LOW": 210000000,
+          "NOMINAL": 262500000
+        },
+        "source_line": 1451
+      },
+      "esc0_clk_src": {
+        "analog": false,
+        "fmax": {
+          "LOWER": 19200000
+        },
+        "source_line": 1473
+      },
+      "esc1_clk_src": {
+        "analog": false,
+        "fmax": {
+          "LOWER": 19200000
+        },
+        "source_line": 1492
+      },
+      "extpclk_clk_src": {
+        "analog": false,
+        "fmax": {
+          "LOWER": 150000000,
+          "LOW": 300000000,
+          "NOMINAL": 600000000
+        },
+        "source_line": 1515
+      },
+      "hdmi_clk_src": {
+        "analog": false,
+        "fmax": {
+          "LOWER": 19200000
+        },
+        "source_line": 1536
+      },
+      "vsync_clk_src": {
+        "analog": false,
+        "fmax": {
+          "LOWER": 19200000
+        },
+        "source_line": 1555
+      },
+      "rbcpr_clk_src": {
+        "analog": false,
+        "fmax": {
+          "LOWER": 19200000,
+          "NOMINAL": 50000000,
+          "HIGH": 50000000
+        },
+        "source_line": 1580
+      },
+      "video_subcore0_clk_src": {
+        "analog": false,
+        "fmax": {
+          "LOWER": 75000000,
+          "LOW": 150000000,
+          "NOMINAL": 346666667,
+          "HIGH": 520000000
+        },
+        "source_line": 1618
+      },
+      "video_subcore1_clk_src": {
+        "analog": false,
+        "fmax": {
+          "LOWER": 75000000,
+          "LOW": 150000000,
+          "NOMINAL": 346666667,
+          "HIGH": 520000000
+        },
+        "source_line": 1658
+      }
+    }
+  }
+}

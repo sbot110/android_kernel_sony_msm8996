@@ -1,0 +1,15 @@
+{
+  "no_stage8_push_has_occurred": true,
+  "target_branch_unchanged": true,
+  "changes_observed_before_our_push": {
+    "refs/heads/kernel-5.15": {
+      "initial": null,
+      "prepush": "ad3dcab528daa2c19877658f268be9925ba6c897"
+    },
+    "refs/heads/kernel-5.5": {
+      "initial": "030f0b026abcc01b990cc7f8b04b9e65fb9bbe74",
+      "prepush": "c10cec83039a46d98c4fddc278c508978558119c"
+    }
+  },
+  "interpretation": "External changes observed before our first Stage8 push; no other ref was created, written or reverted by this task. Post-push audit compares both initial and immediate pre-push snapshots."
+}

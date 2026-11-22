@@ -1,0 +1,7 @@
+{
+  "production_state_functions": 7,
+  "production_backend_functions": 22,
+  "unsafe_mutations_rejected": 16,
+  "hardware_verified": false,
+  "autonomous_exclusion_granted": false
+}

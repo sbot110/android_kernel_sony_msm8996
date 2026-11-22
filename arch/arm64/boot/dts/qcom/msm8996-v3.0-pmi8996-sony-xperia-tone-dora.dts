@@ -1,0 +1,14 @@
+/* Copyright (c) 2014-2017, The Linux Foundation. All rights reserved.
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License version 2 and
+ * only version 2 as published by the Free Software Foundation.
+ */
+/* Hardware data from the final Sony dora DT at
+ * 0c295b15b6d0fb59a64e13b9e0ef2070818ef2a1, not intermediate includes.
+ * Source data is retained while unsupported power chains remain disabled.
+ */
+
+#include "msm8996-sony-xperia-tone-dora.dts"
+#include "msm8996-sony-xperia-tone-v3.0.dtsi"
+#include "msm8996-sony-xperia-tone-pmi8996.dtsi"

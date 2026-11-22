@@ -1,0 +1,27 @@
+# SPDX-License-Identifier: GPL-2.0-only
+config SND_SOC_SONY_MSM8996
+	bool "Sony MSM8996 Tasha vendor sound card"
+	depends on SND_SOC && ARCH_QCOM && QCOM_SMEM && MAILBOX
+	select SWITCH
+	select SND_DYNAMIC_MINORS
+	select SND_HWDEP
+	select SND_SOC_COMPRESS
+	select SLIMBUS
+	select SLIMBUS_MSM_NGD
+	select SPI
+	select I2C
+	select REGMAP_SPI
+	select SPS
+	select SPS_SUPPORT_NDP_BAM
+	select RPMSG_QCOM_SMD
+	select QRTR
+	select QRTR_SMD
+	select QCOM_QMI_HELPERS
+	select MSM_SUBSYSTEM_RESTART
+	select MSM_PIL
+	select MSM_PIL_SSR_GENERIC
+	select MSM_EXT_DISPLAY
+	help
+	  Sony MSM8996 machine driver and the existing vendor APRv2/WCD9335
+	  audio stack. This is distinct from the upstream APQ8096 sound card.
+	  Requires the matching Sony audio DT, firmware and userspace routes.

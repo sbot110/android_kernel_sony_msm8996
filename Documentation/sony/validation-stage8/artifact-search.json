@@ -1,0 +1,26 @@
+{
+  "roots": [
+    "/workspace",
+    "/tmp"
+  ],
+  "read_only": true,
+  "walked_directories": 17686,
+  "candidate_paths": [],
+  "excluded_internal_directories": [
+    "/workspace/.codex",
+    "/workspace/.git",
+    "/workspace/.aws",
+    "/workspace/.agents",
+    "/workspace/android_kernel_sony_msm8996/.git",
+    "/tmp/.aws",
+    "/tmp/.codex",
+    "/tmp/.agents",
+    "/tmp/.git",
+    "/tmp/codex-daemon-1000"
+  ],
+  "errors": [],
+  "working_boot_image_found": false,
+  "los21_ramdisk_identified": false,
+  "known_kernel_only_prebuilt": "/workspace/stage7-official-kernel-dtb-dora",
+  "note": "Kernel-built initramfs files in O= are not identified LOS20/LOS21 ramdisks; no device or partition access performed. Initial rg search encountered protected /tmp/codex-daemon-1000; the bounded permitted-root scan explicitly excludes provider/internal metadata."
+}

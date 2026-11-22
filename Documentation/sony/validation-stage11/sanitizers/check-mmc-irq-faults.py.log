@@ -1,0 +1,2 @@
+PASS: production IRQ first-error, clear retries, timeout, pad guard, restore/DLL and resume IRQ barriers
+Host API/MMIO model only; real IRQ scheduling, RPM ACKs and card behavior remain untested.

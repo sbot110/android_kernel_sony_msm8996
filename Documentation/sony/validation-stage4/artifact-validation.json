@@ -1,0 +1,168 @@
+{
+  "status": "PASS",
+  "scope": "build formats and exact DTB payload only",
+  "bootloader_selection": "UNVERIFIED",
+  "device_boot": "UNTESTED",
+  "linked_implementations": [
+    "qusb2_phy_probe",
+    "msm8996_dora_init_tbl",
+    "ufs_qcom_phy_qmp_14nm_probe",
+    "glink_rpm_probe",
+    "qcom_apcs_ipc_probe",
+    "pmic_gpio_probe",
+    "pmic_mpp_probe",
+    "simple_pm_bus_probe",
+    "mdss_dsi_panel_driver_detection",
+    "bpf_int_jit_compile",
+    "qcom_smd_rpm_probe",
+    "msm_bus_device_probe",
+    "msm8996_boot_probe",
+    "qcom_rpm_corner_sync",
+    "rpm_corner_probe",
+    "sdhci_msm_probe",
+    "mmc_gpiod_request_uim2",
+    "msm8996_cpu_transaction_set_rate",
+    "qcom_genpd_regulator_probe",
+    "qpnp_wled_probe",
+    "msm8996_gfx_probe",
+    "cpr3_hmss_regulator_probe",
+    "cpr3_mmss_regulator_probe",
+    "kryo_regulator_probe",
+    "msm_apm_probe"
+  ],
+  "image_header": {
+    "text_offset": 524288,
+    "image_size": 22007808,
+    "flags": 10
+  },
+  "appended_dtbs": [
+    {
+      "path": "qcom/msm8996-v3.0-sony-xperia-tone-dora.dtb",
+      "offset": 8953321,
+      "size": 190054,
+      "qcom,msm-id": [
+        246,
+        196608
+      ],
+      "qcom,board-id": [
+        8,
+        0
+      ],
+      "qcom,pmic-id": [
+        131081,
+        131082,
+        0,
+        0
+      ]
+    },
+    {
+      "path": "qcom/msm8996-v3.0-pmi8996-sony-xperia-tone-dora.dtb",
+      "offset": 9143375,
+      "size": 190054,
+      "qcom,msm-id": [
+        246,
+        196608
+      ],
+      "qcom,board-id": [
+        8,
+        0
+      ],
+      "qcom,pmic-id": [
+        131081,
+        65555,
+        0,
+        0
+      ]
+    },
+    {
+      "path": "qcom/msm8996-sony-xperia-tone-dora.dtb",
+      "offset": 9333429,
+      "size": 190570,
+      "qcom,msm-id": [
+        246,
+        196609
+      ],
+      "qcom,board-id": [
+        8,
+        0
+      ],
+      "qcom,pmic-id": [
+        131081,
+        131082,
+        0,
+        0
+      ]
+    },
+    {
+      "path": "qcom/msm8996-v3.1-pmi8996-sony-xperia-tone-dora.dtb",
+      "offset": 9523999,
+      "size": 190570,
+      "qcom,msm-id": [
+        246,
+        196609
+      ],
+      "qcom,board-id": [
+        8,
+        0
+      ],
+      "qcom,pmic-id": [
+        131081,
+        65555,
+        0,
+        0
+      ]
+    }
+  ],
+  "artifacts": [
+    {
+      "path": "vmlinux",
+      "size": 24624488,
+      "sha256": "b15f5b13c9a481abdc55950398ab99905ab5f975dd6d07d5e2cd12720bf75dfe"
+    },
+    {
+      "path": ".config",
+      "size": 137400,
+      "sha256": "5d347c289bebcc7f92594fe9f066da6d4043a236ec6dac52773a22541b5db56e"
+    },
+    {
+      "path": "System.map",
+      "size": 3757460,
+      "sha256": "490269e47ac0076326b3dd0ae060427919dbe6cff9dcd312f1dc3e4f36af8ede"
+    },
+    {
+      "path": "arch/arm64/boot/Image",
+      "size": 19659264,
+      "sha256": "6d986d6a99d3f922f759b0048472f22bfcd1bb3a3120fdf74a3d403709fc8cf0"
+    },
+    {
+      "path": "arch/arm64/boot/Image.gz",
+      "size": 8953321,
+      "sha256": "7c694496bc554da5a2ca3707e42659ab18250c99f595f9ecb5ee2c23b2e10b43"
+    },
+    {
+      "path": "arch/arm64/boot/dts/qcom/msm8996-v3.0-sony-xperia-tone-dora.dtb",
+      "size": 190054,
+      "sha256": "e68324dde4c26c1f04861d502edc2f0368836be82bad6e4fa68ace5adeb7980a"
+    },
+    {
+      "path": "arch/arm64/boot/dts/qcom/msm8996-v3.0-pmi8996-sony-xperia-tone-dora.dtb",
+      "size": 190054,
+      "sha256": "37cbc07bcafa90cb858cebb40517c7abf2c3a78d67d872d4ad17362d1560bb86"
+    },
+    {
+      "path": "arch/arm64/boot/dts/qcom/msm8996-sony-xperia-tone-dora.dtb",
+      "size": 190570,
+      "sha256": "3f4bbd4d89b07cc07f4011fac43c9ef7a8d831fe80fd05df398a3c257203ff23"
+    },
+    {
+      "path": "arch/arm64/boot/dts/qcom/msm8996-v3.1-pmi8996-sony-xperia-tone-dora.dtb",
+      "size": 190570,
+      "sha256": "8c074109c51cfd469763872628bfb1574eabd84591948967bd17f9630978cbdd"
+    },
+    {
+      "path": "arch/arm64/boot/Image.gz-dtb",
+      "size": 9714569,
+      "sha256": "3685627fda28c5e87c0dcb5891c1f413723f775d4e521779628906380c9b9b56"
+    }
+  ]
+}

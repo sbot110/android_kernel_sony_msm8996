@@ -1,0 +1,17 @@
+{
+  "BoardConfigCommon.mk": {
+    "sha256": "b9be571cdb901754990712d2cc2bb75652645234f08effe5c4cd96e4b3d5bafd",
+    "scope": "read-only pinned reference; no device repository edits"
+  },
+  "BoardConfig.mk": {
+    "sha256": "5d31f4b9d564e7faf0b6406fedbe5b802284a2490514f4cc6c4298b5f1b37163",
+    "scope": "read-only pinned reference; no device repository edits"
+  },
+  "fstab.qcom": {
+    "sha256": "10bfbc36d5c618d0b0e84218b9ecfdf97e6e2626c695fd150b6dad791fd436c5",
+    "scope": "read-only pinned reference; no device repository edits"
+  },
+  "tone_common_commit": "2701d2aecab52b30c3672ecebbad6ae1910cc212",
+  "dora_commit": "5e9385a65257a28f9a3974342331644a3bbcdd49",
+  "existing_enforcing_patch_apply_check": 0
+}

@@ -1,3 +1,4 @@
+/* SPDX-License-Identifier: GPL-2.0 WITH Linux-syscall-note */
 /*
  *  arch/arm/include/asm/unistd.h
  *
@@ -24,7 +25,7 @@
 #endif
 
 #include <asm/unistd-common.h>
-#define __NR_sync_file_range2           __NR_arm_sync_file_range
+#define __NR_sync_file_range2		__NR_arm_sync_file_range
 
 /*
  * The following SWIs are ARM private.
@@ -35,5 +36,6 @@
 #define __ARM_NR_usr26			(__ARM_NR_BASE+3)
 #define __ARM_NR_usr32			(__ARM_NR_BASE+4)
 #define __ARM_NR_set_tls		(__ARM_NR_BASE+5)
+#define __ARM_NR_get_tls		(__ARM_NR_BASE+6)
 
 #endif /* _UAPI__ASM_ARM_UNISTD_H */

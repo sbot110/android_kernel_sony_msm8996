@@ -1,0 +1,14 @@
+{
+  "CONFIG_CC_VERSION_TEXT": {
+    "stage10": "\"aarch64-linux-gnu-gcc (Debian 12.2.0-14) 12.2.0\"",
+    "stage11": "\"aarch64-linux-gnu-gcc (Debian 12.4.0-5) 12.4.0\""
+  },
+  "CONFIG_DORA_BOOT_TRACE": {
+    "stage10": null,
+    "stage11": "y"
+  },
+  "CONFIG_GCC_VERSION": {
+    "stage10": "120200",
+    "stage11": "120400"
+  }
+}

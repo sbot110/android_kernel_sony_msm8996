@@ -1,0 +1,170 @@
+Stage 9 CPU hardware dependency audit (read-only)
+Source tree: /workspace/android_kernel_sony_msm8996
+Baseline Stage8: e9f1a7be0c13e1447a0cf398af31a9efe5868ad1
+Immutable Sony4.4 reference: work = 0c295b15b6d0fb59a64e13b9e0ef2070818ef2a1
+No repository source, branch, commit or ref was changed by this audit.
+
+DECISIVE NEW FINDINGS
+
+1. The CPU PLL digital rail is MX ACTIVE-ONLY, not the GCC/MMCC CX rail.
+   Sony arch/arm/boot/dts/qcom/msm8996.dtsi:815 connects clock_cpu's
+   vdd-dig-supply to pm8994_s2_corner_ao. No msm8996-v3/Tone override found.
+   msm8996-regulator.dtsi:67 declares S2+S12 VDD_MX, RPM smpa2, set1.
+   Clock CPU PLLs use VDD_DIG_FMAX_MAP1(LOW,3000000000), and
+   drivers/clk/msm/vdd-level-8996.h maps LOW to RPM_CORNER_SVS_SOC = 4
+   (wire corn3); this is NOT the variable CPU CPR plan.level.
+   Current tone-corners.dtsi already retains typed smpa2 AO/BOTH providers
+   disabled. Reusing enabled CX smpa1 or mapping CPR levels to RPM corners
+   would be a hardware-contract error. Existing CX BOTH contracts stay intact.
+
+2. Original LMH v1 has a physical S11 voltage notifier contract missing in4.19.
+   Sony msm8996-v3.dtsi:938: lmh vdd-apss-supply=pm8994_s11;
+   qcom,lmh-odcm-disable-threshold-mA=<850>. Despite property suffix mA,
+   lmh_lite.c stores odcm_thresh_mV and compares rail_uV/1000 to850.
+   lmh_voltage_change_notifier / evaluate_and_config_odcm:
+     - increase: DPM voltage scale written BEFORE voltage increase;
+       ODCM enabled before crossing above threshold.
+     - decrease: DPM scale written AFTER matching POST_VOLTAGE_CHANGE;
+       ODCM disabled after voltage decrease.
+     - abort: restores previous ODCM state.
+   LMH_REG physical source constants are APCS_DPM_VOLTAGE_SCALE=0x09950804,
+   ODCM CPU/L2 addresses 0x09981030,0x09991030,0x099a1028,0x099b1030,
+   0x099c1030,0x099d1028. These are provenance facts, NOT activation permission.
+   Sony qcom,lmh_v1 uses lmh_lite.c + lmh_interface.c / limits monitor.
+   Existing4.19 drivers/thermal/qcom/msm_lmh_dcvs.c matches qcom,msm-hw-limits
+   (newer DCVSH); it is not the missing MSM8996 LMHv1 driver. Do not substitute
+   it or its OSM request/frequency register interpretation for the Sony path.
+   Thermal/DPM/ODCM integration is therefore a concrete activation blocker.
+
+3. There is no existing acknowledged transferable CPR/AVS freeze API.
+   CPR3 definitions in BOTH Sony work:cpr3-regulator.c and current4.19:
+     CPR_CTL +0x4, LOOP_EN bit0; CPR_STATUS +0x8, BUSY bit0;
+     HW_CLOSED_LOOP +0x3000, ENABLE=0, DISABLE=1.
+   Current cpr3_ctrl_loop_disable is a void masked write. It does not poll.
+   Source IRQ recovery explicitly waits BUSY=1 AND LOOP_EN=0 (200us bound),
+   while aging cpr3_regulator_wait_for_idle separately waits BUSY=0.
+   Consequently a generic rule 'disable then BUSY0 means exclusion' is not
+   proven by these sources; BUSY1 alone likewise is not proof of completion.
+   Need revision-specific stop protocol plus HW-loop mode/SAW AVS readback,
+   IRQ serialization, PM state and endpoint ownership—not only ctrl->lock.
+   msm_spm_drv_get_avs_enable returns cached reg_shadow&1; set_avs_enable
+   writes cached shadow with no physical readback. Cannot serve as real ACK.
+   SAW AVS offsets depend version: +0x20 on2.1/3.0, +0x904 on4.1.
+   Unknown SAW version currently WARNs but returns0 with missing reg_offsets;
+   SPM agent has been notified to fix this fail-open condition.
+
+4. Expected Dora v3 CPR is SOFTWARE closed-loop, but boot state remains unknown.
+   Sony msm8996-v3.dtsi includes msm8996.dtsi directly (not v2).
+   qcom,cpr-hw-closed-loop exists only in v2; no such property is present in
+   current preserved Dora CPU datasets. HMSS initializes supports_hw=true,
+   use_hw=OF property. Do not infer HW closed-loop active from generic support,
+   nor assume bootloader already left HW/SAW disabled: physical reads needed.
+
+5. Linux SCM mutex does not arbitrate autonomous firmware or thermal.
+   scm.c __scm_call2 locks scm_lmh_lock around Linux SCM_SVC_LMH calls.
+   APM msm8996 switch functions also use it around their source clock override.
+   Sony cpu_clk_8996_set_rate uses that mutex only when !cpu_clocks_v3;
+   original v3 skips it. Holding it across a quarantined transaction would
+   retain a task-owned mutex across return and can deadlock other callers.
+   Blocking thermal/emergency firmware requests is not an acceptable substitute
+   for a real firmware ownership grant or a protocol allowing safe mitigation.
+
+SOURCE-TO-IMPLEMENTATION GRAPH
+
+| Sony4.4 function / binding | Linux4.19 implementation | Resource / possible writer | Dependency / completion | Activation |
+| --- | --- | --- | --- | --- |
+| clock_cpu_8996_resources_init / vdd-dig | future shared owner, typed qcom-rpm-corner.c | MX S2+S12, smpa2 ACTIVE-only corn | LOW=logical4, actual RPM ACK, correct AO aggregate | node retained disabled; CPU unbound |
+| clock_cpu_8996_resources_init / vdd-pwrcl | CPR3 regulator-pwrcl, current cpr3-regulator.c | PWR demand in thread0 | strict selected CPU plan level is CPR index, not uV | gated |
+| clock_cpu_8996_resources_init / vdd-perfcl | CPR3 thread1 regulator | PERF demand, same VDD_APCC gang | same controller aggregation + Kryo1/L3/mem-acc | gated |
+| clock_cpu_8996_resources_init / vdd-cbf | CPR3 thread0 regulator-cbf + proxy | CBF demand shares PWR thread, all share S11 | proxy/aggregate corner and source CBF plan | gated |
+| cpu_clk_8996_pre_set_rate | msm8996_cpu_transaction_set_rate / native_safe | ACD/main mux before a voltage increase | safe source readback before raising CPR vote; original CPU-affine PM QoS excludes L2 collapse | native unbound |
+| cpu_clk_8996_post_set_rate | engine restore_acd + native_program | ACD output after voltage decrease | final rate/lock and source contract, release collapse reservation last | native unbound |
+| cpu_clk_8996_set_rate / source PLL ops | native_primary/native_set_alt/native_div2/native_rate | APCC/CBF primary/alternate PLL and mux | counted prepared XO/AUX/PLL parents; lock/readback, source integer/v3 limits | callbacks exist, write instance unbound |
+| cpu_clock_8996_acd_init / CPU_STARTING callback | native_acd_cpu/native_acd | target-cluster L2ACD selector/data and APCC SSS/PSCTL | target-online CPU, selector spinlock, barriers/readback; hotplug/collapse ownership | unbound |
+| cpr3_msm8996_hmss_read_fuse_data | same HMSS frontend | QFPROM CPR/PVS/fusing/partial bins | source fuse rows/quotient/voltage interpolation; independent CPU clock speedbin reader isn't complete CPR calibration | compiled, controller disabled |
+| cpr3_regulator_set_voltage/_update_ctrl_state | same core + Stage8 power faults | aggregate PWR/PERF/CBF corners -> shared VDD_APCC/LDO/mem-acc | ctrl mutex serializes software, sensing loop/HW AVS may act independently | disabled |
+| cpr3_irq_handler / ceiling handler | same core | software CPR voltage feedback; SAW max IRQ | ctrl->lock, proper IRQ status/ACKs, loop-stop proof | disabled |
+| msm_spm_set_vdd / msm_spm_drv_set_vdd | same APIs + Stage7 errors | S11 four-phase gang leader via CCI/system SAW | PMIC_STS sent-data + PMIC FSM idle; no physical voltage measurement | controller/S11 disabled |
+| spm_regulator_avs_* | same frontend | same gang main and AVS limits | one main/AVS instance lock; real AVS readback and endpoint lifetime still needed | disabled |
+| msm_apm_set_supply / msm8996_apm_switch_* | msm-apm.c + Stage8 ownership/tombstone | APCC/MX memory array switch; for early revisions PLL source and SAW events | threshold VDD + LDO preparations + MODE/STATUS/SMC readback; no rollback to old VDD after uncertain result | disabled |
+| kryo_regulator_set_voltage/set_bypass | same frontend | cluster functional LDO/BHS | physical supply-headroom and APM/mem-acc sequencing; register ack/error must be real | disabled |
+| kryo_regulator_cpu_pm_callback / lpm_prepare/resume | same frontend | independent CPU_CLUSTER_PM writes to LDO/BHS/retention | local slock is not shared native owner; source CPU_PM event affinity meanings + counter consistency | disabled |
+| lmh_voltage_change_notifier / lmh_dpm_init | NO MSM8996 LMHv1 counterpart | S11 notifier updates DPM scale and ODCM | before-increase/after-decrease contract; firmware profile/intensity/threshold ownership | missing, write gate blocker |
+| lmh_poll/ISR / LMH_CHANGE_PROFILE / GET_INTENSITY | only newer DCVSH driver exists | secure firmware limits and throttling | SCM service capability/profile, sensors, source interrupt23, non-disabling thermal arbitration | missing for Dora |
+| msm_thermal frequency/hotplug/vdd restriction | generic TSENS/thermal pieces only | thermal CPU cap, online mask, CX floor, emergency reset | original final Tone policy, actual calibration/trips/cooling and emergency states | runtime not qualified |
+| lpm-levels set_l2_mode/set_l3_mode/psci_enter_sleep | current vendor lpm-levels files / platform PSCI | SAW programs, RPM sleep, power collapse and retention | original PSCI state IDs, CPU-affine latency request, IRQ/hotplug ordering | CPU_IDLE=n; not qualified |
+| original PM QoS cpus_affine + IPI | no equivalent complete transferable shared guard | prevents cluster-collapse changing clock-tree ownership | modern CPU latency API alone does not exclude firmware or all hotplug transitions | missing |
+| source vdd_dig to GCC/MMCC paths | Stage5+ clk-msm8996-voltage.h/clk.c + corner backend | CX smpa1 BOTH for 56GCC/49MMCC, L12 analog | preserve bootstrap HIGH and BOTH ACK/quarantine | live software contracts, no phone measurements |
+
+IMPORTANT DISTINCTIONS
+
+- Runtime PM getters, cached regulator_get_voltage on a logical CPR frontend,
+  and successful CCF prepare are not physical supply measurements/ACKs.
+- Read-only clk-cpu-8996.c has no rate/disable/voltage writes. It can avoid
+  introducing Linux CPU writes, but this does not establish firmware thermal,
+  SAW, retention or bootloader ownership. It reports selected clock-tree rates,
+  not effective execution frequency during duty-cycle throttling.
+- CPU_FREQ=n / CPU_IDLE=n / maxcpus2 avoids newly enabling DVFS/deep idle/four
+  CPUs, but is not proof that existing firmware/autonomous paths are absent.
+- CPU digital LOW=4 is unrelated to CPU CPR plan.level1..25. Native S8--S11
+  regulators must remain disabled; bind against one typed S11/CPR controller.
+- APM Stage8 tombstones cover its own endpoint; they do not make the full CPR/
+  SPM/LMH gang transferable. Parent preparation and primary/digital lease
+  retirement still must respect failed transaction quarantine.
+
+SMALLEST CORRECT PARENT IMPLEMENTATION PROPOSAL
+
+Connect an owned backend context to the actual APCC/CBF provider lifecycle,
+using source-typed CPR child identities, selected fuse plans and the MX AO
+supplier, while preserving read-only publication if prerequisites are gated.
+Acquire real references and validate supplier membership before any hardware
+operation; never let a regulator dummy/fallback count as a qualified endpoint.
+Link both providers to the same singleton domain by actual resource identity;
+prevent a second APCC/CBF context from claiming one bank. No new engine.
+
+Separate (a) real resource/provider binding and state/errno handling from
+(b) writability qualification. A missing disabled supplier may defer backend
+completion, but must not hide the already usable read-only clocks by deferring
+all clock publication. Report the exact incomplete dependency. Do not invent
+an empty enter()/vote()/ready(); if typed stop/thermal exclusion is unsupported,
+leave the write binding absent and return an explicit readiness failure.
+
+A qualified transfer API eventually needs: controller mutex reservation state,
+actual closed-loop stop/readback, drain software IRQ work, AVS mode/readback,
+SAW endpoint pin, APM serialization, source LMHv1/DPM notifier integration,
+CPU hotplug/collapse exclusion and suspend freeze. Its token must survive a
+return after quarantine, unlike a held task mutex. Public regulator/PM/thermal
+operations must participate in the same protocol without disabling emergency
+mitigation. Owner must retain every uncertain lease and hardware-dependent
+parent reference until confirmed recovery. New DT 'verified' properties cannot
+manufacture those capabilities.
+
+EXACT MISSING HARDWARE EVIDENCE / HOW TO OBTAIN WITHOUT FLASHING
+
+Use the already-working LOS21/Sony4.4 as reference, via existing read-only sysfs,
+debugfs, dmesg/pstore and bootloader logs exposed by that working configuration.
+Do not issue arbitrary devmem or unverified SMC commands and do not change
+Sony4.4 source. If a required register is not safely exposed, mark it missing.
+
+1. Per-device selected SoC/PMIC tuple, CPU QFPROM speed/PVS/CPR fuse plan IDs,
+   HW CPR version and SAW version. These determine valid maps and plan bounds.
+2. Stable APCC/PERF/CBF mux and PLL MODE/USER/L/ALPHA/CONFIG/TEST snapshots,
+   current GPLL0/APCS AUX divider, APM MODE/STATUS, boot initial S11 request /
+   actual SAW PMIC sent-data+FSM states, AVS_CTL/AVS_STS/limits.
+3. Actual CPR_CTL, CPR_STATUS and HW_CLOSED_LOOP state, plus observed documented
+   stop/idle completion under the working vendor path. No guessed BUSY polarity.
+4. LMHv1 service availability, active profile, sensor/intensity/throttle logs,
+   DPM voltage-scale/ODCM state, final TSENS calibration/trips and CPU frequency/
+   hotplug restriction policy. Record legitimate emergency events; never disable
+   thermal protection to obtain exclusive CPU control.
+5. Working pre/post voltage/frequency timeline including regulator events, ACD
+   leave/restore, source LMHv1 DPM updates, SAW completion and parent refcounts.
+6. Existing hotplug/suspend/retention/collapse logs and actual PSCI state IDs.
+   Demonstrate allowed concurrent transitions and what the firmware changes.
+7. Working LOS21 boot.img/ramdisk/effective cmdline/partition-size/selected-DTB
+   provenance for later boot qualification (root/boot artifact agent handles it).
+
+Until these software integrations/proofs are complete, do not activate writable
+CPU callbacks or assert BOOT TEST READY. The specific strongest newly established
+blockers are missing MX-AO CPU connection and missing source LMHv1 S11 notifier,
+not merely the generic statement 'hardware unavailable'.

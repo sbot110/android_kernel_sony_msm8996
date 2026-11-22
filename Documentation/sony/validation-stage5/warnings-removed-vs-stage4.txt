@@ -1,0 +1,7 @@
+arm-linux-gnueabi-ld: warning: arch/arm64/kernel/vdso32/sigreturn.o: missing .note.GNU-stack section implies executable stack
+/workspace/android_kernel_sony_msm8996/mm/slub.c:<location>: warning: format ‘%p’ expects argument of type ‘void *’, but argument 3 has type ‘long unsigned int’ [-Wformat=]
+/workspace/android_kernel_sony_msm8996/mm/slub.c:<location>: warning: format ‘%zu’ expects argument of type ‘size_t’, but argument 5 has type ‘unsigned int’ [-Wformat=]
+/workspace/android_kernel_sony_msm8996/mm/slub.c:<location>: warning: format ‘%zu’ expects argument of type ‘size_t’, but argument 6 has type ‘unsigned int’ [-Wformat=]
+/workspace/android_kernel_sony_msm8996/drivers/mmc/host/sdhci-msm.c:<location>: warning: ignoring return value of ‘kstrtoul’ declared with attribute ‘warn_unused_result’ [-Wunused-result]
+/workspace/android_kernel_sony_msm8996/drivers/net/wireless/bcmdhd/dhd_linux.c:<location>: warning: ISO C90 forbids variable length array ‘buf’ [-Wvla]
+/workspace/android_kernel_sony_msm8996/drivers/soc/qcom/peripheral-loader.c:<location>: warning: value computed is not used [-Wunused-value]

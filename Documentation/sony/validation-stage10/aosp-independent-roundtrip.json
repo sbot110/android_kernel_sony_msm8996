@@ -1,0 +1,162 @@
+{
+  "independent_official_aosp_unpack": true,
+  "aosp_tool_sha256": "a9d260978a63bd06a24b6347e7dee8a28ff96639793caea15dff6aa491316308",
+  "checker_sha256": "e1066f45cc01a827b31f277e238d4766a3c3d1202407748d56cb69dbb838a7b4",
+  "image_sha256": "772f3cbf74580b5b9e6935d3f88635342acbd26d4b70b39ab2336864f138eeda",
+  "image_size": 10985472,
+  "header": {
+    "kernel_size": 9750740,
+    "kernel_addr": 2148007936,
+    "ramdisk_size": 1224724,
+    "ramdisk_addr": 2188378112,
+    "second_size": 0,
+    "second_addr": 0,
+    "tags_addr": 2186280960,
+    "page_size": 4096,
+    "header_version": 0,
+    "os_version_word": 469762474,
+    "kernel_offset": 4096,
+    "ramdisk_offset": 9756672,
+    "second_offset": 10985472,
+    "compact_extent": 10985472,
+    "header_id": "bebb6e2828beb58baeefb1b5fd16742f8bbeb75d",
+    "strict_aosp_v0_id": "6cf63d25dc31d26a968bc321755fad152642bb43"
+  },
+  "kernel_matches_expected_and_aosp_extract": true,
+  "ramdisk_matches_expected_and_aosp_extract": true,
+  "kernel_sha256": "c57fc7ca5fe554970b465bf10038997e75c3c887c658884072b13bdb8f4cd88e",
+  "ramdisk_sha256": "9a532793e779b33bad98df1576ec9b661bc04457f4f3f9148b31ba8d42d4f41e",
+  "ramdisk_unchanged_from_reference": true,
+  "initramfs_sha256": "093246c221d33f9915d82088b1a5f158b9af04f8b00479c1522bfcca4b8856ed",
+  "initramfs_size": 3589632,
+  "supplied_partition_limit": null,
+  "actual_partition_size_proved": false,
+  "conservative_reference_extent_bound_applied": true,
+  "arm64": {
+    "text_offset": 524288,
+    "image_size": 22077440,
+    "flags": 10,
+    "file_size": 19724800,
+    "sha256": "8cec234b28e667ab4c0c85879086c5f2bfe151cff302269fc94107cc2cbb4f21"
+  },
+  "dtbs": [
+    {
+      "offset": 8987028,
+      "size": 190670,
+      "sha256": "09bc5c50feb763acc05e8d03d370f669df278e008cd6feae5f214c1ae30af5b8",
+      "identity": {
+        "qcom,msm-id": [
+          246,
+          196608
+        ],
+        "qcom,board-id": [
+          8,
+          0
+        ],
+        "qcom,pmic-id": [
+          131081,
+          131082,
+          0,
+          0
+        ]
+      },
+      "memory_bank_present": false
+    },
+    {
+      "offset": 9177698,
+      "size": 191186,
+      "sha256": "5ef77848c5e00548cb14e5a8c271ceb93ee2c3c7972d5ffaf4c1850c34a2995b",
+      "identity": {
+        "qcom,msm-id": [
+          246,
+          196609
+        ],
+        "qcom,board-id": [
+          8,
+          0
+        ],
+        "qcom,pmic-id": [
+          131081,
+          131082,
+          0,
+          0
+        ]
+      },
+      "memory_bank_present": false
+    },
+    {
+      "offset": 9368884,
+      "size": 190670,
+      "sha256": "3af510c5b3fcc91601cfef2b0edb8751b31d073489c249367b9e9f45c5e893c4",
+      "identity": {
+        "qcom,msm-id": [
+          246,
+          196608
+        ],
+        "qcom,board-id": [
+          8,
+          0
+        ],
+        "qcom,pmic-id": [
+          131081,
+          65555,
+          0,
+          0
+        ]
+      },
+      "memory_bank_present": false
+    },
+    {
+      "offset": 9559554,
+      "size": 191186,
+      "sha256": "66fedc462e7e3282cefa2189a5bb46e30a57a4c2e9bd79f3e06e432e944913d9",
+      "identity": {
+        "qcom,msm-id": [
+          246,
+          196609
+        ],
+        "qcom,board-id": [
+          8,
+          0
+        ],
+        "qcom,pmic-id": [
+          131081,
+          65555,
+          0,
+          0
+        ]
+      },
+      "memory_bank_present": false
+    }
+  ],
+  "source_profile_dtb_layout_checks": [
+    {
+      "sha256": "09bc5c50feb763acc05e8d03d370f669df278e008cd6feae5f214c1ae30af5b8",
+      "workspace_required": 191965,
+      "overlaps": false
+    },
+    {
+      "sha256": "5ef77848c5e00548cb14e5a8c271ceb93ee2c3c7972d5ffaf4c1850c34a2995b",
+      "workspace_required": 192481,
+      "overlaps": false
+    },
+    {
+      "sha256": "3af510c5b3fcc91601cfef2b0edb8751b31d073489c249367b9e9f45c5e893c4",
+      "workspace_required": 191965,
+      "overlaps": false
+    },
+    {
+      "sha256": "66fedc462e7e3282cefa2189a5bb46e30a57a4c2e9bd79f3e06e432e944913d9",
+      "workspace_required": 192481,
+      "overlaps": false
+    }
+  ],
+  "reference_only": false,
+  "reference_literal_kernel_initrd_overlap": false,
+  "reference_security_metadata_detected": false,
+  "input_unchanged": true,
+  "hardware_verified": false,
+  "sony_firmware_compatible_proved": false,
+  "boot_test_ready": false,
+  "booted": false
+}

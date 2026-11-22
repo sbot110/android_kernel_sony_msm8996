@@ -1,0 +1,27 @@
+{
+  "inspected_trees": {
+    "/workspace/stage9-qualified-clean-out/arch/arm64/boot/dts/qcom/msm8996-v3.0-sony-xperia-tone-dora.dtb": [
+      "somc,dora-row",
+      "sony,dora-row",
+      "qcom,msm8996"
+    ],
+    "/workspace/stage9-qualified-clean-out/arch/arm64/boot/dts/qcom/msm8996-v3.0-pmi8996-sony-xperia-tone-dora.dtb": [
+      "somc,dora-row",
+      "sony,dora-row",
+      "qcom,msm8996"
+    ],
+    "/workspace/stage9-qualified-clean-out/arch/arm64/boot/dts/qcom/msm8996-sony-xperia-tone-dora.dtb": [
+      "somc,dora-row",
+      "sony,dora-row",
+      "qcom,msm8996"
+    ],
+    "/workspace/stage9-qualified-clean-out/arch/arm64/boot/dts/qcom/msm8996-v3.1-pmi8996-sony-xperia-tone-dora.dtb": [
+      "somc,dora-row",
+      "sony,dora-row",
+      "qcom,msm8996"
+    ]
+  },
+  "unsafe_source_mutations_rejected": 3,
+  "parent_hardware_accesses_before_gate": 0,
+  "physical_charging_verified": false
+}

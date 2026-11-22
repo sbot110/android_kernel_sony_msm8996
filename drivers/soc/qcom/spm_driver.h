@@ -1,4 +1,5 @@
-/* Copyright (c) 2011-2016, The Linux Foundation. All rights reserved.
+/* SPDX-License-Identifier: GPL-2.0-only */
+/* Copyright (c) 2011-2017, 2020, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -53,15 +54,18 @@ enum {
 struct msm_spm_seq_entry {
 	uint32_t mode;
 	uint8_t *cmd;
+	uint32_t cmd_len;
 	uint32_t ctl;
 };
 
 struct msm_spm_platform_data {
 	void __iomem *reg_base_addr;
+	uint32_t reg_size;
 	uint32_t reg_init_values[MSM_SPM_REG_NR_INITIALIZE];
 
 	uint32_t ver_reg;
 	uint32_t vctl_port;
+	int vctl_port_ub;
 	uint32_t phase_port;
 	uint32_t pfm_port;
 
@@ -84,6 +88,7 @@ struct msm_spm_driver_data {
 	uint32_t minor;
 	uint32_t ver_reg;
 	uint32_t vctl_port;
+	int vctl_port_ub;
 	uint32_t phase_port;
 	uint32_t pfm_port;
 	void __iomem *reg_base_addr;
@@ -91,7 +96,13 @@ struct msm_spm_driver_data {
 	uint32_t avs_timeout_us;
 	uint32_t reg_shadow[MSM_SPM_REG_NR];
 	uint32_t *reg_seq_entry_shadow;
+	uint32_t seq_entries;
+	uint32_t num_pmic_data;
 	uint32_t *reg_offsets;
+	/* Sticky after an uncertain PMIC/AVS transaction. The endpoint lock or
+	 * exclusive probe serializes access; reinit never clears quarantine.
+	 */
+	int transaction_error;
 };
 
 int msm_spm_drv_init(struct msm_spm_driver_data *dev,
@@ -107,7 +118,7 @@ void dump_regs(struct msm_spm_driver_data *dev, int cpu);
 uint32_t msm_spm_drv_get_sts_curr_pmic_data(
 		struct msm_spm_driver_data *dev);
 int msm_spm_drv_write_seq_data(struct msm_spm_driver_data *dev,
-		uint8_t *cmd, uint32_t *offset);
+		uint8_t *cmd, uint32_t cmd_len, uint32_t *offset);
 void msm_spm_drv_flush_seq_entry(struct msm_spm_driver_data *dev);
 int msm_spm_drv_set_spm_enable(struct msm_spm_driver_data *dev,
 		bool enable);
@@ -130,5 +141,5 @@ void msm_spm_reinit(void);
 int msm_spm_init(struct msm_spm_platform_data *data, int nr_devs);
 void msm_spm_drv_upd_reg_shadow(struct msm_spm_driver_data *dev, int id,
 		int val);
-uint32_t msm_spm_drv_get_vdd(struct msm_spm_driver_data *dev);
+int msm_spm_drv_get_vdd(struct msm_spm_driver_data *dev);
 #endif

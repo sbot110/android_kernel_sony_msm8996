@@ -1,0 +1,12 @@
+{
+  "initial_sha": "6dfd2314c958294d13291885e3ce463e2d7a9257",
+  "original_sony44_ref": "work",
+  "original_sony44_sha": "0c295b15b6d0fb59a64e13b9e0ef2070818ef2a1",
+  "dt_source_unchanged": true,
+  "defconfig_unchanged": true,
+  "final_config_identical_to_stage7": true,
+  "built_source_manifest_matches_final_source_files": true,
+  "changes_in_protected_source_paths": [],
+  "validated_source_sha": "ecedc54e29a31665a761085b33adeeed280dab61",
+  "built_sources_match_source_commit": true
+}

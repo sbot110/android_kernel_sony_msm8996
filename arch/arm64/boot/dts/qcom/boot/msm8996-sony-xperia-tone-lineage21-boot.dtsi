@@ -1,0 +1,22 @@
+// SPDX-License-Identifier: GPL-2.0-only
+/* Opt-in LOS21 first-stage metadata, matching the supplied working DT.
+ * The inherited SDHC1 selection is source-qualified, not hardware-verified.
+ * This does not activate CPU voltage control, USB, charging or display.
+ */
+/ {
+	/delete-property/ sony,sdhc1-diagnostic;
+	sony,lineage21-boot;
+};
+
+&{/firmware/android} {
+	/* LineageOS21 init emits generic by-name links for this explicit policy. */
+	boot_devices = "any";
+};
+
+&{/firmware/android/fstab/system} {
+	dev = "/dev/block/by-name/system";
+};
+
+&{/firmware/android/fstab/vendor} {
+	dev = "/dev/block/by-name/oem";
+};

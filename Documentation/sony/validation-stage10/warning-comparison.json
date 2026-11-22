@@ -1,0 +1,53 @@
+{
+  "compiler_count": 90,
+  "compiler_added": [],
+  "compiler_removed": [],
+  "normal_external": {
+    "msm8996-v3.0-sony-xperia-tone-dora.dtb": 29,
+    "msm8996-v3.0-pmi8996-sony-xperia-tone-dora.dtb": 29,
+    "msm8996-sony-xperia-tone-dora.dtb": 29,
+    "msm8996-v3.1-pmi8996-sony-xperia-tone-dora.dtb": 29
+  },
+  "external_added": [],
+  "external_removed": [],
+  "diagnostic_external": {
+    "msm8996-sony-xperia-tone-dora-sdhc1-diagnostic.dtb": 29,
+    "msm8996-v3.0-pmi8996-sony-xperia-tone-dora-sdhc1-diagnostic.dtb": 29,
+    "msm8996-v3.0-sony-xperia-tone-dora-sdhc1-diagnostic.dtb": 29,
+    "msm8996-v3.1-pmi8996-sony-xperia-tone-dora-sdhc1-diagnostic.dtb": 29
+  },
+  "diagnostic_external_added": [],
+  "diagnostic_external_removed": [],
+  "boot_external": {
+    "msm8996-sony-xperia-tone-dora-lineage21-boot.dtb": 29,
+    "msm8996-v3.0-pmi8996-sony-xperia-tone-dora-lineage21-boot.dtb": 29,
+    "msm8996-v3.0-sony-xperia-tone-dora-lineage21-boot.dtb": 29,
+    "msm8996-v3.1-pmi8996-sony-xperia-tone-dora-lineage21-boot.dtb": 29
+  },
+  "boot_external_added": [],
+  "boot_external_removed": [],
+  "normal_bundled": {
+    "msm8996-v3.0-sony-xperia-tone-dora.dtb": 15,
+    "msm8996-v3.0-pmi8996-sony-xperia-tone-dora.dtb": 15,
+    "msm8996-sony-xperia-tone-dora.dtb": 15,
+    "msm8996-v3.1-pmi8996-sony-xperia-tone-dora.dtb": 15
+  },
+  "bundled_added": [],
+  "bundled_removed": [],
+  "diagnostic_bundled": {
+    "msm8996-sony-xperia-tone-dora-sdhc1-diagnostic.dtb": 15,
+    "msm8996-v3.0-pmi8996-sony-xperia-tone-dora-sdhc1-diagnostic.dtb": 15,
+    "msm8996-v3.0-sony-xperia-tone-dora-sdhc1-diagnostic.dtb": 15,
+    "msm8996-v3.1-pmi8996-sony-xperia-tone-dora-sdhc1-diagnostic.dtb": 15
+  },
+  "diagnostic_bundled_added": [],
+  "diagnostic_bundled_removed": [],
+  "boot_bundled": {
+    "msm8996-sony-xperia-tone-dora-lineage21-boot.dtb": 15,
+    "msm8996-v3.0-pmi8996-sony-xperia-tone-dora-lineage21-boot.dtb": 15,
+    "msm8996-v3.0-sony-xperia-tone-dora-lineage21-boot.dtb": 15,
+    "msm8996-v3.1-pmi8996-sony-xperia-tone-dora-lineage21-boot.dtb": 15
+  },
+  "boot_bundled_added": [],
+  "boot_bundled_removed": []
+}

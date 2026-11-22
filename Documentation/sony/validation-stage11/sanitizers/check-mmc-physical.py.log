@@ -1,0 +1,2 @@
+PASS: production MMC typed readiness, cache-bypass ACKs, ownership, retirement and permanent host quarantine
+Host API/cache model only; actual firmware, clock/IRQ scheduling and SDHC I/O remain untested.

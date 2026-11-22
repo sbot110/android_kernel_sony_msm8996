@@ -1,0 +1,168 @@
+/* Copyright (c) 2014-2017, 2019, The Linux Foundation. All rights reserved.
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License version 2 and
+ * only version 2 as published by the Free Software Foundation.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ */
+
+/* Original Sony MSM8996 SMMU-v2 data at 0c295b15b6d0fb59a64e13b9e0ef2070818ef2a1.
+ * Native 4.19 MMCC clocks and genpd-backed vdd votes replace old clock/GDSC
+ * bindings. Register programming, interrupts and bus vectors remain original.
+ */
+#include <dt-bindings/clock/qcom,mmcc-msm8996.h>
+#include <dt-bindings/interrupt-controller/arm-gic.h>
+
+/* MDP/ROT share the original v3 programming on all four Sony variants. */
+&soc {
+	mdp_smmu: arm,smmu-mdp@d00000 {
+		status = "disabled";
+		compatible = "qcom,smmu-v2";
+		qcom,tz-device-id = "MDSS";
+		reg = <0xd00000 0x10000>;
+		#iommu-cells = <1>;
+	};
+
+	rot_smmu: arm,smmu-rot@d20000 {
+		status = "disabled";
+		compatible = "qcom,smmu-v2";
+		qcom,tz-device-id = "ROT";
+		reg = <0xd20000 0x10000>;
+		#iommu-cells = <1>;
+	};
+};
+
+&mdp_smmu {
+	status = "ok";
+	qcom,register-save;
+	qcom,skip-init;
+	qcom,no-smr-check;
+	#global-interrupts = <1>;
+	interrupts = <GIC_SPI 73 IRQ_TYPE_LEVEL_HIGH>,
+		<GIC_SPI 320 IRQ_TYPE_LEVEL_HIGH>,
+		<GIC_SPI 321 IRQ_TYPE_LEVEL_HIGH>;
+	vdd-supply = <&gdsc_mmagic_mdss>;
+	qcom,regulator-names = "vdd";
+	clocks = <&mmcc MMSS_MMAGIC_AHB_CLK>,
+		<&mmcc MMSS_MMAGIC_CFG_AHB_CLK>,
+		<&mmcc SMMU_MDP_AHB_CLK>,
+		<&mmcc SMMU_MDP_AXI_CLK>,
+		<&mmcc MMAGIC_MDSS_AXI_CLK>;
+	clock-names = "mmagic_ahb_clk", "mmagic_cfg_ahb_clk",
+		"mdp_ahb_clk", "mdp_axi_clk",
+		"mmagic_mdss_axi_clk";
+	#clock-cells = <1>;
+	qcom,msm-bus-provider = <&ad_hoc_bus>;
+	qcom,msm-bus,name = "smmu-bus-client-mdp-port0";
+	qcom,msm-bus,num-cases = <2>;
+	qcom,msm-bus,num-paths = <1>;
+	qcom,msm-bus,vectors-KBps =
+				<22 512 0 0>,
+				<22 512 0 1000>;
+};
+&mdp_smmu {
+	attach-impl-defs = <0x6000 0x70>,
+		<0x6060 0x1055>,
+		<0x6070 0x70>,
+		<0x6074 0x70>,
+		<0x6170 0x52>,
+		<0x6174 0x68>,
+		<0x6270 0x0>,
+		<0x6274 0x3e>,
+		<0x6470 0x0>,
+		<0x6474 0x8>,
+		<0x6570 0x8>,
+		<0x6574 0x13>,
+		<0x6670 0x1e>,
+		<0x6674 0x5c>,
+		<0x67a0 0x0>,
+		<0x67a4 0x0>,
+		<0x67a8 0x1e>,
+		<0x67b0 0x0>,
+		<0x67b4 0x8>,
+		<0x67b8 0xb8>,
+		<0x67d0 0x10>,
+		<0x67dc 0x8>,
+		<0x67e0 0x10>,
+		<0x6800 0x0>,
+		<0x6804 0x1>,
+		<0x6a00 0x6>,
+		<0x6b00 0x3ff>,
+		<0x678c 0x8>,
+		<0x6794 0x24>;
+};
+
+&rot_smmu {
+	status = "ok";
+	qcom,register-save;
+	qcom,skip-init;
+	#global-interrupts = <1>;
+	interrupts = <GIC_SPI 353 IRQ_TYPE_LEVEL_HIGH>,
+		<GIC_SPI 348 IRQ_TYPE_LEVEL_HIGH>,
+		<GIC_SPI 349 IRQ_TYPE_LEVEL_HIGH>;
+	vdd-supply = <&gdsc_mmagic_mdss>;
+	qcom,regulator-names = "vdd";
+	clocks = <&mmcc MMSS_MMAGIC_AHB_CLK>,
+		<&mmcc MMSS_MMAGIC_CFG_AHB_CLK>,
+		<&mmcc SMMU_ROT_AHB_CLK>,
+		<&mmcc SMMU_ROT_AXI_CLK>,
+		<&mmcc MMAGIC_MDSS_AXI_CLK>;
+	clock-names = "mmagic_ahb_clk", "mmagic_cfg_ahb_clk",
+		"rot_ahb_clk", "rot_axi_clk",
+		"mmagic_mdss_axi_clk";
+	#clock-cells = <1>;
+	qcom,msm-bus-provider = <&ad_hoc_bus>;
+	qcom,msm-bus,name = "smmu-bus-client-rotator";
+	qcom,msm-bus,num-cases = <2>;
+	qcom,msm-bus,num-paths = <1>;
+	qcom,msm-bus,vectors-KBps =
+				<25 512 0 0>,
+				<25 512 0 1000>;
+};
+&rot_smmu {
+	attach-impl-defs = <0x6000 0x70>,
+		<0x6060 0x1055>,
+		<0x6070 0xc0>,
+		<0x6074 0xc0>,
+		<0x6078 0xc0>,
+		<0x6170 0xae>,
+		<0x6174 0xb6>,
+		<0x6178 0xbe>,
+		<0x6270 0x0>,
+		<0x6274 0x52>,
+		<0x6278 0xa6>,
+		<0x6470 0x0>,
+		<0x6474 0x2>,
+		<0x6478 0x4>,
+		<0x6570 0x4>,
+		<0x6574 0xc>,
+		<0x6578 0x15>,
+		<0x6670 0x19>,
+		<0x6674 0x42>,
+		<0x6678 0x6c>,
+		<0x67a0 0x0>,
+		<0x67a4 0x0>,
+		<0x67a8 0x12>,
+		<0x67b0 0x0>,
+		<0x67b4 0x4>,
+		<0x67b8 0xac>,
+		<0x67d0 0x10>,
+		<0x67dc 0x8>,
+		<0x67e0 0x10>,
+		<0x6800 0x0>,
+		<0x6804 0x2>,
+		<0x6808 0x1>,
+		<0x680c 0x2>,
+		<0x6a00 0x6>,
+		<0x6b00 0x3ff>,
+		<0x6b18 0xf>,
+		<0x6b24 0x204>,
+		<0x6b28 0x10a00>,
+		<0x6b30 0x500>,
+		<0x678c 0xc>,
+		<0x6794 0x44>;
+};

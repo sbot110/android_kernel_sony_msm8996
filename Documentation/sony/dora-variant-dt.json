@@ -1,0 +1,1313 @@
+{
+  "source_commit": "0c295b15b6d0fb59a64e13b9e0ef2070818ef2a1",
+  "notes": [
+    "Raw final flattened Sony data. Native phandles, clock IDs and SPMI one-cell reg encoding are checked separately.",
+    "All imported GFX/flash/corner roots must remain disabled; no runtime hardware support is certified."
+  ],
+  "variants": {
+    "v3.1-pmi8994": {
+      "source_dtb": "msm8996-v3-tone-dora_generic.dtb",
+      "source_sha256": "03cfed3f4b4f626dd138f44d9b44ed47136efd1a236f3645ce1c5fa41cd008d7",
+      "msm_id": "000000f600030001",
+      "pmic_id": "000200090002000a0000000000000000",
+      "board_id": "0000000800000000",
+      "bcl_derating": "00086470",
+      "ibb_discharge": "00000020",
+      "nodes": {
+        "gfx-cpr": {
+          "properties": {
+            "clock-names": "636f72655f636c6b0069666163655f636c6b006275735f636c6b00",
+            "compatible": "71636f6d2c637072332d6d736d383939362d6d6d73732d726567756c61746f7200",
+            "interrupt-names": "63707200",
+            "interrupts": "00000000000000a600000001",
+            "mem-acc-supply": "@gfx-mem-acc",
+            "qcom,cpr-aging-ref-voltage": "000dcf28",
+            "qcom,cpr-count-mode": "00000002",
+            "qcom,cpr-ctrl-name": "67667800",
+            "qcom,cpr-enable": "",
+            "qcom,cpr-idle-cycles": "0000000f",
+            "qcom,cpr-loop-time": "004c4b40",
+            "qcom,cpr-sensor-time": "000003e8",
+            "qcom,cpr-step-quot-init-max": "0000000d",
+            "qcom,cpr-step-quot-init-min": "0000000a",
+            "qcom,voltage-step": "00001388",
+            "reg": "00838000000040000007400000001000",
+            "reg-names": "6370725f6374726c00667573655f6261736500",
+            "status": "64697361626c656400",
+            "vdd-supply": "@gfx-buck"
+          },
+          "children": [
+            "thread@0"
+          ]
+        },
+        "gfx-cpr/thread@0": {
+          "properties": {
+            "qcom,cpr-consecutive-down": "00000002",
+            "qcom,cpr-consecutive-up": "00000000",
+            "qcom,cpr-down-threshold": "00000002",
+            "qcom,cpr-thread-id": "00000000",
+            "qcom,cpr-up-threshold": "00000000"
+          },
+          "children": [
+            "regulator"
+          ]
+        },
+        "gfx-cpr/thread@0/regulator": {
+          "properties": {
+            "qcom,allow-aging-voltage-adjustment": "0000000000000000000000000000000100000001000000010000000100000001",
+            "qcom,allow-voltage-interpolation": "",
+            "qcom,corner-frequencies": "0000000007ed6b400cc1618012c684c017f2fb401e65fb802160ec0025317c00",
+            "qcom,cpr-aging-max-voltage-adjustment": "00003a98",
+            "qcom,cpr-aging-ref-corner": "00000006",
+            "qcom,cpr-aging-ro-scaling-factor": "00000b86",
+            "qcom,cpr-closed-loop-voltage-adjustment": "000000000000afc8ffffec7800004e2000004e200000753000002710ffffec78000000000000afc8ffffec7800004e2000004e200000753000002710ffffec7800000000000075300000ea6000009c4000009c400000afc8000061a8000088b800000000000000000000753000002710000027100000afc8000061a8000061a800000000000000000000753000002710000027100000afc8000061a8000061a800000000000000000000753000002710000027100000afc8000061a8000061a800000000000000000000753000002710000027100000afc8000061a8000061a800000000000000000000753000002710000027100000afc8000061a8000061a8",
+            "qcom,cpr-corner-fmax-map": "00000002000000040000000600000008",
+            "qcom,cpr-corners": "00000008",
+            "qcom,cpr-floor-to-ceiling-max-range": "000000000001117000011170000124f80001388000015f9000017318000186a0",
+            "qcom,cpr-fuse-combos": "00000008",
+            "qcom,cpr-fuse-corners": "00000004",
+            "qcom,cpr-fused-closed-loop-voltage-adjustment-map": "00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000002000000020000000200000002000000000000000000000004000000000000000200000002000000020000000200000000000000000000000400000000000000020000000200000002000000020000000000000000000000040000000000000002000000020000000200000002000000000000000000000004",
+            "qcom,cpr-open-loop-voltage-fuse-adjustment": "000000000000000000007530ffffd8f0ffff8ad0ffff8ad000000000ffffd8f0ffff8ad0ffff8ad000000000ffffd8f0fffeee90000000000000000000000000fffeee90000000000000000000000000fffeee90000000000000000000000000fffeee90000000000000000000000000fffeee90000000000000000000000000",
+            "qcom,cpr-ro-scaling-factor": "000000000000000000000000000000000000000000000000000007f30000077d000007a700000853000008c6000008cd00000000000000000000000000000000000000000000000000000000000000000000000000000000000007f30000077d000007a700000853000008c6000008cd00000000000000000000000000000000000000000000000000000000000000000000000000000000000007f30000077d000007a700000853000008c6000008cd00000000000000000000000000000000000000000000000000000000000000000000000000000000000007f30000077d000007a700000853000008c6000008cd00000000000000000000000000000000000000000000000000000000000000000000000000000000000007f30000077d000007a700000853000008c6000008cd00000000000000000000000000000000000000000000000000000000000000000000000000000000000007f30000077d000007a700000853000008c6000008cd00000000000000000000000000000000000000000000000000000000000000000000000000000000000007f30000077d000007a700000853000008c6000008cd00000000000000000000000000000000000000000000000000000000000000000000000000000000000007f30000077d000007a700000853000008c6000008cd00000000000000000000000000000000",
+            "qcom,cpr-scaled-open-loop-voltage-as-ceiling": "",
+            "qcom,cpr-target-quotients": "00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000b9000000b3000001230000012b000001300000013f000000000000000000000000000000000000000000000000000000000000000000000000000000000000011f00000111000001a9000001aa000001bb000001c5000000000000000000000000000000000000000000000000000000000000000000000000000000000000019e000001880000024800000240000002600000026400000000000000000000000000000000000000000000000000000000000000000000000000000000000001cb000001af000002ac00000284000002b4000002a700000000000000000000000000000000000000000000000000000000000000000000000000000000000002410000021f0000031e00000300000003370000032a000000000000000000000000000000000000000000000000000000000000000000000000000000000000029d0000027500000376000003600000039c0000038f0000000000000000000000000000000000000000000000000000000000000000000000000000000000000303000002d5000003d8000003ca0000040c0000040000000000000000000000000000000000",
+            "qcom,cpr-voltage-ceiling": "00061a80000a3930000a3930000b5e28000c96a8000dcf28000ea600000f7cd8",
+            "qcom,cpr-voltage-floor": "00061a800007ef400007ef400007ef400007ef400007ef400007ef400007ef40",
+            "qcom,mem-acc-voltage": "0000000100000001000000010000000100000002000000020000000200000002",
+            "regulator-max-microvolt": "00000008",
+            "regulator-min-microvolt": "00000002",
+            "regulator-name": "6766785f636f726e657200"
+          },
+          "children": []
+        },
+        "gfx-mem-acc": {
+          "properties": {
+            "compatible": "71636f6d2c6d656d2d6163632d726567756c61746f7200",
+            "qcom,acc-sel-l1-bit-pos": "00000000",
+            "qcom,acc-sel-l1-bit-size": "00000001",
+            "qcom,corner-acc-map": "0000000100000000",
+            "reg": "007af00400000004",
+            "reg-names": "6163632d73656c2d6c3100",
+            "regulator-max-microvolt": "00000002",
+            "regulator-min-microvolt": "00000001",
+            "regulator-name": "6766785f6d656d5f6163635f636f726e657200",
+            "status": "64697361626c656400"
+          },
+          "children": []
+        },
+        "gfx-buck": {
+          "properties": {
+            "compatible": "71636f6d2c71706e702d726567756c61746f7200",
+            "qcom,enable-time": "000001f4",
+            "reg": "00001700",
+            "regulator-max-microvolt": "000f7cd8",
+            "regulator-min-microvolt": "00061a80",
+            "regulator-name": "706d69383939345f733200",
+            "status": "64697361626c656400"
+          },
+          "children": []
+        },
+        "flash": {
+          "properties": {
+            "compatible": "71636f6d2c71706e702d666c6173682d6c656400",
+            "label": "666c61736800",
+            "qcom,clamp-curr": "000000c8",
+            "qcom,current-ramp-enabled": "",
+            "qcom,follow-otst2-rb-disabled": "",
+            "qcom,headroom": "000001f4",
+            "qcom,headroom-sense-ch0-enabled": "",
+            "qcom,headroom-sense-ch1-enabled": "",
+            "qcom,pmic-charger-support": "",
+            "qcom,pmic-revid": "@pmi-revid",
+            "qcom,power-detect-enabled": "",
+            "qcom,ramp_dn_step": "3650375f555300",
+            "qcom,ramp_up_step": "3650375f555300",
+            "qcom,self-check-enabled": "",
+            "qcom,startup-dly": "00000080",
+            "qcom,thermal-derate-enabled": "",
+            "qcom,thermal-derate-rate": "355f50455243454e5400",
+            "qcom,thermal-derate-threshold": "00000069",
+            "qcom,vph-pwr-droop-debounce-time": "0000000a",
+            "qcom,vph-pwr-droop-enabled": "",
+            "qcom,vph-pwr-droop-threshold": "00000bb8",
+            "reg": "0000d300",
+            "status": "64697361626c656400"
+          },
+          "children": [
+            "qcom,flash_0",
+            "qcom,flash_1",
+            "qcom,switch",
+            "qcom,torch_0",
+            "qcom,torch_1"
+          ]
+        },
+        "flash/qcom,flash_0": {
+          "properties": {
+            "label": "666c61736800",
+            "qcom,current": "00000271",
+            "qcom,default-led-trigger": "666c617368305f7472696767657200",
+            "qcom,duration": "00000500",
+            "qcom,id": "00000000",
+            "qcom,led-name": "6c65643a666c6173685f3000",
+            "qcom,max-current": "000003e8"
+          },
+          "children": []
+        },
+        "flash/qcom,flash_1": {
+          "properties": {
+            "label": "666c61736800",
+            "qcom,current": "00000271",
+            "qcom,default-led-trigger": "666c617368315f7472696767657200",
+            "qcom,duration": "00000500",
+            "qcom,id": "00000001",
+            "qcom,led-name": "6c65643a666c6173685f3100",
+            "qcom,max-current": "000003e8"
+          },
+          "children": []
+        },
+        "flash/qcom,torch_0": {
+          "properties": {
+            "label": "746f72636800",
+            "qcom,current": "00000078",
+            "qcom,default-led-trigger": "746f726368305f7472696767657200",
+            "qcom,id": "00000000",
+            "qcom,led-name": "6c65643a746f7263685f3000",
+            "qcom,max-current": "000000c8"
+          },
+          "children": []
+        },
+        "flash/qcom,torch_1": {
+          "properties": {
+            "label": "746f72636800",
+            "qcom,current": "00000078",
+            "qcom,default-led-trigger": "746f726368315f7472696767657200",
+            "qcom,id": "00000001",
+            "qcom,led-name": "6c65643a746f7263685f3100",
+            "qcom,max-current": "000000c8"
+          },
+          "children": []
+        },
+        "flash/qcom,switch": {
+          "properties": {
+            "label": "73776974636800",
+            "qcom,current": "00000271",
+            "qcom,default-led-trigger": "7377697463685f7472696767657200",
+            "qcom,duration": "00000500",
+            "qcom,id": "00000002",
+            "qcom,led-name": "6c65643a73776974636800",
+            "qcom,max-current": "000003e8"
+          },
+          "children": [
+            "reg0",
+            "reg1"
+          ]
+        },
+        "flash/qcom,switch/reg0": {
+          "properties": {
+            "max-voltage": "0036ee80",
+            "regulator-name": "706d69383939345f626f6f737462797061737300"
+          },
+          "children": []
+        },
+        "flash/qcom,switch/reg1": {
+          "properties": {
+            "regulator-name": "706f6e5f73706172655f72656700"
+          },
+          "children": []
+        },
+        "cx-resource": {
+          "properties": {
+            "compatible": "71636f6d2c72706d2d736d642d726567756c61746f722d7265736f7572636500",
+            "qcom,regulator-type": "00000001",
+            "qcom,resource-id": "00000001",
+            "qcom,resource-name": "736d706100",
+            "status": "64697361626c656400"
+          },
+          "children": [
+            "regulator-s1",
+            "regulator-s1-corner",
+            "regulator-s1-corner-ao",
+            "regulator-s1-floor-corner"
+          ]
+        },
+        "cx-resource/regulator-s1": {
+          "properties": {
+            "compatible": "71636f6d2c72706d2d736d642d726567756c61746f7200",
+            "qcom,set": "00000003",
+            "regulator-name": "706d383939345f733100",
+            "status": "64697361626c656400"
+          },
+          "children": []
+        },
+        "cx-resource/regulator-s1-corner": {
+          "properties": {
+            "compatible": "71636f6d2c72706d2d736d642d726567756c61746f7200",
+            "qcom,set": "00000003",
+            "qcom,use-voltage-corner": "",
+            "regulator-max-microvolt": "00000007",
+            "regulator-min-microvolt": "00000001",
+            "regulator-name": "706d383939345f73315f636f726e657200"
+          },
+          "children": []
+        },
+        "cx-resource/regulator-s1-floor-corner": {
+          "properties": {
+            "compatible": "71636f6d2c72706d2d736d642d726567756c61746f7200",
+            "qcom,always-send-voltage": "",
+            "qcom,set": "00000003",
+            "qcom,use-voltage-floor-corner": "",
+            "regulator-max-microvolt": "00000007",
+            "regulator-min-microvolt": "00000001",
+            "regulator-name": "706d383939345f73315f666c6f6f725f636f726e657200"
+          },
+          "children": []
+        },
+        "cx-resource/regulator-s1-corner-ao": {
+          "properties": {
+            "compatible": "71636f6d2c72706d2d736d642d726567756c61746f7200",
+            "qcom,set": "00000001",
+            "qcom,use-voltage-corner": "",
+            "regulator-max-microvolt": "00000007",
+            "regulator-min-microvolt": "00000001",
+            "regulator-name": "706d383939345f73315f636f726e65725f616f00"
+          },
+          "children": []
+        },
+        "mx-resource": {
+          "properties": {
+            "compatible": "71636f6d2c72706d2d736d642d726567756c61746f722d7265736f7572636500",
+            "qcom,regulator-type": "00000001",
+            "qcom,resource-id": "00000002",
+            "qcom,resource-name": "736d706100",
+            "status": "64697361626c656400"
+          },
+          "children": [
+            "regulator-s2",
+            "regulator-s2-corner",
+            "regulator-s2-corner-ao"
+          ]
+        },
+        "mx-resource/regulator-s2": {
+          "properties": {
+            "compatible": "71636f6d2c72706d2d736d642d726567756c61746f7200",
+            "qcom,set": "00000003",
+            "regulator-name": "706d383939345f733200",
+            "status": "64697361626c656400"
+          },
+          "children": []
+        },
+        "mx-resource/regulator-s2-corner": {
+          "properties": {
+            "compatible": "71636f6d2c72706d2d736d642d726567756c61746f7200",
+            "qcom,set": "00000003",
+            "qcom,use-voltage-corner": "",
+            "regulator-max-microvolt": "00000007",
+            "regulator-min-microvolt": "00000001",
+            "regulator-name": "706d383939345f73325f636f726e657200"
+          },
+          "children": []
+        },
+        "mx-resource/regulator-s2-corner-ao": {
+          "properties": {
+            "compatible": "71636f6d2c72706d2d736d642d726567756c61746f7200",
+            "qcom,set": "00000001",
+            "qcom,use-voltage-corner": "",
+            "regulator-max-microvolt": "00000007",
+            "regulator-min-microvolt": "00000001",
+            "regulator-name": "706d383939345f73325f636f726e65725f616f00"
+          },
+          "children": []
+        },
+        "gfx-clock": {
+          "properties": {
+            "qcom,gfxfreq-speedbin0": "00000000000000000000000007ed6b4000000002000000040cc16180000000030000000412c684c0000000040000000417f2fb4000000005000000051e65fb8000000006000000052160ec00000000070000000725317c000000000800000007",
+            "qcom,gfxfreq-mx-speedbin0": "000000000000000007ed6b40000000040cc161800000000412c684c00000000417f2fb40000000051e65fb80000000052160ec000000000725317c0000000007",
+            "qcom,gfxfreq-speedbin1": "00000000000000000000000007ed6b4000000002000000040cc16180000000030000000412c684c0000000040000000417f2fb4000000005000000051e65fb800000000600000005",
+            "qcom,gfxfreq-mx-speedbin1": "000000000000000007ed6b40000000040cc161800000000412c684c00000000417f2fb40000000051e65fb8000000005",
+            "qcom,gfxfreq-speedbin2": "00000000000000000000000007ed6b4000000002000000040cc16180000000030000000412c684c0000000040000000417f2fb4000000005000000051e65fb8000000006000000052160ec000000000700000007",
+            "qcom,gfxfreq-mx-speedbin2": "000000000000000007ed6b40000000040cc161800000000412c684c00000000417f2fb40000000051e65fb80000000052160ec0000000007",
+            "qcom,gfxfreq-speedbin3": "00000000000000000000000007ed6b4000000002000000040cc16180000000030000000412c684c0000000040000000417f2fb4000000005000000051e65fb8000000006000000052160ec00000000070000000725317c000000000800000007",
+            "qcom,gfxfreq-mx-speedbin3": "000000000000000007ed6b40000000040cc161800000000412c684c00000000417f2fb40000000051e65fb80000000052160ec000000000725317c0000000007"
+          },
+          "children": []
+        }
+      }
+    },
+    "v3.0-pmi8994": {
+      "source_dtb": "msm8996-v3.0-tone-dora_generic.dtb",
+      "source_sha256": "ba3cb5cac73b3210f5d9ca876b85a0635ac2daa694634dcab556b256408f4eb0",
+      "msm_id": "000000f600030000",
+      "pmic_id": "000200090002000a0000000000000000",
+      "board_id": "0000000800000000",
+      "bcl_derating": "00086470",
+      "ibb_discharge": "00000020",
+      "nodes": {
+        "gfx-cpr": {
+          "properties": {
+            "clock-names": "636f72655f636c6b0069666163655f636c6b006275735f636c6b00",
+            "compatible": "71636f6d2c637072332d6d736d383939362d6d6d73732d726567756c61746f7200",
+            "interrupt-names": "63707200",
+            "interrupts": "00000000000000a600000001",
+            "mem-acc-supply": "@gfx-mem-acc",
+            "qcom,cpr-count-mode": "00000002",
+            "qcom,cpr-ctrl-name": "67667800",
+            "qcom,cpr-enable": "",
+            "qcom,cpr-idle-cycles": "0000000f",
+            "qcom,cpr-loop-time": "004c4b40",
+            "qcom,cpr-sensor-time": "000003e8",
+            "qcom,cpr-step-quot-init-max": "0000000d",
+            "qcom,cpr-step-quot-init-min": "0000000a",
+            "qcom,voltage-step": "00001388",
+            "reg": "00838000000040000007400000001000",
+            "reg-names": "6370725f6374726c00667573655f6261736500",
+            "status": "64697361626c656400",
+            "system-supply": "@cx-resource/regulator-s1-corner",
+            "vdd-supply": "@gfx-buck"
+          },
+          "children": [
+            "thread@0"
+          ]
+        },
+        "gfx-cpr/thread@0": {
+          "properties": {
+            "qcom,cpr-consecutive-down": "00000002",
+            "qcom,cpr-consecutive-up": "00000000",
+            "qcom,cpr-down-threshold": "00000002",
+            "qcom,cpr-thread-id": "00000000",
+            "qcom,cpr-up-threshold": "00000000"
+          },
+          "children": [
+            "regulator"
+          ]
+        },
+        "gfx-cpr/thread@0/regulator": {
+          "properties": {
+            "qcom,allow-voltage-interpolation": "",
+            "qcom,corner-frequencies": "000000000cc1618012c684c017f2fb401e65fb802160ec0025317c00",
+            "qcom,cpr-closed-loop-voltage-adjustment": "00000000ffffec7800004e2000004e200000753000002710ffffec7800000000ffffec7800004e2000004e200000753000002710ffffec78000000000000ea6000009c4000009c400000afc8000061a8000088b8000000000000753000002710000027100000afc8000061a8000061a8000000000000753000002710000027100000afc8000061a8000061a8000000000000753000002710000027100000afc8000061a8000061a8000000000000753000002710000027100000afc8000061a8000061a8000000000000753000002710000027100000afc8000061a8000061a8",
+            "qcom,cpr-corner-fmax-map": "00000002000000030000000500000007",
+            "qcom,cpr-corners": "00000007",
+            "qcom,cpr-floor-to-ceiling-max-range": "0000000000011170000124f80001388000015f9000017318000186a0",
+            "qcom,cpr-fuse-combos": "00000008",
+            "qcom,cpr-fuse-corners": "00000004",
+            "qcom,cpr-open-loop-voltage-fuse-adjustment": "000000000000000000007530ffffd8f0ffff8ad0ffff8ad000000000ffffd8f0ffff8ad0ffff8ad000000000ffffd8f00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000",
+            "qcom,cpr-ro-scaling-factor": "000000000000000000000000000000000000000000000000000007f30000077d000007a700000853000008c6000008cd00000000000000000000000000000000000000000000000000000000000000000000000000000000000007f30000077d000007a700000853000008c6000008cd00000000000000000000000000000000000000000000000000000000000000000000000000000000000007f30000077d000007a700000853000008c6000008cd00000000000000000000000000000000000000000000000000000000000000000000000000000000000007f30000077d000007a700000853000008c6000008cd00000000000000000000000000000000000000000000000000000000000000000000000000000000000007f30000077d000007a700000853000008c6000008cd00000000000000000000000000000000000000000000000000000000000000000000000000000000000007f30000077d000007a700000853000008c6000008cd00000000000000000000000000000000000000000000000000000000000000000000000000000000000007f30000077d000007a700000853000008c6000008cd00000000000000000000000000000000",
+            "qcom,cpr-scaled-open-loop-voltage-as-ceiling": "",
+            "qcom,cpr-target-quotients": "000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000011f00000111000001a9000001aa000001bb000001c5000000000000000000000000000000000000000000000000000000000000000000000000000000000000019e000001880000024800000240000002600000026400000000000000000000000000000000000000000000000000000000000000000000000000000000000001cb000001af000002ac00000284000002b4000002a700000000000000000000000000000000000000000000000000000000000000000000000000000000000002410000021f0000031e00000300000003370000032a000000000000000000000000000000000000000000000000000000000000000000000000000000000000029d0000027500000376000003600000039c0000038f0000000000000000000000000000000000000000000000000000000000000000000000000000000000000303000002d5000003d8000003ca0000040c0000040000000000000000000000000000000000",
+            "qcom,cpr-voltage-ceiling": "00061a80000a3930000b5e28000c96a8000dcf28000ea600000f7cd8",
+            "qcom,cpr-voltage-floor": "00061a800007ef400007ef400007ef400007ef400007ef400007ef40",
+            "qcom,mem-acc-voltage": "00000001000000010000000100000002000000020000000200000002",
+            "qcom,system-voltage": "00000002000000020000000200000002000000020000000400000004",
+            "regulator-max-microvolt": "00000007",
+            "regulator-min-microvolt": "00000002",
+            "regulator-name": "6766785f636f726e657200"
+          },
+          "children": []
+        },
+        "gfx-mem-acc": {
+          "properties": {
+            "compatible": "71636f6d2c6d656d2d6163632d726567756c61746f7200",
+            "qcom,acc-sel-l1-bit-pos": "00000000",
+            "qcom,acc-sel-l1-bit-size": "00000001",
+            "qcom,corner-acc-map": "0000000100000000",
+            "reg": "007af00400000004",
+            "reg-names": "6163632d73656c2d6c3100",
+            "regulator-max-microvolt": "00000002",
+            "regulator-min-microvolt": "00000001",
+            "regulator-name": "6766785f6d656d5f6163635f636f726e657200",
+            "status": "64697361626c656400"
+          },
+          "children": []
+        },
+        "gfx-buck": {
+          "properties": {
+            "compatible": "71636f6d2c71706e702d726567756c61746f7200",
+            "qcom,enable-time": "000001f4",
+            "reg": "00001700",
+            "regulator-max-microvolt": "000f7cd8",
+            "regulator-min-microvolt": "00061a80",
+            "regulator-name": "706d69383939345f733200",
+            "status": "64697361626c656400"
+          },
+          "children": []
+        },
+        "flash": {
+          "properties": {
+            "compatible": "71636f6d2c71706e702d666c6173682d6c656400",
+            "label": "666c61736800",
+            "qcom,clamp-curr": "000000c8",
+            "qcom,current-ramp-enabled": "",
+            "qcom,follow-otst2-rb-disabled": "",
+            "qcom,headroom": "000001f4",
+            "qcom,headroom-sense-ch0-enabled": "",
+            "qcom,headroom-sense-ch1-enabled": "",
+            "qcom,pmic-charger-support": "",
+            "qcom,pmic-revid": "@pmi-revid",
+            "qcom,power-detect-enabled": "",
+            "qcom,ramp_dn_step": "3650375f555300",
+            "qcom,ramp_up_step": "3650375f555300",
+            "qcom,self-check-enabled": "",
+            "qcom,startup-dly": "00000080",
+            "qcom,thermal-derate-enabled": "",
+            "qcom,thermal-derate-rate": "355f50455243454e5400",
+            "qcom,thermal-derate-threshold": "00000069",
+            "qcom,vph-pwr-droop-debounce-time": "0000000a",
+            "qcom,vph-pwr-droop-enabled": "",
+            "qcom,vph-pwr-droop-threshold": "00000bb8",
+            "reg": "0000d300",
+            "status": "64697361626c656400"
+          },
+          "children": [
+            "qcom,flash_0",
+            "qcom,flash_1",
+            "qcom,switch",
+            "qcom,torch_0",
+            "qcom,torch_1"
+          ]
+        },
+        "flash/qcom,flash_0": {
+          "properties": {
+            "label": "666c61736800",
+            "qcom,current": "00000271",
+            "qcom,default-led-trigger": "666c617368305f7472696767657200",
+            "qcom,duration": "00000500",
+            "qcom,id": "00000000",
+            "qcom,led-name": "6c65643a666c6173685f3000",
+            "qcom,max-current": "000003e8"
+          },
+          "children": []
+        },
+        "flash/qcom,flash_1": {
+          "properties": {
+            "label": "666c61736800",
+            "qcom,current": "00000271",
+            "qcom,default-led-trigger": "666c617368315f7472696767657200",
+            "qcom,duration": "00000500",
+            "qcom,id": "00000001",
+            "qcom,led-name": "6c65643a666c6173685f3100",
+            "qcom,max-current": "000003e8"
+          },
+          "children": []
+        },
+        "flash/qcom,torch_0": {
+          "properties": {
+            "label": "746f72636800",
+            "qcom,current": "00000078",
+            "qcom,default-led-trigger": "746f726368305f7472696767657200",
+            "qcom,id": "00000000",
+            "qcom,led-name": "6c65643a746f7263685f3000",
+            "qcom,max-current": "000000c8"
+          },
+          "children": []
+        },
+        "flash/qcom,torch_1": {
+          "properties": {
+            "label": "746f72636800",
+            "qcom,current": "00000078",
+            "qcom,default-led-trigger": "746f726368315f7472696767657200",
+            "qcom,id": "00000001",
+            "qcom,led-name": "6c65643a746f7263685f3100",
+            "qcom,max-current": "000000c8"
+          },
+          "children": []
+        },
+        "flash/qcom,switch": {
+          "properties": {
+            "label": "73776974636800",
+            "qcom,current": "00000271",
+            "qcom,default-led-trigger": "7377697463685f7472696767657200",
+            "qcom,duration": "00000500",
+            "qcom,id": "00000002",
+            "qcom,led-name": "6c65643a73776974636800",
+            "qcom,max-current": "000003e8"
+          },
+          "children": [
+            "reg0",
+            "reg1"
+          ]
+        },
+        "flash/qcom,switch/reg0": {
+          "properties": {
+            "max-voltage": "0036ee80",
+            "regulator-name": "706d69383939345f626f6f737462797061737300"
+          },
+          "children": []
+        },
+        "flash/qcom,switch/reg1": {
+          "properties": {
+            "regulator-name": "706f6e5f73706172655f72656700"
+          },
+          "children": []
+        },
+        "cx-resource": {
+          "properties": {
+            "compatible": "71636f6d2c72706d2d736d642d726567756c61746f722d7265736f7572636500",
+            "qcom,regulator-type": "00000001",
+            "qcom,resource-id": "00000001",
+            "qcom,resource-name": "736d706100",
+            "status": "64697361626c656400"
+          },
+          "children": [
+            "regulator-s1",
+            "regulator-s1-corner",
+            "regulator-s1-corner-ao",
+            "regulator-s1-floor-corner"
+          ]
+        },
+        "cx-resource/regulator-s1": {
+          "properties": {
+            "compatible": "71636f6d2c72706d2d736d642d726567756c61746f7200",
+            "qcom,set": "00000003",
+            "regulator-name": "706d383939345f733100",
+            "status": "64697361626c656400"
+          },
+          "children": []
+        },
+        "cx-resource/regulator-s1-corner": {
+          "properties": {
+            "compatible": "71636f6d2c72706d2d736d642d726567756c61746f7200",
+            "qcom,set": "00000003",
+            "qcom,use-voltage-corner": "",
+            "regulator-max-microvolt": "00000007",
+            "regulator-min-microvolt": "00000001",
+            "regulator-name": "706d383939345f73315f636f726e657200"
+          },
+          "children": []
+        },
+        "cx-resource/regulator-s1-floor-corner": {
+          "properties": {
+            "compatible": "71636f6d2c72706d2d736d642d726567756c61746f7200",
+            "qcom,always-send-voltage": "",
+            "qcom,set": "00000003",
+            "qcom,use-voltage-floor-corner": "",
+            "regulator-max-microvolt": "00000007",
+            "regulator-min-microvolt": "00000001",
+            "regulator-name": "706d383939345f73315f666c6f6f725f636f726e657200"
+          },
+          "children": []
+        },
+        "cx-resource/regulator-s1-corner-ao": {
+          "properties": {
+            "compatible": "71636f6d2c72706d2d736d642d726567756c61746f7200",
+            "qcom,set": "00000001",
+            "qcom,use-voltage-corner": "",
+            "regulator-max-microvolt": "00000007",
+            "regulator-min-microvolt": "00000001",
+            "regulator-name": "706d383939345f73315f636f726e65725f616f00"
+          },
+          "children": []
+        },
+        "mx-resource": {
+          "properties": {
+            "compatible": "71636f6d2c72706d2d736d642d726567756c61746f722d7265736f7572636500",
+            "qcom,regulator-type": "00000001",
+            "qcom,resource-id": "00000002",
+            "qcom,resource-name": "736d706100",
+            "status": "64697361626c656400"
+          },
+          "children": [
+            "regulator-s2",
+            "regulator-s2-corner",
+            "regulator-s2-corner-ao"
+          ]
+        },
+        "mx-resource/regulator-s2": {
+          "properties": {
+            "compatible": "71636f6d2c72706d2d736d642d726567756c61746f7200",
+            "qcom,set": "00000003",
+            "regulator-name": "706d383939345f733200",
+            "status": "64697361626c656400"
+          },
+          "children": []
+        },
+        "mx-resource/regulator-s2-corner": {
+          "properties": {
+            "compatible": "71636f6d2c72706d2d736d642d726567756c61746f7200",
+            "qcom,set": "00000003",
+            "qcom,use-voltage-corner": "",
+            "regulator-max-microvolt": "00000007",
+            "regulator-min-microvolt": "00000001",
+            "regulator-name": "706d383939345f73325f636f726e657200"
+          },
+          "children": []
+        },
+        "mx-resource/regulator-s2-corner-ao": {
+          "properties": {
+            "compatible": "71636f6d2c72706d2d736d642d726567756c61746f7200",
+            "qcom,set": "00000001",
+            "qcom,use-voltage-corner": "",
+            "regulator-max-microvolt": "00000007",
+            "regulator-min-microvolt": "00000001",
+            "regulator-name": "706d383939345f73325f636f726e65725f616f00"
+          },
+          "children": []
+        },
+        "gfx-clock": {
+          "properties": {
+            "qcom,gfxfreq-speedbin0": "00000000000000000000000007ed6b4000000003000000040cc16180000000030000000412c684c0000000030000000417f2fb4000000004000000051e65fb8000000005000000052160ec00000000060000000725317c000000000700000007",
+            "qcom,gfxfreq-mx-speedbin0": "000000000000000007ed6b40000000040cc161800000000412c684c00000000417f2fb40000000051e65fb80000000052160ec000000000725317c0000000007",
+            "qcom,gfxfreq-speedbin1": "00000000000000000000000007ed6b4000000002000000040cc16180000000030000000412c684c0000000040000000417f2fb4000000005000000051e65fb800000000600000005",
+            "qcom,gfxfreq-mx-speedbin1": "000000000000000007ed6b40000000040cc161800000000412c684c00000000417f2fb40000000051e65fb8000000005",
+            "qcom,gfxfreq-speedbin2": "00000000000000000000000007ed6b4000000002000000040cc16180000000030000000412c684c0000000040000000417f2fb4000000005000000051e65fb8000000006000000052160ec000000000700000007",
+            "qcom,gfxfreq-mx-speedbin2": "000000000000000007ed6b40000000040cc161800000000412c684c00000000417f2fb40000000051e65fb80000000052160ec0000000007",
+            "qcom,gfxfreq-speedbin3": "00000000000000000000000007ed6b4000000002000000040cc16180000000030000000412c684c0000000040000000417f2fb4000000005000000051e65fb8000000006000000052160ec00000000070000000725317c000000000800000007",
+            "qcom,gfxfreq-mx-speedbin3": "000000000000000007ed6b40000000040cc161800000000412c684c00000000417f2fb40000000051e65fb80000000052160ec000000000725317c0000000007"
+          },
+          "children": []
+        }
+      }
+    },
+    "v3.1-pmi8996": {
+      "source_dtb": "msm8996-v3-pmi8996-tone-dora_generic.dtb",
+      "source_sha256": "9dc1184db75dead2612cd6adcfc5f74dfc97c8c80253cc332ab88dd576480bdd",
+      "msm_id": "000000f600030001",
+      "pmic_id": "00020009000100130000000000000000",
+      "board_id": "0000000800000000",
+      "bcl_derating": "00000000",
+      "ibb_discharge": "00000020",
+      "nodes": {
+        "gfx-cpr": {
+          "properties": {
+            "clock-names": "636f72655f636c6b0069666163655f636c6b006275735f636c6b00",
+            "compatible": "71636f6d2c637072332d6d736d383939362d6d6d73732d726567756c61746f7200",
+            "interrupt-names": "63707200",
+            "interrupts": "00000000000000a600000001",
+            "mem-acc-supply": "@gfx-mem-acc",
+            "qcom,cpr-aging-ref-voltage": "000dcf28",
+            "qcom,cpr-count-mode": "00000002",
+            "qcom,cpr-ctrl-name": "67667800",
+            "qcom,cpr-enable": "",
+            "qcom,cpr-idle-cycles": "0000000f",
+            "qcom,cpr-loop-time": "004c4b40",
+            "qcom,cpr-sensor-time": "000003e8",
+            "qcom,cpr-step-quot-init-max": "0000000d",
+            "qcom,cpr-step-quot-init-min": "0000000a",
+            "qcom,voltage-step": "00001388",
+            "reg": "00838000000040000007400000001000",
+            "reg-names": "6370725f6374726c00667573655f6261736500",
+            "status": "64697361626c656400",
+            "vdd-supply": "@gfx-buck"
+          },
+          "children": [
+            "thread@0"
+          ]
+        },
+        "gfx-cpr/thread@0": {
+          "properties": {
+            "qcom,cpr-consecutive-down": "00000002",
+            "qcom,cpr-consecutive-up": "00000000",
+            "qcom,cpr-down-threshold": "00000002",
+            "qcom,cpr-thread-id": "00000000",
+            "qcom,cpr-up-threshold": "00000000"
+          },
+          "children": [
+            "regulator"
+          ]
+        },
+        "gfx-cpr/thread@0/regulator": {
+          "properties": {
+            "qcom,allow-aging-voltage-adjustment": "0000000000000000000000000000000100000001000000010000000100000001",
+            "qcom,allow-voltage-interpolation": "",
+            "qcom,corner-frequencies": "0000000007ed6b400cc1618012c684c017f2fb401e65fb802160ec0025317c00",
+            "qcom,cpr-aging-max-voltage-adjustment": "00003a98",
+            "qcom,cpr-aging-ref-corner": "00000006",
+            "qcom,cpr-aging-ro-scaling-factor": "00000b86",
+            "qcom,cpr-closed-loop-voltage-adjustment": "000000000000afc8ffffec7800004e2000004e200000753000002710ffffec78000000000000afc8ffffec7800004e2000004e200000753000002710ffffec7800000000000075300000ea6000009c4000009c400000afc8000061a8000088b800000000000000000000753000002710000027100000afc8000061a8000061a800000000000000000000753000002710000027100000afc8000061a8000061a800000000000000000000753000002710000027100000afc8000061a8000061a800000000000000000000753000002710000027100000afc8000061a8000061a800000000000000000000753000002710000027100000afc8000061a8000061a8",
+            "qcom,cpr-corner-fmax-map": "00000002000000040000000600000008",
+            "qcom,cpr-corners": "00000008",
+            "qcom,cpr-floor-to-ceiling-max-range": "000000000001117000011170000124f80001388000015f9000017318000186a0",
+            "qcom,cpr-fuse-combos": "00000008",
+            "qcom,cpr-fuse-corners": "00000004",
+            "qcom,cpr-fused-closed-loop-voltage-adjustment-map": "00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000002000000020000000200000002000000000000000000000004000000000000000200000002000000020000000200000000000000000000000400000000000000020000000200000002000000020000000000000000000000040000000000000002000000020000000200000002000000000000000000000004",
+            "qcom,cpr-open-loop-voltage-fuse-adjustment": "000000000000000000007530ffffd8f0ffff8ad0ffff8ad000000000ffffd8f0ffff8ad0ffff8ad000000000ffffd8f0fffeee90000000000000000000000000fffeee90000000000000000000000000fffeee90000000000000000000000000fffeee90000000000000000000000000fffeee90000000000000000000000000",
+            "qcom,cpr-ro-scaling-factor": "000000000000000000000000000000000000000000000000000007f30000077d000007a700000853000008c6000008cd00000000000000000000000000000000000000000000000000000000000000000000000000000000000007f30000077d000007a700000853000008c6000008cd00000000000000000000000000000000000000000000000000000000000000000000000000000000000007f30000077d000007a700000853000008c6000008cd00000000000000000000000000000000000000000000000000000000000000000000000000000000000007f30000077d000007a700000853000008c6000008cd00000000000000000000000000000000000000000000000000000000000000000000000000000000000007f30000077d000007a700000853000008c6000008cd00000000000000000000000000000000000000000000000000000000000000000000000000000000000007f30000077d000007a700000853000008c6000008cd00000000000000000000000000000000000000000000000000000000000000000000000000000000000007f30000077d000007a700000853000008c6000008cd00000000000000000000000000000000000000000000000000000000000000000000000000000000000007f30000077d000007a700000853000008c6000008cd00000000000000000000000000000000",
+            "qcom,cpr-scaled-open-loop-voltage-as-ceiling": "",
+            "qcom,cpr-target-quotients": "00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000b9000000b3000001230000012b000001300000013f000000000000000000000000000000000000000000000000000000000000000000000000000000000000011f00000111000001a9000001aa000001bb000001c5000000000000000000000000000000000000000000000000000000000000000000000000000000000000019e000001880000024800000240000002600000026400000000000000000000000000000000000000000000000000000000000000000000000000000000000001cb000001af000002ac00000284000002b4000002a700000000000000000000000000000000000000000000000000000000000000000000000000000000000002410000021f0000031e00000300000003370000032a000000000000000000000000000000000000000000000000000000000000000000000000000000000000029d0000027500000376000003600000039c0000038f0000000000000000000000000000000000000000000000000000000000000000000000000000000000000303000002d5000003d8000003ca0000040c0000040000000000000000000000000000000000",
+            "qcom,cpr-voltage-ceiling": "00061a80000a3930000a3930000b5e28000c96a8000dcf28000ea600000f7cd8",
+            "qcom,cpr-voltage-floor": "00061a800007ef400007ef400007ef400007ef400007ef400007ef400007ef40",
+            "qcom,mem-acc-voltage": "0000000100000001000000010000000100000002000000020000000200000002",
+            "regulator-max-microvolt": "00000008",
+            "regulator-min-microvolt": "00000002",
+            "regulator-name": "6766785f636f726e657200"
+          },
+          "children": []
+        },
+        "gfx-mem-acc": {
+          "properties": {
+            "compatible": "71636f6d2c6d656d2d6163632d726567756c61746f7200",
+            "qcom,acc-sel-l1-bit-pos": "00000000",
+            "qcom,acc-sel-l1-bit-size": "00000001",
+            "qcom,corner-acc-map": "0000000100000000",
+            "reg": "007af00400000004",
+            "reg-names": "6163632d73656c2d6c3100",
+            "regulator-max-microvolt": "00000002",
+            "regulator-min-microvolt": "00000001",
+            "regulator-name": "6766785f6d656d5f6163635f636f726e657200",
+            "status": "64697361626c656400"
+          },
+          "children": []
+        },
+        "gfx-buck": {
+          "properties": {
+            "compatible": "71636f6d2c71706e702d726567756c61746f7200",
+            "qcom,enable-time": "000001f4",
+            "reg": "00001700",
+            "regulator-max-microvolt": "000f7cd8",
+            "regulator-min-microvolt": "00061a80",
+            "regulator-name": "706d69383939345f733200",
+            "status": "64697361626c656400"
+          },
+          "children": []
+        },
+        "flash": {
+          "properties": {
+            "compatible": "71636f6d2c71706e702d666c6173682d6c656400",
+            "label": "666c61736800",
+            "qcom,clamp-curr": "000000c8",
+            "qcom,current-ramp-enabled": "",
+            "qcom,follow-otst2-rb-disabled": "",
+            "qcom,headroom": "000001f4",
+            "qcom,headroom-sense-ch0-enabled": "",
+            "qcom,headroom-sense-ch1-enabled": "",
+            "qcom,pmic-charger-support": "",
+            "qcom,pmic-revid": "@pmi-revid",
+            "qcom,power-detect-enabled": "",
+            "qcom,ramp_dn_step": "32375f555300",
+            "qcom,ramp_up_step": "32375f555300",
+            "qcom,self-check-enabled": "",
+            "qcom,startup-dly": "00000080",
+            "qcom,thermal-derate-enabled": "",
+            "qcom,thermal-derate-rate": "355f50455243454e5400",
+            "qcom,thermal-derate-threshold": "00000069",
+            "qcom,vph-pwr-droop-debounce-time": "0000000a",
+            "qcom,vph-pwr-droop-enabled": "",
+            "qcom,vph-pwr-droop-threshold": "00000bb8",
+            "reg": "0000d300",
+            "status": "64697361626c656400"
+          },
+          "children": [
+            "qcom,flash_0",
+            "qcom,flash_1",
+            "qcom,switch",
+            "qcom,torch_0",
+            "qcom,torch_1"
+          ]
+        },
+        "flash/qcom,flash_0": {
+          "properties": {
+            "label": "666c61736800",
+            "qcom,current": "00000271",
+            "qcom,default-led-trigger": "666c617368305f7472696767657200",
+            "qcom,duration": "00000500",
+            "qcom,id": "00000000",
+            "qcom,led-name": "6c65643a666c6173685f3000",
+            "qcom,max-current": "000003e8"
+          },
+          "children": []
+        },
+        "flash/qcom,flash_1": {
+          "properties": {
+            "label": "666c61736800",
+            "qcom,current": "00000271",
+            "qcom,default-led-trigger": "666c617368315f7472696767657200",
+            "qcom,duration": "00000500",
+            "qcom,id": "00000001",
+            "qcom,led-name": "6c65643a666c6173685f3100",
+            "qcom,max-current": "000003e8"
+          },
+          "children": []
+        },
+        "flash/qcom,torch_0": {
+          "properties": {
+            "label": "746f72636800",
+            "qcom,current": "00000078",
+            "qcom,default-led-trigger": "746f726368305f7472696767657200",
+            "qcom,id": "00000000",
+            "qcom,led-name": "6c65643a746f7263685f3000",
+            "qcom,max-current": "000000c8"
+          },
+          "children": []
+        },
+        "flash/qcom,torch_1": {
+          "properties": {
+            "label": "746f72636800",
+            "qcom,current": "00000078",
+            "qcom,default-led-trigger": "746f726368315f7472696767657200",
+            "qcom,id": "00000001",
+            "qcom,led-name": "6c65643a746f7263685f3100",
+            "qcom,max-current": "000000c8"
+          },
+          "children": []
+        },
+        "flash/qcom,switch": {
+          "properties": {
+            "label": "73776974636800",
+            "qcom,current": "00000271",
+            "qcom,default-led-trigger": "7377697463685f7472696767657200",
+            "qcom,duration": "00000500",
+            "qcom,id": "00000002",
+            "qcom,led-name": "6c65643a73776974636800",
+            "qcom,max-current": "000003e8"
+          },
+          "children": [
+            "reg0",
+            "reg1"
+          ]
+        },
+        "flash/qcom,switch/reg0": {
+          "properties": {
+            "max-voltage": "0036ee80",
+            "regulator-name": "706d69383939345f626f6f737462797061737300"
+          },
+          "children": []
+        },
+        "flash/qcom,switch/reg1": {
+          "properties": {
+            "regulator-name": "706f6e5f73706172655f72656700"
+          },
+          "children": []
+        },
+        "cx-resource": {
+          "properties": {
+            "compatible": "71636f6d2c72706d2d736d642d726567756c61746f722d7265736f7572636500",
+            "qcom,regulator-type": "00000001",
+            "qcom,resource-id": "00000001",
+            "qcom,resource-name": "736d706100",
+            "status": "64697361626c656400"
+          },
+          "children": [
+            "regulator-s1",
+            "regulator-s1-corner",
+            "regulator-s1-corner-ao",
+            "regulator-s1-floor-corner"
+          ]
+        },
+        "cx-resource/regulator-s1": {
+          "properties": {
+            "compatible": "71636f6d2c72706d2d736d642d726567756c61746f7200",
+            "qcom,set": "00000003",
+            "regulator-name": "706d383939345f733100",
+            "status": "64697361626c656400"
+          },
+          "children": []
+        },
+        "cx-resource/regulator-s1-corner": {
+          "properties": {
+            "compatible": "71636f6d2c72706d2d736d642d726567756c61746f7200",
+            "qcom,set": "00000003",
+            "qcom,use-voltage-corner": "",
+            "regulator-max-microvolt": "00000007",
+            "regulator-min-microvolt": "00000001",
+            "regulator-name": "706d383939345f73315f636f726e657200"
+          },
+          "children": []
+        },
+        "cx-resource/regulator-s1-floor-corner": {
+          "properties": {
+            "compatible": "71636f6d2c72706d2d736d642d726567756c61746f7200",
+            "qcom,always-send-voltage": "",
+            "qcom,set": "00000003",
+            "qcom,use-voltage-floor-corner": "",
+            "regulator-max-microvolt": "00000007",
+            "regulator-min-microvolt": "00000001",
+            "regulator-name": "706d383939345f73315f666c6f6f725f636f726e657200"
+          },
+          "children": []
+        },
+        "cx-resource/regulator-s1-corner-ao": {
+          "properties": {
+            "compatible": "71636f6d2c72706d2d736d642d726567756c61746f7200",
+            "qcom,set": "00000001",
+            "qcom,use-voltage-corner": "",
+            "regulator-max-microvolt": "00000007",
+            "regulator-min-microvolt": "00000001",
+            "regulator-name": "706d383939345f73315f636f726e65725f616f00"
+          },
+          "children": []
+        },
+        "mx-resource": {
+          "properties": {
+            "compatible": "71636f6d2c72706d2d736d642d726567756c61746f722d7265736f7572636500",
+            "qcom,regulator-type": "00000001",
+            "qcom,resource-id": "00000002",
+            "qcom,resource-name": "736d706100",
+            "status": "64697361626c656400"
+          },
+          "children": [
+            "regulator-s2",
+            "regulator-s2-corner",
+            "regulator-s2-corner-ao"
+          ]
+        },
+        "mx-resource/regulator-s2": {
+          "properties": {
+            "compatible": "71636f6d2c72706d2d736d642d726567756c61746f7200",
+            "qcom,set": "00000003",
+            "regulator-name": "706d383939345f733200",
+            "status": "64697361626c656400"
+          },
+          "children": []
+        },
+        "mx-resource/regulator-s2-corner": {
+          "properties": {
+            "compatible": "71636f6d2c72706d2d736d642d726567756c61746f7200",
+            "qcom,set": "00000003",
+            "qcom,use-voltage-corner": "",
+            "regulator-max-microvolt": "00000007",
+            "regulator-min-microvolt": "00000001",
+            "regulator-name": "706d383939345f73325f636f726e657200"
+          },
+          "children": []
+        },
+        "mx-resource/regulator-s2-corner-ao": {
+          "properties": {
+            "compatible": "71636f6d2c72706d2d736d642d726567756c61746f7200",
+            "qcom,set": "00000001",
+            "qcom,use-voltage-corner": "",
+            "regulator-max-microvolt": "00000007",
+            "regulator-min-microvolt": "00000001",
+            "regulator-name": "706d383939345f73325f636f726e65725f616f00"
+          },
+          "children": []
+        },
+        "gfx-clock": {
+          "properties": {
+            "qcom,gfxfreq-speedbin0": "00000000000000000000000007ed6b4000000002000000040cc16180000000030000000412c684c0000000040000000417f2fb4000000005000000051e65fb8000000006000000052160ec00000000070000000725317c000000000800000007",
+            "qcom,gfxfreq-mx-speedbin0": "000000000000000007ed6b40000000040cc161800000000412c684c00000000417f2fb40000000051e65fb80000000052160ec000000000725317c0000000007",
+            "qcom,gfxfreq-speedbin1": "00000000000000000000000007ed6b4000000002000000040cc16180000000030000000412c684c0000000040000000417f2fb4000000005000000051e65fb800000000600000005",
+            "qcom,gfxfreq-mx-speedbin1": "000000000000000007ed6b40000000040cc161800000000412c684c00000000417f2fb40000000051e65fb8000000005",
+            "qcom,gfxfreq-speedbin2": "00000000000000000000000007ed6b4000000002000000040cc16180000000030000000412c684c0000000040000000417f2fb4000000005000000051e65fb8000000006000000052160ec000000000700000007",
+            "qcom,gfxfreq-mx-speedbin2": "000000000000000007ed6b40000000040cc161800000000412c684c00000000417f2fb40000000051e65fb80000000052160ec0000000007",
+            "qcom,gfxfreq-speedbin3": "00000000000000000000000007ed6b4000000002000000040cc16180000000030000000412c684c0000000040000000417f2fb4000000005000000051e65fb8000000006000000052160ec00000000070000000725317c000000000800000007",
+            "qcom,gfxfreq-mx-speedbin3": "000000000000000007ed6b40000000040cc161800000000412c684c00000000417f2fb40000000051e65fb80000000052160ec000000000725317c0000000007"
+          },
+          "children": []
+        }
+      }
+    },
+    "v3.0-pmi8996": {
+      "source_dtb": "msm8996-v3.0-pmi8996-tone-dora_generic.dtb",
+      "source_sha256": "b6c92a0ae4eccc79efd9b0de66caa308e3d24324928b252236935b4538469cae",
+      "msm_id": "000000f600030000",
+      "pmic_id": "00020009000100130000000000000000",
+      "board_id": "0000000800000000",
+      "bcl_derating": "00000000",
+      "ibb_discharge": "00000020",
+      "nodes": {
+        "gfx-cpr": {
+          "properties": {
+            "clock-names": "636f72655f636c6b0069666163655f636c6b006275735f636c6b00",
+            "compatible": "71636f6d2c637072332d6d736d383939362d6d6d73732d726567756c61746f7200",
+            "interrupt-names": "63707200",
+            "interrupts": "00000000000000a600000001",
+            "mem-acc-supply": "@gfx-mem-acc",
+            "qcom,cpr-count-mode": "00000002",
+            "qcom,cpr-ctrl-name": "67667800",
+            "qcom,cpr-enable": "",
+            "qcom,cpr-idle-cycles": "0000000f",
+            "qcom,cpr-loop-time": "004c4b40",
+            "qcom,cpr-sensor-time": "000003e8",
+            "qcom,cpr-step-quot-init-max": "0000000d",
+            "qcom,cpr-step-quot-init-min": "0000000a",
+            "qcom,voltage-step": "00001388",
+            "reg": "00838000000040000007400000001000",
+            "reg-names": "6370725f6374726c00667573655f6261736500",
+            "status": "64697361626c656400",
+            "system-supply": "@cx-resource/regulator-s1-corner",
+            "vdd-supply": "@gfx-buck"
+          },
+          "children": [
+            "thread@0"
+          ]
+        },
+        "gfx-cpr/thread@0": {
+          "properties": {
+            "qcom,cpr-consecutive-down": "00000002",
+            "qcom,cpr-consecutive-up": "00000000",
+            "qcom,cpr-down-threshold": "00000002",
+            "qcom,cpr-thread-id": "00000000",
+            "qcom,cpr-up-threshold": "00000000"
+          },
+          "children": [
+            "regulator"
+          ]
+        },
+        "gfx-cpr/thread@0/regulator": {
+          "properties": {
+            "qcom,allow-voltage-interpolation": "",
+            "qcom,corner-frequencies": "000000000cc1618012c684c017f2fb401e65fb802160ec0025317c00",
+            "qcom,cpr-closed-loop-voltage-adjustment": "00000000ffffec7800004e2000004e200000753000002710ffffec7800000000ffffec7800004e2000004e200000753000002710ffffec78000000000000ea6000009c4000009c400000afc8000061a8000088b8000000000000753000002710000027100000afc8000061a8000061a8000000000000753000002710000027100000afc8000061a8000061a8000000000000753000002710000027100000afc8000061a8000061a8000000000000753000002710000027100000afc8000061a8000061a8000000000000753000002710000027100000afc8000061a8000061a8",
+            "qcom,cpr-corner-fmax-map": "00000002000000030000000500000007",
+            "qcom,cpr-corners": "00000007",
+            "qcom,cpr-floor-to-ceiling-max-range": "0000000000011170000124f80001388000015f9000017318000186a0",
+            "qcom,cpr-fuse-combos": "00000008",
+            "qcom,cpr-fuse-corners": "00000004",
+            "qcom,cpr-open-loop-voltage-fuse-adjustment": "000000000000000000007530ffffd8f0ffff8ad0ffff8ad000000000ffffd8f0ffff8ad0ffff8ad000000000ffffd8f00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000",
+            "qcom,cpr-ro-scaling-factor": "000000000000000000000000000000000000000000000000000007f30000077d000007a700000853000008c6000008cd00000000000000000000000000000000000000000000000000000000000000000000000000000000000007f30000077d000007a700000853000008c6000008cd00000000000000000000000000000000000000000000000000000000000000000000000000000000000007f30000077d000007a700000853000008c6000008cd00000000000000000000000000000000000000000000000000000000000000000000000000000000000007f30000077d000007a700000853000008c6000008cd00000000000000000000000000000000000000000000000000000000000000000000000000000000000007f30000077d000007a700000853000008c6000008cd00000000000000000000000000000000000000000000000000000000000000000000000000000000000007f30000077d000007a700000853000008c6000008cd00000000000000000000000000000000000000000000000000000000000000000000000000000000000007f30000077d000007a700000853000008c6000008cd00000000000000000000000000000000",
+            "qcom,cpr-scaled-open-loop-voltage-as-ceiling": "",
+            "qcom,cpr-target-quotients": "000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000011f00000111000001a9000001aa000001bb000001c5000000000000000000000000000000000000000000000000000000000000000000000000000000000000019e000001880000024800000240000002600000026400000000000000000000000000000000000000000000000000000000000000000000000000000000000001cb000001af000002ac00000284000002b4000002a700000000000000000000000000000000000000000000000000000000000000000000000000000000000002410000021f0000031e00000300000003370000032a000000000000000000000000000000000000000000000000000000000000000000000000000000000000029d0000027500000376000003600000039c0000038f0000000000000000000000000000000000000000000000000000000000000000000000000000000000000303000002d5000003d8000003ca0000040c0000040000000000000000000000000000000000",
+            "qcom,cpr-voltage-ceiling": "00061a80000a3930000b5e28000c96a8000dcf28000ea600000f7cd8",
+            "qcom,cpr-voltage-floor": "00061a800007ef400007ef400007ef400007ef400007ef400007ef40",
+            "qcom,mem-acc-voltage": "00000001000000010000000100000002000000020000000200000002",
+            "qcom,system-voltage": "00000002000000020000000200000002000000020000000400000004",
+            "regulator-max-microvolt": "00000007",
+            "regulator-min-microvolt": "00000002",
+            "regulator-name": "6766785f636f726e657200"
+          },
+          "children": []
+        },
+        "gfx-mem-acc": {
+          "properties": {
+            "compatible": "71636f6d2c6d656d2d6163632d726567756c61746f7200",
+            "qcom,acc-sel-l1-bit-pos": "00000000",
+            "qcom,acc-sel-l1-bit-size": "00000001",
+            "qcom,corner-acc-map": "0000000100000000",
+            "reg": "007af00400000004",
+            "reg-names": "6163632d73656c2d6c3100",
+            "regulator-max-microvolt": "00000002",
+            "regulator-min-microvolt": "00000001",
+            "regulator-name": "6766785f6d656d5f6163635f636f726e657200",
+            "status": "64697361626c656400"
+          },
+          "children": []
+        },
+        "gfx-buck": {
+          "properties": {
+            "compatible": "71636f6d2c71706e702d726567756c61746f7200",
+            "qcom,enable-time": "000001f4",
+            "reg": "00001700",
+            "regulator-max-microvolt": "000f7cd8",
+            "regulator-min-microvolt": "00061a80",
+            "regulator-name": "706d69383939345f733200",
+            "status": "64697361626c656400"
+          },
+          "children": []
+        },
+        "flash": {
+          "properties": {
+            "compatible": "71636f6d2c71706e702d666c6173682d6c656400",
+            "label": "666c61736800",
+            "qcom,clamp-curr": "000000c8",
+            "qcom,current-ramp-enabled": "",
+            "qcom,follow-otst2-rb-disabled": "",
+            "qcom,headroom": "000001f4",
+            "qcom,headroom-sense-ch0-enabled": "",
+            "qcom,headroom-sense-ch1-enabled": "",
+            "qcom,pmic-charger-support": "",
+            "qcom,pmic-revid": "@pmi-revid",
+            "qcom,power-detect-enabled": "",
+            "qcom,ramp_dn_step": "32375f555300",
+            "qcom,ramp_up_step": "32375f555300",
+            "qcom,self-check-enabled": "",
+            "qcom,startup-dly": "00000080",
+            "qcom,thermal-derate-enabled": "",
+            "qcom,thermal-derate-rate": "355f50455243454e5400",
+            "qcom,thermal-derate-threshold": "00000069",
+            "qcom,vph-pwr-droop-debounce-time": "0000000a",
+            "qcom,vph-pwr-droop-enabled": "",
+            "qcom,vph-pwr-droop-threshold": "00000bb8",
+            "reg": "0000d300",
+            "status": "64697361626c656400"
+          },
+          "children": [
+            "qcom,flash_0",
+            "qcom,flash_1",
+            "qcom,switch",
+            "qcom,torch_0",
+            "qcom,torch_1"
+          ]
+        },
+        "flash/qcom,flash_0": {
+          "properties": {
+            "label": "666c61736800",
+            "qcom,current": "00000271",
+            "qcom,default-led-trigger": "666c617368305f7472696767657200",
+            "qcom,duration": "00000500",
+            "qcom,id": "00000000",
+            "qcom,led-name": "6c65643a666c6173685f3000",
+            "qcom,max-current": "000003e8"
+          },
+          "children": []
+        },
+        "flash/qcom,flash_1": {
+          "properties": {
+            "label": "666c61736800",
+            "qcom,current": "00000271",
+            "qcom,default-led-trigger": "666c617368315f7472696767657200",
+            "qcom,duration": "00000500",
+            "qcom,id": "00000001",
+            "qcom,led-name": "6c65643a666c6173685f3100",
+            "qcom,max-current": "000003e8"
+          },
+          "children": []
+        },
+        "flash/qcom,torch_0": {
+          "properties": {
+            "label": "746f72636800",
+            "qcom,current": "00000078",
+            "qcom,default-led-trigger": "746f726368305f7472696767657200",
+            "qcom,id": "00000000",
+            "qcom,led-name": "6c65643a746f7263685f3000",
+            "qcom,max-current": "000000c8"
+          },
+          "children": []
+        },
+        "flash/qcom,torch_1": {
+          "properties": {
+            "label": "746f72636800",
+            "qcom,current": "00000078",
+            "qcom,default-led-trigger": "746f726368315f7472696767657200",
+            "qcom,id": "00000001",
+            "qcom,led-name": "6c65643a746f7263685f3100",
+            "qcom,max-current": "000000c8"
+          },
+          "children": []
+        },
+        "flash/qcom,switch": {
+          "properties": {
+            "label": "73776974636800",
+            "qcom,current": "00000271",
+            "qcom,default-led-trigger": "7377697463685f7472696767657200",
+            "qcom,duration": "00000500",
+            "qcom,id": "00000002",
+            "qcom,led-name": "6c65643a73776974636800",
+            "qcom,max-current": "000003e8"
+          },
+          "children": [
+            "reg0",
+            "reg1"
+          ]
+        },
+        "flash/qcom,switch/reg0": {
+          "properties": {
+            "max-voltage": "0036ee80",
+            "regulator-name": "706d69383939345f626f6f737462797061737300"
+          },
+          "children": []
+        },
+        "flash/qcom,switch/reg1": {
+          "properties": {
+            "regulator-name": "706f6e5f73706172655f72656700"
+          },
+          "children": []
+        },
+        "cx-resource": {
+          "properties": {
+            "compatible": "71636f6d2c72706d2d736d642d726567756c61746f722d7265736f7572636500",
+            "qcom,regulator-type": "00000001",
+            "qcom,resource-id": "00000001",
+            "qcom,resource-name": "736d706100",
+            "status": "64697361626c656400"
+          },
+          "children": [
+            "regulator-s1",
+            "regulator-s1-corner",
+            "regulator-s1-corner-ao",
+            "regulator-s1-floor-corner"
+          ]
+        },
+        "cx-resource/regulator-s1": {
+          "properties": {
+            "compatible": "71636f6d2c72706d2d736d642d726567756c61746f7200",
+            "qcom,set": "00000003",
+            "regulator-name": "706d383939345f733100",
+            "status": "64697361626c656400"
+          },
+          "children": []
+        },
+        "cx-resource/regulator-s1-corner": {
+          "properties": {
+            "compatible": "71636f6d2c72706d2d736d642d726567756c61746f7200",
+            "qcom,set": "00000003",
+            "qcom,use-voltage-corner": "",
+            "regulator-max-microvolt": "00000007",
+            "regulator-min-microvolt": "00000001",
+            "regulator-name": "706d383939345f73315f636f726e657200"
+          },
+          "children": []
+        },
+        "cx-resource/regulator-s1-floor-corner": {
+          "properties": {
+            "compatible": "71636f6d2c72706d2d736d642d726567756c61746f7200",
+            "qcom,always-send-voltage": "",
+            "qcom,set": "00000003",
+            "qcom,use-voltage-floor-corner": "",
+            "regulator-max-microvolt": "00000007",
+            "regulator-min-microvolt": "00000001",
+            "regulator-name": "706d383939345f73315f666c6f6f725f636f726e657200"
+          },
+          "children": []
+        },
+        "cx-resource/regulator-s1-corner-ao": {
+          "properties": {
+            "compatible": "71636f6d2c72706d2d736d642d726567756c61746f7200",
+            "qcom,set": "00000001",
+            "qcom,use-voltage-corner": "",
+            "regulator-max-microvolt": "00000007",
+            "regulator-min-microvolt": "00000001",
+            "regulator-name": "706d383939345f73315f636f726e65725f616f00"
+          },
+          "children": []
+        },
+        "mx-resource": {
+          "properties": {
+            "compatible": "71636f6d2c72706d2d736d642d726567756c61746f722d7265736f7572636500",
+            "qcom,regulator-type": "00000001",
+            "qcom,resource-id": "00000002",
+            "qcom,resource-name": "736d706100",
+            "status": "64697361626c656400"
+          },
+          "children": [
+            "regulator-s2",
+            "regulator-s2-corner",
+            "regulator-s2-corner-ao"
+          ]
+        },
+        "mx-resource/regulator-s2": {
+          "properties": {
+            "compatible": "71636f6d2c72706d2d736d642d726567756c61746f7200",
+            "qcom,set": "00000003",
+            "regulator-name": "706d383939345f733200",
+            "status": "64697361626c656400"
+          },
+          "children": []
+        },
+        "mx-resource/regulator-s2-corner": {
+          "properties": {
+            "compatible": "71636f6d2c72706d2d736d642d726567756c61746f7200",
+            "qcom,set": "00000003",
+            "qcom,use-voltage-corner": "",
+            "regulator-max-microvolt": "00000007",
+            "regulator-min-microvolt": "00000001",
+            "regulator-name": "706d383939345f73325f636f726e657200"
+          },
+          "children": []
+        },
+        "mx-resource/regulator-s2-corner-ao": {
+          "properties": {
+            "compatible": "71636f6d2c72706d2d736d642d726567756c61746f7200",
+            "qcom,set": "00000001",
+            "qcom,use-voltage-corner": "",
+            "regulator-max-microvolt": "00000007",
+            "regulator-min-microvolt": "00000001",
+            "regulator-name": "706d383939345f73325f636f726e65725f616f00"
+          },
+          "children": []
+        },
+        "gfx-clock": {
+          "properties": {
+            "qcom,gfxfreq-speedbin0": "00000000000000000000000007ed6b4000000003000000040cc16180000000030000000412c684c0000000030000000417f2fb4000000004000000051e65fb8000000005000000052160ec00000000060000000725317c000000000700000007",
+            "qcom,gfxfreq-mx-speedbin0": "000000000000000007ed6b40000000040cc161800000000412c684c00000000417f2fb40000000051e65fb80000000052160ec000000000725317c0000000007",
+            "qcom,gfxfreq-speedbin1": "00000000000000000000000007ed6b4000000002000000040cc16180000000030000000412c684c0000000040000000417f2fb4000000005000000051e65fb800000000600000005",
+            "qcom,gfxfreq-mx-speedbin1": "000000000000000007ed6b40000000040cc161800000000412c684c00000000417f2fb40000000051e65fb8000000005",
+            "qcom,gfxfreq-speedbin2": "00000000000000000000000007ed6b4000000002000000040cc16180000000030000000412c684c0000000040000000417f2fb4000000005000000051e65fb8000000006000000052160ec000000000700000007",
+            "qcom,gfxfreq-mx-speedbin2": "000000000000000007ed6b40000000040cc161800000000412c684c00000000417f2fb40000000051e65fb80000000052160ec0000000007",
+            "qcom,gfxfreq-speedbin3": "00000000000000000000000007ed6b4000000002000000040cc16180000000030000000412c684c0000000040000000417f2fb4000000005000000051e65fb8000000006000000052160ec00000000070000000725317c000000000800000007",
+            "qcom,gfxfreq-mx-speedbin3": "000000000000000007ed6b40000000040cc161800000000412c684c00000000417f2fb40000000051e65fb80000000052160ec000000000725317c0000000007"
+          },
+          "children": []
+        }
+      }
+    }
+  }
+}

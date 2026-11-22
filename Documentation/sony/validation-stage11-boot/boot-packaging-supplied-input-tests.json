@@ -1,0 +1,13 @@
+{
+  "positive_roundtrips": 2,
+  "negative_cases": 69,
+  "actual_assembler_executed": true,
+  "independent_raw_verification": true,
+  "private_inputs_used": false,
+  "hardware_verified": false,
+  "unsafe_producer_mutations_rejected": [
+    "ignore-Image-mismatch",
+    "reverse-reference-DTB-order",
+    "raise-CPU-limit"
+  ]
+}

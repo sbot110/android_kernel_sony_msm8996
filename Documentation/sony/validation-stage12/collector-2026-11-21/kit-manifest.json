@@ -1,0 +1,44 @@
+{
+  "format": "dora-stage12-kit-v2",
+  "prepared_date_utc": "2026-11-21",
+  "allowed_branch": "kernel-4.19-701905467803253630",
+  "collector_source_sha": "d3bf66d5b380a19d5fc3152c01565030ddf409db",
+  "kernel_source_sha": "1b8871be2d2ce04f7361816fa90aa686e5ece1a3",
+  "kernel_release": "4.19.318-dora-4.19+",
+  "hardware_test_A": "NOT EXECUTED",
+  "hardware_test_B": "NOT EXECUTED",
+  "boot_test_ready": false,
+  "phone_writes_or_reboots_performed": false,
+  "images_or_backup_included": false,
+  "operator_statement_refreshed": false,
+  "files": {
+    "NEXT-READONLY.md": {
+      "bytes": 2426,
+      "sha256": "cc7da353c42c4845abc9aeb45d968bd84593fca8642ceb5493092a1475500700"
+    },
+    "README.md": {
+      "bytes": 9896,
+      "sha256": "b1803edb774688b94b45f4598b5fde11c4dead07259f1e88306b470f7c6dbf8d"
+    },
+    "System.map": {
+      "bytes": 3766673,
+      "sha256": "3bcdc40ee664d02f0329cede550d1d25058273fdcafd7389fee587720bd2979c"
+    },
+    "decode-boot-trace.py": {
+      "bytes": 2518,
+      "sha256": "c5251cf7b6a797b246e2aa49f74027118af8b6d011e298f89d307de00d662e7b"
+    },
+    "dora-stage12-hardware-preflight.sh": {
+      "bytes": 37367,
+      "sha256": "844de2dbaa361c5be5919cc11ea150c612fa34f05677ab20837fbc37f5218f15"
+    },
+    "operator-confirmation.json": {
+      "bytes": 429,
+      "sha256": "78957b5f74333e9d44024f7030b44696406f4c16d3c61d5c67980d894aaf7873"
+    },
+    "unpack_bootimg.py": {
+      "bytes": 23223,
+      "sha256": "a9d260978a63bd06a24b6347e7dee8a28ff96639793caea15dff6aa491316308"
+    }
+  }
+}

@@ -1,0 +1,12 @@
+{
+  "initial_sha": "e9f1a7be0c13e1447a0cf398af31a9efe5868ad1",
+  "original_sony44_sha": "0c295b15b6d0fb59a64e13b9e0ef2070818ef2a1",
+  "defconfig_unchanged": true,
+  "final_config_identical_to_stage8": true,
+  "built_source_manifest_matches_current_source_files": true,
+  "built_changed_source_files": 22,
+  "dt_source_delta": [
+    "arch/arm64/boot/dts/qcom/msm8996-sony-xperia-tone-cpu.dtsi"
+  ],
+  "protected_source_path_changes": []
+}

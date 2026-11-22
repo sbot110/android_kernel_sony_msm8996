@@ -57,9 +57,6 @@ int crypto_hash_walk_first(struct ahash_request *req,
 			   struct crypto_hash_walk *walk);
 int crypto_ahash_walk_first(struct ahash_request *req,
 			   struct crypto_hash_walk *walk);
-int crypto_hash_walk_first_compat(struct hash_desc *hdesc,
-				  struct crypto_hash_walk *walk,
-				  struct scatterlist *sg, unsigned int len);
 
 static inline int crypto_ahash_walk_done(struct crypto_hash_walk *walk,
 					 int err)
@@ -79,6 +76,8 @@ static inline int crypto_ahash_walk_last(struct crypto_hash_walk *walk)
 
 int crypto_register_ahash(struct ahash_alg *alg);
 int crypto_unregister_ahash(struct ahash_alg *alg);
+int crypto_register_ahashes(struct ahash_alg *algs, int count);
+void crypto_unregister_ahashes(struct ahash_alg *algs, int count);
 int ahash_register_instance(struct crypto_template *tmpl,
 			    struct ahash_instance *inst);
 void ahash_free_instance(struct crypto_instance *inst);
@@ -106,8 +105,6 @@ int shash_register_instance(struct crypto_template *tmpl,
 			    struct shash_instance *inst);
 void shash_free_instance(struct crypto_instance *inst);
 
-int crypto_grab_shash(struct crypto_shash_spawn *spawn,
-		      const char *name, u32 type, u32 mask);
 int crypto_init_shash_spawn(struct crypto_shash_spawn *spawn,
 			    struct shash_alg *alg,
 			    struct crypto_instance *inst);
@@ -117,26 +114,11 @@ static inline void crypto_drop_shash(struct crypto_shash_spawn *spawn)
 	crypto_drop_spawn(&spawn->base);
 }
 
-static inline struct shash_alg *crypto_spawn_shash_alg(
-	struct crypto_shash_spawn *spawn)
-{
-	return container_of(spawn->base.alg, struct shash_alg, base);
-}
-
 struct shash_alg *shash_attr_alg(struct rtattr *rta, u32 type, u32 mask);
 
 int shash_ahash_update(struct ahash_request *req, struct shash_desc *desc);
 int shash_ahash_finup(struct ahash_request *req, struct shash_desc *desc);
 int shash_ahash_digest(struct ahash_request *req, struct shash_desc *desc);
-
-int shash_ahash_mcryptd_update(struct ahash_request *req,
-			       struct shash_desc *desc);
-int shash_ahash_mcryptd_final(struct ahash_request *req,
-			      struct shash_desc *desc);
-int shash_ahash_mcryptd_finup(struct ahash_request *req,
-			      struct shash_desc *desc);
-int shash_ahash_mcryptd_digest(struct ahash_request *req,
-			       struct shash_desc *desc);
 
 int crypto_init_shash_ops_async(struct crypto_tfm *tfm);
 

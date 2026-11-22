@@ -1,0 +1,178 @@
+{
+  "profile_version": 1,
+  "profile_id": "dora-stage65b-initrd-differential-unverified",
+  "status": "USER_REPORTED_INITRD / HEADER_INTERPRETATION_UNVERIFIED",
+  "firmware_match_unverified": true,
+  "sony_installed_firmware_identified": true,
+  "hardware_verified": false,
+  "physical_ram_bounds_verified": false,
+  "base_address": 2147483648,
+  "kernel_addr": 2148007936,
+  "kernel_offset": 524288,
+  "tags_addr": 2186280960,
+  "tags_offset": 38797312,
+  "ramdisk_addr": 2183135232,
+  "ramdisk_offset": 35651584,
+  "page_size": 4096,
+  "arm64_text_offset": 524288,
+  "arm64_base_alignment": 2097152,
+  "source_dtb_pad_bytes": 1024,
+  "scratch_addr": 2452619264,
+  "scratch_capacity": 536870912,
+  "source_loader_addr": 2446327808,
+  "source_loader_size": 4194304,
+  "source_provenance": [
+    {
+      "repository": "msm8916-mainline/lk2nd",
+      "commit": "e8af1985b6b42f490abcdf9a86dd4855f3511326",
+      "path": "app/aboot/aboot.c",
+      "git_blob_sha1": "0f81acb26f2351b00f3487ee7761efe85e4ca1ec",
+      "sha256": "a2b4b3064dd48c266571bfeb2556521cf0322df55d44765272f02e531c3fac94",
+      "url": "https://github.com/msm8916-mainline/lk2nd/blob/e8af1985b6b42f490abcdf9a86dd4855f3511326/app/aboot/aboot.c",
+      "lines": {
+        "header_override": [
+          378,
+          389
+        ],
+        "scratch_decompression": [
+          1948,
+          1974
+        ],
+        "override_call": [
+          1999,
+          2013
+        ],
+        "memory_header_to_dt": [
+          1147,
+          1175
+        ]
+      }
+    },
+    {
+      "repository": "msm8916-mainline/lk2nd",
+      "commit": "e8af1985b6b42f490abcdf9a86dd4855f3511326",
+      "path": "platform/msm8996/include/platform/iomap.h",
+      "git_blob_sha1": "3b7dfd11fd566d46f98f9d738e5a094b93b7feaf",
+      "sha256": "dbce09115f905025fd5d90ed1d6ac215a8f90a042ca0d8533c97b3b635282f86",
+      "url": "https://github.com/msm8916-mainline/lk2nd/blob/e8af1985b6b42f490abcdf9a86dd4855f3511326/platform/msm8996/include/platform/iomap.h",
+      "lines": {
+        "destination_offsets": [
+          685,
+          689
+        ]
+      }
+    },
+    {
+      "repository": "msm8916-mainline/lk2nd",
+      "commit": "e8af1985b6b42f490abcdf9a86dd4855f3511326",
+      "path": "project/msm8996.mk",
+      "git_blob_sha1": "d4b6dac93f638861d294c83af12aa3b13cbf838d",
+      "sha256": "495097058d637d30074b2b8eeb044e72c919ff65ae663c7f10e8bcccf2833dab",
+      "url": "https://github.com/msm8916-mainline/lk2nd/blob/e8af1985b6b42f490abcdf9a86dd4855f3511326/project/msm8996.mk",
+      "lines": {
+        "ignore_header_enabled": [
+          37,
+          37
+        ]
+      }
+    },
+    {
+      "repository": "msm8916-mainline/lk2nd",
+      "commit": "e8af1985b6b42f490abcdf9a86dd4855f3511326",
+      "path": "target/msm8996/rules.mk",
+      "git_blob_sha1": "ed6bae04a1a79519b1a465f75ca867496a211b0e",
+      "sha256": "e0cf27fead2521596ee2397e759eff649c6d4a7d96e12b0c5b602cf1fdd7f251",
+      "url": "https://github.com/msm8916-mainline/lk2nd/blob/e8af1985b6b42f490abcdf9a86dd4855f3511326/target/msm8996/rules.mk",
+      "lines": {
+        "loader_and_scratch": [
+          11,
+          21
+        ]
+      }
+    },
+    {
+      "repository": "msm8916-mainline/lk2nd",
+      "commit": "e8af1985b6b42f490abcdf9a86dd4855f3511326",
+      "path": "target/msm8996/meminfo.c",
+      "git_blob_sha1": "c65525f8e5f5f962225d7c0b8480acfc2fd7a12a",
+      "sha256": "e68106273731d91f74b0cb6d17707fd4e3261c651c00165559e7ef2898a18beb",
+      "url": "https://github.com/msm8916-mainline/lk2nd/blob/e8af1985b6b42f490abcdf9a86dd4855f3511326/target/msm8996/meminfo.c",
+      "lines": {
+        "runtime_ram_table": [
+          37,
+          81
+        ],
+        "scratch_capacity": [
+          86,
+          94
+        ]
+      }
+    },
+    {
+      "repository": "msm8916-mainline/lk2nd",
+      "commit": "e8af1985b6b42f490abcdf9a86dd4855f3511326",
+      "path": "platform/msm_shared/dev_tree.c",
+      "git_blob_sha1": "eb137b7fe061a628f53215808c804ba5b2ac2ac7",
+      "sha256": "7d06e2503b9380ee9dbcec98af0f70184ffb988d243132ffcbd3c74bba968463",
+      "url": "https://github.com/msm8916-mainline/lk2nd/blob/e8af1985b6b42f490abcdf9a86dd4855f3511326/platform/msm_shared/dev_tree.c",
+      "lines": {
+        "dt_growth": [
+          2023,
+          2076
+        ]
+      }
+    },
+    {
+      "repository": "msm8916-mainline/lk2nd",
+      "commit": "e8af1985b6b42f490abcdf9a86dd4855f3511326",
+      "path": "platform/msm_shared/include/dev_tree.h",
+      "git_blob_sha1": "754e4af9fc1abe88c592ebd1166287fa7b3a1534",
+      "sha256": "8772bfa30bd4c0238fb0792894e926931cc2f4fce7d0ff87e0d8fb7b133f2b05",
+      "url": "https://github.com/msm8916-mainline/lk2nd/blob/e8af1985b6b42f490abcdf9a86dd4855f3511326/platform/msm_shared/include/dev_tree.h",
+      "lines": {
+        "dt_pad_size": [
+          49,
+          49
+        ]
+      }
+    },
+    {
+      "repository": "msm8916-mainline/lk2nd",
+      "commit": "e8af1985b6b42f490abcdf9a86dd4855f3511326",
+      "path": "platform/msm8996/platform.c",
+      "git_blob_sha1": "8ef3df2ba72a0f1ca954d3530296b7337eb2ffcb",
+      "sha256": "f5c3003c34b79875cc608d79eb20935b04c3d2486afc7dc1abe1b720fbd0cc76",
+      "url": "https://github.com/msm8916-mainline/lk2nd/blob/e8af1985b6b42f490abcdf9a86dd4855f3511326/platform/msm8996/platform.c",
+      "lines": {
+        "scratch_default_mmu_table": [
+          66,
+          75
+        ],
+        "ddr_base_and_kernel_mmu_mapping": [
+          114,
+          141
+        ],
+        "platform_get_ddr_start": [
+          211,
+          214
+        ]
+      }
+    }
+  ],
+  "qualification": "Public Qualcomm CAF source candidate only; not evidence of installed Sony firmware or runtime RAM.",
+  "dtb_workspace_capacity": 2097152,
+  "stage65b_observation": {
+    "provenance": "User Stage 11 instructions; original capture not available in this environment",
+    "reference_kernel": "4.4.302+",
+    "sony_s1": "1299-4832_S1_Boot_MSM8996_LA2.0_O_204",
+    "linux_initrd_start": 2183135232,
+    "linux_initrd_end": 2184359956,
+    "initrd_bytes": 1224724,
+    "reference_header_ramdisk_addr": 2164260864,
+    "actual_x0_fdt": "UNKNOWN",
+    "relocating_component": "UNKNOWN"
+  },
+  "expected_stage10_ramdisk_sha256": "9a532793e779b33bad98df1576ec9b661bc04457f4f3f9148b31ba8d42d4f41e",
+  "experiment": "Only change the declared initrd destination from Stage 10; keep kernel, tags, scratch and DT selection unchanged. The header may be ignored by Sony S1.",
+  "firmware_identity_provenance": "User-reported Stage 65B Sony S1 identity; firmware binary/CAF match unverified"
+}

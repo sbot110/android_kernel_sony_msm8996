@@ -1,0 +1,238 @@
+{
+  "status": "FULL OFFLINE BOOT IMAGE BUILT / HARDWARE UNVERIFIED",
+  "booted": false,
+  "boot_test_ready": false,
+  "daily_use_ready": false,
+  "hardware_test_performed": false,
+  "hardware_result_user_reported": "Stage 10 image hangs at Sony logo, pstore empty; no Android completion",
+  "initial_stage10_sha": "61d3e0663162c6cf2507e6653d8ac2e0d2ce9803",
+  "validated_source_sha": "1b8871be2d2ce04f7361816fa90aa686e5ece1a3",
+  "source_file_hashes_verified_after_build": true,
+  "kernel_release": "#define UTS_RELEASE \"4.19.318-dora-4.19+\"",
+  "normal_dtbs": 4,
+  "diagnostic_dtbs": 4,
+  "boot_dtbs": 4,
+  "check_scripts": 62,
+  "asan_ubsan_runs": 23,
+  "compiler_warnings": {
+    "stage10_compiler_warnings": 90,
+    "stage11_compiler_warnings": 90,
+    "added": [],
+    "removed": []
+  },
+  "dtc_warnings": {
+    "normal_external": {
+      "counts": {
+        "msm8996-sony-xperia-tone-dora.dtb": 29,
+        "msm8996-v3.0-pmi8996-sony-xperia-tone-dora.dtb": 29,
+        "msm8996-v3.0-sony-xperia-tone-dora.dtb": 29,
+        "msm8996-v3.1-pmi8996-sony-xperia-tone-dora.dtb": 29
+      },
+      "added": [],
+      "removed": []
+    },
+    "normal_bundled": {
+      "counts": {
+        "msm8996-sony-xperia-tone-dora.dtb": 15,
+        "msm8996-v3.0-pmi8996-sony-xperia-tone-dora.dtb": 15,
+        "msm8996-v3.0-sony-xperia-tone-dora.dtb": 15,
+        "msm8996-v3.1-pmi8996-sony-xperia-tone-dora.dtb": 15
+      },
+      "added": [],
+      "removed": []
+    },
+    "diagnostic_external": {
+      "counts": {
+        "msm8996-sony-xperia-tone-dora-sdhc1-diagnostic.dtb": 29,
+        "msm8996-v3.0-pmi8996-sony-xperia-tone-dora-sdhc1-diagnostic.dtb": 29,
+        "msm8996-v3.0-sony-xperia-tone-dora-sdhc1-diagnostic.dtb": 29,
+        "msm8996-v3.1-pmi8996-sony-xperia-tone-dora-sdhc1-diagnostic.dtb": 29
+      },
+      "added": [],
+      "removed": []
+    },
+    "diagnostic_bundled": {
+      "counts": {
+        "msm8996-sony-xperia-tone-dora-sdhc1-diagnostic.dtb": 15,
+        "msm8996-v3.0-pmi8996-sony-xperia-tone-dora-sdhc1-diagnostic.dtb": 15,
+        "msm8996-v3.0-sony-xperia-tone-dora-sdhc1-diagnostic.dtb": 15,
+        "msm8996-v3.1-pmi8996-sony-xperia-tone-dora-sdhc1-diagnostic.dtb": 15
+      },
+      "added": [],
+      "removed": []
+    },
+    "boot_external": {
+      "counts": {
+        "msm8996-sony-xperia-tone-dora-lineage21-boot.dtb": 29,
+        "msm8996-v3.0-pmi8996-sony-xperia-tone-dora-lineage21-boot.dtb": 29,
+        "msm8996-v3.0-sony-xperia-tone-dora-lineage21-boot.dtb": 29,
+        "msm8996-v3.1-pmi8996-sony-xperia-tone-dora-lineage21-boot.dtb": 29
+      },
+      "added": [],
+      "removed": []
+    },
+    "boot_bundled": {
+      "counts": {
+        "msm8996-sony-xperia-tone-dora-lineage21-boot.dtb": 15,
+        "msm8996-v3.0-pmi8996-sony-xperia-tone-dora-lineage21-boot.dtb": 15,
+        "msm8996-v3.0-sony-xperia-tone-dora-lineage21-boot.dtb": 15,
+        "msm8996-v3.1-pmi8996-sony-xperia-tone-dora-lineage21-boot.dtb": 15
+      },
+      "added": [],
+      "removed": []
+    }
+  },
+  "acpi_gic_object_compiled": true,
+  "clean_build_start": "Mon Nov 16 15:16:45 UTC 2026",
+  "clean_build_end_utc": "2026-11-16T15:25:37.573205+00:00",
+  "boot_image": {
+    "requested_path": "/workspace/stage11-artifacts/boot-dora-lineage21-kernel419-stage11.img",
+    "exists": true,
+    "bytes": 11051008,
+    "sha256": "c7a248e58f04fc72c4640d144f5e6f1a47dc32c85c50f020cefd3cae2ea9dfd2",
+    "id": "35afd6abb3972411a1bbe916a87557342ef46380",
+    "aosp_unpack": "PASS",
+    "ramdisk_byte_comparison": "PASS: unchanged working reference payload",
+    "addresses": {
+      "kernel": 2148007936,
+      "ramdisk": 2188378112,
+      "tags": 2186280960,
+      "ddr_base": 2147483648,
+      "decompression_input": 2452623360,
+      "decompression_output": 2463674368
+    },
+    "boot_test_ready": false
+  },
+  "original_ramdisk_expected_sha256": "9a532793e779b33bad98df1576ec9b661bc04457f4f3f9148b31ba8d42d4f41e",
+  "artifacts": {
+    "clean-out/.config": {
+      "bytes": 137490,
+      "sha256": "40179cb0f4f02fe0105a167bd55a675a004b4c6a9b9dffc6369540019f90751c"
+    },
+    "clean-out/vmlinux": {
+      "bytes": 24770104,
+      "sha256": "ec9b0f8e281d0d0b434efd01ffaae3823bead62c0975afe3da2490f128e95044"
+    },
+    "clean-out/System.map": {
+      "bytes": 3766673,
+      "sha256": "3bcdc40ee664d02f0329cede550d1d25058273fdcafd7389fee587720bd2979c"
+    },
+    "clean-out/arch/arm64/boot/Image": {
+      "bytes": 19792384,
+      "sha256": "df80903f8168bd233559836d283e409266344faad1bdc627cc57afa1e8de15df"
+    },
+    "clean-out/arch/arm64/boot/Image.gz": {
+      "bytes": 9051760,
+      "sha256": "3a5418ab714e7f8cd349afd88faaadd847b01a3a1bd47f237e697a57934acf5c"
+    },
+    "clean-out/arch/arm64/boot/Image.gz-dtb": {
+      "bytes": 9815660,
+      "sha256": "627db615926244840bd7b3f6e287f4644f4e834d26c0136b64e9ad0c4b9edcbf"
+    },
+    "Image.gz-dtb-stage11-boot": {
+      "bytes": 9815824,
+      "sha256": "725a60106736e6eeabc45f93a0178e6a57d7f5958679d44c1414038252a146d2"
+    },
+    "clean-out/arch/arm64/boot/dts/qcom/msm8996-sony-xperia-tone-dora.dtb": {
+      "bytes": 191233,
+      "sha256": "92fa299993708b41bb3b7e24cfdcba73dd8218fd53b7767d0b8ab0dcbefbbf15"
+    },
+    "clean-out/arch/arm64/boot/dts/qcom/msm8996-v3.0-pmi8996-sony-xperia-tone-dora.dtb": {
+      "bytes": 190717,
+      "sha256": "98b6b27527932941ecdddf5190546b40234b181da2a73c2b3c55d251aa3ee327"
+    },
+    "clean-out/arch/arm64/boot/dts/qcom/msm8996-v3.0-sony-xperia-tone-dora.dtb": {
+      "bytes": 190717,
+      "sha256": "e11333c8a73565305f8ab216a908b9eba5d1e9cc585d8e5f577d7fa636f8e9d9"
+    },
+    "clean-out/arch/arm64/boot/dts/qcom/msm8996-v3.1-pmi8996-sony-xperia-tone-dora.dtb": {
+      "bytes": 191233,
+      "sha256": "e0099b1be91141493f215583b173aad53961deff15eb21fd7fa8e96a03ce365d"
+    },
+    "diagnostic-out/arch/arm64/boot/dts/qcom/diagnostic/msm8996-sony-xperia-tone-dora-sdhc1-diagnostic.dtb": {
+      "bytes": 191307,
+      "sha256": "ab2c019d162ec65962ae7d464b1908c9ada11cf2c9ae7fea389c376adf7c01fa"
+    },
+    "diagnostic-out/arch/arm64/boot/dts/qcom/diagnostic/msm8996-v3.0-pmi8996-sony-xperia-tone-dora-sdhc1-diagnostic.dtb": {
+      "bytes": 190791,
+      "sha256": "cd476b44588a60edd7aa10787dae88e8e1d089d7d20df0b9bc6c2c96f009bd1a"
+    },
+    "diagnostic-out/arch/arm64/boot/dts/qcom/diagnostic/msm8996-v3.0-sony-xperia-tone-dora-sdhc1-diagnostic.dtb": {
+      "bytes": 190791,
+      "sha256": "2ea983219ee4777254ec9461efb832e9e457d0145d3c326539207bc6b377a32c"
+    },
+    "diagnostic-out/arch/arm64/boot/dts/qcom/diagnostic/msm8996-v3.1-pmi8996-sony-xperia-tone-dora-sdhc1-diagnostic.dtb": {
+      "bytes": 191307,
+      "sha256": "673ce5b3e3262bd937bb25910814f36e5d67bd3ccaf1cd8d854c492c5ea2fe1a"
+    },
+    "boot-out/arch/arm64/boot/dts/qcom/boot/msm8996-sony-xperia-tone-dora-lineage21-boot.dtb": {
+      "bytes": 191274,
+      "sha256": "db5479cdaba00d4111c3bf24ad7093c384f7b866d42fb0bce1d16e2832bc8d17"
+    },
+    "boot-out/arch/arm64/boot/dts/qcom/boot/msm8996-v3.0-pmi8996-sony-xperia-tone-dora-lineage21-boot.dtb": {
+      "bytes": 190758,
+      "sha256": "04e9dc339d8dfac76704463c83875419a43fdc806d15fca1e5c33a4ea998f250"
+    },
+    "boot-out/arch/arm64/boot/dts/qcom/boot/msm8996-v3.0-sony-xperia-tone-dora-lineage21-boot.dtb": {
+      "bytes": 190758,
+      "sha256": "3b9f15d92beba0234c34465754a9a5f30b6ba8287b9a11600c63645404bd2d9f"
+    },
+    "boot-out/arch/arm64/boot/dts/qcom/boot/msm8996-v3.1-pmi8996-sony-xperia-tone-dora-lineage21-boot.dtb": {
+      "bytes": 191274,
+      "sha256": "adb380173e6148c2281a0b3761934294eb0d67259be54703d3197d148ad855e1"
+    },
+    "boot-dora-lineage21-kernel419-stage11.img": {
+      "bytes": 11051008,
+      "sha256": "c7a248e58f04fc72c4640d144f5e6f1a47dc32c85c50f020cefd3cae2ea9dfd2"
+    },
+    "boot-dora-lineage21-kernel419-stage11-initrd822-experiment.img": {
+      "bytes": 11051008,
+      "sha256": "3c33a57da1c473cf239dbd9fdc0b3cad26206461b4ba8151c371c86d60941c18"
+    }
+  },
+  "working_reference_supplied": true,
+  "working_reference_provenance": {
+    "zip_sha256": "13615e75cbbc456cc6f32d960a2d07cf0c0dbc8bf4b302edb331e64e4c8a053a",
+    "boot_sha256": "f923f9b99c468484b713529577b84e3a137d1b9cbc09393e5593258009983820",
+    "boot_bytes": 13283328,
+    "stage10_reference_byte_identity": true,
+    "input_unmodified": true,
+    "entry_name": "boot.img",
+    "kernel_releases": [
+      "4.4.302+"
+    ],
+    "ramdisk_bytes": 1224724,
+    "ramdisk_sha256": "9a532793e779b33bad98df1576ec9b661bc04457f4f3f9148b31ba8d42d4f41e",
+    "header_addresses": {
+      "kernel": 2147516416,
+      "ramdisk": 2164260864
+    },
+    "header_tags_addr": 2147483904,
+    "page_size": 4096,
+    "qcom_id": "26019fa18d9ecd502b29199901c11535675606d9",
+    "raw_cmdline_published": false,
+    "raw_payload_published": false
+  },
+  "initrd822_experiment": {
+    "path": "/workspace/stage11-artifacts/boot-dora-lineage21-kernel419-stage11-initrd822-experiment.img",
+    "bytes": 11051008,
+    "sha256": "3c33a57da1c473cf239dbd9fdc0b3cad26206461b4ba8151c371c86d60941c18",
+    "id": "35afd6abb3972411a1bbe916a87557342ef46380",
+    "addresses": {
+      "kernel": 2148007936,
+      "ramdisk": 2183135232,
+      "tags": 2186280960,
+      "ddr_base": 2147483648,
+      "decompression_input": 2452623360,
+      "decompression_output": 2463674368
+    },
+    "only_changed_field": "ramdisk_addr",
+    "changed_file_offsets": [
+      22
+    ],
+    "hardware_verified": false
+  },
+  "reference_check_utc": "2026-11-16T15:56:32.053423+00:00",
+  "kernel_rebuilt_for_ramdisk_input": false,
+  "reuse_reason": "All 19 clean build artifacts and 16 source hashes preserved; no kernel/config/DT source changes"
+}

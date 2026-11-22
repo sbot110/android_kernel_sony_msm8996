@@ -1,0 +1,24 @@
+{
+  "verification_date_client": "2026-11-11",
+  "initial_target_sha": "6dfd2314c958294d13291885e3ce463e2d7a9257",
+  "current_remote_target_sha": "6dfd2314c958294d13291885e3ce463e2d7a9257",
+  "source_sha": "ecedc54e29a31665a761085b33adeeed280dab61",
+  "implementation_check_files_verified": 15,
+  "normal_artifact_hashes_verified": true,
+  "diagnostic_artifact_hashes_verified": true,
+  "config_verified": true,
+  "archived_logs_integrity_verified": true,
+  "source_changed_since_clean_build": false,
+  "new_full_build_required": false,
+  "no_stage8_push_yet": true,
+  "external_ref_changes_before_our_push": {
+    "refs/heads/kernel-5.15": {
+      "initial": null,
+      "before_publication": "ad3dcab528daa2c19877658f268be9925ba6c897"
+    },
+    "refs/heads/kernel-5.5": {
+      "initial": "030f0b026abcc01b990cc7f8b04b9e65fb9bbe74",
+      "before_publication": "c10cec83039a46d98c4fddc278c508978558119c"
+    }
+  }
+}

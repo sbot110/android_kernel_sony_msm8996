@@ -1,0 +1,11 @@
+{
+  "no_stage9_push_yet": true,
+  "target_unchanged": true,
+  "changes_observed_before_our_push": {
+    "refs/heads/kernel-5.15": {
+      "initial": "8c7ad7e9221f299530e89d944e3399703d915760",
+      "prepush": "0f955fbca80d3ccc7834f5524b1a5dc25a7ad6c9"
+    }
+  },
+  "interpretation": "External updates before this task publication; post-push comparison uses fresh prepublication snapshot"
+}

@@ -13,6 +13,7 @@
 #include <linux/kernel.h>
 #include <linux/moduleparam.h>
 #include <linux/sched.h>
+#include <linux/sched/clock.h>
 #include <linux/syscore_ops.h>
 #include <linux/hrtimer.h>
 #include <linux/sched_clock.h>
@@ -70,11 +71,9 @@ struct clock_data {
 
 static struct hrtimer sched_clock_timer;
 static int irqtime = -1;
-static int initialized;
 static u64 suspend_ns;
 static u64 suspend_cycles;
 static u64 resume_cycles;
-
 
 core_param(irqtime, irqtime, int, 0400);
 
@@ -241,12 +240,7 @@ sched_clock_register(u64 (*read)(void), int bits, unsigned long rate)
 	pr_debug("Registered %pF as sched_clock source\n", read);
 }
 
-int sched_clock_initialized(void)
-{
-	return initialized;
-}
-
-void __init sched_clock_postinit(void)
+void __init generic_sched_clock_init(void)
 {
 	/*
 	 * If no sched_clock() function has been provided at that point,
@@ -264,8 +258,6 @@ void __init sched_clock_postinit(void)
 	hrtimer_init(&sched_clock_timer, CLOCK_MONOTONIC, HRTIMER_MODE_REL);
 	sched_clock_timer.function = sched_clock_poll;
 	hrtimer_start(&sched_clock_timer, cd.wrap_kt, HRTIMER_MODE_REL);
-
-	initialized = 1;
 }
 
 /*
@@ -286,7 +278,7 @@ static u64 notrace suspended_sched_clock_read(void)
 	return cd.read_data[seq & 1].epoch_cyc;
 }
 
-static int sched_clock_suspend(void)
+int sched_clock_suspend(void)
 {
 	struct clock_read_data *rd = &cd.read_data[0];
 
@@ -302,7 +294,7 @@ static int sched_clock_suspend(void)
 	return 0;
 }
 
-static void sched_clock_resume(void)
+void sched_clock_resume(void)
 {
 	struct clock_read_data *rd = &cd.read_data[0];
 

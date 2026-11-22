@@ -1,0 +1,1 @@
+CPU boot clocks: production MMIO read path, AUX/PLL sources, lock/output checks, unstable snapshots, signed alpha/MN/dividers, perf bank and probe defer checks PASS

@@ -1,0 +1,58 @@
+[
+  {
+    "name": "owner",
+    "exit": 0,
+    "asan": true,
+    "ubsan": true,
+    "leak_detection": false
+  },
+  {
+    "name": "cpr",
+    "exit": 0,
+    "asan": true,
+    "ubsan": true,
+    "leak_detection": false
+  },
+  {
+    "name": "spm",
+    "exit": 0,
+    "asan": true,
+    "ubsan": true,
+    "leak_detection": false
+  },
+  {
+    "name": "rpm",
+    "exit": 0,
+    "asan": true,
+    "ubsan": true,
+    "leak_detection": false
+  },
+  {
+    "name": "provider",
+    "exit": 0,
+    "asan": true,
+    "ubsan": true,
+    "leak_detection": false
+  },
+  {
+    "name": "shared-power",
+    "exit": 0,
+    "asan": true,
+    "ubsan": true,
+    "leak_detection": false
+  },
+  {
+    "name": "ccf",
+    "exit": 0,
+    "asan": true,
+    "ubsan": true,
+    "leak_detection": false
+  },
+  {
+    "name": "native",
+    "exit": 0,
+    "asan": true,
+    "ubsan": true,
+    "leak_detection": false
+  }
+]

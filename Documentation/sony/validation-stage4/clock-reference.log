@@ -1,0 +1,4 @@
+PASS: production clock voltage adapter ACK/rollback, handoff, retry lifetime and analog lost-ACK quarantine
+PASS: actual read-only PLL divider round/recalc agreement, fixed GPLL0 600 MHz, read faults and parent policy
+PASS: all manifest contracts independently parsed from Sony source and final v3 fixups
+PASS: final Sony GCC 56 / MMCC 49 fmax contracts, GPLL4 and SDCC2 source rates; mutation rejected

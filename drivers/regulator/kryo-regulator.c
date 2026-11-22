@@ -1007,7 +1007,8 @@ static int kryo_regulator_probe(struct platform_device *pdev)
 	kvreg->mode		= BHS_MODE;
 
 	for_each_available_child_of_node(dev->of_node, child) {
-		kryo_regulator_retention_init(kvreg, pdev, child);
+		rc = kryo_regulator_retention_init(kvreg, pdev, child);
+		of_node_put(child);
 		if (rc) {
 			dev_err(dev, "could not initialize retention regulator, rc=%d\n",
 				rc);
@@ -1020,7 +1021,7 @@ static int kryo_regulator_probe(struct platform_device *pdev)
 	rc = kryo_hw_init(kvreg);
 	if (rc) {
 		dev_err(dev, "unable to perform CPUSS PM initialization sequence\n");
-		return rc;
+		goto unregister_retention;
 	}
 
 	reg_config.dev = dev;
@@ -1031,7 +1032,7 @@ static int kryo_regulator_probe(struct platform_device *pdev)
 	if (IS_ERR(kvreg->rdev)) {
 		rc = PTR_ERR(kvreg->rdev);
 		kvreg_err(kvreg, "regulator_register failed, rc=%d\n", rc);
-		return rc;
+		goto unregister_retention;
 	}
 
 	platform_set_drvdata(pdev, kvreg);
@@ -1042,7 +1043,16 @@ static int kryo_regulator_probe(struct platform_device *pdev)
 	mutex_unlock(&kryo_regulator_list_mutex);
 
 	kvreg->cpu_pm_notifier.notifier_call = kryo_regulator_cpu_pm_callback;
-	cpu_pm_register_notifier(&kvreg->cpu_pm_notifier);
+	rc = cpu_pm_register_notifier(&kvreg->cpu_pm_notifier);
+	if (rc) {
+		mutex_lock(&kryo_regulator_list_mutex);
+		list_del(&kvreg->link);
+		mutex_unlock(&kryo_regulator_list_mutex);
+		kryo_debugfs_deinit(kvreg);
+		regulator_unregister(kvreg->rdev);
+		platform_set_drvdata(pdev, NULL);
+		goto unregister_retention;
+	}
 	kvreg_debug(kvreg, "registered cpu pm notifier\n");
 
 	kvreg_info(kvreg, "default LDO functional volt=%d uV, LDO retention volt=%d uV, Vref func=%d + %d*(val), cluster-num=%d\n",
@@ -1051,6 +1061,11 @@ static int kryo_regulator_probe(struct platform_device *pdev)
 		   kvreg->vref_func_step_volt,
 		   kvreg->cluster_num);
 
+	return 0;
+
+unregister_retention:
+	if (kvreg->retention_rdev)
+		regulator_unregister(kvreg->retention_rdev);
 	return rc;
 }
 
@@ -1063,9 +1078,11 @@ static int kryo_regulator_remove(struct platform_device *pdev)
 	mutex_unlock(&kryo_regulator_list_mutex);
 
 	cpu_pm_unregister_notifier(&kvreg->cpu_pm_notifier);
-	regulator_unregister(kvreg->rdev);
-	platform_set_drvdata(pdev, NULL);
 	kryo_debugfs_deinit(kvreg);
+	regulator_unregister(kvreg->rdev);
+	if (kvreg->retention_rdev)
+		regulator_unregister(kvreg->retention_rdev);
+	platform_set_drvdata(pdev, NULL);
 
 	return 0;
 }
@@ -1080,6 +1097,7 @@ static struct platform_driver kryo_regulator_driver = {
 	.remove	= kryo_regulator_remove,
 	.driver	= {
 		.name		= KRYO_REGULATOR_DRIVER_NAME,
+		.suppress_bind_attrs = true,
 		.of_match_table	= kryo_regulator_match_table,
 		.owner		= THIS_MODULE,
 	},

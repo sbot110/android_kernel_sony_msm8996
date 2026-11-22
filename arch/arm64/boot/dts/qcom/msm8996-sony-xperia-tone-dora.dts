@@ -1,0 +1,51 @@
+// SPDX-License-Identifier: BSD-3-Clause
+/*
+ * Copyright (c) 2021, AngeloGioacchino Del Regno
+ *                     <angelogioacchino.delregno@somainline.org>
+ * Copyright (c) 2021, Konrad Dybcio <konrad.dybcio@somainline.org>
+ */
+
+/dts-v1/;
+
+#include "msm8996-sony-xperia-tone.dtsi"
+#include "msm8996-sony-xperia-tone-pcie.dtsi"
+#include "msm8996-sony-xperia-tone-power.dtsi"
+#include "msm8996-sony-xperia-tone-safety.dtsi"
+#include "msm8996-sony-xperia-tone-power-domains.dtsi"
+#include "msm8996-sony-xperia-tone-bus.dtsi"
+#include "msm8996-sony-xperia-tone-ufs.dtsi"
+#include "msm8996-sony-xperia-tone-cpu.dtsi"
+#include "msm8996-sony-xperia-tone-display-pmic.dtsi"
+#include "msm8996-sony-xperia-tone-smmu.dtsi"
+#include "msm8996-sony-xperia-tone-display.dtsi"
+#include "msm8996-sony-xperia-tone-display-safety.dtsi"
+#include "msm8996-sony-xperia-tone-gfx.dtsi"
+#include "msm8996-sony-xperia-tone-storage.dtsi"
+#include "msm8996-sony-xperia-tone-rpm-physical.dtsi"
+#include "msm8996-sony-xperia-tone-clock-voltage.dtsi"
+
+/ {
+	model = "Sony Xperia X Performance";
+	compatible = "somc,dora-row", "sony,dora-row", "qcom,msm8996";
+};
+
+/delete-node/ &pm8994_l11;
+/delete-node/ &pm8994_l14;
+
+/* Use the original Tone electrical tuning with the native PHY provider. */
+&hsusb_phy1 {
+	compatible = "sony,dora-qusb2-phy", "qcom,msm8996-qusb2-phy";
+};
+
+/*
+ * Sony's USB_DETECT is an output used with an ADC/pullup circuit, not a
+ * digital microUSB ID input. Do not request it as an extcon IRQ. Fixed
+ * peripheral mode does not use an ID extcon; real VBUS/OTG detection still
+ * requires the Sony charger/ADC integration.
+ */
+/delete-node/ &usb3_id;
+/delete-node/ &usb_detect;
+
+&{/soc/usb@6a00000/dwc3@6a00000} {
+	/delete-property/ extcon;
+};

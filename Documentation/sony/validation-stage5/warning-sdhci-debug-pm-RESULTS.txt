@@ -1,0 +1,29 @@
+SDHCI debug sysfs runtime-PM followup
+
+Owned scope only:
+- drivers/mmc/host/sdhci-msm.c: store_mask_and_match()
+- scripts/dora/check-warning-inputs.py
+Native RPM test/source and all other MMC helpers were not edited.
+
+Confirmed fix: save pm_runtime_get_sync() result. A negative return now calls
+pm_runtime_put_noidle(), frees the copied parameters and returns the original
+error before sdhci_msm_mm_dbg_configure() can perform MMIO. Both zero and
+positive get_sync success retain the existing configure/put_sync/count path.
+
+Validation exits:
+0: targeted AArch64 crosscompile drivers/mmc/host/sdhci-msm.o using local
+   toolchain env.sh and /tmp/dora-stage5-warnfixes; no warnings/errors.
+0: normal actual-production DHD/parser/PM host harness.
+0: UBSan --self-test.
+0: ASan/UBSan --self-test, ASAN_OPTIONS=detect_leaks=0.
+0: git diff --check.
+
+The host model increments PM usage on failed gets like the real API, verifies
+negative -EIO/-EPROBE_DEFER results return unchanged with no configure/MMIO,
+exactly one noidle rollback, no synchronous put and balanced usage/heap.
+Positive get_sync result1 is accepted and balanced through put_sync.
+Mutations removing the PM error check or rollback are rejected, while all
+earlier parser/DHD bounds, allocation, cleanup and VLA checks remain active.
+
+Logs: sdhci-debug-pm-build.log, warning-inputs-pm-host.log,
+warning-inputs-pm-sanitized.log. Host checks do not establish device runtime PM.

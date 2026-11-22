@@ -1,0 +1,30 @@
+[
+  {
+    "name": "native",
+    "exit": 0,
+    "asan": true,
+    "ubsan": true,
+    "leak_detection": false
+  },
+  {
+    "name": "ccf",
+    "exit": 0,
+    "asan": true,
+    "ubsan": true,
+    "leak_detection": false
+  },
+  {
+    "name": "cpr",
+    "exit": 0,
+    "asan": true,
+    "ubsan": true,
+    "leak_detection": false
+  },
+  {
+    "name": "rpm",
+    "exit": 0,
+    "asan": true,
+    "ubsan": true,
+    "leak_detection": false
+  }
+]

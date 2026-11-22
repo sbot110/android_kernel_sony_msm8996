@@ -1,0 +1,4 @@
+PASS: actual SDHCI parser preserves input and rejects malformed/range/heap failures before PM or MMIO
+PASS: actual SDHCI debug runtime PM failures preserve errors, balance usage and prevent MMIO
+PASS: actual DHD command builder bounds heap allocation and balances success/failure cleanup and GET copying
+Host API checks only: WLAN firmware and SDHCI hardware remain device validation gates

@@ -1,0 +1,18 @@
+{
+  "stage8_checks": 54,
+  "stage9_checks": 56,
+  "missing": [],
+  "changed_existing_checks": [
+    "scripts/dora/check-cpu-clocks.py",
+    "scripts/dora/check-cpu-dt.py",
+    "scripts/dora/check-dt.py",
+    "scripts/dora/check-rpm-corners.py",
+    "scripts/dora/check-spm-transactions.py"
+  ],
+  "added_checks": [
+    "scripts/dora/check-cpr-cpu-state.py",
+    "scripts/dora/check-cpu-power-owner.py"
+  ],
+  "default_executions": 83,
+  "existing_checker_changes": "Extended production provider lifecycle, RPM snapshots, SAW lifetime/readback and CPU supply identity negative tests; previous checkers retained"
+}

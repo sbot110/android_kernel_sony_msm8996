@@ -1,0 +1,172 @@
+{
+  "stage": 7,
+  "status": "BUILDABLE",
+  "boot_test_ready": false,
+  "runtime_verified": false,
+  "initial_sha": "b8a20dab81b8f891fdb6f9ec935c5183549b18c8",
+  "validated_source_sha": "5bcf038a27bd5334cdaec7ecd0f28d989f028ae1",
+  "build_invocation_head": "b8a20dab81b8f891fdb6f9ec935c5183549b18c8",
+  "build_source": "frozen working-tree files, hashes match validated source commit; commits created after checks",
+  "final_sha_location": "final response and external stage7-publication-audit.json; final commit changes documentation/evidence only",
+  "commit_count": 7,
+  "changed_file_count": 68,
+  "source_commits": [
+    {
+      "sha": "42bccb16fdc2c934044283ff98b0a222a070cdfa",
+      "subject": "clk: qcom: add gated MSM8996 native CPU transaction callbacks"
+    },
+    {
+      "sha": "b3ca5b8a9fc05f83b6fd55a5b719c53f0eeed4be",
+      "subject": "regulator: qcom: serialize SPM ownership and preserve uncertain state"
+    },
+    {
+      "sha": "997f095301532bf2e0b2a13538fdd60a29902974",
+      "subject": "soc: qcom: fail and unwind APSS watchdog setup safely"
+    },
+    {
+      "sha": "22965e192cc0f64f399186bd6f47290f43ebc119",
+      "subject": "phy: qcom: enforce Dora charger handoff and MSM8996 IRQ layout"
+    },
+    {
+      "sha": "c60e1d75c93226f6ccde024cb4b9c3933b8de712",
+      "subject": "sony: inspect boot artifacts without guessing loader parameters"
+    },
+    {
+      "sha": "5bcf038a27bd5334cdaec7ecd0f28d989f028ae1",
+      "subject": "dora: run native CPU watchdog USB and boot artifact checks"
+    }
+  ],
+  "out_dir": "/workspace/stage7-final-clean-out",
+  "jobs": 3,
+  "build_exit": 0,
+  "build_start_utc": "2026-11-05T20:07:34Z",
+  "build_end_utc": "2026-11-05T20:17:23Z",
+  "diagnostic_out_dir": "/workspace/stage7-diagnostic-out",
+  "diagnostic_exit": 0,
+  "normal_dtb_count": 4,
+  "diagnostic_dtb_count": 4,
+  "normal_artifacts_preserved": true,
+  "normal_dtbs_identical_to_stage6": true,
+  "final_config_identical_to_stage6": true,
+  "check_scripts": 52,
+  "existing_check_scripts_preserved": 47,
+  "default_check_executions": 79,
+  "diagnostic_check_executions": 2,
+  "extra_eight_tree_check_executions": 1,
+  "sanitized_runs": 4,
+  "watchdog_additional_object_builds": 2,
+  "watchdog_logbuf_configs": [
+    "y",
+    "n"
+  ],
+  "watchdog_production_cases": 69,
+  "watchdog_production_functions": 18,
+  "watchdog_unsafe_mutations_rejected": 11,
+  "usb_production_cases": 42,
+  "usb_unsafe_mutations_rejected": 11,
+  "boot_parser_in_memory_checks": 66,
+  "compiler_warnings": 90,
+  "compiler_added": 0,
+  "compiler_removed": 0,
+  "dtc_version": "1.6.1",
+  "dtc_warnings_by_tree": {
+    "qcom/msm8996-v3.0-sony-xperia-tone-dora.dtb": 29,
+    "qcom/msm8996-v3.0-pmi8996-sony-xperia-tone-dora.dtb": 29,
+    "qcom/msm8996-sony-xperia-tone-dora.dtb": 29,
+    "qcom/msm8996-v3.1-pmi8996-sony-xperia-tone-dora.dtb": 29
+  },
+  "dtc_added": 0,
+  "dtc_removed": 0,
+  "bundled_dtc_warnings_by_tree": {
+    "qcom/msm8996-v3.0-sony-xperia-tone-dora.dtb": 15,
+    "qcom/msm8996-v3.0-pmi8996-sony-xperia-tone-dora.dtb": 15,
+    "qcom/msm8996-sony-xperia-tone-dora.dtb": 15,
+    "qcom/msm8996-v3.1-pmi8996-sony-xperia-tone-dora.dtb": 15
+  },
+  "artifacts": [
+    {
+      "path": "vmlinux",
+      "size": 24696368,
+      "sha256": "1f5efc1dff25864484cc24010eec782c2bd37a15b384c7bd87645cca86b1c089"
+    },
+    {
+      "path": ".config",
+      "size": 137437,
+      "sha256": "881bcb0d1ca79e0c79c99166bbb07b1d4a7af4389229f366c5e5f2393a47806c"
+    },
+    {
+      "path": "System.map",
+      "size": 3762151,
+      "sha256": "5680efb8f0261fc4391d179721b20a373db71c50775b5564cf3cf7333c8e6d2d"
+    },
+    {
+      "path": "arch/arm64/boot/Image",
+      "size": 19724800,
+      "sha256": "cb3c92088c2deee21b96d822d58d2b053d11343b8126d77bf9104df040725153"
+    },
+    {
+      "path": "arch/arm64/boot/Image.gz",
+      "size": 8968679,
+      "sha256": "b6d8dedda802192c59cf40712c4deb979dc304d0a1d0c61fed91c0acc83b0524"
+    },
+    {
+      "path": "arch/arm64/boot/dts/qcom/msm8996-v3.0-sony-xperia-tone-dora.dtb",
+      "size": 190467,
+      "sha256": "19909bd2890d8659963e109cc1142f0d170ed224720819c06a4332148e6da796"
+    },
+    {
+      "path": "arch/arm64/boot/dts/qcom/msm8996-v3.0-pmi8996-sony-xperia-tone-dora.dtb",
+      "size": 190467,
+      "sha256": "aba6f8bad183021eb9c83f790e3765543707032e5f1a2438c2d33a2da23defe7"
+    },
+    {
+      "path": "arch/arm64/boot/dts/qcom/msm8996-sony-xperia-tone-dora.dtb",
+      "size": 190983,
+      "sha256": "1a756b98048e44665a293e75b889d0429df24e455477d79c5fe8fa5d1b2c8204"
+    },
+    {
+      "path": "arch/arm64/boot/dts/qcom/msm8996-v3.1-pmi8996-sony-xperia-tone-dora.dtb",
+      "size": 190983,
+      "sha256": "c7f88e14289d790bf50cac7dd1afc7c9656e7d82e6b84a5ea23135e8bfa8bdd1"
+    },
+    {
+      "path": "arch/arm64/boot/Image.gz-dtb",
+      "size": 9731579,
+      "sha256": "f64fee87380efa84c1f7dac67a0c75e15c2fa7ebe4a986dfd149febf495bd421"
+    }
+  ],
+  "cpu_hardware_adapter": "partial: real gated APCC/CBF/ACD/PLL callbacks + transaction engine; no live power backend or writable provider",
+  "cpu_limits": "maxcpus=2, CPU_FREQ=n, CPU_IDLE=n; source frequency/voltage/fuse limits unchanged",
+  "shared_rails": "native S8-S11 remain disabled; singleton software reservation and SPM main/AVS lock; real CPR/SPM/APM gang ownership unimplemented",
+  "ccf_recovery": "Stage6 sole healthy HIGH same-owner reattach preserved; unknown per-clock ownership and quarantine stay blocked",
+  "watchdog": "probe/IRQ/lifetime/PM fixes and two object builds; final source/prebuilt bark12s pet10s; activation/handoff gated",
+  "usb_charging": "Dora PHY init explicitly blocked before PHY rail/clock/reset/MMIO; USB/ADB unavailable; parent VBUS and firmware charging remain P0",
+  "rpm_pmic": "S4/L12/L13/L20/L21 physical BOTH ACK + logical corners preserved; no phone measurements",
+  "sdhc1": "four isolated experimental DTBs and software checks pass; no phone CID/IRQ/GPT/HS400 evidence",
+  "sdhc2": "disabled",
+  "display": "disabled, all five LCD-ID panels 1080p60 preserved; no AUO120/dynamic FPS",
+  "boot_image": "not created; working boot.img, LOS21 ramdisk, observed boot size and effective cmdline unavailable",
+  "f8131": "source/config/DT compatibility only; no phone runtime",
+  "f8132": "source/config/DT compatibility only; no phone/DSDS runtime",
+  "los21": "host source/config/ABI compatibility only; bpfloader/BoringSSL/vold runtime errors unresolved",
+  "other_remote_refs": "kernel-5.5 changed externally before our first Stage7 push; no other branch written by this task; fresh pre/post push audit required",
+  "phone_flash": false,
+  "emmc_content_write": false,
+  "device_vendor_edits": false,
+  "new_branch": false,
+  "force_push": false,
+  "remaining_p0": [
+    "real shared CPU CPR/SPM/APM/HMSS power owner and thermal/lifetime integration",
+    "unknown per-clock ownership",
+    "watchdog secure/bootloader handoff",
+    "USB/firmware charging/DPDM/VBUS/ID safety",
+    "real boot image/ramdisk/GPT/loader selection/cmdline/recovery/logging",
+    "phone RPM/eMMC/early-init evidence"
+  ],
+  "remaining_p1": [
+    "display/incell/backlight",
+    "GPU/secure ABI",
+    "modem/DSDS/audio/camera",
+    "full suspend"
+  ]
+}

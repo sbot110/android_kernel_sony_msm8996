@@ -1,0 +1,13 @@
+{
+  "status": "SOFTWARE_CHECKED / HARDWARE_UNVERIFIED",
+  "boot_test_ready": false,
+  "hardware_verified": false,
+  "normal_artifacts_modified": false,
+  "production_functions": 3,
+  "rejected_unsafe_mutations": 8,
+  "boot_dtb_order": [],
+  "first_stage_device_policy": "LineageOS21 boot_devices=any, generic system/oem by-name",
+  "ramdisk": null,
+  "actual_emmc_gpt": "UNVERIFIED",
+  "actual_first_stage_mount": "UNVERIFIED"
+}

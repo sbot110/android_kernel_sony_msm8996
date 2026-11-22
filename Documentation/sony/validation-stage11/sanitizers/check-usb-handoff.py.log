@@ -1,0 +1,1 @@
+PASS: 42 actual-QUSB2 cases: public Dora gate, prepared Sony IRQ/line readback, clock ownership, PLL, faults, quarantine, PM/concurrency; hardware handoff still unqualified

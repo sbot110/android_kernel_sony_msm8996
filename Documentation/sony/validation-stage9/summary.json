@@ -1,0 +1,201 @@
+{
+  "stage": 9,
+  "status": "BUILDABLE",
+  "boot_test_ready": false,
+  "booted": false,
+  "daily_use_ready": false,
+  "runtime_verified": false,
+  "initial_sha": "e9f1a7be0c13e1447a0cf398af31a9efe5868ad1",
+  "validated_source_sha": "87a4a52a50177dfafeec780f3f3c9316621d7c20",
+  "build_invocation_head": "e9f1a7be0c13e1447a0cf398af31a9efe5868ad1",
+  "build_source": "Initial HEAD plus frozen working changes; all22 changed source/test hashes match validated source commit; original invocation/version strings retained",
+  "final_sha_location": "Final response and /workspace/stage9-publication-audit.json (post-push)",
+  "commit_count": 6,
+  "source_commits": [
+    {
+      "sha": "a67210d3923d98180c92aab68541f09787da5818",
+      "subject": "regulator: cpr3: expose HMSS observations and quarantine uncertain transitions"
+    },
+    {
+      "sha": "9c29df6a097e13ffb0d281a8eae05d9e4acf5553",
+      "subject": "regulator: qcom: observe RPM corners without acquiring supplies"
+    },
+    {
+      "sha": "7acbd44eff1839d043d1b2e40782f0f01fb6bd45",
+      "subject": "soc: qcom: retain SAW ownership and verify live AVS state"
+    },
+    {
+      "sha": "6326cd1cf2116ff4ff02288649d47864f1b12520",
+      "subject": "clk: qcom: bind Dora read-only providers to shared CPU resources"
+    },
+    {
+      "sha": "87a4a52a50177dfafeec780f3f3c9316621d7c20",
+      "subject": "dora: qualify inert CPU supply references and shared power code in builds"
+    }
+  ],
+  "changed_file_count": 104,
+  "source_test_files": 22,
+  "documentation_files": 6,
+  "evidence_files": 76,
+  "out_dir": "/workspace/stage9-qualified-clean-out",
+  "jobs": 3,
+  "build_exit": 0,
+  "build_start_utc": "2026-11-13T21:19:46.579564+00:00",
+  "build_end_utc": "2026-11-13T21:29:34.109772+00:00",
+  "first_clean_workflow_exit": 1,
+  "first_clean_failure": "Generic DT checker treated intentionally inert APCC supply metadata as active dependency; corrected with typed read-only source/DT guards and17 negative tests",
+  "validation_rehearsal_exit": 0,
+  "diagnostic_out_dir": "/workspace/stage9-diagnostic-out",
+  "diagnostic_exit": 0,
+  "normal_dtb_count": 4,
+  "diagnostic_dtb_count": 4,
+  "normal_artifacts_preserved": true,
+  "final_config_identical_to_stage8": true,
+  "normal_dtb_delta": "Only4 APCC supply properties and same-node phandle relocation; no activation policy change",
+  "check_scripts": 56,
+  "existing_check_scripts_preserved": 54,
+  "default_check_executions": 83,
+  "diagnostic_check_executions": 2,
+  "extra_eight_tree_early_boot_executions": 1,
+  "extra_eight_tree_usb_parent_executions": 1,
+  "extra_diagnostic_cpu_dt_executions": 4,
+  "sanitized_runs": 8,
+  "leak_detection": false,
+  "leak_detection_limitation": "LeakSanitizer unavailable under environment ptrace",
+  "owner_unsafe_mutations_rejected": 10,
+  "cpr_production_functions": 24,
+  "cpr_unsafe_mutations_rejected": 16,
+  "dependency_unsafe_mutations_per_tree": 17,
+  "spm_production_harnesses": 3,
+  "boot_parser_selftests": 66,
+  "compiler_warnings": 90,
+  "compiler_added": 0,
+  "compiler_removed": 0,
+  "dtc_warnings_by_tree": {
+    "qcom/msm8996-v3.0-sony-xperia-tone-dora.dtb": 29,
+    "qcom/msm8996-v3.0-pmi8996-sony-xperia-tone-dora.dtb": 29,
+    "qcom/msm8996-sony-xperia-tone-dora.dtb": 29,
+    "qcom/msm8996-v3.1-pmi8996-sony-xperia-tone-dora.dtb": 29
+  },
+  "diagnostic_dtc_warnings_by_tree": {
+    "qcom/diagnostic/msm8996-v3.0-sony-xperia-tone-dora-sdhc1-diagnostic.dtb": 29,
+    "qcom/diagnostic/msm8996-v3.0-pmi8996-sony-xperia-tone-dora-sdhc1-diagnostic.dtb": 29,
+    "qcom/diagnostic/msm8996-sony-xperia-tone-dora-sdhc1-diagnostic.dtb": 29,
+    "qcom/diagnostic/msm8996-v3.1-pmi8996-sony-xperia-tone-dora-sdhc1-diagnostic.dtb": 29
+  },
+  "bundled_dtc_warnings_by_tree": {
+    "qcom/msm8996-v3.0-sony-xperia-tone-dora.dtb": 15,
+    "qcom/msm8996-v3.0-pmi8996-sony-xperia-tone-dora.dtb": 15,
+    "qcom/msm8996-sony-xperia-tone-dora.dtb": 15,
+    "qcom/msm8996-v3.1-pmi8996-sony-xperia-tone-dora.dtb": 15
+  },
+  "diagnostic_bundled_dtc_warnings_by_tree": {
+    "qcom/diagnostic/msm8996-v3.0-sony-xperia-tone-dora-sdhc1-diagnostic.dtb": 15,
+    "qcom/diagnostic/msm8996-v3.0-pmi8996-sony-xperia-tone-dora-sdhc1-diagnostic.dtb": 15,
+    "qcom/diagnostic/msm8996-sony-xperia-tone-dora-sdhc1-diagnostic.dtb": 15,
+    "qcom/diagnostic/msm8996-v3.1-pmi8996-sony-xperia-tone-dora-sdhc1-diagnostic.dtb": 15
+  },
+  "dtc_added": 0,
+  "dtc_removed": 0,
+  "artifacts": [
+    {
+      "path": ".config",
+      "size": 137437,
+      "sha256": "881bcb0d1ca79e0c79c99166bbb07b1d4a7af4389229f366c5e5f2393a47806c"
+    },
+    {
+      "path": "vmlinux",
+      "size": 24699256,
+      "sha256": "2df8396a10d8885b74958f6901c4f77e5a449efd15396522f28cb0dc24b1d06e"
+    },
+    {
+      "path": "System.map",
+      "size": 3764360,
+      "sha256": "b988a8a87e85ba74d0db8a1e196118f5e5a6a647bc9f756a23ef0925aef6c674"
+    },
+    {
+      "path": "arch/arm64/boot/Image",
+      "size": 19724800,
+      "sha256": "de834d24c1d9fca8fe1146cd1dae6662affa0086a5967749c344e2d8004090f4"
+    },
+    {
+      "path": "arch/arm64/boot/Image.gz",
+      "size": 8977670,
+      "sha256": "085a65f7be2985c1bbb7b799c7e527c6995a667c46cfe34ede79a5469f33c2a2"
+    },
+    {
+      "path": "arch/arm64/boot/dts/qcom/msm8996-v3.0-sony-xperia-tone-dora.dtb",
+      "size": 190629,
+      "sha256": "7675a6ba79f0509de61a252089fdef37ee002dedb4a467aa2918a604cc9012f2"
+    },
+    {
+      "path": "arch/arm64/boot/dts/qcom/msm8996-v3.0-pmi8996-sony-xperia-tone-dora.dtb",
+      "size": 190629,
+      "sha256": "b1642817b4f1d0ecbef0a9484f0ebb0a1b5b0c5a892747c6cd35d3db8e23da64"
+    },
+    {
+      "path": "arch/arm64/boot/dts/qcom/msm8996-sony-xperia-tone-dora.dtb",
+      "size": 191145,
+      "sha256": "c47b47b9da01a73eab74f5f9873fba9c980019474d01d115ab371feb616df6a2"
+    },
+    {
+      "path": "arch/arm64/boot/dts/qcom/msm8996-v3.1-pmi8996-sony-xperia-tone-dora.dtb",
+      "size": 191145,
+      "sha256": "c0305be01340962ea9f69305168f11623237892fa34aaf6e04b6f1748acdbb24"
+    },
+    {
+      "path": "arch/arm64/boot/Image.gz-dtb",
+      "size": 9741218,
+      "sha256": "4245af10881462cd14ba4ef831e9a113d08ca9a81ef800fae5b065c361963d61"
+    }
+  ],
+  "cpu_shared_power": "Partial real resource owner: single APCC/CBF ports, counted parents, immutable plans, permanent quarantine/retirement; no transferable voltage gang ownership",
+  "live_cpu_adapter": "Read-only provider linked to common owner; native modifying callbacks remain unbound; voltage_leases=0",
+  "cpr_spm_apm_lmh": "Typed observational CPR state, failure closure/IRQ quarantine, SAW endpoint users drain/readback/bounds, existing APM contracts retained; compatible LMHv1 S11 notifier and autonomous CPR/AVS exclusion missing",
+  "cpu_digital_supply": "Original MX S2 ACTIVE-only smpa2 corn, LOW logicalSVS_SOC4/wire3; not GCC CX or CPR plan index; remains gated",
+  "cpu_limits": "maxcpus=2; CPU_FREQ=n; CPU_IDLE=n; native RPM S8-S11 disabled",
+  "gcc_voltage_contracts": 56,
+  "mmcc_voltage_contracts": 49,
+  "gcc_ccf": "Existing HIGH/bootstrap/BOTH ACK/quarantine/reattach preserved; unknown owner/parent/rate cannot release HIGH",
+  "rpm_pmic": "Physical S4/L12/L13/L20/L21 BOTH ACK, logical corners/recovery preserved; typed snapshots do not transmit/claim leases",
+  "watchdog": "Source base0x9830000/size0x1000/SPI28/29 bark12s/pet10s; bootloader/secure handoff unverified and activation gated",
+  "usb_charging": "DWC3/QUSB2 gates retained; USB/ADB unavailable; firmware charging/DPDM/VBUS/ID/BC1.2/FG/BCL/JEITA/current/thermal handoff unqualified",
+  "sdhc1": "Four isolated experimental DTBs only; RPM/GCC/CX/L20/S4/clock/NoC/IRQ/CQE tests pass; no phone eMMC/CID/GPT/tuning logs",
+  "sdhc2": "disabled",
+  "ufs": "disabled",
+  "display_gpu": "Gated; four SoC/PMIC variants, five LCD-ID panels and1080p60 retained; noAUO120/dynamicFPS",
+  "boot_image_qualification": "Actual working LOS21/Sony4.4 boot.img and identified ramdisk not found; source/metadata/parser checks only; exact host-only provision commands documented; no boot image created",
+  "f8131": "Source/config/DT support preserved; Linux4.19 runtime unverified",
+  "f8132": "DSDS/UIM2/source/config/DT support preserved; Linux4.19 modem/runtime unverified",
+  "los21": "User confirms working LOS21 on Sony4.4.302+; historical bpfloader/BoringSSL/vold messages are not current4.4 failures; Linux4.19 userspace runtime unverified",
+  "remaining_p0": [
+    "Transferable CPU CPR/SPM/APM/LMHv1 ownership and6 real voltage leases",
+    "LMHv1 S11 DPM/ODCM notifier and firmware thermal coordination",
+    "Revision-specific autonomous CPR/AVS stop/IRQ-drain and legacy AVS-restore-after-failed-ACK qualification",
+    "CPU hotplug/collapse/retention/PM and bootloader voltage baseline",
+    "Unknown per-clock owner/parent/rate/PLL recovery",
+    "Watchdog secure/bootloader handoff",
+    "USB/charging ownership and calibrated protections",
+    "Real boot.img/ramdisk/partition-size/cmdline/DTB-selection/logging/recovery evidence",
+    "Phone RPM/eMMC/GPT/early-init logs"
+  ],
+  "remaining_p1": [
+    "Display/incell/backlight",
+    "Adreno530/KGSL/CPR/MX/CX/SMMU/secure ABI",
+    "Modem/DSDS/audio/camera",
+    "Full suspend"
+  ],
+  "phone_flash": false,
+  "fastboot_boot": false,
+  "partition_access": false,
+  "emmc_write": false,
+  "device_vendor_edits": false,
+  "new_branch": false,
+  "force_push": false,
+  "external_ref_changes_before_our_push": {
+    "refs/heads/kernel-5.15": {
+      "initial": "8c7ad7e9221f299530e89d944e3399703d915760",
+      "prepush": "0f955fbca80d3ccc7834f5524b1a5dc25a7ad6c9"
+    }
+  }
+}

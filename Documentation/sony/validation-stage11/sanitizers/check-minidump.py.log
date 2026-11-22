@@ -1,0 +1,2 @@
+PASS: production minidump invalid counts, packed primary/auxiliary records and sparse cleanup
+Host MMIO model only; firmware tables and hardware dump collection remain untested.

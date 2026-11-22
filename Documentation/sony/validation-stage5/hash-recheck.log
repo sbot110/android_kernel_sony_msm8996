@@ -1,0 +1,10 @@
+/workspace/work/dora-stage5-clean-20261104.R9EGIZ/.config: OK
+/workspace/work/dora-stage5-clean-20261104.R9EGIZ/vmlinux: OK
+/workspace/work/dora-stage5-clean-20261104.R9EGIZ/System.map: OK
+/workspace/work/dora-stage5-clean-20261104.R9EGIZ/arch/arm64/boot/Image: OK
+/workspace/work/dora-stage5-clean-20261104.R9EGIZ/arch/arm64/boot/Image.gz: OK
+/workspace/work/dora-stage5-clean-20261104.R9EGIZ/arch/arm64/boot/dts/qcom/msm8996-v3.0-sony-xperia-tone-dora.dtb: OK
+/workspace/work/dora-stage5-clean-20261104.R9EGIZ/arch/arm64/boot/dts/qcom/msm8996-v3.0-pmi8996-sony-xperia-tone-dora.dtb: OK
+/workspace/work/dora-stage5-clean-20261104.R9EGIZ/arch/arm64/boot/dts/qcom/msm8996-sony-xperia-tone-dora.dtb: OK
+/workspace/work/dora-stage5-clean-20261104.R9EGIZ/arch/arm64/boot/dts/qcom/msm8996-v3.1-pmi8996-sony-xperia-tone-dora.dtb: OK
+/workspace/work/dora-stage5-clean-20261104.R9EGIZ/arch/arm64/boot/Image.gz-dtb: OK

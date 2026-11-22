@@ -1,0 +1,15 @@
+{
+  "stage7_checks": 52,
+  "stage8_checks": 54,
+  "missing": [],
+  "changed_existing_checks": [
+    "scripts/dora/check-clk-vdd.py",
+    "scripts/dora/check-cpu-native.py"
+  ],
+  "existing_checker_change": "Add negative invariants for unique native binding, boot peer limits/CFA state, monotonic CCF floor and faulted handoff; no removed assertion",
+  "added_checks": [
+    "scripts/dora/check-cpu-shared-power.py",
+    "scripts/dora/check-usb-parent-handoff.py"
+  ],
+  "default_executions": 81
+}

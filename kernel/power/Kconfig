@@ -1,7 +1,6 @@
 config SUSPEND
 	bool "Suspend to RAM and standby"
 	depends on ARCH_SUSPEND_POSSIBLE
-	select RTC_LIB
 	default y
 	---help---
 	  Allow the system to enter sleep states in which main memory is
@@ -28,15 +27,6 @@ config SUSPEND_SKIP_SYNC
 	  Some systems prefer not to pay this cost on every invocation
 	  of suspend, or they are content with invoking sync() from
 	  user-space before invoking suspend.  Say Y if that's your case.
-
-config WAKELOCK
-	bool "Android's method of preventing suspend"
-	default y
-	---help---
-	  This allows applications to prevent the CPU from suspending while
-	  they need it.
-
-	  Say Y if you are running an android userspace.
 
 config HIBERNATE_CALLBACKS
 	bool
@@ -151,18 +141,6 @@ config PM_WAKELOCKS_GC
 	depends on PM_WAKELOCKS
 	default y
 
-config PM_WAKELOCKS_SENSOR_IND_HACK
-	bool "Poor timeout hack for stuck sensor_ind wakelock"
-	depends on PM_WAKELOCKS
-	default n
-	---help---
-	Adds a very poor hack that converts the sensor_ind wakelock
-	to a timed one on-the-fly. This is unfortunately necessary
-	for broken DSP firmwares on old devices, combined with
-	proprietary sensor binaries which don't account for that.
-	To mitigate this issue, this configuration option applies
-	a 5 seconds timeout to this wakelock.
-
 config PM
 	bool "Device power management core functionality"
 	---help---
@@ -209,7 +187,7 @@ config PM_SLEEP_DEBUG
 
 config DPM_WATCHDOG
 	bool "Device suspend/resume watchdog"
-	depends on PM_DEBUG && PSTORE
+	depends on PM_DEBUG && PSTORE && EXPERT
 	---help---
 	  Sets up a watchdog timer to capture drivers that are
 	  locked up attempting to suspend/resume a device.
@@ -220,7 +198,7 @@ config DPM_WATCHDOG
 config DPM_WATCHDOG_TIMEOUT
 	int "Watchdog timeout in seconds"
 	range 1 120
-	default 60
+	default 120
 	depends on DPM_WATCHDOG
 
 config PM_TRACE
@@ -258,7 +236,7 @@ config PM_TRACE_RTC
 
 config APM_EMULATION
 	tristate "Advanced Power Management Emulation"
-	depends on PM && SYS_SUPPORTS_APM_EMULATION
+	depends on SYS_SUPPORTS_APM_EMULATION
 	help
 	  APM is a BIOS specification for saving power using several different
 	  techniques. This is mostly useful for battery powered laptops with
@@ -281,20 +259,6 @@ config APM_EMULATION
 	  random kernel OOPSes or reboots that don't seem to be related to
 	  anything, try disabling/enabling this option (or disabling/enabling
 	  APM in your BIOS).
-
-config PM_OPP
-	bool
-	select SRCU
-	---help---
-	  SOCs have a standard set of tuples consisting of frequency and
-	  voltage pairs that the device will support per voltage domain. This
-	  is called Operating Performance Point or OPP. The actual definitions
-	  of OPP varies over silicon within the same family of devices.
-
-	  OPP layer organizes the data internally using device pointers
-	  representing individual voltage domains and provides SOC
-	  implementations a ready to use framework to manage OPPs.
-	  For more information, read <file:Documentation/power/opp.txt>
 
 config PM_CLK
 	def_bool y
@@ -335,6 +299,17 @@ config PM_GENERIC_DOMAINS_OF
 config CPU_PM
 	bool
 
-config DEDUCE_WAKEUP_REASONS
-	bool
+config ENERGY_MODEL
+	bool "Energy Model for CPUs"
+	depends on SMP
+	depends on CPU_FREQ
 	default n
+	help
+	  Several subsystems (thermal and/or the task scheduler for example)
+	  can leverage information about the energy consumed by CPUs to make
+	  smarter decisions. This config option enables the framework from
+	  which subsystems can access the energy models.
+
+	  The exact usage of the energy model is subsystem-dependent.
+
+	  If in doubt, say N.

@@ -27,7 +27,7 @@ struct somc_typec_mode_ctrl {
 	struct workqueue_struct	*polling_wq;
 	bool			user_request_polling;
 	bool			avoid_first_usbid_change;
-	struct wakeup_source	wakeup_source_id_polling;
+	struct wakeup_source	*wakeup_source_id_polling;
 };
 
 struct usb_somc_params {

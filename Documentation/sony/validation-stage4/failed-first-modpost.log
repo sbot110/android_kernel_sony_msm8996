@@ -1,0 +1,3 @@
+WARNING: vmlinux.o(___ksymtab+spm_regulator_init+0x0): Section mismatch in reference from the variable __ksymtab_spm_regulator_init to the function .init.text:spm_regulator_init()
+The symbol spm_regulator_init is exported and annotated __init
+Fix this by removing the __init annotation of spm_regulator_init or drop the export.

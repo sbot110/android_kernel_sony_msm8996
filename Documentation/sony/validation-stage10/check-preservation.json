@@ -1,0 +1,18 @@
+{
+  "stage9_scripts": 56,
+  "stage10_scripts": 59,
+  "missing": [],
+  "added": [
+    "scripts/dora/check-boot-packaging.py",
+    "scripts/dora/check-first-stage-init.py",
+    "scripts/dora/check-lmh-v1.py"
+  ],
+  "default_check_executions": 86,
+  "existing_changed": [
+    "scripts/dora/check-boot-image.py",
+    "scripts/dora/check-cpu-clocks.py",
+    "scripts/dora/check-cpu-power-owner.py",
+    "scripts/dora/check-cpu-shared-power.py",
+    "scripts/dora/check-spm-transactions.py"
+  ]
+}

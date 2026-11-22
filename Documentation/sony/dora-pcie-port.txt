@@ -1,0 +1,75 @@
+Sony dora MSM8996 PCIe / BCM4359 source port
+==========================================
+
+Scope and provenance
+--------------------
+The target is the common Tone/dora hardware path for F8131 (Single SIM)
+and F8132 (Dual SIM). No model-specific PCIe wiring difference was found
+in the shared Sony reference data. This is source evidence only; neither
+model's PCIe/WLAN hardware has been tested with this 4.19 port.
+
+Reference: sbot110/android_kernel_sony_msm8996, Sony 4.4.302 commit
+0c295b15b6d0fb59a64e13b9e0ef2070818ef2a1:
+- arch/arm/boot/dts/qcom/msm8996.dtsi: controller/PHY windows, interrupt-map,
+  endpoint reset/wake GPIOs, clocks, regulator constraints and boot option.
+- arch/arm/boot/dts/qcom/msm8996-tone-common.dtsi: BCM4359 platform node,
+  GPIO84 WL_REG_ON and GPIO79 WL_HOST_WAKE, and clock power management.
+- drivers/pci/host/pci-msm.c: MSM8996 Gen2 host programming and vendor
+  msm_pcie_* client interface.
+
+Implementation
+--------------
+The supplement msm8996-sony-xperia-tone-pcie.dtsi is included after
+msm8996-sony-xperia-tone.dtsi. It changes only PCIe0's host binding to
+qcom,msm8996-pci-msm, retaining the original memory windows, native GCC
+clocks/genpd, native QMP PHY, inherited PCI ranges and INTx interrupt-map.
+The host uses real phy_init/exit and phy_power_on/off and runtime PM;
+provider errors propagate instead of synthesizing link or PHY readiness.
+The driver uses MSM8996 PARF DBI/slave-window offsets 0x168/0x16c and
+root-port ID 17cb:0104. Newer Gen3 preset and PARF device-type programming
+is excluded from this Gen2 path. Vendor msm_pcie_* APIs remain available
+to the actual Sony WLAN control/BCMDHD implementation.
+
+The supplement removes the upstream fixed WLAN regulator owning GPIO84
+and adds the Sony android,bcmdhd_wlan node. Sony controlfnc then owns
+GPIO84 alone. Endpoint PERST is GPIO35, PCIe wake is GPIO37; WLAN host
+wake is GPIO79. The original L12/L28 supplies and 925000-uV L28 constraint
+are retained. PCIe0 enumeration is requested by the WLAN client after
+power-on (qcom,boot-option = <1>), as in the Sony reference.
+
+INTx uses GIC SPI244/245/247/248. The dedicated int_pls_link_down is
+GIC SPI254: original interrupt-map entry10. SPI250 is int_pme_legacy
+(entry6), not link-down; the incorrect pending value was corrected during
+source review. BCMDHD uses legacy INTx. Keep CONFIG_PCI_MSM_MSI disabled;
+CONFIG_PCI_MSI may remain enabled for the kernel and other controllers.
+
+Confirmed failure/lifetime fixes include preserving original regulator
+and clock errors during cleanup/reset, propagating deferred probes for
+optional providers, checking required MMIO resources, tracking enabled
+power/PHY resources, stopping IRQ/work callbacks before endpoint removal,
+and removing/draining the sysfs interface before teardown. PCI fixups and
+the root-port PCI driver verify their bus uses msm_pcie_ops before
+interpreting bus->sysdata as the vendor host type. Manual host bind/unbind
+is suppressed because legacy clients retain singleton host references.
+
+Validation and limits
+---------------------
+An ARM64 GCC12 build of drivers/pci/controller/pci-msm.o passed with
+CONFIG_PCI_MSM=y and CONFIG_PHY_QCOM_QMP=y. git diff --check passed.
+The dora DT plus supplement compiled; decoding confirmed the selected
+host, native PHY/genpd references, register windows, supplies, GPIOs,
+INTx mapping and corrected SPI254. The scratch DT retained the existing
+seven base warnings (unit-address and duplicate syscon/mailbox address);
+no additional supplement-specific warning was introduced.
+
+Successful compilation is not proof of hardware support. Both F8131 and
+F8132 require PCIe link training/enumeration, BCM4359 firmware/NVRAM load,
+real packet/DMA traffic, WPA2 association, wake, suspend/resume, shutdown
+and link-down recovery tests. The initial native 4.19 DT does not provide
+the Sony 4.4 ANOC SMMU/bus-bandwidth topology. DMA/SMMU bypass assumptions
+and bandwidth/power behavior must be resolved against actual hardware
+and logs; no invented IOMMU or bandwidth provider has been added.
+Firmware and board calibration remain external vendor files. SIM/modem
+behavior and full boot.img compatibility are outside this PCIe source
+validation. Existing WPA2 fixes and alternative display panels are not
+modified by the supplement.

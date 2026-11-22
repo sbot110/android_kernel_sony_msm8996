@@ -1,0 +1,340 @@
+{
+  "format": "dora-stage12-preflight-v1",
+  "status": "STOP",
+  "checks": [
+    {
+      "check": "image_A",
+      "status": "PASS",
+      "reason": "real file: SHA/size, independent legacy QCOM/gzip/XZ/CPIO/FDT checks",
+      "evidence": {
+        "sha256": "c7a248e58f04fc72c4640d144f5e6f1a47dc32c85c50f020cefd3cae2ea9dfd2",
+        "bytes": 11051008,
+        "header": {
+          "kernel_addr": 2148007936,
+          "ramdisk_addr": 2188378112,
+          "tags_addr": 2186280960,
+          "page_size": 4096,
+          "kernel_size": 9815824,
+          "ramdisk_size": 1224724,
+          "second_size": 0,
+          "second_addr": 0,
+          "header_sha256": "21606ef0c94f7c7e9237f1baa92103b9fd0c418d71d680472fbb129fcae06447",
+          "legacy_dt_size": 0,
+          "payload_padded_end": 11051008,
+          "qcom_id": "35afd6abb3972411a1bbe916a87557342ef46380",
+          "cmdline_sha256": "62cf439de43a398f4eb04cfbf61d2261a486dd88b5431ca571441430550e08a1",
+          "os_version_word": 469762474
+        },
+        "kernel_release": "4.19.318-dora-4.19+",
+        "kernel_payload_sha256": "725a60106736e6eeabc45f93a0178e6a57d7f5958679d44c1414038252a146d2",
+        "kernel_payload_bytes": 9815824,
+        "image_sha256": "df80903f8168bd233559836d283e409266344faad1bdc627cc57afa1e8de15df",
+        "image_size_with_bss": 22147072,
+        "dtbs": [
+          {
+            "qcom,msm-id": [
+              246,
+              196608
+            ],
+            "qcom,board-id": [
+              8,
+              0
+            ],
+            "qcom,pmic-id": [
+              131081,
+              131082,
+              0,
+              0
+            ],
+            "sha256": "3b9f15d92beba0234c34465754a9a5f30b6ba8287b9a11600c63645404bd2d9f",
+            "bytes": 190758
+          },
+          {
+            "qcom,msm-id": [
+              246,
+              196609
+            ],
+            "qcom,board-id": [
+              8,
+              0
+            ],
+            "qcom,pmic-id": [
+              131081,
+              131082,
+              0,
+              0
+            ],
+            "sha256": "db5479cdaba00d4111c3bf24ad7093c384f7b866d42fb0bce1d16e2832bc8d17",
+            "bytes": 191274
+          },
+          {
+            "qcom,msm-id": [
+              246,
+              196608
+            ],
+            "qcom,board-id": [
+              8,
+              0
+            ],
+            "qcom,pmic-id": [
+              131081,
+              65555,
+              0,
+              0
+            ],
+            "sha256": "04e9dc339d8dfac76704463c83875419a43fdc806d15fca1e5c33a4ea998f250",
+            "bytes": 190758
+          },
+          {
+            "qcom,msm-id": [
+              246,
+              196609
+            ],
+            "qcom,board-id": [
+              8,
+              0
+            ],
+            "qcom,pmic-id": [
+              131081,
+              65555,
+              0,
+              0
+            ],
+            "sha256": "adb380173e6148c2281a0b3761934294eb0d67259be54703d3197d148ad855e1",
+            "bytes": 191274
+          }
+        ],
+        "ramdisk": {
+          "compression": "xz",
+          "sha256": "9a532793e779b33bad98df1576ec9b661bc04457f4f3f9148b31ba8d42d4f41e",
+          "bytes": 1224724,
+          "init_sha256": "74f3afc4adce6e0f0ad02993e7701e353c0d7777c935e417fca8b4c19edbb5c5"
+        },
+        "hardware_qualified": false
+      }
+    },
+    {
+      "check": "image_B",
+      "status": "PASS",
+      "reason": "real file: SHA/size, independent legacy QCOM/gzip/XZ/CPIO/FDT checks",
+      "evidence": {
+        "sha256": "3c33a57da1c473cf239dbd9fdc0b3cad26206461b4ba8151c371c86d60941c18",
+        "bytes": 11051008,
+        "header": {
+          "kernel_addr": 2148007936,
+          "ramdisk_addr": 2183135232,
+          "tags_addr": 2186280960,
+          "page_size": 4096,
+          "kernel_size": 9815824,
+          "ramdisk_size": 1224724,
+          "second_size": 0,
+          "second_addr": 0,
+          "header_sha256": "69ff662c871d99b7e90cc16dda73b4dd8647ef582fd3e661f1a27bbdefe5d94e",
+          "legacy_dt_size": 0,
+          "payload_padded_end": 11051008,
+          "qcom_id": "35afd6abb3972411a1bbe916a87557342ef46380",
+          "cmdline_sha256": "62cf439de43a398f4eb04cfbf61d2261a486dd88b5431ca571441430550e08a1",
+          "os_version_word": 469762474
+        },
+        "kernel_release": "4.19.318-dora-4.19+",
+        "kernel_payload_sha256": "725a60106736e6eeabc45f93a0178e6a57d7f5958679d44c1414038252a146d2",
+        "kernel_payload_bytes": 9815824,
+        "image_sha256": "df80903f8168bd233559836d283e409266344faad1bdc627cc57afa1e8de15df",
+        "image_size_with_bss": 22147072,
+        "dtbs": [
+          {
+            "qcom,msm-id": [
+              246,
+              196608
+            ],
+            "qcom,board-id": [
+              8,
+              0
+            ],
+            "qcom,pmic-id": [
+              131081,
+              131082,
+              0,
+              0
+            ],
+            "sha256": "3b9f15d92beba0234c34465754a9a5f30b6ba8287b9a11600c63645404bd2d9f",
+            "bytes": 190758
+          },
+          {
+            "qcom,msm-id": [
+              246,
+              196609
+            ],
+            "qcom,board-id": [
+              8,
+              0
+            ],
+            "qcom,pmic-id": [
+              131081,
+              131082,
+              0,
+              0
+            ],
+            "sha256": "db5479cdaba00d4111c3bf24ad7093c384f7b866d42fb0bce1d16e2832bc8d17",
+            "bytes": 191274
+          },
+          {
+            "qcom,msm-id": [
+              246,
+              196608
+            ],
+            "qcom,board-id": [
+              8,
+              0
+            ],
+            "qcom,pmic-id": [
+              131081,
+              65555,
+              0,
+              0
+            ],
+            "sha256": "04e9dc339d8dfac76704463c83875419a43fdc806d15fca1e5c33a4ea998f250",
+            "bytes": 190758
+          },
+          {
+            "qcom,msm-id": [
+              246,
+              196609
+            ],
+            "qcom,board-id": [
+              8,
+              0
+            ],
+            "qcom,pmic-id": [
+              131081,
+              65555,
+              0,
+              0
+            ],
+            "sha256": "adb380173e6148c2281a0b3761934294eb0d67259be54703d3197d148ad855e1",
+            "bytes": 191274
+          }
+        ],
+        "ramdisk": {
+          "compression": "xz",
+          "sha256": "9a532793e779b33bad98df1576ec9b661bc04457f4f3f9148b31ba8d42d4f41e",
+          "bytes": 1224724,
+          "init_sha256": "74f3afc4adce6e0f0ad02993e7701e353c0d7777c935e417fca8b4c19edbb5c5"
+        },
+        "hardware_qualified": false
+      }
+    },
+    {
+      "check": "A_B_differential",
+      "status": "PASS",
+      "reason": "only header ramdisk_addr may differ; does not establish Sony relocation",
+      "evidence": {
+        "changed_offsets": [
+          22
+        ],
+        "same_payload_and_cmdline": true
+      }
+    },
+    {
+      "check": "AOSP_independent_unpack",
+      "status": "PASS",
+      "reason": "both actual images unpacked; kernel and ramdisk byte equality; temporary host files removed"
+    },
+    {
+      "check": "working_backup",
+      "status": "STOP",
+      "reason": "[Errno 2] No such file or directory: '/mnt/d/dora515-noreloc-flash/boot-stable-verified-full64M.img'"
+    },
+    {
+      "check": "reference_file_tail",
+      "status": "WARN",
+      "reason": "reference FILE illustration only; not a current partition measurement",
+      "evidence": {
+        "start": 11051008,
+        "bytes": 2232320,
+        "nonzero_bytes": 1723124,
+        "sha256": "1405dee14b4c5cd913b220f9b4d92c52a6b2247c19195717e719d95262d720c9",
+        "short_write_safe": false,
+        "automatic_zero_fill_safe": false
+      }
+    },
+    {
+      "check": "current_4_4_user_confirmation",
+      "status": "PASS",
+      "reason": "user statement only; runtime capture checked separately",
+      "evidence": {
+        "confirmed": true
+      }
+    },
+    {
+      "check": "recovery_access",
+      "status": "PASS",
+      "reason": "current TWRP access must be confirmed; historical Stage 65 recovery alone is insufficient",
+      "evidence": {
+        "source": "user_statement",
+        "confirmed": true
+      }
+    },
+    {
+      "check": "boot_target_and_capacity",
+      "status": "STOP",
+      "reason": "no live target capture"
+    },
+    {
+      "check": "current_reference_runtime",
+      "status": "STOP",
+      "reason": "no successful current runtime capture; user statement is preserved separately"
+    },
+    {
+      "check": "current_partition_tail",
+      "status": "STOP",
+      "reason": "no verified full CURRENT boot read; bytes after11051008 remain unknown"
+    },
+    {
+      "check": "trace_symbol_map",
+      "status": "PASS",
+      "reason": "exact Stage 11 System.map SHA256; not a persistent capture channel"
+    },
+    {
+      "check": "S1_memory_handoff",
+      "status": "STOP",
+      "reason": "reviewed Sony S1 load/decompression contract, actual RAM bounds and safe Image/initrd/FDT placement are missing; reaching entry remains a test objective"
+    },
+    {
+      "check": "CPU_handoff",
+      "status": "STOP",
+      "reason": "bootloader CPU/MX/APCC/CBF/CPR/SAW/LMH baseline and preservation/secondary-bringup contract are unqualified; native six-lease DVFS is also incomplete"
+    },
+    {
+      "check": "watchdog_handoff",
+      "status": "STOP",
+      "reason": "firmware watchdog owner, initial state, servicing and legal Linux takeover are unqualified"
+    },
+    {
+      "check": "write_extent_and_tail_policy",
+      "status": "STOP",
+      "reason": "Sony partition-read/write extent and old nonzero tail policy are unqualified; neither short write nor automatic zero-fill is approved"
+    },
+    {
+      "check": "diagnostic_transport",
+      "status": "STOP",
+      "reason": "no reviewed failure-time UART/live reader/pstore preservation before TWRP; stable4.4 ADB alone is insufficient"
+    },
+    {
+      "check": "temporary_fastboot_boot",
+      "status": "WARN",
+      "reason": "not qualified on this Sony S1; not executed and not assumed equivalent to partition boot"
+    }
+  ],
+  "image_source_sha": "1b8871be2d2ce04f7361816fa90aa686e5ece1a3",
+  "stage11_published_sha": "30102a011d83b4dd0d30f3d47add10fba5fe45bb",
+  "sony_s1_reference": "1299-4832_S1_Boot_MSM8996_LA2.0_O_204",
+  "hardware_test_A": "NOT EXECUTED",
+  "hardware_test_B": "NOT EXECUTED",
+  "boot_test_ready": false,
+  "flash_or_reboot_performed": false,
+  "device_partition_writes": false,
+  "explicit_user_authorization_is_separate": true,
+  "risk_acceptance_can_qualify_hardware": false,
+  "result_time_utc": "2026-11-16T19:45:38.844823+00:00"
+}

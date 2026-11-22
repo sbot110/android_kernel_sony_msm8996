@@ -1,0 +1,4 @@
+PASS: production native RPM selectors, load bounds, transport failures and offline callbacks
+PASS: production native RPM claims, publication faults, final-rdev lifetime and blocked-write retirement
+PASS: production module bank opt-in preflight rejects both child orders before endpoint lookup or sibling votes
+Host models only; firmware ACKs, physical rails and device removal remain hardware validation gates.

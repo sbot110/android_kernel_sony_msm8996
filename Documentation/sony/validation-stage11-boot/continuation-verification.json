@@ -1,0 +1,14 @@
+{
+  "checked_utc": "2026-11-16T15:58:38.563221+00:00",
+  "continuation_base_sha": "42523a582c69eda88653b502a8cbf182039023da",
+  "compiled_source_sha": "1b8871be2d2ce04f7361816fa90aa686e5ece1a3",
+  "kernel_config_dtb_sources_changed": false,
+  "previous_19_artifact_hashes_verified": true,
+  "source_16_hashes_verified": true,
+  "new_actual_boot_images": 2,
+  "official_aosp14_unpack_images": 3,
+  "reference_input_untouched": true,
+  "private_payload_committed": false,
+  "phone_operations_performed": false,
+  "boot_test_ready": false
+}

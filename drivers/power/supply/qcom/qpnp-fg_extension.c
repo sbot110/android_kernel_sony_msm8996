@@ -117,10 +117,7 @@ static int somc_fg_aging_setting(struct fg_chip *chip, bool mode)
 	}
 	fg_stay_awake(&chip->resume_soc_wakeup_source);
 	schedule_work(&chip->set_resume_soc_work);
-	if (!chip->batt_psy)
-		chip->batt_psy = power_supply_get_by_name("battery");
-
-	if (chip->batt_psy) {
+	if (is_charger_available(chip)) {
 		rc = power_supply_set_property(chip->batt_psy,
 				POWER_SUPPLY_PROP_FV_CFG, &prop);
 		if (rc) {
@@ -376,6 +373,9 @@ static ssize_t somc_fg_param_show(struct device *dev,
 	int rc = 0;
 	char decimal_num[DECIMAL_NUM_SIZE];
 
+	if (READ_ONCE(chip->stopping))
+		return -ENODEV;
+
 	switch (off) {
 	case ATTR_LATEST_SOC:
 		rc = fg_mem_read(chip, data,
@@ -537,6 +537,9 @@ static ssize_t somc_fg_param_store(struct device *dev,
 	const ptrdiff_t off = attr - somc_fg_attrs;
 	int ret;
 
+	if (READ_ONCE(chip->stopping))
+		return -ENODEV;
+
 	switch (off) {
 	case ATTR_TEMP_PERIOD_UPDATE_MS:
 		ret = kstrtoint(buf, 10, &params->data.temp_period_update_ms);
@@ -678,6 +681,7 @@ static int somc_fg_register(struct fg_chip *chip)
 
 	params->learning_data.last_battery_soc =
 				chip->learning_data.max_start_soc;
+	chip->somc_sysfs_registered = true;
 
 	pr_fg_ext(PR_INFO, "somc fg register success\n");
 	return 0;
@@ -688,5 +692,8 @@ exit:
 
 static void somc_fg_unregister(struct fg_chip *chip)
 {
+	if (!chip->somc_sysfs_registered)
+		return;
 	somc_fg_remove_sysfs_entries(chip->dev);
+	chip->somc_sysfs_registered = false;
 }

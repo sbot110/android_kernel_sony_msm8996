@@ -6,6 +6,9 @@
 #define __MSM_VIDC_H__
 
 #include <linux/types.h>
+/* DORA: reuse canonical VIDC UAPI definitions */
+#include <linux/v4l2-controls.h>
+#include <media/msm_media_info.h>
 
 #define MSM_VIDC_HAL_INTERLACE_COLOR_FORMAT_NV12	0x2
 #define MSM_VIDC_HAL_INTERLACE_COLOR_FORMAT_NV12_UBWC	0x8002
@@ -13,26 +16,10 @@
 #define MSM_VIDC_EXTRADATA_FRAME_QP_ADV 0x1
 
 
-static inline unsigned int VENUS_EXTRADATA_SIZE(int width, int height)
-{
-	(void)height;
-	(void)width;
-	/*
-	 * In the future, calculate the size based on the w/h but just
-	 * hardcode it for now since 16K satisfies all current usecases.
-	 */
-	return 16 * 1024;
-}
-
 #define V4L2_CID_MPEG_VIDC_VIDEO_IDR_PERIOD   (V4L2_CID_MPEG_MSM_VIDC_BASE+5)
 
 #define V4L2_CID_MPEG_VIDC_VIDEO_STREAM_OUTPUT_MODE \
 		(V4L2_CID_MPEG_MSM_VIDC_BASE + 22)
-enum v4l2_mpeg_vidc_video_decoder_multi_stream {
-	V4L2_CID_MPEG_VIDC_VIDEO_STREAM_OUTPUT_PRIMARY = 0,
-	V4L2_CID_MPEG_VIDC_VIDEO_STREAM_OUTPUT_SECONDARY = 1,
-};
-
 struct msm_vidc_extradata_header {
 	unsigned int size;
 	unsigned int:32; /** Keeping binary compatibility */

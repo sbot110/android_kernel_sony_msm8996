@@ -790,7 +790,13 @@ static int __vote_buses(struct venus_hfi_device *device,
 	int rc = 0;
 	struct bus_info *bus = NULL;
 	struct vidc_bus_vote_data *new_data = NULL;
-	unsigned long freq = 0;
+	unsigned long freq;
+	bool sony_legacy_bw = false;
+
+	if (device->res && device->res->pdev)
+		sony_legacy_bw = of_property_read_bool(
+			device->res->pdev->dev.of_node,
+			"qcom,sony-legacy-bw-governor");
 
 	if (!num_data) {
 		dprintk(VIDC_DBG, "No vote data available\n");
@@ -812,23 +818,50 @@ no_data_count:
 	device->bus_vote.data = new_data;
 	device->bus_vote.data_count = num_data;
 	device->bus_vote.imem_size = device->res->imem_size;
+	device->bus_vote.total_bw_ddr = 0;
 
 	venus_hfi_for_each_bus(device, bus) {
-		if (!bus->is_prfm_gov_used) {
+		/* Each bus has an independent vote, not the last bus's vote. */
+		freq = 0;
+
+		if (bus->is_prfm_gov_used) {
+			freq = bus->range[1];
+		} else if (sony_legacy_bw) {
+			/* Never silently use PERF/zero on an unknown Sony bus. */
+			if (!bus->name || !bus->mode ||
+			    !((!strcmp(bus->name, "venus-ddr") &&
+			       !strcmp(bus->mode, "msm-vidc-ddr")) ||
+			      (!strcmp(bus->name, "venus-vmem") &&
+			       (!strcmp(bus->mode, "msm-vidc-vmem+") ||
+			        !strcmp(bus->mode, "msm-vidc-vmem"))))) {
+				dprintk(VIDC_ERR,
+					"Unsupported Sony bus %s / %s\n",
+					bus->name ?: "(null)",
+					bus->mode ?: "(null)");
+				return -EINVAL;
+			}
+			freq = __calc_bw(bus, &device->bus_vote);
+		} else {
 			rc = msm_vidc_table_get_target_freq(
-					device->res->gov_data,
-					&device->bus_vote, &freq);
+				device->res->gov_data,
+				&device->bus_vote, &freq);
 			if (rc) {
 				dprintk(VIDC_ERR, "unable to get freq\n");
 				return rc;
 			}
-			device->bus_vote.total_bw_ddr = freq;
-		} else
-			freq = bus->range[1];
+		}
 
 		rc = __vote_bandwidth(bus, &freq);
 		if (rc)
 			return rc;
+
+		/* Keep the HFI bus-voted watchdog tied to the DDR vote. */
+		if (sony_legacy_bw) {
+			if (bus->name && !strcmp(bus->name, "venus-ddr"))
+				device->bus_vote.total_bw_ddr = freq;
+		} else if (!bus->is_prfm_gov_used) {
+			device->bus_vote.total_bw_ddr = freq;
+		}
 	}
 
 err_no_mem:
@@ -1537,7 +1570,7 @@ static int __iface_cmdq_write_relaxed(struct venus_hfi_device *device,
 
 	if (cmd_packet->packet_type == HFI_CMD_SESSION_EMPTY_BUFFER &&
 				!is_clock_bus_voted(device))
-		dprintk(VIDC_ERR, "%s: bus %llu bps or clock %lu MHz\n",
+		dprintk(VIDC_ERR, "%s: bus %lu kB/s or clock %u Hz\n",
 				__func__, device->bus_vote.total_bw_ddr,
 					device->clk_freq);
 

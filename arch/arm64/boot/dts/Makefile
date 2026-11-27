@@ -61,3 +61,13 @@ targets += $(DTB_LIST)
 dtbs: $(addprefix $(obj)/, $(DTB_LIST))
 
 clean-files := dts/*.dtb *.dtb
+
+
+# BEGIN DORA MSM8996 DTB FIX
+# Include QCOM DTBs when vendor/Makefile exists.
+ifeq ($(CONFIG_ARCH_QCOM),y)
+ifeq ($(filter qcom,$(subdir-y)),)
+subdir-y += qcom
+endif
+endif
+# END DORA MSM8996 DTB FIX

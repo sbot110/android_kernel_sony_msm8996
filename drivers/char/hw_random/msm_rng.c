@@ -297,8 +297,10 @@ static int msm_rng_probe(struct platform_device *pdev)
 	}
 
 	if (IS_ERR(msm_rng_dev->prng_clk)) {
-		dev_err(&pdev->dev, "failed to register clock source\n");
-		error = -EPERM;
+		error = PTR_ERR(msm_rng_dev->prng_clk);
+		if (error != -EPROBE_DEFER)
+			dev_err(&pdev->dev, "failed to register clock source: %d\n",
+				error);
 		goto err_clk_get;
 	}
 

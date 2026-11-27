@@ -108,7 +108,7 @@ static struct gic_chip_data gic_data __read_mostly;
 static DEFINE_STATIC_KEY_TRUE(supports_deactivate_key);
 
 static struct gic_kvm_info gic_v3_kvm_info;
-static DEFINE_PER_CPU(bool, has_rss);
+static DEFINE_PER_CPU(bool, has_rss) __maybe_unused;
 
 enum gicd_save_restore_reg {
 	SAVED_ICFGR,
@@ -469,6 +469,7 @@ void gic_v3_dist_restore(void)
 	wmb();
 }
 
+#ifdef CONFIG_ARM_GIC_V3_NO_ACCESS_CONTROL
 static void gic_enable_redist(bool enable)
 {
 	void __iomem *rbase;
@@ -502,6 +503,9 @@ static void gic_enable_redist(bool enable)
 		pr_err_ratelimited("redistributor failed to %s...\n",
 				   enable ? "wakeup" : "sleep");
 }
+#else
+static void gic_enable_redist(bool enable) { }
+#endif
 
 /*
  * Routines to disable, enable, EOI and route interrupts
@@ -966,6 +970,7 @@ static void gic_update_vlpi_properties(void)
 		!gic_data.rdists.has_direct_lpi ? "no " : "");
 }
 
+#ifdef CONFIG_ARM_GIC_V3_NO_ACCESS_CONTROL
 static void gic_cpu_sys_reg_init(void)
 {
 	int i, cpu = smp_processor_id();
@@ -1081,6 +1086,22 @@ static void gic_cpu_sys_reg_init(void)
 	if (need_rss && (!gic_data.has_rss))
 		pr_crit_once("RSS is required but GICD doesn't support it\n");
 }
+#else
+static void gic_cpu_sys_reg_init(void)
+{
+	if (!gic_enable_sre())
+		pr_err("GIC: unable to set SRE (disabled at EL2), panic ahead\n");
+
+	write_gicreg(DEFAULT_PMR_VALUE, ICC_PMR_EL1);
+
+	if (static_branch_likely(&supports_deactivate_key))
+		gic_write_ctlr(ICC_CTLR_EL1_EOImode_drop);
+	else
+		gic_write_ctlr(ICC_CTLR_EL1_EOImode_drop_dir);
+
+	gic_write_grpen1(1);
+}
+#endif
 
 static bool gicv3_nolpi;
 
@@ -1727,8 +1748,9 @@ static int __init gicv3_of_init(struct device_node *node, struct device_node *pa
 	u32 ignore_restore_irqs[MAX_IRQS_IGNORE] = {0};
 
 	/* Board policy, not a switchable DT ownership/verification grant. */
-	gic_data.rwp_fail_stop = of_machine_is_compatible("sony,dora-row") ||
-				 of_machine_is_compatible("somc,dora-row");
+	gic_data.rwp_fail_stop = IS_ENABLED(CONFIG_ARM_GIC_V3_NO_ACCESS_CONTROL) &&
+				 (of_machine_is_compatible("sony,dora-row") ||
+				  of_machine_is_compatible("somc,dora-row"));
 
 	dist_base = of_iomap(node, 0);
 	if (!dist_base) {

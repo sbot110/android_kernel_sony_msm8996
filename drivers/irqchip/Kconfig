@@ -67,6 +67,17 @@ config ARM_GIC_V3_ACL
 	  If you wish to enforce the Acces control then set this
 	  option to Y, if you are unsure please say N.
 
+config ARM_GIC_V3_NO_ACCESS_CONTROL
+	bool "GICv3 No Access Control Configuration"
+	depends on ARM_GIC_V3
+	help
+	  On some SOCs with access control configurations it is not
+	  allowed to access certain GIC registers (such as GICR_WAKER)
+	  from the non-secure world. Compile those accesses out unless
+	  explicitly enabled.
+
+	  For production MSM8996 kernels, say 'N' here.
+
 config ARM_NVIC
 	bool
 	select IRQ_DOMAIN

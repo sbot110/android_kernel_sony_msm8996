@@ -9,6 +9,7 @@
 #include <linux/device.h>
 #include <linux/slab.h>
 #include <linux/genalloc.h>
+#include <asm/cacheflush.h>
 
 #include <soc/qcom/scm.h>
 #include <soc/qcom/qseecomi.h>
@@ -314,6 +315,7 @@ int32_t qtee_shmbridge_allocate_shm(size_t size, struct qtee_shm *shm)
 	}
 
 	memset((void *)va, 0, size);
+	dmac_flush_range((void *)va, (void *)va + size);
 	shm->vaddr = (void *)va;
 	shm->paddr = gen_pool_virt_to_phys(default_bridge.genpool, va);
 	shm->size = size;
@@ -352,9 +354,10 @@ static int __init qtee_shmbridge_init(void)
 		return 0;
 	}
 
-	/* allocate a contiguous page aligned buffer */
+	/* allocate a contiguous page aligned buffer in 32-bit DRAM for legacy TZ */
 	default_bridge.size = DEFAULT_BRIDGE_SIZE;
-	default_bridge.vaddr = (void *)__get_free_pages(GFP_KERNEL|__GFP_COMP,
+	default_bridge.vaddr = (void *)__get_free_pages(
+				GFP_KERNEL | __GFP_COMP | GFP_DMA32,
 				get_order(default_bridge.size));
 	if (!default_bridge.vaddr)
 		return -ENOMEM;

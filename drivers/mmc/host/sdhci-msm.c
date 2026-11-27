@@ -2932,8 +2932,11 @@ static int sdhci_msm_power_sync(struct sdhci_msm_pltfm_data *pdata)
 		ret = qcom_rpm_physical_check_ready(vreg->reg);
 		if (!ret && vreg->is_enabled)
 			ret = qcom_rpm_physical_sync(vreg->reg, true);
-		if (ret)
+		if (ret) {
+			pr_err("%s: RPM physical ACK sync failed for %s: %d\n",
+			       __func__, vreg->name, ret);
 			return sdhci_msm_vreg_fault(vreg, ret);
+		}
 	}
 	return 0;
 }
@@ -2981,10 +2984,13 @@ check_ready:
 #else
 		ret = -EOPNOTSUPP;
 #endif
-		if (ret && vreg->is_enabled)
-			return sdhci_msm_vreg_fault(vreg, ret);
-		if (ret)
+		if (ret) {
+			dev_err(dev, "RPM physical ACK gate: regulator %s readiness failed: %d\n",
+				vreg->name, ret);
+			if (vreg->is_enabled)
+				return sdhci_msm_vreg_fault(vreg, ret);
 			goto put_reg;
+		}
 	}
 	goto out;
 put_reg:
@@ -4372,6 +4378,7 @@ static void sdhci_msm_set_clock(struct sdhci_host *host, unsigned int clock)
 	struct mmc_card *card = host->mmc->card;
 	struct mmc_ios	curr_ios = host->mmc->ios;
 	u32 sup_clock, ddr_clock, dll_lock;
+	u16 clk_ctrl = 0;
 	long bus_clk_rate;
 	bool curr_pwrsave;
 
@@ -4599,17 +4606,20 @@ clocks_off:
 	mb();
 
 	sdhci_set_clock(host, clock);
-	if (clock &&
-	    (sdhci_readw(host, SDHCI_CLOCK_CONTROL) &
-	     (SDHCI_CLOCK_INT_STABLE | SDHCI_CLOCK_CARD_EN)) !=
-	    (SDHCI_CLOCK_INT_STABLE | SDHCI_CLOCK_CARD_EN)) {
-		rc = -ETIMEDOUT;
-		goto fault;
+	if (clock) {
+		rc = readw_poll_timeout_atomic(host->ioaddr + SDHCI_CLOCK_CONTROL,
+			clk_ctrl,
+			(clk_ctrl & (SDHCI_CLOCK_INT_STABLE |
+				     SDHCI_CLOCK_CARD_EN)) ==
+			(SDHCI_CLOCK_INT_STABLE | SDHCI_CLOCK_CARD_EN),
+			10, 20000);
+		if (rc)
+			goto fault;
 	}
 	return;
 fault:
-	pr_err("%s: clock transition to %u failed: %d\n",
-		mmc_hostname(host->mmc), clock, rc);
+	pr_err("%s: clock transition to %u failed: %d (clk_ctrl=0x%04x)\n",
+		mmc_hostname(host->mmc), clock, rc, clk_ctrl);
 	sdhci_msm_latch_error(host, rc);
 }
 
@@ -5852,30 +5862,43 @@ static int sdhci_msm_link_clock_providers(struct device *dev)
 				   "sony,require-rpm-physical-acks"))
 		return 0;
 	count = of_count_phandle_with_args(dev->of_node, "clocks", "#clock-cells");
-	if (count <= 0)
+	if (count <= 0) {
+		dev_err(dev, "RPM physical ACK gate: invalid clocks property count=%d\n", count);
 		return count ? count : -EINVAL;
+	}
 	for (i = 0; i < count; i++) {
 		ret = of_parse_phandle_with_args(dev->of_node, "clocks",
 						 "#clock-cells", i, &spec);
-		if (ret)
+		if (ret) {
+			dev_err(dev, "RPM physical ACK gate: failed to parse clock[%d] provider: %d\n", i, ret);
 			return ret;
+		}
 		supplier = of_find_device_by_node(spec.np);
-		of_node_put(spec.np);
-		if (!supplier)
+		if (!supplier) {
+			dev_err(dev, "RPM physical ACK gate: clock[%d] provider %pOF not registered; deferring\n", i, spec.np);
+			of_node_put(spec.np);
 			return -EPROBE_DEFER;
+		}
+		of_node_put(spec.np);
 		device_lock(&supplier->dev);
 		if (!device_is_bound(&supplier->dev)) {
 			ret = -EPROBE_DEFER;
+			dev_err(dev, "RPM physical ACK gate: clock[%d] supplier %s is not bound; deferring\n",
+				i, dev_name(&supplier->dev));
 		} else {
 			link = device_link_add(dev, &supplier->dev,
 					       DL_FLAG_AUTOREMOVE_CONSUMER);
 			ret = link ? 0 : -ENOMEM;
+			if (ret)
+				dev_err(dev, "RPM physical ACK gate: link to clock[%d] supplier %s failed: %d\n",
+					i, dev_name(&supplier->dev), ret);
 		}
 		device_unlock(&supplier->dev);
 		put_device(&supplier->dev);
 		if (ret)
 			return ret;
 	}
+	dev_info(dev, "RPM physical ACK gate: all %d clock suppliers bound and linked\n", count);
 	return 0;
 }
 
@@ -6051,6 +6074,8 @@ static int sdhci_msm_probe(struct platform_device *pdev)
 		/* skip the probe if eMMC isn't a boot device */
 		if ((ret == 1) && !sdhci_msm_is_bootdevice(&pdev->dev)
 		    && !force_probe) {
+			dev_info(&pdev->dev, "SDHC1 probe skipped: androidboot.bootdevice does not match %s; shared rails/clocks untouched\n",
+				 dev_name(&pdev->dev));
 			/* Do not touch shared rails/clocks of a rejected controller. */
 			ret = -ENODEV;
 			goto pltfm_free;

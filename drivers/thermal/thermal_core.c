@@ -1304,7 +1304,23 @@ thermal_zone_device_register(const char *type, int trips, int mask,
 	INIT_LIST_HEAD(&tz->thermal_instances);
 	ida_init(&tz->ida);
 	mutex_init(&tz->lock);
-	result = ida_simple_get(&thermal_tz_ida, 0, 0, GFP_KERNEL);
+	/*
+	 * Sony vendor thermanager.xml on dora opens /sys/class/thermal/thermal_zone0..40
+	 * by hardcoded index without checking zone->type:
+	 *   - thermal_zone0 ("bms"): milli-centigrade (shutdown at 67000)
+	 *   - thermal_zone4 ("emmc_therm"): deci-centigrade (shutdown at 740)
+	 *   - thermal_zone9..29 ("tsens_tz_sensor*"): deci-centigrade (shutdown at 900)
+	 * Keep kernel DT/hwmon milli-centigrade zones at index >= 41 so kernel
+	 * thermal protection stays active without triggering false 3000 C halts.
+	 */
+	if (!strcmp(type, "bms"))
+		result = ida_simple_get(&thermal_tz_ida, 0, 1, GFP_KERNEL);
+	else if (!strcmp(type, "emmc_therm"))
+		result = ida_simple_get(&thermal_tz_ida, 4, 5, GFP_KERNEL);
+	else
+		result = ida_simple_get(&thermal_tz_ida, 41, 0, GFP_KERNEL);
+	if (result == -ENOSPC)
+		result = ida_simple_get(&thermal_tz_ida, 41, 0, GFP_KERNEL);
 	if (result < 0)
 		goto free_tz;
 

@@ -1435,6 +1435,7 @@ static int dwc3_probe(struct platform_device *pdev)
 	struct dwc3		*dwc;
 
 	int			ret;
+	bool			qcom_glue = false;
 
 	void __iomem		*regs;
 	int			irq;
@@ -1564,14 +1565,36 @@ skip_clk_reset:
 	if (ret)
 		goto err2;
 
+	if (dev->parent && dev->parent->of_node &&
+	    (of_device_is_compatible(dev->parent->of_node, "qcom,dwc3") ||
+	     of_device_is_compatible(dev->parent->of_node, "qcom,msm8996-dwc3") ||
+	     of_device_is_compatible(dev->parent->of_node, "qcom,sdm845-dwc3"))) {
+		qcom_glue = true;
+		ret = dwc3_core_init(dwc);
+		if (ret) {
+			if (ret != -EPROBE_DEFER)
+				dev_err(dev, "failed to initialize core: %d\n", ret);
+			goto err3;
+		}
+		if (dwc->dr_mode == USB_DR_MODE_HOST)
+			dwc3_set_prtcap(dwc, DWC3_GCTL_PRTCAP_HOST);
+		else
+			dwc3_set_prtcap(dwc, DWC3_GCTL_PRTCAP_DEVICE);
+		dev_info(dev, "dwc3-qcom core initialized (rev %08x)\n",
+			 dwc->revision);
+	}
+
 	if (dwc3_is_otg_or_drd(dwc) ||
 		dwc->dr_mode == USB_DR_MODE_PERIPHERAL) {
 		ret = dwc3_gadget_init(dwc);
 		if (ret) {
 			dev_err(dwc->dev, "gadget init failed %d\n", ret);
-			goto err3;
+			goto err3_core;
 		}
 	}
+
+	if (qcom_glue)
+		enable_irq(dwc->irq);
 
 	dwc->dwc_ipc_log_ctxt = ipc_log_context_create(NUM_LOG_PAGES,
 					dev_name(dwc->dev), 0);
@@ -1596,6 +1619,9 @@ skip_clk_reset:
 
 	return 0;
 
+err3_core:
+	if (qcom_glue)
+		dwc3_core_exit(dwc);
 err3:
 	dwc3_free_scratch_buffers(dwc);
 err2:

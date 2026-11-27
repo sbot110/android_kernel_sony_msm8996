@@ -23,6 +23,8 @@
 #include <linux/platform_device.h>
 #include <linux/ktime.h>
 #include <linux/regulator/driver.h>
+#include <linux/regulator/machine.h>
+#include <linux/regulator/of_regulator.h>
 #include <linux/regmap.h>
 #include <linux/list.h>
 #include <linux/mfd/syscon.h>
@@ -1731,12 +1733,18 @@ static const struct spmi_regulator_data pmi8994_regulators[] = {
 	{ }
 };
 
+static const struct spmi_regulator_data pmi8994_s2_regulator[] = {
+	{ "s2", 0x1700, NULL, },
+	{ }
+};
+
 static const struct of_device_id qcom_spmi_regulator_match[] = {
 	{ .compatible = "qcom,pm8841-regulators", .data = &pm8841_regulators },
 	{ .compatible = "qcom,pm8916-regulators", .data = &pm8916_regulators },
 	{ .compatible = "qcom,pm8941-regulators", .data = &pm8941_regulators },
 	{ .compatible = "qcom,pm8994-regulators", .data = &pm8994_regulators },
 	{ .compatible = "qcom,pmi8994-regulators", .data = &pmi8994_regulators },
+	{ .compatible = "qcom,qpnp-regulator", .data = &pmi8994_s2_regulator },
 	{ }
 };
 MODULE_DEVICE_TABLE(of, qcom_spmi_regulator_match);
@@ -1787,6 +1795,14 @@ static int qcom_spmi_regulator_probe(struct platform_device *pdev)
 	if (!match)
 		return -ENODEV;
 
+	if (match->data == pmi8994_s2_regulator) {
+		u32 single_base = 0;
+
+		if (of_property_read_u32(node, "reg", &single_base) ||
+		    single_base != 0x1700)
+			return -ENODEV;
+	}
+
 	spm_owned_apcc = of_property_read_bool(node, "qcom,spm-owned-apcc");
 	if (spm_owned_apcc && match->data != pm8994_regulators)
 		return -EINVAL;
@@ -1836,8 +1852,10 @@ static int qcom_spmi_regulator_probe(struct platform_device *pdev)
 		vreg->desc.enable_val = SPMI_COMMON_ENABLE;
 		vreg->desc.name = name = reg->name;
 		vreg->desc.supply_name = reg->supply;
-		vreg->desc.of_match = reg->name;
-		vreg->desc.of_parse_cb = spmi_regulator_of_parse;
+		if (match->data != pmi8994_s2_regulator) {
+			vreg->desc.of_match = reg->name;
+			vreg->desc.of_parse_cb = spmi_regulator_of_parse;
+		}
 		vreg->desc.of_map_mode = spmi_regulator_of_map_mode;
 
 		ret = spmi_regulator_match(vreg, reg->force_type);
@@ -1860,6 +1878,34 @@ static int qcom_spmi_regulator_probe(struct platform_device *pdev)
 		config.dev = dev;
 		config.driver_data = vreg;
 		config.regmap = regmap;
+		if (match->data == pmi8994_s2_regulator) {
+			struct regulator_init_data *init_data;
+			u32 enable_time = 0;
+
+			if (!of_property_read_u32(node, "qcom,enable-time",
+						  &enable_time))
+				vreg->desc.enable_time = enable_time;
+			config.of_node = node;
+			init_data = of_get_regulator_init_data(dev, node,
+							       &vreg->desc);
+			if (!init_data) {
+				ret = -EINVAL;
+				goto err;
+			}
+			if (init_data->constraints.name)
+				vreg->desc.name = name =
+					init_data->constraints.name;
+			init_data->constraints.valid_ops_mask |=
+				REGULATOR_CHANGE_MODE;
+			init_data->constraints.valid_modes_mask |=
+				REGULATOR_MODE_NORMAL | REGULATOR_MODE_FAST |
+				REGULATOR_MODE_IDLE;
+			config.init_data = init_data;
+			ret = spmi_regulator_of_parse(node, &vreg->desc,
+						      &config);
+			if (ret)
+				goto err;
+		}
 		rdev = devm_regulator_register(dev, &vreg->desc, &config);
 		if (IS_ERR(rdev)) {
 			dev_err(dev, "failed to register %s\n", name);

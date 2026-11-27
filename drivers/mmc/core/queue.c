@@ -264,6 +264,12 @@ static blk_status_t mmc_mq_queue_rq(struct blk_mq_hw_ctx *hctx,
 		return BLK_STS_IOERR;
 	}
 
+	if (mmc_access_rpmb(mq) &&
+	    req_op(req) != REQ_OP_DRV_IN && req_op(req) != REQ_OP_DRV_OUT) {
+		req->rq_flags |= RQF_QUIET;
+		return BLK_STS_IOERR;
+	}
+
 	issue_type = mmc_issue_type(mq, req);
 
 	spin_lock_irq(q->queue_lock);

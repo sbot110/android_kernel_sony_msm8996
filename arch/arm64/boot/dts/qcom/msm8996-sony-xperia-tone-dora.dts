@@ -23,6 +23,13 @@
 #include "msm8996-sony-xperia-tone-storage.dtsi"
 #include "msm8996-sony-xperia-tone-rpm-physical.dtsi"
 #include "msm8996-sony-xperia-tone-clock-voltage.dtsi"
+#include "msm8996-sony-xperia-tone-bootmem-compat.dtsi"
+#include "msm8996-sony-xperia-tone-venus.dtsi"
+#include "msm8996-sony-xperia-tone-venus-resources.dtsi"
+#include "msm8996-sony-xperia-tone-venus-context-banks.dtsi"
+#include "msm8996-sony-xperia-tone-venus-bus.dtsi"
+#include "msm8996-sony-xperia-tone-gpu.dtsi"
+#include "msm8996-sony-xperia-tone-touch.dtsi"
 
 / {
 	model = "Sony Xperia X Performance";
@@ -48,4 +55,5 @@
 
 &{/soc/usb@6a00000/dwc3@6a00000} {
 	/delete-property/ extcon;
+	status = "okay";
 };

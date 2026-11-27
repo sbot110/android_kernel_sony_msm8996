@@ -34,4 +34,9 @@
 		regulator-name = "gdsc_mdss";
 		power-domains = <&mmcc MDSS_GDSC>;
 	};
+	gdsc_gpu: power-domain-gpu {
+		compatible = "qcom,genpd-regulator";
+		regulator-name = "gdsc_gpu";
+		power-domains = <&mmcc GPU_GDSC>;
+	};
 };

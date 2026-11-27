@@ -4862,7 +4862,7 @@ int msm_comm_flush(struct msm_vidc_inst *inst, u32 flags)
 
 
 enum hal_extradata_id msm_comm_get_hal_extradata_index(
-	enum v4l2_mpeg_vidc3x_extradata index)
+	enum v4l2_mpeg_vidc_extradata index)
 {
 	int ret = 0;
 

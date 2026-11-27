@@ -425,7 +425,8 @@ void *msm_bus_realloc_devmem(struct device *dev, void *p, size_t old_size,
 	size_t copy_size = old_size;
 
 	if (!new_size) {
-		devm_kfree(dev, p);
+		if (p)
+			devm_kfree(dev, p);
 		return ZERO_SIZE_PTR;
 	}
 
@@ -436,8 +437,11 @@ void *msm_bus_realloc_devmem(struct device *dev, void *p, size_t old_size,
 	if (!ret)
 		goto exit_realloc_devmem;
 
-	memcpy(ret, p, copy_size);
-	devm_kfree(dev, p);
+	if (p) {
+		if (copy_size)
+			memcpy(ret, p, copy_size);
+		devm_kfree(dev, p);
+	}
 exit_realloc_devmem:
 	return ret;
 }

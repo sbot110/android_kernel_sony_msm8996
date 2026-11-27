@@ -49,6 +49,7 @@
 		ramoops@a7f00000 {
 			compatible = "ramoops";
 			reg = <0 0xa7f00000 0 0x100000>;
+			no-map;
 			record-size = <0x20000>;
 			console-size = <0x40000>;
 			ftrace-size = <0x20000>;
@@ -56,14 +57,21 @@
 			ecc-size = <16>;
 		};
 
+		dfps_data_mem: dfps_data_mem@83400000 {
+			reg = <0 0x83400000 0 0x1000>;
+		};
+
 		cont_splash_mem: memory@83401000 {
 			reg = <0 0x83401000 0 0x23ff000>;
-			no-map;
 		};
 
 		zap_shader_region: gpu@90400000 {
-			compatible = "shared-dma-pool";
 			reg = <0x0 0x90400000 0x0 0x2000>;
+			no-map;
+		};
+
+		peripheral_xpu_hole1@90402000 {
+			reg = <0x0 0x90402000 0x0 0x000fe000>;
 			no-map;
 		};
 
@@ -75,6 +83,19 @@
 		venus_region: memory@90f00000 {
 			reg = <0 0x90f00000 0 0x500000>;
 			no-map;
+		};
+
+		peripheral_xpu_hole2@91400000 {
+			reg = <0x0 0x91400000 0x0 0x00100000>;
+			no-map;
+		};
+
+		qseecom_mem: qseecom_region {
+			compatible = "shared-dma-pool";
+			alloc-ranges = <0x0 0x92000000 0x0 0x15000000>;
+			reusable;
+			alignment = <0x0 0x400000>;
+			size = <0x0 0x1400000>;
 		};
 	};
 
@@ -119,6 +140,10 @@
 
 &blsp2_uart1 {
 	status = "okay";
+};
+
+&adsp_region {
+	compatible = "removed-dma-pool";
 };
 
 &blsp2_uart2 {
@@ -822,6 +847,20 @@
 		drive-strength = <2>;
 	};
 
+	blsp2_i2c5_default: blsp2-i2c5-default {
+		pins = "gpio87", "gpio88";
+		function = "blsp_i2c12";
+		drive-strength = <2>;
+		bias-disable;
+	};
+
+	blsp2_i2c5_sleep: blsp2-i2c5-sleep {
+		pins = "gpio87", "gpio88";
+		function = "blsp_i2c12";
+		drive-strength = <2>;
+		bias-disable;
+	};
+
 	touch_int_n: touch-int-n {
 		pins = "gpio125";
 		function = "gpio";
@@ -839,6 +878,7 @@
 
 /* USB peripheral bring-up; USB-C/charger/OTG policy still needs vendor porting. */
 &usb3 {
+	reg = <0x06af8800 0x400>;
 	status = "okay";
 	qcom,select-utmi-as-pipe-clk;
 };
@@ -861,4 +901,101 @@
 
 &{/soc/ufshc@624000} {
 	status = "okay";
+};
+
+&soc {
+	qcom,ion {
+		compatible = "qcom,msm-ion";
+		#address-cells = <1>;
+		#size-cells = <0>;
+
+		system_heap: qcom,ion-heap@25 {
+			reg = <25>;
+			qcom,ion-heap-type = "SYSTEM";
+		};
+
+		qcom,ion-heap@27 { /* QSEECOM HEAP */
+			reg = <27>;
+			memory-region = <&qseecom_mem>;
+			qcom,ion-heap-type = "DMA";
+		};
+	};
+
+	qcom_seecom: qseecom@86600000 {
+		compatible = "qcom,qseecom";
+		reg = <0x86600000 0x2200000>;
+		reg-names = "secapp-region";
+		memory-region = <&qseecom_mem>;
+		qcom,hlos-num-ce-hw-instances = <1>;
+		qcom,hlos-ce-hw-instance = <0>;
+		qcom,qsee-ce-hw-instance = <0>;
+		qcom,disk-encrypt-pipe-pair = <2>;
+		qcom,support-fde;
+		qcom,no-clock-support;
+		qcom,appsbl-qseecom-support;
+		qcom,ce-opp-freq = <171430000>;
+		qcom,qsee-reentrancy-support = <2>;
+	};
+
+	qcom_rng: qrng@83000 {
+		compatible = "qcom,msm-rng";
+		reg = <0x00083000 0x1000>;
+		qcom,msm-rng-iface-clk;
+		qcom,no-qrng-config;
+		qcom,msm-bus,name = "msm-rng-noc";
+		qcom,msm-bus,num-cases = <2>;
+		qcom,msm-bus,num-paths = <1>;
+		qcom,msm-bus,vectors-KBps =
+			<1 618 0 0>,
+			<1 618 0 800>;
+		clocks = <&gcc GCC_PRNG_AHB_CLK>;
+		clock-names = "iface_clk";
+	};
+
+	imem@66bf000 {
+		compatible = "syscon", "simple-mfd";
+		reg = <0x066bf000 0x1000>;
+		#address-cells = <1>;
+		#size-cells = <1>;
+		ranges = <0 0x066bf000 0x1000>;
+
+		restart_reason@65c {
+			compatible = "qcom,msm-imem-restart_reason";
+			reg = <0x65c 0x4>;
+		};
+	};
+
+	restart@4ab000 {
+		compatible = "qcom,pshold";
+		reg = <0x004ab000 0x4>,
+		      <0x007b3000 0x4>;
+		reg-names = "pshold-base", "tcsr-boot-misc-detect";
+		qcom,force-warm-reboot;
+	};
+
+	qcom,restart-reason {
+		compatible = "qcom,restart-reason";
+
+		recovery {
+			cmd = "recovery";
+			reg-val = <0x01 0x77665502>;
+			reboot-cmd;
+		};
+
+		bootloader {
+			cmd = "bootloader";
+			reg-val = <0x02 0x77665500>;
+			reboot-cmd;
+		};
+
+		panic {
+			cmd = "panic";
+			reg-val = <0x01 0x77665502>;
+		};
+
+		unknown {
+			cmd = "unknown";
+			reg-val = <0x00 0x77665501>;
+		};
+	};
 };

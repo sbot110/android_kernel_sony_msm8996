@@ -3138,7 +3138,7 @@ channel_to_chanspec(struct wiphy *wiphy, struct net_device *dev, u32 channel, u3
 	int bw = 0, tmp_bw = 0;
 	int i;
 	u32 tmp_c;
-	u16 kflags = in_atomic() ? GFP_ATOMIC : GFP_KERNEL;
+	gfp_t kflags = in_atomic() ? GFP_ATOMIC : GFP_KERNEL;
 #define LOCAL_BUF_SIZE	1024
 	buf = (u8 *) kzalloc(LOCAL_BUF_SIZE, kflags);
 	if (!buf) {
@@ -6883,7 +6883,7 @@ wl_cfg80211_mgmt_tx(struct wiphy *wiphy, bcm_struct_cfgdev *cfgdev,
 	}
 
 #ifndef CONFIG_MACH_SONY_KAGURA
-	if (len > (action_frame->len + DOT11_MGMT_HDR_LEN)) {
+	if (len > (ACTION_FRAME_SIZE + DOT11_MGMT_HDR_LEN)) {
 		WL_ERR(("invalid action frame length:%zu\n", len));
 		return BCME_BADARG;
 		goto exit;
@@ -15958,7 +15958,7 @@ bool wl_cfg80211_is_concurrent_mode(void)
 	}
 }
 
-void* wl_cfg80211_get_dhdp()
+void* wl_cfg80211_get_dhdp(void)
 {
 	struct bcm_cfg80211 *cfg = g_bcm_cfg;
 

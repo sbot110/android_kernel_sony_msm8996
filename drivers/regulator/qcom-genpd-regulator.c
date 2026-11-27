@@ -3,6 +3,7 @@
  * Status-only regulator API for legacy Qualcomm consumers of native GDSCs.
  * Physical sequencing and register ownership remain in the genpd provider.
  */
+#include <linux/clk.h>
 #include <linux/err.h>
 #include <linux/module.h>
 #include <linux/of.h>
@@ -16,8 +17,33 @@
 struct qcom_genpd_regulator {
 	struct device *dev;
 	struct regulator_desc desc;
+	struct clk *root_clk;
 	bool enabled;
 };
+
+static int qcom_genpd_regulator_clk_enable(struct qcom_genpd_regulator *proxy)
+{
+	long rate;
+	int ret;
+
+	if (!proxy->root_clk)
+		return 0;
+	if (clk_get_rate(proxy->root_clk) < 133000000) {
+		rate = clk_round_rate(proxy->root_clk, 133000000);
+		if (rate > 0) {
+			ret = clk_set_rate(proxy->root_clk, rate);
+			if (ret)
+				return ret;
+		}
+	}
+	return clk_prepare_enable(proxy->root_clk);
+}
+
+static void qcom_genpd_regulator_clk_disable(struct qcom_genpd_regulator *proxy)
+{
+	if (proxy->root_clk)
+		clk_disable_unprepare(proxy->root_clk);
+}
 
 static int qcom_genpd_regulator_enable(struct regulator_dev *rdev)
 {
@@ -26,7 +52,11 @@ static int qcom_genpd_regulator_enable(struct regulator_dev *rdev)
 
 	if (proxy->enabled)
 		return 0;
+	ret = qcom_genpd_regulator_clk_enable(proxy);
+	if (ret)
+		return ret;
 	ret = pm_runtime_get_sync(proxy->dev);
+	qcom_genpd_regulator_clk_disable(proxy);
 	if (ret < 0) {
 		pm_runtime_put_noidle(proxy->dev);
 		return ret;
@@ -42,7 +72,11 @@ static int qcom_genpd_regulator_disable(struct regulator_dev *rdev)
 
 	if (!proxy->enabled)
 		return -EINVAL;
+	ret = qcom_genpd_regulator_clk_enable(proxy);
+	if (ret)
+		return ret;
 	ret = pm_runtime_put_sync(proxy->dev);
+	qcom_genpd_regulator_clk_disable(proxy);
 	if (ret < 0) {
 		/* Keep the logical enable vote if the domain could not suspend. */
 		pm_runtime_get_noresume(proxy->dev);
@@ -69,8 +103,14 @@ static void qcom_genpd_regulator_cleanup(void *data)
 {
 	struct qcom_genpd_regulator *proxy = data;
 
-	if (proxy->enabled)
-		pm_runtime_put_sync(proxy->dev);
+	if (proxy->enabled) {
+		if (!qcom_genpd_regulator_clk_enable(proxy)) {
+			pm_runtime_put_sync(proxy->dev);
+			qcom_genpd_regulator_clk_disable(proxy);
+		} else {
+			pm_runtime_put_sync(proxy->dev);
+		}
+	}
 	pm_runtime_disable(proxy->dev);
 }
 
@@ -105,9 +145,16 @@ static int qcom_genpd_regulator_probe(struct platform_device *pdev)
 	if (!proxy)
 		return -ENOMEM;
 	proxy->dev = dev;
+	if (of_property_read_bool(dev->of_node, "qcom,force-enable-root-clk")) {
+		proxy->root_clk = devm_clk_get(dev, "core_root_clk");
+		if (IS_ERR(proxy->root_clk))
+			return PTR_ERR(proxy->root_clk);
+	}
 	proxy->desc.type = REGULATOR_VOLTAGE;
 	proxy->desc.owner = THIS_MODULE;
 	proxy->desc.ops = &qcom_genpd_regulator_ops;
+	if (of_find_property(dev->of_node, "parent-supply", NULL))
+		proxy->desc.supply_name = "parent";
 	init_data = of_get_regulator_init_data(dev, dev->of_node, &proxy->desc);
 	if (!init_data || !init_data->constraints.name)
 		return -EINVAL;

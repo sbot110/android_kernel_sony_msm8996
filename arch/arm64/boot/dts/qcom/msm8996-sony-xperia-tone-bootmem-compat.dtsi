@@ -1,0 +1,13 @@
+// SPDX-License-Identifier: GPL-2.0-only
+/*
+ * Sony Xperia X Performance (dora) early-boot memory coverage parity.
+ * DFPS (0x83400000) and the two peripheral XPU gaps (0x90402000, 0x91400000)
+ * are now defined directly in msm8996-sony-xperia-tone.dtsi; keep only the
+ * HDMI splash region here to avoid duplicate/overlapping reserved-memory nodes.
+ */
+
+&{/reserved-memory} {
+    sony_hdmi_splash_boot: memory@b1c00000 {
+        reg = <0x0 0xb1c00000 0x0 0x23ff000>;
+    };
+};

@@ -798,6 +798,89 @@ cmd_err:
 	return ioc_err ? ioc_err : err;
 }
 
+static int mmc_blk_ioctl_rpmb_cmd(struct mmc_blk_data *md,
+				  struct mmc_ioc_rpmb __user *user)
+{
+	struct mmc_blk_ioc_data **idata = NULL;
+	struct mmc_rpmb_data *rpmb = NULL;
+	struct mmc_card *card;
+	struct mmc_queue *mq;
+	struct request *req;
+	int i, err = 0, ioc_err = 0;
+	int num_of_cmds = 0;
+
+	if (!(md->area_type & MMC_BLK_DATA_AREA_RPMB))
+		return -EINVAL;
+
+	rpmb = kzalloc(sizeof(*rpmb), GFP_KERNEL);
+	if (!rpmb)
+		return -ENOMEM;
+	rpmb->part_index = md->part_type & EXT_CSD_PART_CONFIG_ACC_MASK;
+	rpmb->md = md;
+
+	idata = kcalloc(MMC_IOC_MAX_RPMB_CMD, sizeof(*idata), GFP_KERNEL);
+	if (!idata) {
+		kfree(rpmb);
+		return -ENOMEM;
+	}
+
+	for (i = 0; i < MMC_IOC_MAX_RPMB_CMD; i++) {
+		idata[i] = mmc_blk_ioctl_copy_from_user(&user->cmds[i]);
+		if (IS_ERR(idata[i])) {
+			err = PTR_ERR(idata[i]);
+			goto cmd_err;
+		}
+		if (!idata[i]->ic.opcode) {
+			kfree(idata[i]->buf);
+			kfree(idata[i]);
+			idata[i] = NULL;
+			break;
+		}
+		idata[i]->rpmb = rpmb;
+		num_of_cmds++;
+	}
+
+	if (!num_of_cmds)
+		goto cmd_err;
+
+	pr_info_once("mmcblk0rpmb: first MMC_IOC_RPMB_CMD (%d subcmds)\n",
+		     num_of_cmds);
+
+	card = md->queue.card;
+	if (IS_ERR(card)) {
+		err = PTR_ERR(card);
+		goto cmd_err;
+	}
+
+	mq = &md->queue;
+	req = blk_get_request(mq->queue,
+		idata[0]->ic.write_flag ? REQ_OP_DRV_OUT : REQ_OP_DRV_IN, 0);
+	if (IS_ERR(req)) {
+		err = PTR_ERR(req);
+		goto cmd_err;
+	}
+	req_to_mmc_queue_req(req)->drv_op = MMC_DRV_OP_IOCTL_RPMB;
+	req_to_mmc_queue_req(req)->drv_op_result = -EIO;
+	req_to_mmc_queue_req(req)->drv_op_data = idata;
+	req_to_mmc_queue_req(req)->ioc_count = num_of_cmds;
+	blk_execute_rq(mq->queue, NULL, req, 0);
+	ioc_err = req_to_mmc_queue_req(req)->drv_op_result;
+
+	for (i = 0; i < num_of_cmds && !err; i++)
+		err = mmc_blk_ioctl_copy_to_user(&user->cmds[i], idata[i]);
+
+	blk_put_request(req);
+
+cmd_err:
+	for (i = 0; i < num_of_cmds; i++) {
+		kfree(idata[i]->buf);
+		kfree(idata[i]);
+	}
+	kfree(idata);
+	kfree(rpmb);
+	return ioc_err ? ioc_err : err;
+}
+
 static int mmc_blk_check_blkdev(struct block_device *bdev)
 {
 	/*
@@ -814,6 +897,7 @@ static int mmc_blk_ioctl(struct block_device *bdev, fmode_t mode,
 	unsigned int cmd, unsigned long arg)
 {
 	struct mmc_blk_data *md;
+	struct mmc_rpmb_data *rpmb_ptr = NULL;
 	int ret;
 
 	switch (cmd) {
@@ -824,9 +908,20 @@ static int mmc_blk_ioctl(struct block_device *bdev, fmode_t mode,
 		md = mmc_blk_get(bdev->bd_disk);
 		if (!md)
 			return -EINVAL;
+		if (md->area_type & MMC_BLK_DATA_AREA_RPMB) {
+			rpmb_ptr = kzalloc(sizeof(*rpmb_ptr), GFP_KERNEL);
+			if (!rpmb_ptr) {
+				mmc_blk_put(md);
+				return -ENOMEM;
+			}
+			rpmb_ptr->part_index =
+				md->part_type & EXT_CSD_PART_CONFIG_ACC_MASK;
+			rpmb_ptr->md = md;
+		}
 		ret = mmc_blk_ioctl_cmd(md,
 					(struct mmc_ioc_cmd __user *)arg,
-					NULL);
+					rpmb_ptr);
+		kfree(rpmb_ptr);
 		mmc_blk_put(md);
 		return ret;
 	case MMC_IOC_MULTI_CMD:
@@ -836,9 +931,31 @@ static int mmc_blk_ioctl(struct block_device *bdev, fmode_t mode,
 		md = mmc_blk_get(bdev->bd_disk);
 		if (!md)
 			return -EINVAL;
+		if (md->area_type & MMC_BLK_DATA_AREA_RPMB) {
+			rpmb_ptr = kzalloc(sizeof(*rpmb_ptr), GFP_KERNEL);
+			if (!rpmb_ptr) {
+				mmc_blk_put(md);
+				return -ENOMEM;
+			}
+			rpmb_ptr->part_index =
+				md->part_type & EXT_CSD_PART_CONFIG_ACC_MASK;
+			rpmb_ptr->md = md;
+		}
 		ret = mmc_blk_ioctl_multi_cmd(md,
 					(struct mmc_ioc_multi_cmd __user *)arg,
-					NULL);
+					rpmb_ptr);
+		kfree(rpmb_ptr);
+		mmc_blk_put(md);
+		return ret;
+	case MMC_IOC_RPMB_CMD:
+		ret = mmc_blk_check_blkdev(bdev);
+		if (ret)
+			return ret;
+		md = mmc_blk_get(bdev->bd_disk);
+		if (!md)
+			return -EINVAL;
+		ret = mmc_blk_ioctl_rpmb_cmd(md,
+					(struct mmc_ioc_rpmb __user *)arg);
 		mmc_blk_put(md);
 		return ret;
 	default:
@@ -2279,6 +2396,13 @@ static int mmc_blk_wait_for_idle(struct mmc_queue *mq, struct mmc_host *host)
 	return mmc_blk_rw_wait(mq, NULL);
 }
 
+bool mmc_access_rpmb(struct mmc_queue *mq)
+{
+	struct mmc_blk_data *md = mq ? mq->blkdata : NULL;
+
+	return md && (md->area_type & MMC_BLK_DATA_AREA_RPMB);
+}
+
 enum mmc_issued mmc_blk_mq_issue_rq(struct mmc_queue *mq, struct request *req)
 {
 	struct mmc_blk_data *md = mq->blkdata;
@@ -2286,6 +2410,10 @@ enum mmc_issued mmc_blk_mq_issue_rq(struct mmc_queue *mq, struct request *req)
 	struct mmc_host *host = card->host;
 	int ret;
 	int err;
+
+	if ((md->area_type & MMC_BLK_DATA_AREA_RPMB) &&
+	    req_op(req) != REQ_OP_DRV_IN && req_op(req) != REQ_OP_DRV_OUT)
+		return MMC_REQ_FAILED_TO_START;
 
 	ret = mmc_blk_part_switch(card, md->part_type);
 	if (ret) {
@@ -2624,7 +2752,7 @@ static void mmc_blk_rpmb_device_release(struct device *dev)
 	kfree(rpmb);
 }
 
-static int mmc_blk_alloc_rpmb_part(struct mmc_card *card,
+static int __maybe_unused mmc_blk_alloc_rpmb_part(struct mmc_card *card,
 				   struct mmc_blk_data *md,
 				   unsigned int part_index,
 				   sector_t size,
@@ -2708,15 +2836,16 @@ static int mmc_blk_alloc_parts(struct mmc_card *card, struct mmc_blk_data *md)
 	for (idx = 0; idx < card->nr_parts; idx++) {
 		if (card->part[idx].area_type & MMC_BLK_DATA_AREA_RPMB) {
 			/*
-			 * RPMB partitions does not provide block access, they
-			 * are only accessed using ioctl():s. Thus create
-			 * special RPMB block devices that do not have a
-			 * backing block queue for these.
+			 * Expose RPMB as /dev/block/mmcblk0rpmb for QCOM
+			 * librpmb/qseecomd; non-ioctl block I/O is rejected in
+			 * mmc_mq_queue_rq() and mmc_blk_mq_issue_rq().
 			 */
-			ret = mmc_blk_alloc_rpmb_part(card, md,
+			ret = mmc_blk_alloc_part(card, md,
 				card->part[idx].part_cfg,
 				card->part[idx].size >> 9,
-				card->part[idx].name);
+				false,
+				card->part[idx].name,
+				card->part[idx].area_type);
 			if (ret)
 				return ret;
 		} else if (card->part[idx].size) {

@@ -1,0 +1,93 @@
+// SPDX-License-Identifier: GPL-2.0-only
+/*
+ * Sony MSM8996 Venus context banks.
+ * Original identifiers from Sony 4.4.
+ * Staged disabled for Linux 4.19 validation.
+ */
+
+&dora_venus {
+	non_secure_cb {
+		status = "disabled";
+		compatible = "qcom,msm-vidc,context-bank";
+		label = "venus_ns";
+		iommus = <&venus_smmu 0x00>,
+			<&venus_smmu 0x01>,
+			<&venus_smmu 0x0a>,
+			<&venus_smmu 0x07>,
+			<&venus_smmu 0x0e>,
+			<&venus_smmu 0x0f>,
+			<&venus_smmu 0x08>,
+			<&venus_smmu 0x09>,
+			<&venus_smmu 0x0b>,
+			<&venus_smmu 0x0c>,
+			<&venus_smmu 0x0d>,
+			<&venus_smmu 0x10>,
+			<&venus_smmu 0x11>,
+			<&venus_smmu 0x21>,
+			<&venus_smmu 0x28>,
+			<&venus_smmu 0x29>,
+			<&venus_smmu 0x2b>,
+			<&venus_smmu 0x2c>,
+			<&venus_smmu 0x2d>,
+			<&venus_smmu 0x31>;
+		buffer-types = <0xfff>;
+		virtual-addr-pool = <0x70800000 0x6f800000>;
+	};
+
+	firmware_cb {
+		status = "disabled";
+		compatible = "qcom,msm-vidc,context-bank";
+		qcom,fw-context-bank;
+		iommus = <&venus_smmu 0x180>,
+			<&venus_smmu 0x186>;
+	};
+
+	secure_bitstream_cb {
+		status = "disabled";
+		compatible = "qcom,msm-vidc,context-bank";
+		label = "venus_sec_bitstream";
+		iommus = <&venus_smmu 0x100>,
+			<&venus_smmu 0x102>,
+			<&venus_smmu 0x109>,
+			<&venus_smmu 0x10a>,
+			<&venus_smmu 0x10b>,
+			<&venus_smmu 0x10e>,
+			<&venus_smmu 0x126>,
+			<&venus_smmu 0x129>,
+			<&venus_smmu 0x12b>;
+		buffer-types = <0x241>;
+		virtual-addr-pool = <0x4b000000 0x25800000>;
+		qcom,secure-context-bank;
+	};
+
+	venus_secure_pixel_cb: secure_pixel_cb {
+		status = "disabled";
+		compatible = "qcom,msm-vidc,context-bank";
+		label = "venus_sec_pixel";
+		iommus = <&venus_smmu 0x104>,
+			<&venus_smmu 0x10c>,
+			<&venus_smmu 0x110>,
+			<&venus_smmu 0x12c>;
+		buffer-types = <0x106>;
+		virtual-addr-pool = <0x25800000 0x25800000>;
+		qcom,secure-context-bank;
+	};
+
+	venus_secure_non_pixel_cb: secure_non_pixel_cb {
+		status = "disabled";
+		compatible = "qcom,msm-vidc,context-bank";
+		label = "venus_sec_non_pixel";
+		iommus = <&venus_smmu 0x105>,
+			<&venus_smmu 0x107>,
+			<&venus_smmu 0x108>,
+			<&venus_smmu 0x10d>,
+			<&venus_smmu 0x10f>,
+			<&venus_smmu 0x125>,
+			<&venus_smmu 0x128>,
+			<&venus_smmu 0x12d>,
+			<&venus_smmu 0x140>;
+		buffer-types = <0x480>;
+		virtual-addr-pool = <0x1000000 0x24800000>;
+		qcom,secure-context-bank;
+	};
+};

@@ -285,7 +285,7 @@ int mdss_smmu_set_attribute(int domain, int flag, int val)
 	int rc = 0, domain_attr = 0;
 	struct mdss_smmu_client *mdss_smmu = mdss_smmu_get_cb(domain);
 
-	if (!mdss_smmu) {
+	if (!mdss_smmu || !mdss_smmu->domain) {
 		pr_err("not able to get smmu context\n");
 		return -EINVAL;
 	}
@@ -468,7 +468,7 @@ static int mdss_smmu_map_dma_buf_v2(struct dma_buf *dma_buf,
 	struct scatterlist *sg;
 	unsigned int i;
 
-	if (!mdss_smmu) {
+	if (!mdss_smmu || !mdss_smmu->domain) {
 		pr_err("not able to get smmu context\n");
 		return -EINVAL;
 	}
@@ -518,7 +518,7 @@ static int mdss_smmu_dma_alloc_coherent_v2(struct device *dev, size_t size,
 {
 	struct mdss_smmu_client *mdss_smmu = mdss_smmu_get_cb(domain);
 
-	if (!mdss_smmu) {
+	if (!mdss_smmu || !mdss_smmu->domain) {
 		pr_err("not able to get smmu context\n");
 		return -EINVAL;
 	}
@@ -557,7 +557,7 @@ static int mdss_smmu_map_v2(int domain, phys_addr_t iova, phys_addr_t phys,
 {
 	struct mdss_smmu_client *mdss_smmu = mdss_smmu_get_cb(domain);
 
-	if (!mdss_smmu) {
+	if (!mdss_smmu || !mdss_smmu->domain) {
 		pr_err("not able to get smmu context\n");
 		return -EINVAL;
 	}
@@ -608,7 +608,7 @@ static int mdss_smmu_dsi_map_buffer_v2(phys_addr_t phys, unsigned int domain,
 {
 	struct mdss_smmu_client *mdss_smmu = mdss_smmu_get_cb(domain);
 
-	if (!mdss_smmu) {
+	if (!mdss_smmu || !mdss_smmu->domain) {
 		pr_err("not able to get smmu context\n");
 		return -EINVAL;
 	}

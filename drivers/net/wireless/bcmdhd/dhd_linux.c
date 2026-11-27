@@ -269,7 +269,7 @@ extern void dhd_wlfc_plat_deinit(void *dhd);
 
 #if LINUX_VERSION_CODE == KERNEL_VERSION(2, 6, 15)
 const char *
-print_tainted()
+print_tainted(void)
 {
 	return "";
 }

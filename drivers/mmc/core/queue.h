@@ -102,6 +102,7 @@ extern void mmc_queue_suspend(struct mmc_queue *);
 extern void mmc_queue_resume(struct mmc_queue *);
 extern unsigned int mmc_queue_map_sg(struct mmc_queue *,
 				     struct mmc_queue_req *);
+extern bool mmc_access_rpmb(struct mmc_queue *mq);
 
 void mmc_cqe_check_busy(struct mmc_queue *mq);
 void mmc_cqe_recovery_notifier(struct mmc_request *mrq);

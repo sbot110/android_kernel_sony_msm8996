@@ -61,7 +61,7 @@
 		};
 	};
 
-	rpm-regulator-smpa2 {
+	dora_rpm_mx: rpm-regulator-smpa2 {
 		compatible = "qcom,msm8996-rpm-corner-resource";
 		qcom,rpm = <&{/rpm-glink/rpm_requests}>;
 		qcom,resource-name = "smpa";

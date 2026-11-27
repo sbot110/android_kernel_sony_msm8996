@@ -50,6 +50,7 @@
 #include <linux/dma-contiguous.h>
 #include <linux/cma.h>
 #include <linux/of_platform.h>
+#include <linux/of_reserved_mem.h>
 #include <soc/qcom/qtee_shmbridge.h>
 
 #define QSEECOM_DEV			"qseecom"
@@ -472,6 +473,7 @@ static int __qseecom_scm_call2_locked(uint32_t smc_id, struct scm_desc *desc)
 	int ret = 0;
 	int retry_count = 0;
 
+	dsb(sy);
 	if (qseecom.support_bus_scaling)
 		return scm_call2(smc_id, desc);
 
@@ -705,7 +707,7 @@ static int qseecom_scm_call2(uint32_t svc_id, uint32_t tz_cmd_id,
 			qseecom.smcinvoke_support = true;
 			smc_id = TZ_OS_REGISTER_LISTENER_SMCINVOKE_ID;
 			ret = __qseecom_scm_call2_locked(smc_id, &desc);
-			if (ret == -EOPNOTSUPP) {
+			if (ret) {
 				/* smcinvoke is not supported */
 				qseecom.smcinvoke_support = false;
 				smc_id = TZ_OS_REGISTER_LISTENER_ID;
@@ -1486,6 +1488,12 @@ static int __qseecom_set_sb_memory(struct qseecom_registered_listener_list *svc,
 	}
 
 	resp.result = QSEOS_RESULT_INCOMPLETE;
+	if (pfn_valid(__phys_to_pfn(svc->sb_phys)))
+		dmac_flush_range(phys_to_virt(svc->sb_phys),
+				 phys_to_virt(svc->sb_phys) +
+				 PAGE_ALIGN(svc->sb_length));
+	pr_info("register_listener: id=%u sb_phys=%pa len=%zu\n",
+		svc->svc.listener_id, &svc->sb_phys, svc->sb_length);
 
 	mutex_unlock(&listener_access_lock);
 	mutex_lock(&app_access_lock);
@@ -1495,6 +1503,9 @@ static int __qseecom_set_sb_memory(struct qseecom_registered_listener_list *svc,
 					 &resp, sizeof(resp));
 	mutex_unlock(&app_access_lock);
 	mutex_lock(&listener_access_lock);
+	pr_info("register_listener: id=%u ret=%d res=0x%x smcinvoke=%d\n",
+		svc->svc.listener_id, ret, resp.result,
+		qseecom.smcinvoke_support);
 	if (ret) {
 		pr_err("qseecom_scm_call failed with err: %d\n", ret);
 		ret = -EINVAL;
@@ -2904,10 +2915,19 @@ static int qseecom_load_app(struct qseecom_dev_handle *data, void __user *argp)
 			pr_err("cache operation failed %d\n", ret);
 			goto loadapp_err;
 		}
+		dsb(sy);
+		if (pfn_valid(__phys_to_pfn(pa)))
+			dmac_flush_range(phys_to_virt(pa),
+					 phys_to_virt(pa) + PAGE_ALIGN(len));
+		pr_info("load_app: %s arch=%u pa=%pa mdt=%u img=%u len=%zu\n",
+			load_img_req.img_name, load_img_req.app_arch,
+			&pa, load_img_req.mdt_len, load_img_req.img_len, len);
 
 		/*  SCM_CALL  to load the app and get the app_id back */
 		ret = qseecom_scm_call(SCM_SVC_TZSCHEDULER, 1, cmd_buf,
 			cmd_len, &resp, sizeof(resp));
+		pr_info("load_app: %s scm ret=%d res=0x%x data=%u\n",
+			load_img_req.img_name, ret, resp.result, resp.data);
 		if (ret) {
 			pr_err("scm_call to load app failed\n");
 			ret = -EINVAL;
@@ -4155,7 +4175,7 @@ static int __qseecom_allocate_sg_list_buffer(struct qseecom_dev_handle *data,
 	size = sg_ptr->nents * SG_ENTRY_SZ_64BIT;
 	size = (size + PAGE_SIZE) & PAGE_MASK;
 	buf = dma_alloc_coherent(qseecom.dev,
-			size, &coh_pmem, GFP_KERNEL);
+			size, &coh_pmem, GFP_KERNEL | GFP_DMA32);
 	if (buf == NULL) {
 		pr_err("failed to alloc memory for sg buf\n");
 		return -ENOMEM;
@@ -4719,11 +4739,14 @@ static int __qseecom_alloc_coherent_buf(
 	/* Allocate a contiguous kernel buffer */
 	size = (size + PAGE_SIZE) & PAGE_MASK;
 	buf = dma_alloc_coherent(qseecom.dev,
-			size, &coh_pmem, GFP_KERNEL);
+			size, &coh_pmem, GFP_KERNEL | GFP_DMA32);
 	if (buf == NULL) {
 		pr_err("failed to alloc memory for size %d\n", size);
 		return -ENOMEM;
 	}
+	if (pfn_valid(__phys_to_pfn(coh_pmem)))
+		dmac_flush_range(phys_to_virt(coh_pmem),
+				 phys_to_virt(coh_pmem) + size);
 	*vaddr = buf;
 	*paddr = coh_pmem;
 	return 0;
@@ -4791,6 +4814,11 @@ static int __qseecom_load_fw(struct qseecom_dev_handle *data, char *appname,
 		ret = -EIO;
 		goto exit_free_img_data;
 	}
+	dsb(sy);
+	if (pfn_valid(__phys_to_pfn(pa)))
+		dmac_flush_range(phys_to_virt(pa),
+				 phys_to_virt(pa) +
+				 ((fw_size + PAGE_SIZE) & PAGE_MASK));
 
 	/* Populate the load_req parameters */
 	if (qseecom.qsee_version < QSEE_VERSION_40) {
@@ -4912,6 +4940,13 @@ static int qseecom_load_commonlib_image(struct qseecom_dev_handle *data,
 		ret = -EIO;
 		goto exit_free_img_data;
 	}
+	dsb(sy);
+	if (pfn_valid(__phys_to_pfn(pa)))
+		dmac_flush_range(phys_to_virt(pa),
+				 phys_to_virt(pa) +
+				 ((fw_size + PAGE_SIZE) & PAGE_MASK));
+	pr_info("load_cmnlib: %s pa=%pa fw_size=%u mdt=%u img=%u\n",
+		cmnlib_name, &pa, fw_size, load_req.mdt_len, load_req.img_len);
 	if (qseecom.qsee_version < QSEE_VERSION_40) {
 		load_req.phy_addr = (uint32_t)pa;
 		load_req.qsee_cmd_id = QSEOS_LOAD_SERV_IMAGE_COMMAND;
@@ -5901,6 +5936,13 @@ static int qseecom_load_external_elf(struct qseecom_dev_handle *data,
 		pr_err("cache operation failed %d\n", ret);
 		goto exit_disable_clock;
 	}
+	dsb(sy);
+	if (pfn_valid(__phys_to_pfn(pa)))
+		dmac_flush_range(phys_to_virt(pa),
+				 phys_to_virt(pa) + PAGE_ALIGN(len));
+	pr_info("load_ext_elf: %s pa=%pa mdt=%u img=%u len=%zu\n",
+		load_img_req.img_name, &pa, load_img_req.mdt_len,
+		load_img_req.img_len, len);
 	/*  SCM_CALL to load the external elf */
 	ret = qseecom_scm_call(SCM_SVC_TZSCHEDULER, 1, cmd_buf, cmd_len,
 			&resp, sizeof(resp));
@@ -7059,7 +7101,7 @@ static int __qseecom_qteec_handle_pre_alc_fd(struct qseecom_dev_handle *data,
 		sizeof(struct qseecom_sg_entry) * sg_ptr->nents;
 	size = (size + PAGE_SIZE) & PAGE_MASK;
 	buf = dma_alloc_coherent(qseecom.dev,
-			size, &coh_pmem, GFP_KERNEL);
+			size, &coh_pmem, GFP_KERNEL | GFP_DMA32);
 	if (buf == NULL) {
 		pr_err("failed to alloc memory for sg buf\n");
 		return -ENOMEM;
@@ -9368,7 +9410,10 @@ static int qseecom_init_dev(struct platform_device *pdev)
 	}
 
 	qseecom.dev = &pdev->dev;
-	rc = dma_set_mask(qseecom.dev, DMA_BIT_MASK(64));
+	rc = of_reserved_mem_device_init(qseecom.dev);
+	if (rc && rc != -ENODEV)
+		pr_warn("qseecom reserved_mem init ret=%d\n", rc);
+	rc = dma_set_mask_and_coherent(qseecom.dev, DMA_BIT_MASK(32));
 	if (rc) {
 		pr_err("qseecom failed to set dma mask %d\n", rc);
 		goto exit_del_cdev;
@@ -9641,6 +9686,9 @@ static int qseecom_probe(struct platform_device *pdev)
 		goto exit_stop_kthreads;
 
 	atomic_set(&qseecom.qseecom_state, QSEECOM_STATE_READY);
+	pr_info("qseecom: probe completed, version=0x%x whitelist=%d reentrancy=%u\n",
+		qseecom.qsee_version, qseecom.whitelist_support,
+		qseecom.qsee_reentrancy_support);
 	return 0;
 
 exit_stop_kthreads:

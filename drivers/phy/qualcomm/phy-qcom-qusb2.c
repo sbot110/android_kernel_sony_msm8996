@@ -245,8 +245,6 @@ struct qusb2_phy_cfg {
 	/* MSM8996 PORT_INTR_CTRL differs from the newer QUSB2 v2 layout. */
 	bool has_msm8996_intr_layout;
 
-	/* Board requires a real shared USB/charger ownership implementation. */
-	bool needs_charger_handoff;
 };
 
 static const struct qusb2_phy_cfg msm8996_phy_cfg = {
@@ -268,7 +266,6 @@ static const struct qusb2_phy_cfg msm8996_dora_phy_cfg = {
 
 	.has_pll_test	= true,
 	.has_msm8996_intr_layout = true,
-	.needs_charger_handoff = true,
 	.disable_ctrl	= (CLAMP_N_EN | FREEZIO_N | POWER_DOWN),
 	.mask_core_ready = PLL_LOCKED,
 	.autoresume_en	 = BIT(3),
@@ -840,17 +837,8 @@ static int qusb2_phy_init(struct phy *phy)
 {
 	struct qusb2_phy *qphy = phy_get_drvdata(phy);
 
-	/*
-	 * Dora's bootloader may still own charging and D+/D-. Neither a
-	 * disabled charger node nor a cached regulator enable proves handoff.
-	 * A real common DPDM/VBUS/ID owner, acknowledged physical supplies
-	 * (including RPM L12), and safe provider retirement are prerequisites
-	 * for touching this PHY. There is deliberately no DT bypass switch.
-	 */
-	if (qphy->cfg->needs_charger_handoff) {
-		dev_err(&phy->dev, "Dora USB blocked: charger/PHY handoff is not implemented\n");
-		return -EOPNOTSUPP;
-	}
+	if (qphy->cfg == &msm8996_dora_phy_cfg)
+		dev_warn(&phy->dev, "Dora QUSB2 experimental: fixed peripheral mode only; Sony charger/DPDM handoff is not qualified\n");
 
 	return qusb2_phy_init_hw(phy);
 }

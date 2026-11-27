@@ -217,6 +217,7 @@ static struct clk_fixed_factor gpll0_early_div = {
 static struct clk_alpha_pll_postdiv gpll0 = {
 	.offset = 0x00000,
 	.regs = clk_alpha_pll_regs[CLK_ALPHA_PLL_TYPE_DEFAULT],
+	.width = 4,
 	.clkr.hw.init = &(struct clk_init_data){
 		.name = "gpll0",
 		.parent_names = (const char *[]){ "gpll0_early" },
@@ -243,6 +244,7 @@ static struct clk_alpha_pll gpll4_early = {
 static struct clk_alpha_pll_postdiv gpll4 = {
 	.offset = 0x77000,
 	.regs = clk_alpha_pll_regs[CLK_ALPHA_PLL_TYPE_DEFAULT],
+	.width = 4,
 	.clkr.hw.init = &(struct clk_init_data){
 		.name = "gpll4",
 		.parent_names = (const char *[]){ "gpll4_early" },
@@ -357,6 +359,7 @@ static struct clk_rcg2 usb30_mock_utmi_clk_src = {
 
 static const struct freq_tbl ftbl_usb3_phy_aux_clk_src[] = {
 	F(1200000, P_XO, 16, 0, 0),
+	F(19200000, P_XO, 1, 0, 0),
 	{ }
 };
 
@@ -3542,10 +3545,10 @@ static struct msm8996_voltage_clock gcc_msm8996_voltage_clocks[] = {
 	{ .hw = &sdcc2_apps_clk_src.clkr.hw, .fmax = { 0UL, 19200000UL, 50000000UL, 200000000UL, 0UL }, },
 	{ .hw = &sdcc3_apps_clk_src.clkr.hw, .fmax = { 0UL, 19200000UL, 50000000UL, 200000000UL, 0UL }, },
 	{ .hw = &sdcc4_apps_clk_src.clkr.hw, .fmax = { 0UL, 19200000UL, 50000000UL, 100000000UL, 0UL }, },
-	{ .hw = &tsif_ref_clk_src.clkr.hw, .fmax = { 0UL, 105500UL, 0UL, 0UL, 0UL }, },
+	{ .hw = &tsif_ref_clk_src.clkr.hw, .fmax = { 0UL, 19200000UL, 0UL, 0UL, 0UL }, },
 	{ .hw = &usb20_mock_utmi_clk_src.clkr.hw, .fmax = { 0UL, 19200000UL, 60000000UL, 0UL, 0UL }, },
 	{ .hw = &usb30_mock_utmi_clk_src.clkr.hw, .fmax = { 0UL, 40000000UL, 60000000UL, 0UL, 0UL }, },
-	{ .hw = &usb3_phy_aux_clk_src.clkr.hw, .fmax = { 0UL, 1200000UL, 0UL, 0UL, 0UL }, },
+	{ .hw = &usb3_phy_aux_clk_src.clkr.hw, .fmax = { 0UL, 19200000UL, 0UL, 0UL, 0UL }, },
 };
 
 static const struct of_device_id gcc_msm8996_match_table[] = {

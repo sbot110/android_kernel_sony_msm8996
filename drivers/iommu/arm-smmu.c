@@ -5966,13 +5966,15 @@ static int __init arm_smmu_init(void)
 		return ret;
 
 	ret = platform_driver_register(&arm_smmu_driver);
+	if (ret)
+		return ret;
+	registered = true;
 #ifdef CONFIG_MSM_TZ_SMMU
-	ret = register_iommu_sec_ptbl();
+	register_iommu_sec_ptbl();
 #endif
-	registered = !ret;
 	trace_smmu_init(ktime_us_delta(ktime_get(), cur));
 
-	return ret;
+	return 0;
 }
 
 static void __exit arm_smmu_exit(void)

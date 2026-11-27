@@ -23,6 +23,8 @@ enum vidc_bus_type {
 	PERF,
 	DDR,
 	LLCC,
+	SONY_VMEM,
+	SONY_VMEM_PLUS,
 };
 enum scenario {
 	SCENARIO_WORST,
@@ -161,12 +163,23 @@ static struct lut {
 		}
 	},
 };
-static u32 get_type_frm_name(char *name)
+/*
+ * The Sony MSM8996 device uses the original VMEM+ vote table.
+ * Other platforms retain the existing DDR/PERF selection.
+ */
+static enum vidc_bus_type get_type_frm_name(struct bus_info *bus)
 {
-	if (!strcmp(name, "venus-ddr"))
+	if (!strcmp(bus->name, "venus-ddr"))
 		return DDR;
-	else
-		return PERF;
+
+	if (!strcmp(bus->name, "venus-vmem") && bus->mode) {
+		if (!strcmp(bus->mode, "msm-vidc-vmem+"))
+			return SONY_VMEM_PLUS;
+		if (!strcmp(bus->mode, "msm-vidc-vmem"))
+			return SONY_VMEM;
+	}
+
+	return PERF;
 }
 
 static struct lut const *__lut(int width, int height)
@@ -239,6 +252,36 @@ static void __dump(struct dump dump[], int len)
 
 		dprintk(VIDC_DBG, "%s", formatted_line);
 	}
+}
+
+static unsigned long __calculate_vmem_plus_ab(struct vidc_bus_vote_data *d)
+{
+	unsigned long i = 0, vmem_plus = 0;
+
+	if (!d->imem_ab_tbl || !d->imem_ab_tbl_size) {
+		vmem_plus = 1; /* Vote for the min ab value */
+		goto exit;
+	}
+
+	/* Pick up vmem frequency based on venus core frequency */
+	for (i = 0; i < d->imem_ab_tbl_size; i++) {
+		if (d->imem_ab_tbl[i].core_freq == d->core_freq) {
+			vmem_plus = d->imem_ab_tbl[i].imem_ab;
+			break;
+		}
+	}
+
+	/* If the core rate is unlisted, warn and vote the minimum. */
+	/* Incase we get an unsupported freq throw a warning
+	 * and set ab to the minimum value. */
+	if (!vmem_plus) {
+		vmem_plus = 1;
+		dprintk(VIDC_WARN,
+			"could not calculate vmem ab value due to core freq mismatch\n");
+	}
+
+exit:
+	return vmem_plus;
 }
 
 static unsigned long __calculate_vpe(struct vidc_bus_vote_data *d,
@@ -579,6 +622,9 @@ static unsigned long __calculate_decoder(struct vidc_bus_vote_data *d,
 	switch (type) {
 	case DDR:
 		ret = kbps(fp_round(ddr.total));
+		break;
+	case SONY_VMEM:
+		ret = kbps(fp_round(vmem.total));
 		break;
 	default:
 		dprintk(VIDC_ERR, "%s - Unknown governor\n", __func__);
@@ -980,6 +1026,9 @@ static unsigned long __calculate_encoder(struct vidc_bus_vote_data *d,
 	case DDR:
 		ret = kbps(fp_round(ddr.total));
 		break;
+	case SONY_VMEM:
+		ret = kbps(fp_round(vmem.total));
+		break;
 	default:
 		dprintk(VIDC_ERR, "%s - Unknown governor\n", __func__);
 	}
@@ -991,6 +1040,11 @@ static unsigned long __calculate(struct vidc_bus_vote_data *d,
 		enum vidc_bus_type type)
 {
 	unsigned long value = 0;
+
+	/* Sony VMEM+ is selected from the core clock / IMEM AB table. */
+	if (type == SONY_VMEM_PLUS &&
+	    d->domain != HAL_VIDEO_DOMAIN_VPE)
+		return __calculate_vmem_plus_ab(d);
 
 	switch (d->domain) {
 	case HAL_VIDEO_DOMAIN_VPE:
@@ -1019,13 +1073,13 @@ unsigned long __calc_bw(struct bus_info *bus,
 		goto exit;
 
 	for (c = 0; c < vidc_data->data_count; ++c) {
-		if (vidc_data->data->power_mode == VIDC_POWER_TURBO) {
+		if (vidc_data->data[c].power_mode == VIDC_POWER_TURBO) {
 			ab_kbps = INT_MAX;
 			goto exit;
 		}
 	}
 
-	type = get_type_frm_name(bus->name);
+	type = get_type_frm_name(bus);
 
 	for (c = 0; c < vidc_data->data_count; ++c)
 		ab_kbps += __calculate(&vidc_data->data[c], type);

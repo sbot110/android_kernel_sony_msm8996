@@ -1,0 +1,78 @@
+// SPDX-License-Identifier: GPL-2.0-only
+/* Sony MSM8996 Venus reference frequency and bus data.
+ * All bus clients remain disabled until 4.19 bandwidth
+ * tables and hardware dependencies are validated.
+ */
+#include <dt-bindings/msm/msm-bus-ids.h>
+
+&dora_venus {
+	qcom,sony-legacy-bw-governor;
+	qcom,load-freq-tbl =
+		/* Encoders */
+		<972000 490000000 0x55555555>, /* 4k UHD @ 30 */
+		<489600 320000000 0x55555555>, /* 1080p @ 60 */
+		<244800 150000000 0x55555555>, /* 1080p @ 30 */
+		<108000  75000000 0x55555555>, /* 720p @ 30 */
+
+		/* Decoders */
+		<1944000 490000000 0xffffffff>, /* 4k UHD @ 60 */
+		< 972000 320000000 0xffffffff>, /* 4k UHD @ 30 */
+		< 489600 150000000 0xffffffff>, /* 1080p @ 60 */
+		< 244800  75000000 0xffffffff>;
+
+	qcom,dcvs-tbl =
+		<972000 972000 19944000 0x3f00000c>, /* UHD 30 */
+		<489600 489600   972000 0x3f00000c>, /* 1080p 60 */
+		<244800 244800   489600 0x3f00000c>, /* 1080p 30 */
+		<829440 489600   972000 0x04000004>;
+
+	qcom,dcvs-limit =
+		<32400 30>, /* Encoder UHD */
+		<14400 30>;
+
+	qcom,imem-ab-tbl =
+		<75000000  1500000>, /* imem @ svs2 freq 75 Mhz */
+		<150000000 1500000>, /* imem @ svs2 freq 75 Mhz */
+		<320000000 2500000>, /* imem @ svs freq 171 Mhz */
+		<490000000 6000000>;
+
+	bus_cnoc {
+		status = "disabled";
+		compatible = "qcom,msm-vidc,bus";
+		label = "cnoc";
+		qcom,bus-master = <MSM_BUS_MASTER_AMPSS_M0>;
+		qcom,bus-slave = <MSM_BUS_SLAVE_VENUS_CFG>;
+		qcom,mode = "performance";
+		qcom,bus-range-kbps = <1 1>;
+	};
+
+	venus_bus_ddr {
+		status = "disabled";
+		compatible = "qcom,msm-vidc,bus";
+		label = "venus-ddr";
+		qcom,bus-master = <MSM_BUS_MASTER_VIDEO_P0>;
+		qcom,bus-slave = <MSM_BUS_SLAVE_EBI_CH0>;
+		qcom,mode = "msm-vidc-ddr";
+		qcom,bus-range-kbps = <1000 3388000>;
+	};
+
+	venus_bus_vmem {
+		status = "disabled";
+		compatible = "qcom,msm-vidc,bus";
+		label = "venus-vmem";
+		qcom,bus-master = <MSM_BUS_MASTER_VIDEO_P0_OCMEM>;
+		qcom,bus-slave = <MSM_BUS_SLAVE_VMEM>;
+		qcom,mode = "msm-vidc-vmem+";
+		qcom,bus-range-kbps = <1000 6776000>;
+	};
+
+	arm9_bus_ddr {
+		status = "disabled";
+		compatible = "qcom,msm-vidc,bus";
+		label = "venus-arm9-ddr";
+		qcom,bus-master = <MSM_BUS_MASTER_VIDEO_P0>;
+		qcom,bus-slave = <MSM_BUS_SLAVE_EBI_CH0>;
+		qcom,mode = "performance";
+		qcom,bus-range-kbps = <1 1>;
+	};
+};

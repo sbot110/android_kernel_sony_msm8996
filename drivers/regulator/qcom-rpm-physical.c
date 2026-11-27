@@ -647,7 +647,11 @@ int qcom_rpm_physical_register(struct device *dev, struct device_node *node,
 	 * No dummy provider, raw core-supply detachment or invented Vin exists.
 	 */
 	physical->desc.supply_name = NULL;
-	physical->desc.of_match = node->name;
+	/* init_data is parsed explicitly below with apply_uV = false; leaving
+	 * of_match set would make regulator_register() re-parse DT and
+	 * overwrite apply_uV = true, calling get_voltage() while !online.
+	 */
+	physical->desc.of_match = NULL;
 	physical->desc.owner = THIS_MODULE;
 	physical->desc.type = REGULATOR_VOLTAGE;
 	physical->desc.ops = &rpm_physical_ops;

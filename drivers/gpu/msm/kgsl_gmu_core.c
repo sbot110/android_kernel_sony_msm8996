@@ -49,8 +49,9 @@ int gmu_core_probe(struct kgsl_device *device)
 	struct gmu_core_ops *gmu_core_ops;
 	int i = 0, ret = -ENXIO;
 
-	device->gmu_core.flags = ADRENO_FEATURE(ADRENO_DEVICE(device),
-			ADRENO_GPMU) ? BIT(GMU_GPMU) : 0;
+	device->gmu_core.flags = (adreno_is_a6xx(ADRENO_DEVICE(device)) &&
+			ADRENO_FEATURE(ADRENO_DEVICE(device), ADRENO_GPMU)) ?
+			BIT(GMU_GPMU) : 0;
 
 	for (i = 0; i < ARRAY_SIZE(gmu_subtypes); i++) {
 		node = of_find_compatible_node(device->pdev->dev.of_node,

@@ -10,33 +10,33 @@
  * gate is deliberately visible in the final DT, not a successful fake probe.
  */
 &mdss_mdp {
-	status = "disabled";
+	status = "okay";
 };
 
 &mdss_dsi {
-	status = "disabled";
+	status = "okay";
 };
 
 &mdss_dsi0_pll {
-	status = "disabled";
+	status = "okay";
 };
 
 &mdss_dsi1_pll {
-	status = "disabled";
+	status = "okay";
 };
 
 &mdp_smmu {
-	status = "disabled";
+	status = "okay";
 };
 
 &rot_smmu {
-	status = "disabled";
+	status = "okay";
 };
 
 &labibb {
-	status = "disabled";
+	status = "okay";
 };
 
 &pmi8994_wled {
-	status = "disabled";
+	status = "okay";
 };

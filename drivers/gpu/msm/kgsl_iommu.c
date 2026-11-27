@@ -1674,8 +1674,14 @@ static int kgsl_iommu_start(struct kgsl_mmu *mmu)
 		return status;
 	}
 
-	/* Set the following registers only when the MMU type is QSMMU */
-	if (mmu->subtype != KGSL_IOMMU_SMMU_V500) {
+	/*
+	 * Set the following registers only on SDM660+ QSMMU targets.
+	 * MSM8996 Adreno 530 programs kgsl_smmu impl-def registers via
+	 * arm-smmu attach-impl-defs while halted; direct writes to 0x6800 /
+	 * 0x64a0 from HLOS violate QHEE/TZ SMMU global protection.
+	 */
+	if (!adreno_is_a530(ADRENO_DEVICE(KGSL_MMU_DEVICE(mmu))) &&
+	    mmu->subtype != KGSL_IOMMU_SMMU_V500) {
 		/* Enable hazard check from GPU_SMMU_HUM_CFG */
 		writel_relaxed(0x02, iommu->regbase + 0x6800);
 
@@ -2661,8 +2667,7 @@ static int _kgsl_iommu_cb_probe(struct kgsl_device *device,
 			return PTR_ERR(ctx->dev);
 	}
 
-	of_dma_configure(ctx->dev, node, true);
-	return 0;
+	return of_dma_configure(ctx->dev, node, true);
 }
 
 static const struct {

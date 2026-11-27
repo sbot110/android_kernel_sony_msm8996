@@ -2303,6 +2303,8 @@ static int __genpd_dev_pm_attach(struct device *dev, struct device_node *np,
  */
 int genpd_dev_pm_attach(struct device *dev)
 {
+	bool power_on = true;
+
 	if (!dev->of_node)
 		return 0;
 
@@ -2314,7 +2316,10 @@ int genpd_dev_pm_attach(struct device *dev)
 				       "#power-domain-cells") != 1)
 		return 0;
 
-	return __genpd_dev_pm_attach(dev, dev->of_node, 0, true);
+	if (of_device_is_compatible(dev->of_node, "qcom,genpd-regulator"))
+		power_on = false;
+
+	return __genpd_dev_pm_attach(dev, dev->of_node, 0, power_on);
 }
 EXPORT_SYMBOL_GPL(genpd_dev_pm_attach);
 

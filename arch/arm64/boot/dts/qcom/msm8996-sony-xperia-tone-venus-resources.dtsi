@@ -1,0 +1,69 @@
+// SPDX-License-Identifier: GPL-2.0-only
+/*
+ * Dora MSM8996 Venus - staged resources, not hardware enabled.
+ * GDSC providers: native MMCC 4.19.
+ * SMMU register/IRQ topology: original Sony 4.4 MSM8996.
+ */
+#include <dt-bindings/clock/qcom,mmcc-msm8996.h>
+#include <dt-bindings/interrupt-controller/arm-gic.h>
+
+/ {
+    gdsc_venus: power-domain-venus {
+        compatible = "qcom,genpd-regulator";
+        regulator-name = "gdsc_venus";
+        power-domains = <&mmcc VENUS_GDSC>;
+        status = "disabled";
+    };
+
+    gdsc_venus_core0: power-domain-venus-core0 {
+        compatible = "qcom,genpd-regulator";
+        regulator-name = "gdsc_venus_core0";
+        power-domains = <&mmcc VENUS_CORE0_GDSC>;
+        status = "disabled";
+    };
+
+    gdsc_venus_core1: power-domain-venus-core1 {
+        compatible = "qcom,genpd-regulator";
+        regulator-name = "gdsc_venus_core1";
+        power-domains = <&mmcc VENUS_CORE1_GDSC>;
+        status = "disabled";
+    };
+};
+
+&soc {
+    venus_smmu: arm,smmu-venus@d40000 {
+        compatible = "qcom,smmu-v2";
+        status = "disabled";
+
+        qcom,tz-device-id = "VIDEO";
+        qcom,register-save;
+        qcom,skip-init;
+
+        reg = <0x00d40000 0x00020000>;
+        #iommu-cells = <1>;
+        #global-interrupts = <1>;
+
+        interrupts = <GIC_SPI 286 IRQ_TYPE_LEVEL_HIGH>,
+                     <GIC_SPI 335 IRQ_TYPE_LEVEL_HIGH>,
+                     <GIC_SPI 336 IRQ_TYPE_LEVEL_HIGH>,
+                     <GIC_SPI 337 IRQ_TYPE_LEVEL_HIGH>,
+                     <GIC_SPI 338 IRQ_TYPE_LEVEL_HIGH>,
+                     <GIC_SPI 339 IRQ_TYPE_LEVEL_HIGH>,
+                     <GIC_SPI 340 IRQ_TYPE_LEVEL_HIGH>,
+                     <GIC_SPI 341 IRQ_TYPE_LEVEL_HIGH>;
+
+        vdd-supply = <&gdsc_mmagic_video>;
+
+        clocks = <&mmcc MMSS_MMAGIC_AHB_CLK>,
+                 <&mmcc MMSS_MMAGIC_CFG_AHB_CLK>,
+                 <&mmcc SMMU_VIDEO_AHB_CLK>,
+                 <&mmcc SMMU_VIDEO_AXI_CLK>,
+                 <&mmcc MMAGIC_VIDEO_AXI_CLK>;
+
+        clock-names = "mmagic_ahb_clk",
+                      "mmagic_cfg_ahb_clk",
+                      "video_ahb_clk",
+                      "video_axi_clk",
+                      "mmagic_video_axi_clk";
+    };
+};

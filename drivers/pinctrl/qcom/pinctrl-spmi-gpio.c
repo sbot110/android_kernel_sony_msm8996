@@ -968,13 +968,18 @@ static int pmic_gpio_probe(struct platform_device *pdev)
 
 	ret = of_property_read_u32_array(dev->of_node, "reg", reg, 2);
 	if (ret < 0) {
-		dev_err(dev, "reg property reading failed\n");
-		return ret;
+		ret = of_property_read_u32(dev->of_node, "reg", &start);
+		if (ret < 0) {
+			dev_err(dev, "reg property reading failed\n");
+			return ret;
+		}
+		ngpios = of_irq_count(dev->of_node);
+		size = ngpios * PMIC_GPIO_ADDRESS_RANGE;
+	} else {
+		start = reg[0];
+		size = reg[1];
+		ngpios = size / PMIC_GPIO_ADDRESS_RANGE;
 	}
-	start = reg[0];
-	size = reg[1];
-
-	ngpios = size / PMIC_GPIO_ADDRESS_RANGE;
 	if (ngpios == 0) {
 		dev_err(dev, "no gpios assigned\n");
 		return -ENODEV;

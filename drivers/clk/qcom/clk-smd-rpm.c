@@ -672,7 +672,7 @@ static struct clk_hw *msm8996_clks[] = {
 
 static const struct rpm_smd_clk_desc rpm_clk_msm8996 = {
 	.clks = msm8996_clks,
-	.num_rpm_clks = RPM_SMD_RF_CLK2_A_PIN,
+	.num_rpm_clks = ARRAY_SIZE(msm8996_clks) - 1,
 	.num_clks = ARRAY_SIZE(msm8996_clks),
 };
 

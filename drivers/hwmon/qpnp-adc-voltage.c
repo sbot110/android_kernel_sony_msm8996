@@ -2734,7 +2734,9 @@ static int32_t qpnp_vadc_init_thermal(struct qpnp_vadc_chip *vadc,
 			vadc->adc->adc_channels[i].channel_num;
 		vadc->vadc_therm_chan[i].thermal_chan = i;
 		thermal_node = of_property_read_bool(child,
-					"qcom,vadc-thermal-node");
+					"qcom,vadc-thermal-node") ||
+			(vadc->adc->adc_channels[i].name &&
+			 !strcmp(vadc->adc->adc_channels[i].name, "emmc_therm"));
 		if (thermal_node) {
 			/* Register with the thermal zone */
 			snprintf(name, sizeof(name), "%s",

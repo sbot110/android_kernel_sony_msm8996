@@ -1,0 +1,124 @@
+// SPDX-License-Identifier: GPL-2.0-only
+/*
+ * Sony Xperia X Performance (dora) Synaptics Clearpad incell touchscreen
+ * on BLSP2 QUP6 (BLSP12, i2c@75ba000).
+ */
+
+#include <dt-bindings/clock/qcom,gcc-msm8996.h>
+#include <dt-bindings/interrupt-controller/arm-gic.h>
+
+&soc {
+	blsp2_i2c5: i2c@75ba000 {
+		compatible = "qcom,i2c-qup-v2.2.1";
+		reg = <0x075ba000 0x1000>;
+		interrupts = <GIC_SPI 106 IRQ_TYPE_LEVEL_HIGH>;
+		clocks = <&gcc GCC_BLSP2_AHB_CLK>,
+			 <&gcc GCC_BLSP2_QUP6_I2C_APPS_CLK>;
+		clock-names = "iface", "core";
+		clock-frequency = <355000>;
+		pinctrl-names = "default", "sleep";
+		pinctrl-0 = <&blsp2_i2c5_default>;
+		pinctrl-1 = <&blsp2_i2c5_sleep>;
+		#address-cells = <1>;
+		#size-cells = <0>;
+		status = "okay";
+	};
+};
+
+&blsp2_i2c5 {
+#include "sony/dora/clearpad-ic-default-regoffset.dtsi"
+};
+
+&blsp2_i2c5 {
+#include "sony/dora/clearpad-ic-s332u-regoffset.dtsi"
+};
+
+&blsp2_i2c5 {
+#include "sony/dora/clearpad-ic-s3330-regoffset.dtsi"
+};
+
+&blsp2_i2c5 {
+#include "sony/dora/clearpad-ic-s3500-regoffset.dtsi"
+};
+
+&blsp2_i2c5 {
+	synaptics_clearpad@2c {
+			compatible = "synaptics,clearpad";
+			reg = <0x2c>;
+			interrupt-parent = <&msmgpio>;
+			interrupts = <125 0x2>;
+			synaptics,irq_gpio = <&msmgpio 125 0x00>;
+			pinctrl-names = "default";
+			pinctrl-0 = <&touch_int_n>;
+			post_probe_start = <1>;
+			synaptics,firmware_name = "touch_module_id_0x%02x.img";
+			flash_on_post_probe = <0>;
+			flip_config = <0>;
+			watchdog_enabled = <1>;
+			watchdog_delay_ms = <3000>;
+			charger_supported = <0>;
+			pen_supported = <0>;
+			glove_supported = <1>;
+			cover_supported = <1>;
+			touch_pressure_enabled = <1>;
+			touch_size_enabled = <0>;
+			touch_orientation_enabled = <0>;
+			preset_x_max = <1079>;
+			preset_y_max = <1919>;
+			preset_n_fingers = <10>;
+			wakeup_gesture_supported = <1>;
+			wakeup_gesture_lpm_disabled = <1>;
+			wakeup_gesture_timeout = <0>;
+			wakeup_gesture_use_workaround_for_felica = <1>;
+
+			wakeup_gesture {
+				double_tap {
+					gesture_code = <0x0003>;
+					event_00 {
+						type = <2>;
+						message = "=== DOUBLE TAP ===";
+					};
+					event_01 {
+						type = <1>;
+						code = <143>;
+						down = <1>;
+					};
+					event_02 {
+						type = <1>;
+						code = <143>;
+						down = <0>;
+					};
+					event_03 {
+						type = <99>;
+					};
+				};
+			};
+
+			clearpad_default {
+				flash_default_timeout_ms = <20000>;
+				calibrate_on_fwflash = <0>;
+				calibration_supported = <0>;
+				hwreset_delay_for_powerup_ms = <220>;
+				interrupt_default_wait_ms = <1000>;
+				charger_only_delay_ms = <200>;
+			};
+
+			S3330 {
+				flash_default_timeout_ms = <20000>;
+				calibrate_on_fwflash = <0>;
+				calibration_supported = <0>;
+				hwreset_delay_for_powerup_ms = <220>;
+				interrupt_default_wait_ms = <1000>;
+				charger_only_delay_ms = <200>;
+			};
+
+			S332U {
+				flash_default_timeout_ms = <20000>;
+				calibrate_on_fwflash = <0>;
+				calibration_supported = <1>;
+				hwreset_delay_for_powerup_ms = <220>;
+				interrupt_default_wait_ms = <1000>;
+				charger_only_delay_ms = <200>;
+			};
+		};
+};

@@ -27,7 +27,7 @@
 		sony,require-rpm-physical-acks;
 		reg = <0x7464900 0x500 0x7464000 0x800 0x7464e00 0x19c>;
 		reg-names = "hc_mem", "core_mem", "cmdq_mem";
-		interrupts = <0x0 0x8d 0x0 0x0 0x86 0x0>;
+		interrupts = <0x0 0x8d 0x4 0x0 0x86 0x4>;
 		interrupt-names = "hc_irq", "pwr_irq";
 		clock-names = "iface_clk", "core_clk", "ice_core_clk";
 		clocks = <&gcc GCC_SDCC1_AHB_CLK>, <&gcc GCC_SDCC1_APPS_CLK>, <&gcc GCC_SDCC1_ICE_CORE_CLK>;
@@ -83,7 +83,7 @@
 	compatible = "qcom,sdhci-msm";
 	reg = <0x74a4900 0x314 0x74a4000 0x800>;
 	reg-names = "hc_mem", "core_mem";
-	interrupts = <0x0 0x7d 0x0 0x0 0xdd 0x0>;
+	interrupts = <0x0 0x7d 0x4 0x0 0xdd 0x4>;
 	interrupt-names = "hc_irq", "pwr_irq";
 	clock-names = "iface_clk", "core_clk";
 	clocks = <&gcc GCC_SDCC2_AHB_CLK>, <&gcc GCC_SDCC2_APPS_CLK>;

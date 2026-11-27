@@ -1,0 +1,44 @@
+// SPDX-License-Identifier: GPL-2.0-only
+/*
+ * Sony Xperia X Performance / MSM8996
+ * Venus HFI 3xx - diagnostic DT bring-up.
+ *
+ * Hardware resources are based on Sony 4.4.
+ * Activation is blocked until SMMU, GDSC and bus votes
+ * have been qualified for Linux 4.19.
+ */
+#include <dt-bindings/clock/qcom,mmcc-msm8996.h>
+#include <dt-bindings/interrupt-controller/arm-gic.h>
+
+&soc {
+    dora_venus: video-codec@c00000 {
+        compatible = "qcom,msm-vidc";
+        status = "disabled";
+
+        reg = <0x00c00000 0x000ff000>;
+        interrupts = <GIC_SPI 287 IRQ_TYPE_LEVEL_HIGH>;
+
+        qcom,hfi = "venus";
+        qcom,hfi-version = "3xx";
+        qcom,firmware-name = "venus";
+        qcom,max-hw-load = <2563200>;
+        qcom,imem-size = <524288>;
+
+        clock-names = "smmu_ahb_clk", "smmu_axi_clk",
+                      "mmagic_video_axi", "core_clk",
+                      "iface_clk", "bus_clk", "maxi_clk",
+                      "core0_clk", "core1_clk";
+
+        clocks = <&mmcc SMMU_VIDEO_AHB_CLK>,
+                 <&mmcc SMMU_VIDEO_AXI_CLK>,
+                 <&mmcc MMAGIC_VIDEO_AXI_CLK>,
+                 <&mmcc VIDEO_CORE_CLK>,
+                 <&mmcc VIDEO_AHB_CLK>,
+                 <&mmcc VIDEO_AXI_CLK>,
+                 <&mmcc VIDEO_MAXI_CLK>,
+                 <&mmcc VIDEO_SUBCORE0_CLK>,
+                 <&mmcc VIDEO_SUBCORE1_CLK>;
+
+        qcom,clock-configs = <0 0 0 1 0 0 0 1 1>;
+    };
+};
